@@ -80,10 +80,12 @@ type ExplorerMove = {
 };
 
 type ExplorerPayload = {
-  source: ExplorerSource | "local-explorer-fallback";
+  source?: ExplorerSource | "local-explorer-fallback";
   requestedSource?: ExplorerSource;
   fallback?: boolean;
   reason?: string;
+  error?: string;
+  status?: number;
   upstreamStatus?: number;
   white?: number;
   draws?: number;
@@ -834,6 +836,478 @@ function pickLegalContinuation(fen: string): Continuation | null {
   };
 }
 
+
+type ActiveArrowType = "attack" | "protect" | "plan" | "pin" | "fork" | "skewer" | "discovered" | "overload" | "threat";
+
+type ActiveArrow = {
+  from: string;
+  to: string;
+  type: ActiveArrowType;
+  label?: string;
+  reason?: string;
+};
+
+type TacticalMotif = {
+  type: "pin" | "fork" | "skewer" | "discovered_attack" | "overloaded_defender";
+  attacker?: string;
+  pinnedPiece?: string;
+  target?: string;
+  frontTarget?: string;
+  rearTarget?: string;
+  defender?: string;
+  defended?: string[];
+  targets?: string[];
+  severity?: "low" | "medium" | "high" | "absolute" | "relative";
+  squares: string[];
+  arrows: ActiveArrow[];
+  note: string;
+};
+
+type ActiveBoardAnnotation = {
+  attackedSquares: string[];
+  protectedSquares: string[];
+  importantSquares: Array<{ square: string; reasons: string[]; score: number }>;
+  hangingPieces: string[];
+  motifs: TacticalMotif[];
+  arrows: ActiveArrow[];
+  mainExplanation: string;
+  visualExplanation: string;
+  planExplanation: string;
+  threatNote: string;
+};
+
+type SquareStyleKind = "attack" | "protect" | "important" | "hanging" | "pin" | "fork" | "skewer" | "discovered" | "overload" | "last" | "selected";
+
+const FILE_TO_INDEX: Record<string, number> = Object.fromEntries(FILES.map((file, index) => [file, index]));
+const PIECE_VALUE: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 100 };
+const OPENING_THEME_SQUARES: Array<{ test: RegExp; squares: string[]; ideas: ActiveArrow[]; note: string }> = [
+  { test: /italian|giuoco/i, squares: ["f7", "d4", "c4", "e5"], ideas: [{ from: "c4", to: "f7", type: "plan", label: "pressure" }, { from: "d2", to: "d4", type: "plan", label: "break" }], note: "Italian structures usually build pressure on f7, castle quickly, then prepare c3 and d4." },
+  { test: /ruy|lopez|spanish/i, squares: ["e5", "c6", "d4", "b5"], ideas: [{ from: "b5", to: "c6", type: "plan", label: "pressure" }, { from: "c2", to: "c3", type: "plan", label: "support d4" }], note: "Ruy Lopez plans pressure the e5 defender, preserve the bishop, and prepare central expansion." },
+  { test: /sicilian/i, squares: ["d4", "c5", "c-file", "f7"].filter((x) => x.length === 2), ideas: [{ from: "c5", to: "d4", type: "plan", label: "contest center" }, { from: "b8", to: "c6", type: "plan", label: "develop" }], note: "Sicilian structures fight for d4 and often use asymmetric queenside or central pressure." },
+  { test: /caro/i, squares: ["d5", "e4", "c6", "f5"], ideas: [{ from: "c6", to: "d5", type: "plan", label: "strike center" }, { from: "c8", to: "f5", type: "plan", label: "activate bishop" }], note: "Caro-Kann plans challenge e4 with ...d5 while developing the light-squared bishop outside the pawn chain." },
+  { test: /french/i, squares: ["d4", "e5", "c5", "f7"], ideas: [{ from: "c7", to: "c5", type: "plan", label: "break" }, { from: "f8", to: "e7", type: "plan", label: "develop" }], note: "French structures revolve around pressure on d4/e5 and the central break ...c5." },
+  { test: /queen|gambit|slav/i, squares: ["d5", "c4", "e4", "c-file"].filter((x) => x.length === 2), ideas: [{ from: "c4", to: "d5", type: "plan", label: "challenge" }, { from: "e2", to: "e4", type: "plan", label: "space" }], note: "Queen's pawn structures often revolve around c4 pressure, central control, and timely e4/cxd5 breaks." },
+  { test: /london/i, squares: ["f4", "c7", "e5", "c3"], ideas: [{ from: "f4", to: "c7", type: "plan", label: "diagonal" }, { from: "c2", to: "c3", type: "plan", label: "solid center" }], note: "London setups build a stable center, develop the bishop early, and aim for clean piece coordination." },
+  { test: /king|indian|grunfeld|grünfeld/i, squares: ["d4", "e4", "g7", "c5"], ideas: [{ from: "g7", to: "d4", type: "plan", label: "bishop pressure" }, { from: "c7", to: "c5", type: "plan", label: "counter" }], note: "Indian defenses often let White build a center and then attack it with piece pressure and pawn breaks." },
+];
+
+function isSquare(value: string) {
+  return /^[a-h][1-8]$/.test(value);
+}
+
+function squareToCoord(square: string) {
+  return { file: FILE_TO_INDEX[square[0]], rank: Number(square[1]) - 1 };
+}
+
+function coordToSquare(file: number, rank: number) {
+  if (file < 0 || file > 7 || rank < 0 || rank > 7) return null;
+  return `${FILES[file]}${rank + 1}`;
+}
+
+function uniqueSquares(squares: string[]) {
+  return Array.from(new Set(squares.filter(isSquare)));
+}
+
+function getAllSquares() {
+  const out: string[] = [];
+  for (const file of FILES) {
+    for (let rank = 1; rank <= 8; rank++) out.push(`${file}${rank}`);
+  }
+  return out;
+}
+
+function getBoardPiece(game: Chess, square: string) {
+  try {
+    return game.get(square as any) as any;
+  } catch {
+    return null;
+  }
+}
+
+function pieceAttacksFrom(game: Chess, square: string) {
+  const piece = getBoardPiece(game, square);
+  if (!piece) return [];
+
+  const { file, rank } = squareToCoord(square);
+  const color = piece.color as ChessColor;
+  const out: string[] = [];
+  const add = (f: number, r: number) => {
+    const sq = coordToSquare(f, r);
+    if (sq) out.push(sq);
+  };
+  const ray = (df: number, dr: number) => {
+    let f = file + df;
+    let r = rank + dr;
+    while (true) {
+      const sq = coordToSquare(f, r);
+      if (!sq) break;
+      out.push(sq);
+      if (getBoardPiece(game, sq)) break;
+      f += df;
+      r += dr;
+    }
+  };
+
+  if (piece.type === "p") {
+    const dir = color === "w" ? 1 : -1;
+    add(file - 1, rank + dir);
+    add(file + 1, rank + dir);
+  }
+
+  if (piece.type === "n") {
+    [[1, 2], [2, 1], [-1, 2], [-2, 1], [1, -2], [2, -1], [-1, -2], [-2, -1]].forEach(([df, dr]) => add(file + df, rank + dr));
+  }
+
+  if (piece.type === "k") {
+    for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) if (df || dr) add(file + df, rank + dr);
+  }
+
+  if (["b", "q"].includes(piece.type)) {
+    [[1, 1], [1, -1], [-1, 1], [-1, -1]].forEach(([df, dr]) => ray(df, dr));
+  }
+
+  if (["r", "q"].includes(piece.type)) {
+    [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([df, dr]) => ray(df, dr));
+  }
+
+  return uniqueSquares(out);
+}
+
+function attackMapForColor(game: Chess, color: ChessColor) {
+  const map = new Map<string, string[]>();
+  const byPiece = new Map<string, string[]>();
+
+  for (const square of getAllSquares()) {
+    const piece = getBoardPiece(game, square);
+    if (!piece || piece.color !== color) continue;
+    const attacks = pieceAttacksFrom(game, square);
+    byPiece.set(square, attacks);
+    attacks.forEach((target) => {
+      const list = map.get(target) ?? [];
+      list.push(square);
+      map.set(target, list);
+    });
+  }
+
+  return { map, byPiece };
+}
+
+function firstMoveFromHistory(moveHistory: string[]) {
+  return moveHistory.find(Boolean) ?? "";
+}
+
+function getOpeningTheme(openingName: string) {
+  return OPENING_THEME_SQUARES.find((theme) => theme.test.test(openingName));
+}
+
+function detectLineMotifs(game: Chess, color: ChessColor) {
+  const motifs: TacticalMotif[] = [];
+  const directionsByPiece: Record<string, number[][]> = {
+    b: [[1, 1], [1, -1], [-1, 1], [-1, -1]],
+    r: [[1, 0], [-1, 0], [0, 1], [0, -1]],
+    q: [[1, 1], [1, -1], [-1, 1], [-1, -1], [1, 0], [-1, 0], [0, 1], [0, -1]],
+  };
+
+  for (const square of getAllSquares()) {
+    const piece = getBoardPiece(game, square);
+    if (!piece || piece.color !== color || !directionsByPiece[piece.type]) continue;
+    const { file, rank } = squareToCoord(square);
+
+    for (const [df, dr] of directionsByPiece[piece.type]) {
+      const occupied: Array<{ square: string; piece: any }> = [];
+      let f = file + df;
+      let r = rank + dr;
+      while (true) {
+        const sq = coordToSquare(f, r);
+        if (!sq) break;
+        const occ = getBoardPiece(game, sq);
+        if (occ) occupied.push({ square: sq, piece: occ });
+        if (occupied.length >= 2) break;
+        f += df;
+        r += dr;
+      }
+
+      if (occupied.length < 2) continue;
+      const [first, second] = occupied;
+      if (first.piece.color !== color && second.piece.color !== color) {
+        const firstValue = PIECE_VALUE[first.piece.type] ?? 0;
+        const secondValue = PIECE_VALUE[second.piece.type] ?? 0;
+        if (["k", "q", "r"].includes(second.piece.type) && secondValue > firstValue) {
+          const absolute = second.piece.type === "k";
+          motifs.push({
+            type: "pin",
+            attacker: square,
+            pinnedPiece: first.square,
+            target: second.square,
+            severity: absolute ? "absolute" : "relative",
+            squares: [first.square, second.square],
+            arrows: [{ from: square, to: second.square, type: "pin", label: absolute ? "pin to king" : "pin" }],
+            note: `${first.square} is pinned to the ${second.piece.type === "k" ? "king" : second.piece.type === "q" ? "queen" : "rook"}.`,
+          });
+        } else if (["k", "q", "r"].includes(first.piece.type) && firstValue >= secondValue) {
+          motifs.push({
+            type: "skewer",
+            attacker: square,
+            frontTarget: first.square,
+            rearTarget: second.square,
+            severity: first.piece.type === "k" ? "high" : "medium",
+            squares: [first.square, second.square],
+            arrows: [{ from: square, to: second.square, type: "skewer", label: "skewer" }],
+            note: `The front target on ${first.square} may expose ${second.square} behind it.`,
+          });
+        }
+      }
+    }
+  }
+
+  return motifs.slice(0, 4);
+}
+
+function detectForks(game: Chess, color: ChessColor) {
+  const motifs: TacticalMotif[] = [];
+
+  for (const square of getAllSquares()) {
+    const piece = getBoardPiece(game, square);
+    if (!piece || piece.color !== color) continue;
+    const targets = pieceAttacksFrom(game, square).filter((target) => {
+      const targetPiece = getBoardPiece(game, target);
+      return targetPiece && targetPiece.color !== color && ["k", "q", "r", "b", "n"].includes(targetPiece.type);
+    });
+
+    const valuable = targets.filter((target) => {
+      const targetPiece = getBoardPiece(game, target);
+      return targetPiece && (targetPiece.type === "k" || (PIECE_VALUE[targetPiece.type] ?? 0) >= 3);
+    });
+
+    if (valuable.length >= 2) {
+      motifs.push({
+        type: "fork",
+        attacker: square,
+        targets: valuable.slice(0, 3),
+        severity: valuable.some((target) => getBoardPiece(game, target)?.type === "k") ? "high" : "medium",
+        squares: valuable.slice(0, 3),
+        arrows: valuable.slice(0, 3).map((target) => ({ from: square, to: target, type: "fork", label: "fork" })),
+        note: `${square} attacks multiple valuable targets.`,
+      });
+    }
+  }
+
+  return motifs.slice(0, 3);
+}
+
+function detectDiscoveredAttacks(beforeFen: string | null, afterGame: Chess, movedFrom?: string, movedTo?: string) {
+  if (!beforeFen || !movedFrom || !movedTo) return [] as TacticalMotif[];
+  try {
+    const beforeGame = new Chess(beforeFen);
+    const afterAttackers: string[] = [];
+    for (const square of getAllSquares()) {
+      const piece = getBoardPiece(afterGame, square);
+      if (piece && ["b", "r", "q"].includes(piece.type)) afterAttackers.push(square);
+    }
+
+    const motifs: TacticalMotif[] = [];
+    for (const attacker of afterAttackers) {
+      const beforeAttacks = new Set(pieceAttacksFrom(beforeGame, attacker));
+      const afterAttacks = pieceAttacksFrom(afterGame, attacker);
+      const gainedTargets = afterAttacks.filter((sq) => !beforeAttacks.has(sq));
+      const valuable = gainedTargets.find((sq) => {
+        const targetPiece = getBoardPiece(afterGame, sq);
+        return targetPiece && targetPiece.color !== getBoardPiece(afterGame, attacker)?.color && ["k", "q", "r"].includes(targetPiece.type);
+      });
+      if (valuable) {
+        motifs.push({
+          type: "discovered_attack",
+          attacker,
+          target: valuable,
+          severity: "medium",
+          squares: [attacker, valuable, movedFrom, movedTo].filter(isSquare),
+          arrows: [{ from: attacker, to: valuable, type: "discovered", label: "revealed" }],
+          note: `Moving from ${movedFrom} opened a line from ${attacker} to ${valuable}.`,
+        });
+      }
+    }
+    return motifs.slice(0, 2);
+  } catch {
+    return [];
+  }
+}
+
+function detectOverloadedDefenders(game: Chess, color: ChessColor, importantSquares: string[]) {
+  const motifs: TacticalMotif[] = [];
+  const important = new Set(importantSquares);
+
+  for (const square of getAllSquares()) {
+    const piece = getBoardPiece(game, square);
+    if (!piece || piece.color !== color) continue;
+    const defended = pieceAttacksFrom(game, square).filter((target) => {
+      const targetPiece = getBoardPiece(game, target);
+      return (targetPiece && targetPiece.color === color && (PIECE_VALUE[targetPiece.type] ?? 0) >= 3) || important.has(target);
+    });
+
+    if (defended.length >= 2) {
+      motifs.push({
+        type: "overloaded_defender",
+        defender: square,
+        defended: defended.slice(0, 3),
+        severity: "medium",
+        squares: [square, ...defended.slice(0, 3)],
+        arrows: defended.slice(0, 3).map((target) => ({ from: square, to: target, type: "overload", label: "defends" })),
+        note: `${square} is defending several important targets.`,
+      });
+    }
+  }
+
+  return motifs.slice(0, 2);
+}
+
+function buildActiveBoardAnnotation({
+  fen,
+  previousFen,
+  lastMove,
+  openingName,
+  moveHistory,
+  engineLines,
+}: {
+  fen: string;
+  previousFen: string | null;
+  lastMove: string | null;
+  openingName: string;
+  moveHistory: string[];
+  engineLines: EngineLine[];
+}): ActiveBoardAnnotation {
+  const activeGame = new Chess(fen);
+  const movedFrom = lastMove && lastMove.length >= 4 ? lastMove.slice(0, 2) : undefined;
+  const movedTo = lastMove && lastMove.length >= 4 ? lastMove.slice(2, 4) : undefined;
+  const movedPiece = movedTo ? getBoardPiece(activeGame, movedTo) : null;
+  const movedColor: ChessColor = movedPiece?.color ?? (activeGame.turn() === "w" ? "b" : "w");
+  const enemyColor: ChessColor = movedColor === "w" ? "b" : "w";
+  const theme = getOpeningTheme(openingName);
+
+  const movedPieceInfluence = movedTo ? pieceAttacksFrom(activeGame, movedTo) : [];
+  const attackedSquares = uniqueSquares(movedPieceInfluence.filter((square) => getBoardPiece(activeGame, square)?.color !== movedColor));
+  const protectedSquares = uniqueSquares(movedPieceInfluence.filter((square) => getBoardPiece(activeGame, square)?.color === movedColor));
+
+  const friendlyAttacks = attackMapForColor(activeGame, movedColor);
+  const enemyAttacks = attackMapForColor(activeGame, enemyColor);
+  const allWhiteAttacks = attackMapForColor(activeGame, "w");
+  const allBlackAttacks = attackMapForColor(activeGame, "b");
+
+  const hangingPieces: string[] = [];
+  for (const square of getAllSquares()) {
+    const piece = getBoardPiece(activeGame, square);
+    if (!piece || piece.type === "k") continue;
+    const attacks = piece.color === "w" ? allBlackAttacks.map : allWhiteAttacks.map;
+    const defenses = piece.color === "w" ? allWhiteAttacks.map : allBlackAttacks.map;
+    if (attacks.has(square) && !defenses.has(square)) hangingPieces.push(square);
+  }
+
+  const scoreMap = new Map<string, { square: string; reasons: string[]; score: number }>();
+  const bump = (square: string, reason: string, score: number) => {
+    if (!isSquare(square)) return;
+    const existing = scoreMap.get(square) ?? { square, reasons: [], score: 0 };
+    if (!existing.reasons.includes(reason)) existing.reasons.push(reason);
+    existing.score += score;
+    scoreMap.set(square, existing);
+  };
+
+  attackedSquares.forEach((sq) => bump(sq, "attacked_by_last_move", 3));
+  protectedSquares.forEach((sq) => bump(sq, "protected_by_last_move", 1));
+  hangingPieces.forEach((sq) => bump(sq, "hanging_piece", 5));
+  theme?.squares.forEach((sq) => bump(sq, "opening_theme", 2));
+  engineLines.slice(0, 2).forEach((line) => {
+    if (line.uci?.length >= 4) bump(line.uci.slice(2, 4), "stockfish_candidate_target", 2);
+  });
+  if (openingName.toLowerCase().includes("italian") && getBoardPiece(activeGame, "c4")) bump("f7", "classic_opening_target", 4);
+  if (openingName.toLowerCase().includes("london") && getBoardPiece(activeGame, "f4")) bump("c7", "opening_theme", 3);
+
+  const importantSquares = Array.from(scoreMap.values()).sort((a, b) => b.score - a.score).slice(0, 3);
+  const importantSquareList = importantSquares.map((item) => item.square);
+
+  const pinsAndSkewers = [...detectLineMotifs(activeGame, "w"), ...detectLineMotifs(activeGame, "b")];
+  const forks = [...detectForks(activeGame, "w"), ...detectForks(activeGame, "b")];
+  const discovered = detectDiscoveredAttacks(previousFen, activeGame, movedFrom, movedTo);
+  const overloaded = [...detectOverloadedDefenders(activeGame, "w", importantSquareList), ...detectOverloadedDefenders(activeGame, "b", importantSquareList)];
+  const motifs = [...pinsAndSkewers, ...forks, ...discovered, ...overloaded].slice(0, 8);
+
+  const planArrows: ActiveArrow[] = [];
+  theme?.ideas.forEach((arrow) => {
+    if (isSquare(arrow.from) && isSquare(arrow.to)) planArrows.push({ ...arrow, reason: theme.note });
+  });
+  if (movedTo && importantSquares[0]) planArrows.push({ from: movedTo, to: importantSquares[0].square, type: "plan", label: "focus", reason: "Important square from the current position." });
+  if (engineLines[0]?.uci?.length >= 4) planArrows.push({ from: engineLines[0].uci.slice(0, 2), to: engineLines[0].uci.slice(2, 4), type: "plan", label: "engine idea", reason: `Engine idea: ${engineLines[0].san}` });
+
+  const motifArrows = motifs.flatMap((motif) => motif.arrows).slice(0, 6);
+  const arrows = [...motifArrows, ...planArrows].filter((arrow) => isSquare(arrow.from) && isSquare(arrow.to)).slice(0, 9);
+
+  const lastMoveSan = moveHistory.length ? moveHistory[moveHistory.length - 1] : firstMoveFromHistory(moveHistory);
+  const mainExplanation = lastMoveSan
+    ? `${lastMoveSan} changes the board's pressure map. Active Board highlights the squares this move influences and the tactical features it creates.`
+    : "Active Board is ready. Make a move to see attacks, protection, and plans appear.";
+  const visualExplanation = attackedSquares.length
+    ? `Red/orange squares show the last moved piece's pressure, especially ${attackedSquares.slice(0, 3).join(", ")}.`
+    : "No major last-move attack pressure is visible yet.";
+  const planExplanation = theme?.note ?? "Use the arrows and highlighted squares to connect the move to the next practical plan.";
+  const threatNote = hangingPieces.length
+    ? `Loose piece warning: ${hangingPieces.slice(0, 3).join(", ")} ${hangingPieces.length === 1 ? "is" : "are"} attacked and not defended.`
+    : motifs[0]?.note ?? "No immediate hanging piece was detected by the lightweight visual engine.";
+
+  return {
+    attackedSquares,
+    protectedSquares,
+    importantSquares,
+    hangingPieces,
+    motifs,
+    arrows,
+    mainExplanation,
+    visualExplanation,
+    planExplanation,
+    threatNote,
+  };
+}
+
+function mergeSquareStyle(base: CSSProperties | undefined, next: CSSProperties) {
+  return { ...(base ?? {}), ...next };
+}
+
+function squareGlowStyle(kind: SquareStyleKind): CSSProperties {
+  if (kind === "attack") {
+    return {
+      background: "radial-gradient(circle, rgba(255,80,80,.48) 0%, rgba(255,80,80,.28) 42%, transparent 72%)",
+      boxShadow: "inset 0 0 20px rgba(255,70,70,.55)",
+    };
+  }
+  if (kind === "protect") {
+    return { boxShadow: "inset 0 0 18px rgba(80,220,120,.62)", outline: "2px solid rgba(80,220,120,.42)" };
+  }
+  if (kind === "important") {
+    return {
+      background: "radial-gradient(circle, rgba(255,196,0,.55) 0%, rgba(255,145,0,.28) 48%, transparent 76%)",
+      animation: "pulse-important 1.4s ease-in-out infinite",
+    };
+  }
+  if (kind === "hanging") {
+    return {
+      background: "radial-gradient(circle, rgba(255,0,0,.72) 0%, rgba(255,0,0,.34) 48%, transparent 78%)",
+      animation: "pulse-danger 1s ease-in-out infinite",
+    };
+  }
+  if (kind === "pin" || kind === "fork") {
+    return { boxShadow: "inset 0 0 22px rgba(170,80,255,.82)", outline: "2px solid rgba(170,80,255,.8)" };
+  }
+  if (kind === "skewer") {
+    return { boxShadow: "inset 0 0 22px rgba(255,130,40,.82)", outline: "2px solid rgba(255,130,40,.75)" };
+  }
+  if (kind === "discovered") {
+    return { boxShadow: "inset 0 0 22px rgba(230,230,255,.9)", outline: "2px solid rgba(180,160,255,.75)" };
+  }
+  if (kind === "overload") {
+    return { boxShadow: "inset 0 0 22px rgba(255,190,60,.85)", outline: "2px solid rgba(255,190,60,.65)" };
+  }
+  if (kind === "last") return { backgroundColor: "rgba(255,255,255,.28)", boxShadow: "inset 0 0 26px rgba(255,255,255,.85)", animation: "lastMoveFlash 450ms ease-out" };
+  if (kind === "selected") return { backgroundColor: "rgba(22,101,52,.45)" };
+  return {};
+}
+
 export default function OpeningLabApp() {
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [customRepertoires, setCustomRepertoires] = useState<Repertoire[]>([]);
@@ -867,6 +1341,9 @@ export default function OpeningLabApp() {
   const [coachError, setCoachError] = useState("");
   const [coachCache, setCoachCache] = useState<Record<string, CoachContent>>({});
   const [openingSearch, setOpeningSearch] = useState("");
+  const [activeBoardEnabled, setActiveBoardEnabled] = useState(false);
+  const [previousFen, setPreviousFen] = useState<string | null>(null);
+  const fenTrackerRef = useRef(fen);
 
   const explorerCacheRef = useRef<Record<string, ExplorerPayload>>({});
 
@@ -884,6 +1361,14 @@ export default function OpeningLabApp() {
   const positionsTrained = Object.keys(progress.trainedPositions).length;
   const lineCount = repertoire.lines.length;
   const positionCount = useMemo(() => countPositions(repertoire), [repertoire]);
+  const visualAnnotation = useMemo(() => buildActiveBoardAnnotation({
+    fen,
+    previousFen,
+    lastMove,
+    openingName: explorerOpening || repertoire.name,
+    moveHistory: game.history(),
+    engineLines,
+  }), [fen, previousFen, lastMove, explorerOpening, repertoire.name, engineLines]);
 
   useEffect(() => {
     const savedProgress = localStorage.getItem("opening-lab-progress-v3");
@@ -935,6 +1420,22 @@ export default function OpeningLabApp() {
   useEffect(() => {
     localStorage.setItem("opening-lab-coach-cache-v1", JSON.stringify(coachCache));
   }, [coachCache]);
+
+  useEffect(() => {
+    const savedActiveBoard = localStorage.getItem("blundr-active-board-enabled");
+    if (savedActiveBoard) setActiveBoardEnabled(savedActiveBoard === "true");
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("blundr-active-board-enabled", String(activeBoardEnabled));
+  }, [activeBoardEnabled]);
+
+  useEffect(() => {
+    if (fenTrackerRef.current !== fen) {
+      setPreviousFen(fenTrackerRef.current);
+      fenTrackerRef.current = fen;
+    }
+  }, [fen]);
 
   useEffect(() => {
     setCoachContent(null);
@@ -1005,7 +1506,7 @@ export default function OpeningLabApp() {
 
       const response = await fetch(`/api/explorer?${params.toString()}`);
       const payload = (await response.json()) as ExplorerPayload;
-      if (!response.ok) throw new Error((payload as any)?.reason ?? (payload as any)?.error ?? `Explorer returned ${response.status}`);
+      if (!response.ok) throw new Error(payload?.reason ?? payload?.error ?? `Explorer returned ${response.status}`);
       explorerCacheRef.current[cacheKey] = payload;
 
       try {
@@ -1534,12 +2035,32 @@ export default function OpeningLabApp() {
       : "Waiting for opponent";
 
   const customSquareStyles: Record<string, CSSProperties> = {};
+  if (activeBoardEnabled) {
+    visualAnnotation.attackedSquares.forEach((square) => {
+      customSquareStyles[square] = mergeSquareStyle(customSquareStyles[square], squareGlowStyle("attack"));
+    });
+    visualAnnotation.protectedSquares.forEach((square) => {
+      customSquareStyles[square] = mergeSquareStyle(customSquareStyles[square], squareGlowStyle("protect"));
+    });
+    visualAnnotation.importantSquares.forEach(({ square }) => {
+      customSquareStyles[square] = mergeSquareStyle(customSquareStyles[square], squareGlowStyle("important"));
+    });
+    visualAnnotation.hangingPieces.forEach((square) => {
+      customSquareStyles[square] = mergeSquareStyle(customSquareStyles[square], squareGlowStyle("hanging"));
+    });
+    visualAnnotation.motifs.forEach((motif) => {
+      const kind: SquareStyleKind = motif.type === "pin" ? "pin" : motif.type === "fork" ? "fork" : motif.type === "skewer" ? "skewer" : motif.type === "discovered_attack" ? "discovered" : "overload";
+      motif.squares.forEach((square) => {
+        customSquareStyles[square] = mergeSquareStyle(customSquareStyles[square], squareGlowStyle(kind));
+      });
+    });
+  }
   if (lastMove && lastMove.length >= 4) {
-    customSquareStyles[lastMove.slice(0, 2)] = { backgroundColor: "rgba(234, 179, 8, 0.42)" };
-    customSquareStyles[lastMove.slice(2, 4)] = { backgroundColor: "rgba(234, 179, 8, 0.42)" };
+    customSquareStyles[lastMove.slice(0, 2)] = mergeSquareStyle(customSquareStyles[lastMove.slice(0, 2)], squareGlowStyle("last"));
+    customSquareStyles[lastMove.slice(2, 4)] = mergeSquareStyle(customSquareStyles[lastMove.slice(2, 4)], squareGlowStyle("last"));
   }
   if (selectedSquare) {
-    customSquareStyles[selectedSquare] = { backgroundColor: "rgba(22, 101, 52, 0.45)" };
+    customSquareStyles[selectedSquare] = mergeSquareStyle(customSquareStyles[selectedSquare], squareGlowStyle("selected"));
   }
 
   return (
@@ -1741,15 +2262,42 @@ export default function OpeningLabApp() {
               <SmallStat label="Streak" value={String(progress.streak)} />
             </div>
 
+            <div className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="flex items-center gap-2 font-black">
+                    <Sparkles size={18} className="text-green-700" /> Active Board
+                  </h2>
+                  <p className="text-xs leading-5 text-stone-500">
+                    Turn on live attacks, defended squares, key squares, tactics, and plan arrows.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setActiveBoardEnabled(!activeBoardEnabled)}
+                  className={classNames(
+                    "rounded-full px-4 py-2 text-xs font-black shadow-sm",
+                    activeBoardEnabled ? "bg-green-700 text-white" : "bg-stone-100 text-stone-600"
+                  )}
+                >
+                  {activeBoardEnabled ? "ON" : "OFF"}
+                </button>
+              </div>
+            </div>
+
             <div className="rounded-3xl bg-white p-2 shadow-sm">
               <TapChessboard
                 game={game}
                 orientation={repertoire.color}
                 selectedSquare={selectedSquare}
                 squareStyles={customSquareStyles}
+                arrows={activeBoardEnabled ? visualAnnotation.arrows : []}
                 onSquareTap={handleSquareTap}
               />
             </div>
+
+            {activeBoardEnabled ? (
+              <ActiveBoardPanel annotation={visualAnnotation} />
+            ) : null}
 
             <div className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm">
               <div className="flex items-start gap-3">
@@ -2243,19 +2791,74 @@ function TapChessboard({
   orientation,
   selectedSquare,
   squareStyles,
+  arrows = [],
   onSquareTap,
 }: {
   game: Chess;
   orientation: RepertoireColor;
   selectedSquare: string | null;
   squareStyles: Record<string, CSSProperties>;
+  arrows?: ActiveArrow[];
   onSquareTap: (square: string) => void;
 }) {
   const ranks = orientation === "white" ? [8, 7, 6, 5, 4, 3, 2, 1] : [1, 2, 3, 4, 5, 6, 7, 8];
   const files = orientation === "white" ? FILES : [...FILES].reverse();
+  const centerFor = (square: string) => {
+    const fileIndex = FILE_TO_INDEX[square[0]];
+    const rank = Number(square[1]);
+    const col = orientation === "white" ? fileIndex : 7 - fileIndex;
+    const row = orientation === "white" ? 8 - rank : rank - 1;
+    return { x: (col + 0.5) * 12.5, y: (row + 0.5) * 12.5 };
+  };
+  const arrowColor = (type: ActiveArrowType) => {
+    if (type === "attack" || type === "threat") return "rgba(255,70,70,.92)";
+    if (type === "protect") return "rgba(80,220,120,.88)";
+    if (type === "pin" || type === "fork" || type === "discovered") return "rgba(190,90,255,.92)";
+    if (type === "skewer") return "rgba(255,130,40,.92)";
+    if (type === "overload") return "rgba(255,190,60,.92)";
+    return "rgba(80,160,255,.9)";
+  };
 
   return (
     <div className="relative aspect-square w-full overflow-hidden rounded-[18px] border border-stone-200">
+      {arrows.length ? (
+        <svg className="pointer-events-none absolute inset-0 z-20 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <defs>
+            {arrows.map((arrow, index) => (
+              <marker
+                key={`marker-${index}`}
+                id={`active-arrow-${index}`}
+                markerWidth="5"
+                markerHeight="5"
+                refX="4"
+                refY="2.5"
+                orient="auto"
+                markerUnits="strokeWidth"
+              >
+                <path d="M 0 0 L 5 2.5 L 0 5 z" fill={arrowColor(arrow.type)} />
+              </marker>
+            ))}
+          </defs>
+          {arrows.map((arrow, index) => {
+            const from = centerFor(arrow.from);
+            const to = centerFor(arrow.to);
+            return (
+              <line
+                key={`${arrow.from}-${arrow.to}-${index}`}
+                x1={from.x}
+                y1={from.y}
+                x2={to.x}
+                y2={to.y}
+                stroke={arrowColor(arrow.type)}
+                strokeWidth="1.25"
+                strokeLinecap="round"
+                markerEnd={`url(#active-arrow-${index})`}
+                className="active-arrow-line"
+              />
+            );
+          })}
+        </svg>
+      ) : null}
       <div className="grid h-full w-full grid-cols-8 grid-rows-8">
         {ranks.flatMap((rank) =>
           files.map((file) => {
@@ -2299,6 +2902,83 @@ function TapChessboard({
           })
         )}
       </div>
+    </div>
+  );
+}
+
+
+function ActiveBoardPanel({ annotation }: { annotation: ActiveBoardAnnotation }) {
+  const topMotifs = annotation.motifs.slice(0, 3);
+  return (
+    <div className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm overlay-fade-in">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 font-black">
+            <Sparkles size={18} className="text-green-700" /> Active Board explanation
+          </h2>
+          <p className="text-xs leading-5 text-stone-500">Verified board facts from chess.js with lightweight tactical detection.</p>
+        </div>
+        <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-black text-green-700">Live</span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 text-xs font-bold">
+        <LegendPill color="bg-red-500" label={`Attacks ${annotation.attackedSquares.length}`} />
+        <LegendPill color="bg-green-500" label={`Protects ${annotation.protectedSquares.length}`} />
+        <LegendPill color="bg-yellow-400" label={`Key ${annotation.importantSquares.length}`} />
+        <LegendPill color="bg-purple-500" label={`Motifs ${annotation.motifs.length}`} />
+      </div>
+
+      <div className="mt-4 space-y-3">
+        <div className="rounded-2xl bg-stone-50 p-3">
+          <div className="text-xs font-black uppercase tracking-wide text-stone-500">Main idea</div>
+          <p className="mt-1 text-sm leading-6 text-stone-700">{annotation.mainExplanation}</p>
+        </div>
+        <div className="rounded-2xl bg-stone-50 p-3">
+          <div className="text-xs font-black uppercase tracking-wide text-stone-500">Visual cue</div>
+          <p className="mt-1 text-sm leading-6 text-stone-700">{annotation.visualExplanation}</p>
+        </div>
+        <div className="rounded-2xl bg-stone-50 p-3">
+          <div className="text-xs font-black uppercase tracking-wide text-stone-500">Next plan</div>
+          <p className="mt-1 text-sm leading-6 text-stone-700">{annotation.planExplanation}</p>
+        </div>
+        <div className="rounded-2xl bg-amber-50 p-3">
+          <div className="text-xs font-black uppercase tracking-wide text-amber-700">Threat note</div>
+          <p className="mt-1 text-sm leading-6 text-amber-900">{annotation.threatNote}</p>
+        </div>
+      </div>
+
+      {annotation.importantSquares.length ? (
+        <div className="mt-4">
+          <div className="text-xs font-black uppercase tracking-wide text-stone-500">Important squares</div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {annotation.importantSquares.map((item) => (
+              <span key={item.square} className="rounded-full bg-yellow-50 px-3 py-1 text-xs font-black text-yellow-800">
+                {item.square} • {item.reasons[0]?.replaceAll("_", " ")}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {topMotifs.length ? (
+        <div className="mt-4 space-y-2">
+          <div className="text-xs font-black uppercase tracking-wide text-stone-500">Detected motifs</div>
+          {topMotifs.map((motif, index) => (
+            <div key={`${motif.type}-${index}`} className="rounded-2xl bg-purple-50 p-3 text-sm leading-6 text-purple-950">
+              <span className="font-black capitalize">{motif.type.replaceAll("_", " ")}:</span> {motif.note}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function LegendPill({ color, label }: { color: string; label: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-2xl bg-stone-50 px-3 py-2">
+      <span className={classNames("h-2.5 w-2.5 rounded-full", color)} />
+      <span>{label}</span>
     </div>
   );
 }

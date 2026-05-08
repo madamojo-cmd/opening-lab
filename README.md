@@ -1,28 +1,28 @@
-# Opening Lab v1.0 — AI Opening Coach
+# Blundr v1.1 — Active Board Visual Engine
 
-This deployable build adds a structured AI coaching layer to the existing Opening Lab trainer.
+This deployable update adds an **Active Board** toggle to the training screen.
 
-## What it adds
+When Active Board is ON, the board overlays:
 
-- Plan-first coaching cards.
-- Move-by-move feedback.
-- Variation summaries.
-- Goals, attacking ideas, pawn breaks, and piece-placement notes.
-- `/api/coach` server route.
-- Structured JSON output from OpenAI when `OPENAI_API_KEY` is configured.
-- Deploy-safe static fallback when no API key is present.
-- Local browser cache for generated coach cards.
+- attacked squares from the last moved piece
+- protected/defended friendly pieces
+- weak or important squares
+- hanging pieces
+- pins
+- forks
+- skewers
+- discovered attacks
+- overloaded defenders
+- plan arrows
+- concise move/plan/threat commentary
 
-## Environment variables
+The implementation is local-first and production-safe:
 
-For full AI coaching, add this in Vercel:
-
-```bash
-OPENAI_API_KEY=your_key_here
-OPENAI_COACH_MODEL=gpt-4o-mini
-```
-
-`OPENAI_COACH_MODEL` is optional. The app works without a key, but shows fallback content.
+- chess.js is the verified board-fact engine
+- Stockfish/engine lines are used as candidate targets when available
+- existing AI Coach remains available for deeper structured explanations
+- overlays are generated client-side for speed and cost control
+- the Active Board setting is saved in localStorage
 
 ## Run
 
@@ -31,20 +31,18 @@ npm install
 npm run dev
 ```
 
+## Build
+
+```bash
+npm run build
+```
+
 ## Deploy
+
+Commit and push to GitHub. Vercel will deploy the Next.js app.
 
 ```bash
 git add .
-git commit -m "Add AI opening coach"
+git commit -m "Add Active Board visual engine"
 git push
 ```
-
-
-## AI coach setup
-
-Set these environment variables in Vercel:
-
-- `OPENAI_API_KEY` = your OpenAI API key
-- `OPENAI_COACH_MODEL` = optional, defaults to `gpt-5.4-mini`
-
-The coach route uses OpenAI Structured Outputs to return schema-valid JSON and falls back to static coaching if no key is configured.
