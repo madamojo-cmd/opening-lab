@@ -1,7 +1,7 @@
 {
   "name": "Blundr",
   "short_name": "Blundr",
-  "description": "Controlled chess opening training with an intelligent board.",
+  "description": "GPT-powered controlled opening training.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f7f7f4",

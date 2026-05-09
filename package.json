@@ -1,6 +1,6 @@
 {
-  "name": "blundr-v2-1-gpt-visual-pipeline",
-  "version": "2.1.0",
+  "name": "blundr-v2-2-brain-endpoint",
+  "version": "2.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",

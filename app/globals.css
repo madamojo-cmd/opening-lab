@@ -1,20 +1,2 @@
 @import "tailwindcss";
-
-html, body { min-height: 100%; background: #f7f7f4; color: #171717; }
-body { font-family: Arial, Helvetica, sans-serif; }
-button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-input, textarea, button { font: inherit; }
-
-@keyframes blundrLineBreathe {
-  0% { opacity: .48; filter: drop-shadow(0 0 2px rgba(255,220,120,.26)); }
-  50% { opacity: .92; filter: drop-shadow(0 0 7px rgba(255,220,120,.58)); }
-  100% { opacity: .48; filter: drop-shadow(0 0 2px rgba(255,220,120,.26)); }
-}
-@keyframes blundrOpponentFade {
-  0% { opacity: 0; transform: scale(.985); }
-  12% { opacity: .92; transform: scale(1); }
-  78% { opacity: .82; }
-  100% { opacity: 0; transform: scale(1.015); }
-}
-.blundr-intent-line { animation: blundrLineBreathe 1.9s ease-in-out infinite; }
-.blundr-opponent-line { animation: blundrOpponentFade 2.5s ease-out forwards; }
+html,body{min-height:100%;background:#f7f7f4;color:#171717}body{font-family:Arial,Helvetica,sans-serif}button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}input,textarea,button{font:inherit}@keyframes blundrLine{0%{opacity:.48;filter:drop-shadow(0 0 2px rgba(255,220,120,.25))}50%{opacity:.95;filter:drop-shadow(0 0 7px rgba(255,220,120,.58))}100%{opacity:.48;filter:drop-shadow(0 0 2px rgba(255,220,120,.25))}}@keyframes blundrOpp{0%{opacity:0;transform:scale(.985)}12%{opacity:.92;transform:scale(1)}78%{opacity:.82}100%{opacity:0;transform:scale(1.015)}}.blundr-intent-line{animation:blundrLine 1.9s ease-in-out infinite}.blundr-opponent-line{animation:blundrOpp 2.5s ease-out forwards}
