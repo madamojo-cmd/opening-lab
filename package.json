@@ -1,6 +1,6 @@
 {
-  "name": "blundr-v2-2-brain-endpoint",
-  "version": "2.2.0",
+  "name": "blundr-v2-3-super-trainer",
+  "version": "2.3.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
