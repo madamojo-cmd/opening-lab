@@ -1,37 +1,35 @@
-# Blundr v2.5 — Lightweight Stockfish + Board Coordinates + Dominance Bar
+# Blundr v2.6.1 — GPT Debug + Expert Coach
 
-This build fixes the browser Stockfish issue by switching from the heavyweight `stockfish` package to lightweight `stockfish.wasm`.
+This build is for diagnosing why the trainer may be giving weak or confusing guidance.
 
 ## What changed
 
-- Replaces `stockfish` with `stockfish.wasm`.
-- During `npm install`, `scripts/copy-stockfish.js` copies:
-  - `stockfish.js`
-  - `stockfish.wasm`
-  - `stockfish.worker.js`
-- These files are small enough for GitHub and Vercel.
-- The client runs Stockfish locally in a browser Web Worker before calling `/api/brain`.
-- `/api/brain` prioritizes `clientEngine` results from browser Stockfish.
-- If browser Stockfish is unavailable, the app falls back to internal engine-style analysis and clearly labels that fallback.
-- Adds board coordinates:
-  - files along the bottom
-  - ranks along the left
-  - orientation-aware for white/black
-- Adds a chess.com-style dominance/evaluation bar:
-  - black advantage grows from the top
-  - white advantage grows from the bottom
-  - label shows the current engine estimate
+- Adds a live **GPT Debug Cell** in the trainer screen.
+- The debug cell shows:
+  - pipeline status
+  - system prompt
+  - exact structured input sent to GPT
+  - raw GPT output
+  - parsed GPT output
+  - sanitized board annotation actually rendered by the app
+- `/api/brain` now returns debug data with every response.
+- GPT coaching is now instructed to always use expert-level chess guidance.
+- Rating pool still controls Lichess/opponent context and engine skill, but GPT is instructed not to dumb down or weaken chess advice.
+- Plan is instructed to explicitly distinguish:
+  - restricted training move
+  - engine-preferred move
+  - fallback opening plan
 
-## Core product behavior
+## Existing v2.5 features preserved
 
-- Restricted opening trainer remains default.
-- Wrong legal moves are rejected and logged as review items.
-- Opponent moves are Lichess-weighted but constrained to the selected opening tree.
-- Book-complete pause: Train Again / Continue vs Bot.
-- Continuation mode accepts legal moves and evaluates them.
-- Active Board: Attack / Defense / Plan.
-- Opponent cue fades after 2.5 seconds.
-- Persistent board overlays wait until Brain returns the final validated visual.
+- Lightweight `stockfish.wasm`
+- Browser Stockfish worker
+- Board coordinates
+- White/black dominance bar
+- Restricted trainer
+- Lichess-weighted opponent replies
+- Attack / Defense / Plan Active Board
+- Review mistake logging
 
 ## Install
 
@@ -41,25 +39,11 @@ npm run build
 npm run dev
 ```
 
-During install you should see:
-
-```text
-[Blundr] Copied stockfish.wasm browser worker: stockfish.js, stockfish.wasm, stockfish.worker.js
-```
-
-Verify no huge files:
-
-```bash
-find public/stockfish -size +5M -print
-```
-
-That command should print nothing.
-
 ## Deploy
 
 ```bash
 git add .gitignore .npmrc README.md app public scripts package.json package-lock.json tsconfig.json next.config.ts postcss.config.mjs next-env.d.ts
-git commit -m "Add Blundr v2.5 lightweight Stockfish and board UI"
+git commit -m "Add Blundr v2.6.1 GPT debug and expert coach"
 git push
 ```
 
@@ -71,7 +55,7 @@ OPENAI_COACH_MODEL
 LICHESS_TOKEN
 ```
 
-Recommended fast first model:
+Recommended fast model:
 
 ```text
 OPENAI_COACH_MODEL=gpt-4o-mini

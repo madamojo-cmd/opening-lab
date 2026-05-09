@@ -3,6 +3,12 @@ import { Chess } from "chess.js";
 
 export const dynamic = "force-dynamic";
 
+const BLUNDR_EXPERT_SYSTEM_PROMPT =
+  "You are Blundr's elite chess opening coach and visual teaching selector. Return strict JSON only. Do not invent legal moves, tactics, coordinates, or engine claims. Use verified candidate fields only. Always give expert-level chess advice. Do not dumb down, oversimplify, or weaken advice based on rating level. Make Attack, Defense, and Plan genuinely different: Attack = user pressure/targets; Defense = user pieces/squares protected, loose, or under threat; Plan = next approved move/idea and whether that differs from engine preference. Required keys: selectedView, headline, mainExplanation, visualExplanation, planExplanation, nextPlan, keySquares, planArrows, attack, defense, plan, threatNote, suppress, confidence. Each view needs title, message, lines, cues, insight.";
+
+const BLUNDR_EXPERT_USER_INSTRUCTION =
+  "Return the final visual and verbal annotation. The client renders your attack/defense/plan objects as the source of truth. Use only candidateSquares/candidateArrows or explicit move coordinates. Attack should show what the user is pressuring. Defense should show user-side defended/loose/threatened pieces. Plan should prioritize the expected training move in restricted mode, but explicitly distinguish restricted training move versus engine-preferred move when they differ. Always provide expert-level chess guidance; rating pool affects opponent frequency, not advice quality.";
+
 type LineKind = "attack" | "defense" | "plan" | "opponent";
 type CueKind = "origin" | "target" | "support" | "danger" | "opponent";
 type VisualLine = { from: string; to: string; kind: LineKind; label?: string; score?: number; reason?: string };
@@ -448,6 +454,14 @@ export async function POST(request: NextRequest) {
       annotation: fallback,
       candidates,
       facts,
+      debug: {
+        systemPrompt: BLUNDR_EXPERT_SYSTEM_PROMPT,
+        gptInput: null,
+        rawOutput: null,
+        parsedOutput: null,
+        sanitizedAnnotation: fallback,
+        note: !apiKey ? "OPENAI_API_KEY missing, so GPT was not called." : "GPT skipped by request."
+      }
     });
   }
 
@@ -466,7 +480,7 @@ export async function POST(request: NextRequest) {
       candidateSquares: candidates.candidateSquares,
       candidateArrows: candidates.candidateArrows,
       diagnostics: candidates.diagnostics,
-      instruction: "Return the final visual and verbal annotation. The client renders your attack/defense/plan objects as the source of truth. Use only candidateSquares/candidateArrows or explicit move coordinates. Attack should show what the user is pressuring. Defense should show user-side defended/loose/threatened pieces. Plan should prioritize the expected training move in restricted mode.",
+      instruction: BLUNDR_EXPERT_USER_INSTRUCTION,
     };
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -477,7 +491,7 @@ export async function POST(request: NextRequest) {
         temperature: 0.12,
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: "You are Blundr's elite chess opening teaching selector. Return strict JSON only. Do not invent legal moves, tactics, coordinates, or engine claims. Use verified candidate fields only. Make Attack, Defense, and Plan genuinely different: Attack = user pressure/targets; Defense = user pieces/squares protected, loose, or under threat; Plan = next approved move/idea. Required keys: selectedView, headline, mainExplanation, visualExplanation, planExplanation, nextPlan, keySquares, planArrows, attack, defense, plan, threatNote, suppress, confidence. Each view needs title, message, lines, cues, insight." },
+          { role: "system", content: BLUNDR_EXPERT_SYSTEM_PROMPT },
           { role: "user", content: JSON.stringify(gptInput) },
         ],
       }),
@@ -490,11 +504,20 @@ export async function POST(request: NextRequest) {
         annotation: { ...fallback, reason: `OpenAI returned ${response.status}` },
         candidates,
         facts,
+        debug: {
+          systemPrompt: BLUNDR_EXPERT_SYSTEM_PROMPT,
+          gptInput,
+          rawOutput: null,
+          parsedOutput: null,
+          sanitizedAnnotation: { ...fallback, reason: `OpenAI returned ${response.status}` },
+          note: `OpenAI request failed with status ${response.status}.`
+        }
       });
     }
 
     const data = await response.json();
-    const parsed = JSON.parse(data?.choices?.[0]?.message?.content || "{}");
+    const rawOutput = data?.choices?.[0]?.message?.content || "{}";
+    const parsed = JSON.parse(rawOutput);
     const annotation = sanitizeAnnotation({ source: "openai", fallback: false, ...parsed }, fallback);
 
     return NextResponse.json({
@@ -503,6 +526,14 @@ export async function POST(request: NextRequest) {
       annotation,
       candidates,
       facts,
+      debug: {
+        systemPrompt: BLUNDR_EXPERT_SYSTEM_PROMPT,
+        gptInput,
+        rawOutput,
+        parsedOutput: parsed,
+        sanitizedAnnotation: annotation,
+        note: "GPT call succeeded. This is the exact structured payload and returned JSON used for the board."
+      }
     });
   } catch (error) {
     return NextResponse.json({
@@ -511,6 +542,14 @@ export async function POST(request: NextRequest) {
       annotation: { ...fallback, reason: error instanceof Error ? error.message : "GPT call failed" },
       candidates,
       facts,
+      debug: {
+        systemPrompt: BLUNDR_EXPERT_SYSTEM_PROMPT,
+        gptInput: typeof gptInput !== "undefined" ? gptInput : null,
+        rawOutput: null,
+        parsedOutput: null,
+        sanitizedAnnotation: { ...fallback, reason: error instanceof Error ? error.message : "GPT call failed" },
+        note: error instanceof Error ? error.message : "GPT call failed"
+      }
     });
   }
 }
