@@ -2,6 +2,6 @@
   "enginePath": "/stockfish/stockfish-18-lite-single.js",
   "selectedFile": "stockfish-18-lite-single.js",
   "source": "npm:stockfish",
-  "copiedAt": "2026-05-09T21:48:14.215Z",
+  "copiedAt": "2026-05-09T21:52:34.109Z",
   "note": "Runs Stockfish locally in a browser Web Worker. No external Stockfish API required."
 }

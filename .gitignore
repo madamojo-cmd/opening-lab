@@ -13,3 +13,10 @@ public/stockfish/*.nnue
 public/stockfish/*.bin
 public/stockfish/*.data
 public/stockfish/stockfish*.js
+
+# Generated Stockfish engine assets
+public/stockfish/*.wasm
+public/stockfish/*.nnue
+public/stockfish/*.bin
+public/stockfish/*.data
+public/stockfish/stockfish*.js
