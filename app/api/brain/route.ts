@@ -137,14 +137,28 @@ function buildAttackCandidates(game: Chess, userColor: string, openingName: stri
     for (const target of attacksFrom(game, piece.square)) {
       let score = 0;
       const enemyPiece = enemyPieces.get(target);
-      if (enemyPiece) score += (VALUES[enemyPiece.type] ?? 0) / 10 + 40;
-      if (key.has(target)) score += 55;
-      if (ring.has(target)) score += 45;
-      if (target === (userColor === "w" ? "f7" : "f2")) score += 60;
-      if (["d4", "e4", "d5", "e5"].includes(target)) score += 25;
-      if (score > 0) {
-        lines.push({ from: piece.square, to: target, kind: "attack", label: enemyPiece ? `attacks ${enemyPiece.type}` : key.has(target) ? "theme" : "pressure", score, reason: enemyPiece ? "enemy piece under pressure" : "opening target square" });
-        cues.push({ square: target, kind: enemyPiece ? "danger" : "target", score, reason: "attack target" });
+      const isFPawnTarget = target === (userColor === "w" ? "f7" : "f2");
+      const isKingRing = ring.has(target);
+      const isTheme = key.has(target);
+      const isCenterBreak = target === theme.breakSq;
+
+      if (enemyPiece) score += (VALUES[enemyPiece.type] ?? 0) / 10 + 70;
+      if (isFPawnTarget) score += 115;
+      if (isKingRing) score += 80;
+      if (isTheme) score += 65;
+      if (isCenterBreak) score += 55;
+
+      // Suppress tiny early-opening pseudo-pressure such as e4 -> d5 unless it is actually a motif.
+      if (score >= 70) {
+        lines.push({
+          from: piece.square,
+          to: target,
+          kind: "attack",
+          label: enemyPiece ? `attacks ${enemyPiece.type}` : isFPawnTarget ? "f-pawn target" : isKingRing ? "king pressure" : "pressure",
+          score,
+          reason: enemyPiece ? "enemy piece under pressure" : isFPawnTarget ? "classic opening target" : isKingRing ? "king-zone pressure" : "meaningful opening target"
+        });
+        cues.push({ square: target, kind: enemyPiece ? "danger" : "target", score, reason: "meaningful attack target" });
       }
     }
   }
@@ -154,6 +168,7 @@ function buildAttackCandidates(game: Chess, userColor: string, openingName: stri
   const topLines = uniqueLines(lines).slice(0, 4);
   const topCues = uniqueCues(cues).slice(0, 4);
   if (topLines[0]) details.push(`${topLines[0].from} → ${topLines[0].to}: ${topLines[0].reason}`);
+  else details.push("No direct attack yet. Build pressure through development and central control.");
   return { lines: topLines, cues: topCues, details };
 }
 
@@ -162,28 +177,33 @@ function buildDefenseCandidates(game: Chess, userColor: string) {
   const lines: VisualLine[] = [];
   const cues: VisualCue[] = [];
   const details: string[] = [];
+  const backRank = userColor === "w" ? "1" : "8";
 
   for (const piece of allPieces(game, userColor)) {
     if (piece.type === "k") continue;
+
     const defenders = attackersTo(game, piece.square, userColor).filter((a) => a.from !== piece.square);
     const enemyAttackers = attackersTo(game, piece.square, enemy);
-    const pieceValue = VALUES[piece.type] ?? 0;
+    const value = VALUES[piece.type] ?? 0;
+
+    // Only surface defense when there is a real problem: opponent pressure, loose valuable piece, or king-safety relevance.
     if (enemyAttackers.length && !defenders.length) {
-      cues.push({ square: piece.square, kind: "danger", score: pieceValue / 8 + 100, reason: "loose piece under attack" });
-      lines.push({ from: enemyAttackers[0].from, to: piece.square, kind: "defense", label: "threat", score: pieceValue / 8 + 100, reason: "opponent threat to your piece" });
-      details.push(`${piece.square} is under attack and has no clear defender.`);
+      cues.push({ square: piece.square, kind: "danger", score: value / 8 + 150, reason: "loose piece under attack" });
+      lines.push({ from: enemyAttackers[0].from, to: piece.square, kind: "defense", label: "threat", score: value / 8 + 150, reason: "opponent threat to your piece" });
+      details.push(`${piece.square} is under attack and not clearly defended.`);
     } else if (enemyAttackers.length && defenders.length) {
-      cues.push({ square: piece.square, kind: "support", score: pieceValue / 10 + 70, reason: "contested but defended" });
-      lines.push({ from: defenders[0].from, to: piece.square, kind: "defense", label: "defends", score: pieceValue / 10 + 70, reason: "your piece is defended" });
-      details.push(`${piece.square} is contested, but ${defenders[0].from} helps defend it.`);
-    } else if (defenders.length && pieceValue >= 320) {
-      cues.push({ square: piece.square, kind: "support", score: pieceValue / 14, reason: "valuable defended piece" });
-      lines.push({ from: defenders[0].from, to: piece.square, kind: "defense", label: "protected", score: pieceValue / 14, reason: "defended valuable piece" });
+      cues.push({ square: piece.square, kind: "support", score: value / 10 + 100, reason: "contested but defended" });
+      lines.push({ from: defenders[0].from, to: piece.square, kind: "defense", label: "defends", score: value / 10 + 100, reason: "your piece is contested but defended" });
+      details.push(`${piece.square} is contested; ${defenders[0].from} helps defend it.`);
+    } else if (!defenders.length && value >= 320 && piece.square[1] !== backRank) {
+      cues.push({ square: piece.square, kind: "danger", score: value / 12 + 60, reason: "loose developed piece" });
+      details.push(`${piece.square} is a loose developed piece.`);
     }
   }
 
   lines.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   cues.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  if (!details.length) details.push("No urgent defensive issue. Prioritize development, king safety, and central control.");
   return { lines: uniqueLines(lines).slice(0, 4), cues: uniqueCues(cues).slice(0, 4), details };
 }
 
@@ -306,18 +326,18 @@ function buildCandidates(game: Chess, body: any, engineLines: any[]) {
 
   return {
     attack: {
-      title: attack.lines[0] ? "Your best pressure" : "Your attack",
-      message: attack.lines[0] ? `${attack.lines[0].from} → ${attack.lines[0].to}: ${attack.lines[0].reason ?? "pressure"}.` : theme.message,
+      title: attack.lines[0] ? "Your best pressure" : "No direct attack yet",
+      message: attack.lines[0] ? `${attack.lines[0].from} → ${attack.lines[0].to}: ${attack.lines[0].reason ?? "pressure"}.` : "No direct attack is justified yet. Build pressure through development, central control, and the opening plan.",
       lines: attack.lines.slice(0, 3),
       cues: attack.cues.slice(0, 3),
       insight: attack.details[0] ?? "Attack uses real attacked squares and opening targets.",
     },
     defense: {
-      title: defense.lines[0]?.reason?.includes("opponent") ? "Defensive alert" : "Your defensive structure",
-      message: defense.details[0] ?? "Defense shows defended pieces, loose pieces, and opponent pressure against your side.",
+      title: defense.lines[0]?.reason?.includes("opponent") ? "Defensive alert" : "No urgent defensive issue",
+      message: defense.details[0] ?? "No urgent defensive issue. Keep developing, prepare castling, and maintain central control.",
       lines: defense.lines.slice(0, 3),
       cues: defense.cues.slice(0, 3),
-      insight: defense.details[0] ?? "Defense uses real attacked-by/defended-by relationships.",
+      insight: defense.details[0] ?? "Defense only shows alerts when the opponent creates a meaningful threat or a piece is loose.",
     },
     plan: {
       title: expectedMove?.san ? `Next move: ${expectedMove.san}` : engineLines[0]?.san ? `Next idea: ${engineLines[0].san}` : theme.title,
@@ -359,6 +379,27 @@ function fallbackAnnotation(body: any, candidates: any, engine: any) {
 }
 
 function sanitizeAnnotation(raw: any, base: any) {
+  function textFromRich(value: any, fallback: string, max = 360) {
+    if (typeof value === "string" && value.trim()) return value.slice(0, max);
+    if (value && typeof value === "object") {
+      const parts = [value.title, value.message, value.insight].filter((x) => typeof x === "string" && x.trim());
+      if (parts.length) return parts.join(" ").slice(0, max);
+    }
+    return fallback;
+  }
+
+  function nextPlanText(value: any, fallback: string) {
+    if (typeof value === "string" && value.trim()) return value.slice(0, 240);
+    if (value && typeof value === "object") {
+      const san = typeof value.san === "string" ? value.san : "";
+      const uci = typeof value.uci === "string" ? value.uci : "";
+      const differs = typeof value.differsFromEngine === "boolean" ? value.differsFromEngine : undefined;
+      const baseText = san ? `Play ${san}${uci ? ` (${uci})` : ""}.` : "";
+      if (baseText) return differs === true ? `${baseText} Note: the training move differs from the engine preference.` : baseText;
+    }
+    return fallback;
+  }
+
   function sanitizeView(name: "attack" | "defense" | "plan") {
     const fallback = base[name];
     const view = raw?.[name] || {};
@@ -379,9 +420,9 @@ function sanitizeAnnotation(raw: any, base: any) {
     selectedView: ["attack", "defense", "plan"].includes(raw?.selectedView) ? raw.selectedView : base.selectedView,
     headline: typeof raw?.headline === "string" && raw.headline.trim() ? raw.headline.slice(0, 90) : base.headline,
     mainExplanation: typeof raw?.mainExplanation === "string" && raw.mainExplanation.trim() ? raw.mainExplanation.slice(0, 440) : base.mainExplanation,
-    visualExplanation: typeof raw?.visualExplanation === "string" && raw.visualExplanation.trim() ? raw.visualExplanation.slice(0, 340) : base.visualExplanation,
-    planExplanation: typeof raw?.planExplanation === "string" && raw.planExplanation.trim() ? raw.planExplanation.slice(0, 380) : base.planExplanation,
-    nextPlan: typeof raw?.nextPlan === "string" && raw.nextPlan.trim() ? raw.nextPlan.slice(0, 240) : base.nextPlan,
+    visualExplanation: textFromRich(raw?.visualExplanation, base.visualExplanation, 340),
+    planExplanation: textFromRich(raw?.planExplanation, base.planExplanation, 380),
+    nextPlan: nextPlanText(raw?.nextPlan, base.nextPlan),
     keySquares: Array.isArray(raw?.keySquares) ? raw.keySquares.filter(validSquare).slice(0, 4) : base.keySquares,
     planArrows: Array.isArray(raw?.planArrows) ? raw.planArrows.map((line: any) => sanitizeLine(line, "plan")).filter(Boolean).slice(0, 2) : base.planArrows,
     attack: sanitizeView("attack"),
@@ -418,6 +459,71 @@ function sanitizeClientEngine(clientEngine: any) {
   };
 }
 
+
+function ratingsFromPool(pool: any) {
+  const text = String(pool ?? "");
+  if (text.includes("2200") || text.includes("Expert")) return "2200,2500";
+  if (text.includes("1800")) return "1800,2000,2200";
+  if (text.includes("1600")) return "1200,1400,1600";
+  if (text.includes("1400")) return "1000,1200,1400";
+  if (text.includes("1000") || text.includes("New") || text.includes("Beginner")) return "1000,1200";
+  if (/^\d/.test(text) && text.includes(",")) return text;
+  return "1200,1400,1600";
+}
+
+function validateExplorerMovesForFen(fen: string, moves: any[]) {
+  const out: any[] = [];
+  for (const m of moves || []) {
+    const uci = String(m?.uci ?? "");
+    if (uci.length < 4) continue;
+    try {
+      const g = new Chess(fen);
+      const move = g.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci.length > 4 ? uci.slice(4, 5) : "q" });
+      if (!move) continue;
+      const total = Number(m.white ?? 0) + Number(m.draws ?? 0) + Number(m.black ?? 0);
+      out.push({
+        uci,
+        san: move.san,
+        total,
+        pct: 0,
+        averageRating: m.averageRating,
+      });
+    } catch {}
+  }
+  const denom = out.reduce((sum, m) => sum + (m.total || 0), 0) || 1;
+  return out
+    .map((m) => ({ ...m, pct: Math.round((m.total / denom) * 100) }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 10);
+}
+
+async function getCurrentFenLichessMoves(fen: string, ratingPool: any, speeds: any) {
+  const url = new URL("https://explorer.lichess.org/lichess");
+  url.searchParams.set("variant", "standard");
+  url.searchParams.set("fen", fen);
+  url.searchParams.set("moves", "12");
+  url.searchParams.set("topGames", "0");
+  url.searchParams.set("recentGames", "0");
+  url.searchParams.set("ratings", ratingsFromPool(ratingPool));
+  url.searchParams.set("speeds", String(speeds || "blitz,rapid,classical"));
+
+  const headers: Record<string, string> = { accept: "application/json", "user-agent": "BlundrOpeningTrainer/2.7" };
+  if (process.env.LICHESS_TOKEN) headers.authorization = `Bearer ${process.env.LICHESS_TOKEN}`;
+
+  try {
+    const response = await fetch(url.toString(), { headers, next: { revalidate: 60 * 60 } });
+    if (!response.ok) {
+      return { source: "lichess-current-fen", fallback: true, fen, status: response.status, moves: [], note: `Lichess returned ${response.status}` };
+    }
+    const data = await response.json();
+    const moves = validateExplorerMovesForFen(fen, Array.isArray(data?.moves) ? data.moves : []);
+    return { source: "lichess-current-fen", fallback: false, fen, ratings: ratingsFromPool(ratingPool), speeds: String(speeds || "blitz,rapid,classical"), moves, note: `${moves.length} legal current-FEN moves` };
+  } catch (error) {
+    return { source: "lichess-current-fen", fallback: true, fen, moves: [], note: error instanceof Error ? error.message : "Lichess fetch failed" };
+  }
+}
+
+
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const apiKey = process.env.OPENAI_API_KEY;
@@ -447,6 +553,8 @@ export async function POST(request: NextRequest) {
     opponentBookMoves: body.opponentBookMoves ?? [],
   };
 
+  const lichessContext = await getCurrentFenLichessMoves(body.fen, body.ratingFilter ?? body.ratingPool, body.speedFilter ?? body.speeds);
+
   if (!apiKey || body.skipGpt) {
     return NextResponse.json({
       pipeline: { facts: "complete", engine: engine.source, gpt: !apiKey ? "missing-api-key" : "skipped", visual: "fallback", latencyMs: Date.now() - started },
@@ -454,6 +562,7 @@ export async function POST(request: NextRequest) {
       annotation: fallback,
       candidates,
       facts,
+      lichessContext,
       debug: {
         systemPrompt: BLUNDR_EXPERT_SYSTEM_PROMPT,
         gptInput: null,
@@ -476,8 +585,14 @@ export async function POST(request: NextRequest) {
       attemptedMoveSan: body.attemptedMoveSan,
       lastMoveSan: body.lastMoveSan,
       lastMoveUci: body.lastMoveUci,
-      lichessMoves: Array.isArray(body.lichessMoves) ? body.lichessMoves.slice(0, 8) : [],
+      lichessMoves: lichessContext.moves,
       engineTopMoves: engine.pvs.slice(0, 5),
+      sourceLabels: {
+        planSource: body.expectedMoves?.[0] ? "repertoire" : engine.pvs?.[0] ? "engine" : "fallback",
+        trainingMove: body.expectedMoves?.[0]?.san,
+        engineBestMove: engine.pvs?.[0]?.san,
+        engineAgreement: body.expectedMoves?.[0]?.uci && engine.pvs?.[0]?.uci ? (body.expectedMoves[0].uci === engine.pvs[0].uci ? "agrees" : "prefers-other") : (engine.fallback ? "unavailable" : "unknown")
+      },
       candidateViews: { attack: candidates.attack, defense: candidates.defense, plan: candidates.plan },
       candidateSquares: candidates.candidateSquares,
       candidateArrows: candidates.candidateArrows,
@@ -508,6 +623,7 @@ export async function POST(request: NextRequest) {
         annotation: { ...fallback, reason: `OpenAI returned ${response.status}` },
         candidates,
         facts,
+        lichessContext,
         debug: {
           systemPrompt: BLUNDR_EXPERT_SYSTEM_PROMPT,
           gptInput,
@@ -530,6 +646,7 @@ export async function POST(request: NextRequest) {
       annotation,
       candidates,
       facts,
+      lichessContext,
       debug: {
         systemPrompt: BLUNDR_EXPERT_SYSTEM_PROMPT,
         gptInput,
@@ -546,6 +663,7 @@ export async function POST(request: NextRequest) {
       annotation: { ...fallback, reason: error instanceof Error ? error.message : "GPT call failed" },
       candidates,
       facts,
+      lichessContext,
       debug: {
         systemPrompt: BLUNDR_EXPERT_SYSTEM_PROMPT,
         gptInput: debugGptInput,

@@ -1,6 +1,6 @@
 {
-  "name": "blundr-v2-6-1-gpt-debug-fixed",
-  "version": "2.6.1",
+  "name": "blundr-v2-7-professional-repair",
+  "version": "2.7.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -17,7 +17,7 @@
     "react": "latest",
     "react-dom": "latest",
     "tailwindcss": "latest",
-    "stockfish.wasm": "latest"
+    "stockfish": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",

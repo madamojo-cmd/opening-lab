@@ -1,12 +1,8 @@
 {
-  "enginePath": "/stockfish/stockfish.worker.js",
-  "loaderPath": "/stockfish/stockfish.js",
-  "wasmPath": "/stockfish/stockfish.wasm",
-  "source": "npm:stockfish.wasm",
-  "copied": [
-    "stockfish.js",
-    "stockfish.wasm",
-    "stockfish.worker.js"
-  ],
-  "note": "Small browser Stockfish WASM worker copied successfully. No Stockfish API required."
+  "enginePath": "/stockfish/stockfish-18-lite-single.js",
+  "wasmPath": "/stockfish/stockfish-18-lite-single.wasm",
+  "selectedJs": "stockfish-18-lite-single.js",
+  "selectedWasm": "stockfish-18-lite-single.wasm",
+  "source": "npm:stockfish-lite-single",
+  "note": "Stockfish lite single-thread browser worker copied successfully. No engine API required."
 }
