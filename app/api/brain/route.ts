@@ -465,6 +465,8 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  let debugGptInput: any = null;
+
   try {
     const gptInput = {
       facts,
@@ -482,6 +484,8 @@ export async function POST(request: NextRequest) {
       diagnostics: candidates.diagnostics,
       instruction: BLUNDR_EXPERT_USER_INSTRUCTION,
     };
+
+    debugGptInput = gptInput;
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -544,7 +548,7 @@ export async function POST(request: NextRequest) {
       facts,
       debug: {
         systemPrompt: BLUNDR_EXPERT_SYSTEM_PROMPT,
-        gptInput: typeof gptInput !== "undefined" ? gptInput : null,
+        gptInput: debugGptInput,
         rawOutput: null,
         parsedOutput: null,
         sanitizedAnnotation: { ...fallback, reason: error instanceof Error ? error.message : "GPT call failed" },
