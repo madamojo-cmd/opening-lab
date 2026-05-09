@@ -1,6 +1,6 @@
 {
-  "name": "blundr-v2-4-built-in-stockfish",
-  "version": "2.4.0",
+  "name": "blundr-v2-5-lightweight-stockfish-board-ui",
+  "version": "2.5.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -17,7 +17,7 @@
     "react": "latest",
     "react-dom": "latest",
     "tailwindcss": "latest",
-    "stockfish": "latest"
+    "stockfish.wasm": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",

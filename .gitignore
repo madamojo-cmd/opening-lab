@@ -7,16 +7,7 @@ node_modules/
 .env.local
 .DS_Store
 
-# Generated Stockfish engine assets
-public/stockfish/*.wasm
+# Block accidental heavyweight Stockfish artifacts
 public/stockfish/*.nnue
 public/stockfish/*.bin
 public/stockfish/*.data
-public/stockfish/stockfish*.js
-
-# Generated Stockfish engine assets
-public/stockfish/*.wasm
-public/stockfish/*.nnue
-public/stockfish/*.bin
-public/stockfish/*.data
-public/stockfish/stockfish*.js

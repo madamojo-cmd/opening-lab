@@ -1,7 +1,12 @@
 {
-  "enginePath": "/stockfish/stockfish-18-lite-single.js",
-  "selectedFile": "stockfish-18-lite-single.js",
-  "source": "npm:stockfish",
-  "copiedAt": "2026-05-09T21:52:34.109Z",
-  "note": "Runs Stockfish locally in a browser Web Worker. No external Stockfish API required."
+  "enginePath": "/stockfish/stockfish.worker.js",
+  "loaderPath": "/stockfish/stockfish.js",
+  "wasmPath": "/stockfish/stockfish.wasm",
+  "source": "npm:stockfish.wasm",
+  "copied": [
+    "stockfish.js",
+    "stockfish.wasm",
+    "stockfish.worker.js"
+  ],
+  "note": "Small browser Stockfish WASM worker copied successfully. No Stockfish API required."
 }

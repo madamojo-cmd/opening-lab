@@ -1,16 +1,26 @@
-# Blundr v2.4 — Built-in Stockfish Worker
+# Blundr v2.5 — Lightweight Stockfish + Board Coordinates + Dominance Bar
 
-This build adds built-in browser Stockfish so you do not need a Stockfish API.
+This build fixes the browser Stockfish issue by switching from the heavyweight `stockfish` package to lightweight `stockfish.wasm`.
 
 ## What changed
 
-- Adds the `stockfish` npm package.
-- During `npm install`, `scripts/copy-stockfish.js` copies browser worker files into `public/stockfish`.
-- The client runs Stockfish locally in a Web Worker before calling `/api/brain`.
+- Replaces `stockfish` with `stockfish.wasm`.
+- During `npm install`, `scripts/copy-stockfish.js` copies:
+  - `stockfish.js`
+  - `stockfish.wasm`
+  - `stockfish.worker.js`
+- These files are small enough for GitHub and Vercel.
+- The client runs Stockfish locally in a browser Web Worker before calling `/api/brain`.
 - `/api/brain` prioritizes `clientEngine` results from browser Stockfish.
-- If browser Stockfish is unavailable, the app falls back to the existing engine-style analysis and clearly labels that fallback.
-- GPT still receives verified Attack / Defense / Plan candidates and returns the final visual + verbal annotation.
-- No `STOCKFISH_ENDPOINT` is required.
+- If browser Stockfish is unavailable, the app falls back to internal engine-style analysis and clearly labels that fallback.
+- Adds board coordinates:
+  - files along the bottom
+  - ranks along the left
+  - orientation-aware for white/black
+- Adds a chess.com-style dominance/evaluation bar:
+  - black advantage grows from the top
+  - white advantage grows from the bottom
+  - label shows the current engine estimate
 
 ## Core product behavior
 
@@ -31,17 +41,25 @@ npm run build
 npm run dev
 ```
 
-During install you should see a message like:
+During install you should see:
 
 ```text
-[Blundr] Copied Stockfish worker: stockfish-18-lite-single.js
+[Blundr] Copied stockfish.wasm browser worker: stockfish.js, stockfish.wasm, stockfish.worker.js
 ```
+
+Verify no huge files:
+
+```bash
+find public/stockfish -size +5M -print
+```
+
+That command should print nothing.
 
 ## Deploy
 
 ```bash
 git add .gitignore .npmrc README.md app public scripts package.json package-lock.json tsconfig.json next.config.ts postcss.config.mjs next-env.d.ts
-git commit -m "Add Blundr v2.4 Built-in Stockfish"
+git commit -m "Add Blundr v2.5 lightweight Stockfish and board UI"
 git push
 ```
 
@@ -59,4 +77,4 @@ Recommended fast first model:
 OPENAI_COACH_MODEL=gpt-4o-mini
 ```
 
-`STOCKFISH_ENDPOINT` is no longer required. You can add it later for deeper server-side analysis if desired.
+No `STOCKFISH_ENDPOINT` is required.
