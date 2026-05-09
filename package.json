@@ -1,11 +1,13 @@
 {
-  "name": "blundr-v2-3-super-trainer",
-  "version": "2.3.0",
+  "name": "blundr-v2-4-built-in-stockfish",
+  "version": "2.4.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "copy-stockfish": "node scripts/copy-stockfish.js",
+    "postinstall": "node scripts/copy-stockfish.js"
   },
   "dependencies": {
     "@tailwindcss/postcss": "latest",
@@ -14,7 +16,8 @@
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "tailwindcss": "latest"
+    "tailwindcss": "latest",
+    "stockfish": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",

@@ -387,6 +387,31 @@ function sanitizeAnnotation(raw: any, base: any) {
   };
 }
 
+
+function sanitizeClientEngine(clientEngine: any) {
+  const rawPvs = Array.isArray(clientEngine?.pvs) ? clientEngine.pvs : [];
+  const pvs = rawPvs
+    .map((pv: any) => ({
+      san: typeof pv?.san === "string" ? pv.san : "",
+      uci: typeof pv?.uci === "string" ? pv.uci : "",
+      cp: typeof pv?.cp === "number" ? pv.cp : undefined,
+      line: typeof pv?.line === "string" ? pv.line : typeof pv?.uci === "string" ? pv.uci : "",
+      depth: typeof pv?.depth === "number" ? pv.depth : undefined,
+    }))
+    .filter((pv: any) => typeof pv.uci === "string" && pv.uci.length >= 4)
+    .slice(0, 5);
+
+  if (!pvs.length) return null;
+
+  return {
+    source: clientEngine?.source || "stockfish-browser",
+    fallback: false,
+    depth: typeof clientEngine?.depth === "number" ? clientEngine.depth : undefined,
+    timeMs: typeof clientEngine?.timeMs === "number" ? clientEngine.timeMs : undefined,
+    pvs,
+  };
+}
+
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const apiKey = process.env.OPENAI_API_KEY;
@@ -397,7 +422,8 @@ export async function POST(request: NextRequest) {
 
   const started = Date.now();
   const skill = Number(body.skill ?? 1400) || 1400;
-  const engine = await getEngineLines(body.fen, skill);
+  const suppliedClientEngine = sanitizeClientEngine(body.clientEngine);
+  const engine = suppliedClientEngine ?? await getEngineLines(body.fen, skill);
   const candidates = buildCandidates(game, body, engine.pvs);
   const fallback = fallbackAnnotation(body, candidates, engine);
 

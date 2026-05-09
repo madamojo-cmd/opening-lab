@@ -6,3 +6,10 @@ node_modules/
 .env
 .env.local
 .DS_Store
+
+# Generated Stockfish engine assets
+public/stockfish/*.wasm
+public/stockfish/*.nnue
+public/stockfish/*.bin
+public/stockfish/*.data
+public/stockfish/stockfish*.js
