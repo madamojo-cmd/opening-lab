@@ -2,12 +2,12 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Opening Lab",
-  description: "A mobile-first chess opening trainer with Lichess historical move weighting.",
+  title: "Blundr",
+  description: "Controlled chess opening training with an intelligent board.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    title: "Opening Lab",
+    title: "Blundr",
     statusBarStyle: "default"
   }
 };
@@ -19,11 +19,7 @@ export const viewport: Viewport = {
   maximumScale: 1
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body>{children}</body>

@@ -1,26 +1,25 @@
 {
-  "name": "blundr-active-board-v11",
-  "version": "1.1.0",
+  "name": "blundr-v2-1-gpt-visual-pipeline",
+  "version": "2.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "start": "next start"
   },
   "dependencies": {
-    "chess.js": "1.4.0",
-    "lucide-react": "1.14.0",
-    "next": "16.2.6",
-    "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "@tailwindcss/postcss": "latest",
+    "chess.js": "latest",
+    "lucide-react": "latest",
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "tailwindcss": "latest"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "4.1.17",
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
-    "tailwindcss": "4.1.17",
     "typescript": "latest"
   }
 }

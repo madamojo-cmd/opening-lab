@@ -1,48 +1,44 @@
-# Blundr v1.1 — Active Board Visual Engine
+# Blundr v2.1 — GPT Visual Pipeline
 
-This deployable update adds an **Active Board** toggle to the training screen.
+This update routes the Intelligent Board through a visible annotation pipeline:
 
-When Active Board is ON, the board overlays:
+1. Analyze board facts with chess.js and restricted opening context.
+2. Send current FEN to the engine route for move impact and candidate continuations.
+3. Send verified facts, training target, engine lines, and candidate visual fields to GPT.
+4. Receive structured GPT annotation.
+5. Validate squares/arrows.
+6. Update Attack / Defense / Plan highlights and coaching text.
 
-- attacked squares from the last moved piece
-- protected/defended friendly pieces
-- weak or important squares
-- hanging pieces
-- pins
-- forks
-- skewers
-- discovered attacks
-- overloaded defenders
-- plan arrows
-- concise move/plan/threat commentary
+## Product behavior
 
-The implementation is local-first and production-safe:
+- Restricted opening trainer remains the default.
+- Wrong legal moves are rejected and logged as review items.
+- Opponent opening replies are Lichess-weighted but constrained to the selected opening tree.
+- End of book pauses with Train Again / Continue vs Bot.
+- Active Board modes are Attack / Defense / Plan.
+- GPT controls both verbal coaching and visual annotation from verified candidates.
+- Upper-right status indicator above the board shows the live pipeline step.
 
-- chess.js is the verified board-fact engine
-- Stockfish/engine lines are used as candidate targets when available
-- existing AI Coach remains available for deeper structured explanations
-- overlays are generated client-side for speed and cost control
-- the Active Board setting is saved in localStorage
-
-## Run
+## Install
 
 ```bash
-npm install
-npm run dev
-```
-
-## Build
-
-```bash
+npm install --registry=https://registry.npmjs.org/
 npm run build
+npm run dev
 ```
 
 ## Deploy
 
-Commit and push to GitHub. Vercel will deploy the Next.js app.
-
 ```bash
-git add .
-git commit -m "Add Active Board visual engine"
+git add .gitignore .npmrc README.md app public package.json package-lock.json tsconfig.json next.config.ts postcss.config.mjs next-env.d.ts
+git commit -m "Add Blundr v2.1 GPT Visual Pipeline"
 git push
+```
+
+## Optional Vercel variables
+
+```text
+LICHESS_TOKEN
+OPENAI_API_KEY
+OPENAI_COACH_MODEL
 ```

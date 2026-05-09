@@ -1,16 +1,10 @@
 {
-  "name": "Opening Lab",
-  "short_name": "Opening Lab",
-  "description": "Train your openings with Lichess historical move weighting.",
+  "name": "Blundr",
+  "short_name": "Blundr",
+  "description": "Controlled chess opening training with an intelligent board.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f7f7f4",
   "theme_color": "#166534",
-  "icons": [
-    {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
-    }
-  ]
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
 }
