@@ -1,2 +1,16 @@
 @import "tailwindcss";
 html,body{min-height:100%;background:#f7f7f4;color:#171717}body{font-family:Arial,Helvetica,sans-serif}button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}input,textarea,button{font:inherit}@keyframes blundrLine{0%{opacity:.48;filter:drop-shadow(0 0 2px rgba(255,220,120,.25))}50%{opacity:.95;filter:drop-shadow(0 0 7px rgba(255,220,120,.58))}100%{opacity:.48;filter:drop-shadow(0 0 2px rgba(255,220,120,.25))}}@keyframes blundrOpp{0%{opacity:0;transform:scale(.985)}12%{opacity:.92;transform:scale(1)}78%{opacity:.82}100%{opacity:0;transform:scale(1.015)}}.blundr-intent-line{animation:blundrLine 1.9s ease-in-out infinite}.blundr-opponent-line{animation:blundrOpp 2.5s ease-out forwards}
+
+
+/* Board-Lab Temporal Gate visual package: cleaned for final deployment. */
+@keyframes blundrBoardLabLockGate{to{transform:rotate(360deg)}}
+@keyframes blundrBoardLabStepAlign{0%,100%{opacity:.72;transform:scale(.98)}50%{opacity:1;transform:scale(1.03)}}
+@keyframes blundrBoardLabRailFlow{to{stroke-dashoffset:-10}}
+@keyframes blundrTemporalHold{0%,100%{opacity:.9;filter:drop-shadow(0 0 1.5px color-mix(in srgb,var(--tg-primary) 18%,transparent))}50%{opacity:1;filter:drop-shadow(0 0 3.5px color-mix(in srgb,var(--tg-primary) 34%,transparent))}}
+.blundr-boardlab-temporal-gate{filter:drop-shadow(0 0 3px color-mix(in srgb,var(--tg-primary) 20%,transparent));transform-box:fill-box;transform-origin:center}
+.blundr-temporal-motion{animation:blundrTemporalHold 2.15s ease-in-out infinite}
+.blundr-temporal-motion path:nth-of-type(2){animation:blundrBoardLabRailFlow 2.1s linear infinite}
+.blundr-boardlab-lock-gate{transform-box:fill-box;transform-origin:center;animation:blundrBoardLabLockGate 4.8s linear infinite}
+.blundr-boardlab-lock-step-motion{transform-box:fill-box;transform-origin:center;animation:blundrBoardLabStepAlign 2.6s ease-in-out infinite}
+.blundr-temporal-token{font:900 3.15px Arial,Helvetica,sans-serif;letter-spacing:.08em;paint-order:stroke;stroke:rgba(255,255,255,.85);stroke-width:.56px;dominant-baseline:middle;pointer-events:none}
+.blundr-temporal-label{font:900 2.8px Arial,Helvetica,sans-serif;letter-spacing:.025em;paint-order:stroke;stroke:rgba(255,255,255,.85);stroke-width:.56px;dominant-baseline:middle;pointer-events:none}

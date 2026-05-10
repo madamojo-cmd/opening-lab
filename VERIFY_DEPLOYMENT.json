@@ -1,0 +1,15 @@
+{
+  "name": "blundr-v2.8-temporal-gate-pro",
+  "version": "2.8.0",
+  "core_changes": [
+    "All board lines use unified Temporal Gate visual treatment",
+    "Knight lines preserve L-shaped geometry under the gate style",
+    "Train-mode display settings for motion, labels, gate text, arrows, and auto motif detection",
+    "Server-side motif detection for forks, pins, x-rays, hanging pieces, and defensive pins"
+  ],
+  "run_commands": [
+    "rm -rf .next node_modules",
+    "npm install --registry=https://registry.npmjs.org/",
+    "npm run dev"
+  ]
+}

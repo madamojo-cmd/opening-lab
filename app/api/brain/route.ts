@@ -11,7 +11,7 @@ const BLUNDR_EXPERT_USER_INSTRUCTION =
 
 type LineKind = "attack" | "defense" | "plan" | "opponent";
 type CueKind = "origin" | "target" | "support" | "danger" | "opponent";
-type VisualLine = { from: string; to: string; kind: LineKind; label?: string; score?: number; reason?: string };
+type VisualLine = { from: string; to: string; kind: LineKind; label?: string; score?: number; reason?: string; pathStyle?: "auto" | "curve" | "knight-l" | "temporal-gate"; gateState?: "locked" | "unlocking" | "open"; timing?: "now" | "not-yet" | "prepare"; motif?: "fork" | "pin" | "xray" | "hanging" | "defense" | "attack" | "plan" | "opponent"; knightCorner?: "file-first" | "rank-first" };
 type VisualCue = { square: string; kind: CueKind; score?: number; reason?: string };
 type View = { title: string; message: string; lines: VisualLine[]; cues: VisualCue[]; insight?: string };
 
@@ -93,6 +93,122 @@ function attackersTo(game: Chess, target: string, color: string) {
     .map((piece) => ({ from: piece.square, to: target, piece: piece.type, value: VALUES[piece.type] ?? 0 }));
 }
 
+function knightPathStyle(from: string, to: string) {
+  if (!validSquare(from) || !validSquare(to)) return undefined;
+  const df = Math.abs(fileIndex(from) - fileIndex(to));
+  const dr = Math.abs(rankIndex(from) - rankIndex(to));
+  return (df === 1 && dr === 2) || (df === 2 && dr === 1) ? "knight-l" as const : undefined;
+}
+function temporalize(line: VisualLine, defaults: Partial<VisualLine> = {}): VisualLine {
+  const style = line.pathStyle || knightPathStyle(line.from, line.to) || "temporal-gate";
+  return { gateState: "unlocking", timing: "prepare", ...defaults, ...line, pathStyle: style };
+}
+function lineBetweenSquares(a: string, b: string) {
+  const af = fileIndex(a), ar = rankIndex(a), bf = fileIndex(b), br = rankIndex(b);
+  const df = Math.sign(bf - af), dr = Math.sign(br - ar);
+  const aligned = af === bf || ar === br || Math.abs(bf - af) === Math.abs(br - ar);
+  if (!aligned) return null;
+  return { df, dr, distance: Math.max(Math.abs(bf - af), Math.abs(br - ar)) };
+}
+function squaresBetween(a: string, b: string) {
+  const line = lineBetweenSquares(a, b);
+  if (!line || line.distance <= 1) return [] as string[];
+  const out: string[] = [];
+  let f = fileIndex(a) + line.df, r = rankIndex(a) + line.dr;
+  while (f !== fileIndex(b) || r !== rankIndex(b)) {
+    out.push(toSquare(f, r));
+    f += line.df; r += line.dr;
+  }
+  return out;
+}
+function isLinePieceForVector(pieceType: string, a: string, b: string) {
+  const line = lineBetweenSquares(a, b);
+  if (!line) return false;
+  const diagonal = line.df !== 0 && line.dr !== 0;
+  const straight = line.df === 0 || line.dr === 0;
+  return pieceType === "q" || (pieceType === "b" && diagonal) || (pieceType === "r" && straight);
+}
+function buildMotifCandidates(game: Chess, userColor: string) {
+  const enemy = other(userColor);
+  const lines: VisualLine[] = [];
+  const cues: VisualCue[] = [];
+  const notes: string[] = [];
+  const enemyPieces = allPieces(game, enemy);
+  const userPieces = allPieces(game, userColor);
+  const valuableEnemy = enemyPieces.filter((p) => p.type !== "p" && p.type !== "k");
+  const enemyKing = kingSquare(game, enemy);
+  const userKing = kingSquare(game, userColor);
+
+  // Forks: current legal move lands on a square attacking at least two valuable/king-zone targets.
+  for (const move of game.moves({ verbose: true }) as any[]) {
+    if (move.color !== userColor) continue;
+    const mover = pieceAt(game, move.from);
+    if (!mover) continue;
+    const after = new Chess(game.fen());
+    const made = after.move({ from: move.from, to: move.to, promotion: move.promotion ?? "q" } as any) as any;
+    if (!made) continue;
+    const attacks = attacksFrom(after, move.to);
+    const targets = valuableEnemy.filter((p) => attacks.includes(p.square));
+    const kingPressure = enemyKing && attacks.includes(enemyKing) ? [{ square: enemyKing, type: "k" }] : [];
+    const allTargets = [...targets, ...kingPressure];
+    if (allTargets.length >= 2) {
+      lines.push(temporalize({ from: move.from, to: move.to, kind: "attack", label: `Fork: ${move.san}`, score: 980, reason: "legal move creates a fork", motif: "fork", timing: "now", gateState: "open" }));
+      allTargets.slice(0, 2).forEach((target: any) => {
+        lines.push(temporalize({ from: move.to, to: target.square, kind: "attack", label: "fork target", score: 760, reason: "attacked after fork", motif: "fork", timing: "now", gateState: "open" }));
+        cues.push({ square: target.square, kind: "danger", score: 760, reason: "fork target" });
+      });
+      notes.push(`${move.san} creates a fork from ${move.to}.`);
+      break;
+    }
+  }
+
+  // Pins / x-rays by user line pieces against enemy king/queen/rook.
+  for (const attacker of userPieces.filter((p) => ["b", "r", "q"].includes(p.type))) {
+    for (const anchor of enemyPieces.filter((p) => ["k", "q", "r"].includes(p.type))) {
+      if (!isLinePieceForVector(attacker.type, attacker.square, anchor.square)) continue;
+      const between = squaresBetween(attacker.square, anchor.square);
+      const occupied = between.map((sq) => ({ square: sq, piece: pieceAt(game, sq) })).filter((x) => x.piece);
+      if (occupied.length === 1 && occupied[0].piece.color === enemy) {
+        const blocker = occupied[0];
+        const motif = anchor.type === "k" ? "pin" : "xray";
+        lines.push(temporalize({ from: attacker.square, to: blocker.square, kind: "attack", label: motif === "pin" ? `Pin: ${attacker.square}-${blocker.square}` : `X-Ray: ${attacker.square}-${anchor.square}`, score: motif === "pin" ? 930 : 820, reason: motif === "pin" ? "line piece pins to king" : "line piece x-rays valuable target", motif, timing: "now", gateState: "open" }));
+        lines.push(temporalize({ from: blocker.square, to: anchor.square, kind: "attack", label: motif === "pin" ? "king anchor" : "hidden target", score: 700, reason: "anchor behind blocker", motif, timing: "now", gateState: "open" }));
+        cues.push({ square: blocker.square, kind: "danger", score: 800, reason: motif });
+        cues.push({ square: anchor.square, kind: "target", score: 700, reason: "anchor" });
+        notes.push(`${attacker.square}-${blocker.square}-${anchor.square} forms a ${motif}.`);
+      }
+    }
+  }
+
+  // Hanging enemy pieces: attacked by user and not defended by enemy.
+  for (const target of enemyPieces.filter((p) => p.type !== "k")) {
+    const userAttackers = attackersTo(game, target.square, userColor);
+    const enemyDefenders = attackersTo(game, target.square, enemy).filter((a) => a.from !== target.square);
+    if (userAttackers.length && !enemyDefenders.length && (VALUES[target.type] ?? 0) >= 300) {
+      lines.push(temporalize({ from: userAttackers[0].from, to: target.square, kind: "attack", label: `Loose: ${target.square}`, score: 650, reason: "attacked and undefended", motif: "hanging", timing: "now", gateState: "open" }));
+      cues.push({ square: target.square, kind: "danger", score: 650, reason: "hanging target" });
+      notes.push(`${target.square} is attacked and not defended.`);
+      break;
+    }
+  }
+
+  // Defensive pins against user pieces.
+  if (userKing) {
+    for (const attacker of enemyPieces.filter((p) => ["b", "r", "q"].includes(p.type))) {
+      if (!isLinePieceForVector(attacker.type, attacker.square, userKing)) continue;
+      const occupied = squaresBetween(attacker.square, userKing).map((sq) => ({ square: sq, piece: pieceAt(game, sq) })).filter((x) => x.piece);
+      if (occupied.length === 1 && occupied[0].piece.color === userColor) {
+        lines.push(temporalize({ from: attacker.square, to: occupied[0].square, kind: "defense", label: `Pinned: ${occupied[0].square}`, score: 900, reason: "your piece is pinned to king", motif: "pin", timing: "now", gateState: "open" }));
+        cues.push({ square: occupied[0].square, kind: "danger", score: 900, reason: "pinned defender" });
+        notes.push(`${occupied[0].square} is pinned to your king.`);
+        break;
+      }
+    }
+  }
+
+  return { lines: uniqueLines(lines).slice(0, 6), cues: uniqueCues(cues).slice(0, 6), notes };
+}
+
 function kingSquare(game: Chess, color: string) {
   return allPieces(game, color).find((p) => p.type === "k")?.square ?? null;
 }
@@ -169,7 +285,7 @@ function buildAttackCandidates(game: Chess, userColor: string, openingName: stri
   const topCues = uniqueCues(cues).slice(0, 4);
   if (topLines[0]) details.push(`${topLines[0].from} → ${topLines[0].to}: ${topLines[0].reason}`);
   else details.push("No direct attack yet. Build pressure through development and central control.");
-  return { lines: topLines, cues: topCues, details };
+  return { lines: topLines.map((line) => temporalize(line, { motif: "attack", timing: "now", gateState: "open" })), cues: topCues, details };
 }
 
 function buildDefenseCandidates(game: Chess, userColor: string) {
@@ -204,7 +320,7 @@ function buildDefenseCandidates(game: Chess, userColor: string) {
   lines.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   cues.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   if (!details.length) details.push("No urgent defensive issue. Prioritize development, king safety, and central control.");
-  return { lines: uniqueLines(lines).slice(0, 4), cues: uniqueCues(cues).slice(0, 4), details };
+  return { lines: uniqueLines(lines).slice(0, 4).map((line) => temporalize(line, { motif: "defense", timing: "now", gateState: "open" })), cues: uniqueCues(cues).slice(0, 4), details };
 }
 
 function uniqueLines(lines: VisualLine[]) {
@@ -289,7 +405,12 @@ async function getEngineLines(fen: string, skill = 1400) {
 function sanitizeLine(line: any, fallbackKind: LineKind = "plan"): VisualLine | null {
   if (!validSquare(line?.from) || !validSquare(line?.to)) return null;
   const kind = ["attack", "defense", "plan", "opponent"].includes(line?.kind) ? line.kind : fallbackKind;
-  return { from: line.from, to: line.to, kind, label: typeof line?.label === "string" ? line.label.slice(0, 28) : "" };
+  const pathStyle = ["auto", "curve", "knight-l", "temporal-gate"].includes(line?.pathStyle) ? line.pathStyle : undefined;
+  const gateState = ["locked", "unlocking", "open"].includes(line?.gateState) ? line.gateState : undefined;
+  const timing = ["now", "not-yet", "prepare"].includes(line?.timing) ? line.timing : undefined;
+  const motif = ["fork", "pin", "xray", "hanging", "defense", "attack", "plan", "opponent"].includes(line?.motif) ? line.motif : undefined;
+  const knightCorner = ["file-first", "rank-first"].includes(line?.knightCorner) ? line.knightCorner : undefined;
+  return { from: line.from, to: line.to, kind, label: typeof line?.label === "string" ? line.label.slice(0, 28) : "", pathStyle, gateState, timing, motif, knightCorner };
 }
 
 function sanitizeCue(cue: any, fallbackKind: CueKind = "target"): VisualCue | null {
@@ -308,36 +429,38 @@ function buildCandidates(game: Chess, body: any, engineLines: any[]) {
   const planLines: VisualLine[] = [];
 
   if (expectedMove?.uci && expectedMove.uci.length >= 4) {
-    planLines.push({ from: expectedMove.uci.slice(0, 2), to: expectedMove.uci.slice(2, 4), kind: "plan", label: expectedMove.san, score: 999, reason: "approved training move" });
+    planLines.push(temporalize({ from: expectedMove.uci.slice(0, 2), to: expectedMove.uci.slice(2, 4), kind: "plan", label: expectedMove.san, score: 999, reason: "approved training move", motif: "plan", timing: "prepare", gateState: "unlocking" }));
   } else if (engineLines[0]?.uci && engineLines[0].uci.length >= 4) {
-    planLines.push({ from: engineLines[0].uci.slice(0, 2), to: engineLines[0].uci.slice(2, 4), kind: "plan", label: engineLines[0].san, score: engineLines[0].cp ?? 50, reason: "engine continuation" });
+    planLines.push(temporalize({ from: engineLines[0].uci.slice(0, 2), to: engineLines[0].uci.slice(2, 4), kind: "plan", label: engineLines[0].san, score: engineLines[0].cp ?? 50, reason: "engine continuation", motif: "plan", timing: "prepare", gateState: "unlocking" }));
   }
 
   const planCues = planLines[0]?.to ? [{ square: planLines[0].to, kind: "target" as CueKind, score: 999, reason: "plan destination" }] : theme.key.filter(validSquare).slice(0, 1).map((square) => ({ square, kind: "target" as CueKind }));
+  const motifs = buildMotifCandidates(game, userColor);
 
   const candidateSquares = Array.from(new Set([
     ...theme.key,
     ...attack.cues.map((cue) => cue.square),
     ...defense.cues.map((cue) => cue.square),
     ...planCues.map((cue) => cue.square),
+    ...motifs.cues.map((cue) => cue.square),
   ])).filter(validSquare).slice(0, 12);
 
-  const candidateArrows = [...attack.lines, ...defense.lines, ...planLines].filter((line) => validSquare(line.from) && validSquare(line.to)).slice(0, 12);
+  const candidateArrows = [...motifs.lines, ...attack.lines, ...defense.lines, ...planLines].filter((line) => validSquare(line.from) && validSquare(line.to)).slice(0, 12);
 
   return {
     attack: {
       title: attack.lines[0] ? "Your best pressure" : "No direct attack yet",
       message: attack.lines[0] ? `${attack.lines[0].from} → ${attack.lines[0].to}: ${attack.lines[0].reason ?? "pressure"}.` : "No direct attack is justified yet. Build pressure through development, central control, and the opening plan.",
-      lines: attack.lines.slice(0, 3),
-      cues: attack.cues.slice(0, 3),
-      insight: attack.details[0] ?? "Attack uses real attacked squares and opening targets.",
+      lines: uniqueLines([...motifs.lines.filter((line) => line.kind === "attack"), ...attack.lines]).slice(0, 3),
+      cues: uniqueCues([...motifs.cues.filter((cue) => cue.kind === "danger" || cue.kind === "target"), ...attack.cues]).slice(0, 3),
+      insight: motifs.notes[0] ?? attack.details[0] ?? "Attack uses real attacked squares and opening targets.",
     },
     defense: {
       title: defense.lines[0]?.reason?.includes("opponent") ? "Defensive alert" : "No urgent defensive issue",
       message: defense.details[0] ?? "No urgent defensive issue. Keep developing, prepare castling, and maintain central control.",
-      lines: defense.lines.slice(0, 3),
-      cues: defense.cues.slice(0, 3),
-      insight: defense.details[0] ?? "Defense only shows alerts when the opponent creates a meaningful threat or a piece is loose.",
+      lines: uniqueLines([...motifs.lines.filter((line) => line.kind === "defense"), ...defense.lines]).slice(0, 3),
+      cues: uniqueCues([...motifs.cues.filter((cue) => cue.kind === "danger" || cue.kind === "support"), ...defense.cues]).slice(0, 3),
+      insight: motifs.notes.find((note) => note.includes("pinned to your king")) ?? defense.details[0] ?? "Defense only shows alerts when the opponent creates a meaningful threat or a piece is loose.",
     },
     plan: {
       title: expectedMove?.san ? `Next move: ${expectedMove.san}` : engineLines[0]?.san ? `Next idea: ${engineLines[0].san}` : theme.title,
@@ -352,6 +475,7 @@ function buildCandidates(game: Chess, body: any, engineLines: any[]) {
       attackDetails: attack.details,
       defenseDetails: defense.details,
       openingTheme: theme,
+      motifNotes: motifs.notes,
     },
   };
 }
@@ -405,10 +529,12 @@ function sanitizeAnnotation(raw: any, base: any) {
     const view = raw?.[name] || {};
     const lines = Array.isArray(view.lines) ? view.lines.map((line: any) => sanitizeLine(line, name)).filter(Boolean).slice(0, name === "plan" ? 1 : 2) : [];
     const cues = Array.isArray(view.cues) ? view.cues.map((cue: any) => sanitizeCue(cue, name === "defense" ? "support" : "target")).filter(Boolean).slice(0, 3) : [];
+    const motifLines = Array.isArray(fallback.lines) ? fallback.lines.filter((line: VisualLine) => line.motif).slice(0, name === "plan" ? 1 : 2) : [];
+    const finalLines = uniqueLines([...motifLines, ...lines]).slice(0, name === "plan" ? 1 : 3);
     return {
       title: typeof view.title === "string" && view.title.trim() ? view.title.slice(0, 80) : fallback.title,
       message: typeof view.message === "string" && view.message.trim() ? view.message.slice(0, 300) : fallback.message,
-      lines: lines.length ? lines : fallback.lines,
+      lines: finalLines.length ? finalLines : fallback.lines,
       cues: cues.length ? cues : fallback.cues,
       insight: typeof view.insight === "string" ? view.insight.slice(0, 260) : fallback.insight,
     };

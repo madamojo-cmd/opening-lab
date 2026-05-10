@@ -1,0 +1,27 @@
+{
+  "name": "blundr-v2.7-temporal-gate-visual-only",
+  "base": "blundr-v2.7-professional-repair (uploaded)",
+  "scope": "visual overlay package + optional visual metadata within existing brain pipeline",
+  "unchanged": [
+    "training flow",
+    "repertoire logic",
+    "navigation",
+    "progress storage",
+    "Stockfish/Lichess/GPT architecture",
+    "Next.js stack",
+    "package.json dependencies"
+  ],
+  "changed": [
+    "app/page.tsx BoardLines renderer",
+    "app/globals.css gate animations",
+    "app/api/brain/route.ts optional line metadata and motif candidate labeling"
+  ],
+  "visual_settings": [
+    "motion",
+    "labels",
+    "gateText",
+    "arrows",
+    "autoMotifs"
+  ],
+  "notes": "All rendered board arrows use Temporal Gate style. Knight paths preserve L-shaped geometry where available."
+}

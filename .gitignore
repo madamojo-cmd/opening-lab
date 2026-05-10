@@ -8,6 +8,3 @@ node_modules/
 .DS_Store
 
 # Block accidental heavyweight Stockfish artifacts
-public/stockfish/*.nnue
-public/stockfish/*.bin
-public/stockfish/*.data

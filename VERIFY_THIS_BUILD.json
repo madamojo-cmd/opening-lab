@@ -1,0 +1,30 @@
+{
+  "build_name": "blundr_board_lab_DEPLOYMENT_READY",
+  "fixes": [
+    "postcss.config.mjs now exports { plugins: {} }",
+    "package.json dev script uses next dev -H 0.0.0.0",
+    "package.json build script uses next build",
+    "No Tailwind dependency is required",
+    "No TypeScript files are included",
+    "No Stockfish, GPT, Lichess, accounts, backend, or environment variables"
+  ],
+  "required_root_files": [
+    "package.json",
+    ".npmrc",
+    ".gitignore",
+    "next.config.mjs",
+    "postcss.config.mjs",
+    "vercel.json",
+    "README.md",
+    "app/layout.jsx",
+    "app/page.jsx",
+    "app/globals.css",
+    "public/sample-motion-package.json"
+  ],
+  "run_commands": [
+    "rm -rf app public .next node_modules package.json package-lock.json next.config.* vercel.json .npmrc README.md postcss.config.* tsconfig.json next-env.d.ts",
+    "unzip -o blundr_board_lab_DEPLOYMENT_READY.zip",
+    "npm install --registry=https://registry.npmjs.org/",
+    "npm run dev"
+  ]
+}

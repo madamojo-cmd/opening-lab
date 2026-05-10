@@ -1,0 +1,40 @@
+{
+  "base": "blundr-v2.7-professional-repair",
+  "version": "v2.7-boardlab-temporal-gate-final",
+  "scope": "visual-only renderer + existing-pipeline visual metadata",
+  "changed_files": [
+    "app/page.tsx",
+    "app/globals.css",
+    "app/api/brain/route.ts"
+  ],
+  "unchanged_intent": [
+    "training flow",
+    "repertoire logic",
+    "progress storage",
+    "Stockfish pipeline",
+    "Lichess pipeline",
+    "GPT fallback structure",
+    "package dependencies"
+  ],
+  "visual_source_of_truth": "Board Lab Move-Order Lock / Temporal Gate grammar",
+  "controls": [
+    "motion",
+    "labels",
+    "gate text",
+    "arrows",
+    "auto motifs"
+  ],
+  "motifs": [
+    "fork",
+    "pin",
+    "xray",
+    "hanging",
+    "defensive pin alert"
+  ],
+  "name": "blundr-v2.7-boardlab-temporal-gate-RESCALED",
+  "visual_sizing_fix": {
+    "problem": "Target circles/gates were too small compared with Board Lab temporal gate visuals.",
+    "fix": "Destination gate radius increased to 4.55 SVG units, midpoint to 3.55, source to 3.05; path and text sizes increased accordingly.",
+    "scope": "visual-only sizing and readability patch"
+  }
+}
