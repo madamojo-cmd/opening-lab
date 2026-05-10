@@ -23,3 +23,7 @@ This build keeps the v2.7 trainer intact and only refines the board overlay pres
 - Opponent move cue now explicitly sets pathStyle:"knight-l" for knight-geometry moves, so purple horse moves cannot fall back to a straight diagonal.
 
 - Forced all knight-geometry lines, including opponent/transient horse moves, to render as explicit SVG polylines with three L-shape points. This removes any chance of falling back to a diagonal curve.
+
+- Fixed continuation handoff: legal user moves are accepted when no saved training move exists instead of being marked wrong.
+- Fixed Continue vs Bot stale-state bug by forcing continuation mode into the opponent-move call.
+- Fixed opponent book-end behavior so missing opponent book moves fall through into continuation instead of getting stuck.

@@ -1,14 +1,13 @@
 {
-  "name": "blundr-v2.7-boardlab-temporal-gate-CLEAN-FINAL-FORCED-KNIGHT-POLYLINE",
-  "base": "v2.7 professional repair",
-  "scope": "visual-only cleanup",
-  "critical_fix": "Knight geometry is rendered with explicit SVG polyline points, not generic path curves.",
-  "changes": [
-    "cleaned board overlay renderer",
-    "source and destination circles only",
-    "arrows disabled by default",
-    "reduced and standardized glow",
-    "all knight-geometry lines render as true L-shapes",
-    "opponent/transient knight moves use explicit three-point polyline L-shapes"
-  ]
+  "name": "blundr-v2.7-visual-clean-continuation-fix",
+  "base": "v2.7 professional repair plus final clean temporal visuals",
+  "scope": "visual layer preserved, continuation handoff bug fixed",
+  "fixes": [
+    "Legal user moves are accepted when restricted mode has no saved training move.",
+    "No-saved-user-move positions automatically switch into continuation mode.",
+    "Opponent-side book end falls through into Lichess/engine continuation instead of getting stuck.",
+    "Continue vs Bot now forces continuation mode into the opponent move function and avoids stale restricted-mode closure.",
+    "Final clean temporal visuals and forced knight polyline rendering are preserved."
+  ],
+  "vercel": "Next.js config included; no outputDirectory/dist setting."
 }
