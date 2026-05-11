@@ -1,42 +1,48 @@
-# Blundr v2.7 Stability Temporal Core
+# Blundr v2.7.1 Product Stability + Review Patch
 
-This deployment is intended to get the app through Step 4 testing.
+This deployment extends the v2.7 stability temporal core build with the requested product-facing fixes.
 
-## Included fixes
+## Recommendation / Engine Fix
+- Continuation-mode user recommendations no longer draw random legal fallback moves.
+- After the bot plays, the plan view shows an engine-pending state until browser Stockfish returns.
+- Once browser Stockfish returns, the board highlights the actual Stockfish top move.
+- GPT/Brain text can refine the explanation, but continuation plan geometry stays engine-backed.
 
-1. Stale `/api/brain` response guard
-   - Adds request sequencing and normalized-FEN validation before applying Brain responses.
-   - Aborts older in-flight Brain fetches when a newer request starts.
-   - Prevents old GPT/Brain annotations from overwriting the current turn.
+## Board View Stability
+- Switching Attack, Defense, and Plan no longer retriggers `/api/brain` analysis.
+- Active board views render from the cached annotation for the current FEN until a move changes the position.
 
-2. Fast local visual annotation
-   - The board now receives an immediate local annotation on each train-position update.
-   - The visual layer stays active while Browser Stockfish/GPT Brain refine in the background.
-   - Brain no longer blanks the board with `setVisualReady(false)` while waiting.
+## Advantage / Evaluation Display
+- Replaced confusing positive/negative eval label with a side-explicit label: `White +x`, `Black +x`, `Equal`, or mate status.
+- Engine output is cleared when the FEN changes so stale evals are not displayed during a new position.
 
-3. Book Complete detection
-   - Restricted mode now marks Book Complete when the saved branch ends on the user's turn.
-   - Prevents the user from being punished with “No saved move” after finishing a branch.
+## Captured Pieces + Material
+- Added captured piece strips above and below the board.
+- Top strip shows opponent-side captured material context.
+- Bottom strip shows user-side captured material context.
+- Only the side with a material advantage displays `+N material`; the losing side does not show a redundant negative count.
 
-4. Continue vs Bot first-click fix
-   - `playOpponentMove(forceContinuation = false)` now supports a forced continuation mode.
-   - `Continue vs Bot` calls `playOpponentMove(true)` so stale React state does not keep the bot in restricted mode.
+## Legal Move Preview
+- Selecting a piece now highlights all legal destination squares.
+- Capturing destinations receive a stronger red-ring treatment.
 
-5. Temporal Gate overlay core
-   - Replaces the old tiny-dot curved overlay with source circle, destination circle, and clean rails.
-   - Knight geometry is detected from square coordinates and rendered as a true L-shaped polyline.
-   - Color language: attack coral, defense teal, plan blue, opponent violet.
+## Settings
+- Added a board settings panel.
+- Board themes: Classic, Slate, Blue, Walnut.
+- Piece styles: Classic, Neo, Letters.
+- Active display toggles: Attack view, Defense view, Plan view, legal move dots, advantage bar, captured pieces, move labels, opponent cue.
+- Settings persist in localStorage.
 
-## Manual test focus
+## Game Ending UX
+- Terminal positions now show a clear game-concluded card.
+- Checkmate, stalemate, draw, repetition, and insufficient-material endings are identified.
+- Restart button is shown after the game ends.
 
-- Restricted mode enforces saved repertoire moves.
-- Book Complete appears when a branch ends.
-- Continue vs Bot works on the first click.
-- Continuation mode accepts legal moves.
-- Opponent replies do not leave wrong-side stale visuals.
-- Knight moves never render diagonally.
-- Toggling Attack / Defense / Plan does not break board sync.
+## Move Review Controls
+- Added back/forward controls below the board.
+- Users can step backward and forward through prior positions.
+- Moving is blocked while reviewing an older position to avoid corrupting the live training state.
 
-## Build verification
-
-`npm install` and `NEXT_TELEMETRY_DISABLED=1 npm run build` passed locally.
+## Build Verification
+- `npm install --no-audit --no-fund`: passed.
+- `npm run build`: passed with Next.js 16.2.6 / Turbopack.
