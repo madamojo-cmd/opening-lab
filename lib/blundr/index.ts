@@ -58,3 +58,19 @@ export {
   decideVisualPhase,
 } from "./trainingStateMachine";
 export type { PhaseDecision, TrainingStateValidation } from "./trainingStateMachine";
+
+// Feature packet builder
+export { buildFeaturePacket, normalizeFen } from "./featurePacketBuilder";
+export type {
+  BlundrFeaturePacket,
+  BookStatus,
+  BuildFeaturePacketInput,
+  CandidateMoveProvenance,
+  FeatureValueSource,
+  HumanExplorerMove,
+  JsonPrimitive,
+  JsonValue,
+  ProvidedCandidateMove,
+  ProvidedCandidateSquare,
+  StockfishSummary,
+} from "./featurePacketBuilder";
