@@ -5,9 +5,12 @@
  * No free-form model generation. All context is bounded to known templates.
  */
 
+import type { BlundrConcept } from "./concepts";
 import type { BlundrContext } from "./types";
 
-export const CONTEXT_TEMPLATES: Record<string, BlundrContext> = {
+type ContextTemplateId = BlundrConcept | "generic_stockfish_best_move";
+
+export const CONTEXT_TEMPLATES: Record<ContextTemplateId, BlundrContext> = {
   quiet_development: {
     headline: "Develop your piece",
     mainExplanation:
@@ -19,10 +22,10 @@ export const CONTEXT_TEMPLATES: Record<string, BlundrContext> = {
     nextPlan: "Develop another piece and get your king safe.",
   },
 
-  develop_with_pressure: {
-    headline: "Develop with pressure",
+  development_with_f7_pressure: {
+    headline: "Develop with pressure on f7",
     mainExplanation:
-      "This develops a piece to an active square while creating pressure.",
+      "This develops a piece to an active square while adding pressure toward f7.",
     visualExplanation:
       "The key visual is the line from your piece toward the target square.",
     planExplanation:
@@ -30,7 +33,18 @@ export const CONTEXT_TEMPLATES: Record<string, BlundrContext> = {
     nextPlan: "Castle next, then prepare your central plan.",
   },
 
-  knight_pressure_center: {
+  development_with_f2_pressure: {
+    headline: "Develop with pressure on f2",
+    mainExplanation:
+      "This develops a piece to an active square while adding pressure toward f2.",
+    visualExplanation:
+      "The key visual is the line from your piece toward the target square.",
+    planExplanation:
+      "Keep developing and prepare to castle before opening the center.",
+    nextPlan: "Castle next, then prepare your central plan.",
+  },
+
+  knight_center_pressure: {
     headline: "Develop and pressure the center",
     mainExplanation:
       "This knight move develops a piece and adds pressure to the center.",
@@ -59,6 +73,60 @@ export const CONTEXT_TEMPLATES: Record<string, BlundrContext> = {
       "The highlighted center squares show where the position may open next.",
     planExplanation: "Do not rush the break until your pieces are ready.",
     nextPlan: "Complete development, then challenge the center.",
+  },
+
+  occupy_center: {
+    headline: "Occupy the center",
+    mainExplanation:
+      "This move claims central space and gives your pieces more room to work.",
+    visualExplanation:
+      "The highlighted center squares show the space your move controls.",
+    planExplanation: "Use the extra space to finish development smoothly.",
+    nextPlan: "Support the center and get your king safe.",
+  },
+
+  defend_center: {
+    headline: "Defend the center",
+    mainExplanation:
+      "This move reinforces your central control and makes your position harder to challenge.",
+    visualExplanation:
+      "The highlighted squares show the center points being protected.",
+    planExplanation:
+      "Keep your center stable while improving your least active piece.",
+    nextPlan: "Develop, castle, and be ready for a central break.",
+  },
+
+  pin_pressure: {
+    headline: "Build pin pressure",
+    mainExplanation:
+      "This move increases pressure along a line where a piece is pinned.",
+    visualExplanation:
+      "The highlighted line shows the pressure running through the pinned piece.",
+    planExplanation:
+      "Add support before converting the pressure into a concrete gain.",
+    nextPlan: "Develop another piece and keep the pinned target under pressure.",
+  },
+
+  open_file_pressure: {
+    headline: "Use the open file",
+    mainExplanation:
+      "This move increases activity along a file where your pieces can apply pressure.",
+    visualExplanation:
+      "The highlighted file shows the path where your piece activity matters.",
+    planExplanation:
+      "Coordinate your heavy pieces before looking for a breakthrough.",
+    nextPlan: "Improve your rook or queen activity on the open file.",
+  },
+
+  queen_activity_warning: {
+    headline: "Watch queen activity",
+    mainExplanation:
+      "This position has queen activity that can become dangerous if ignored.",
+    visualExplanation:
+      "The highlighted path shows where the queen can create pressure.",
+    planExplanation:
+      "Develop calmly and avoid weakening squares near your king.",
+    nextPlan: "Answer the threat while improving your position.",
   },
 
   continuation_plan: {
@@ -90,7 +158,7 @@ export const CONTEXT_TEMPLATES: Record<string, BlundrContext> = {
  */
 export function renderContextTemplate(templateId: string): BlundrContext {
   return (
-    CONTEXT_TEMPLATES[templateId] ??
+    CONTEXT_TEMPLATES[templateId as ContextTemplateId] ??
     CONTEXT_TEMPLATES.generic_stockfish_best_move
   );
 }

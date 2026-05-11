@@ -45,7 +45,7 @@ export function idToSquare(id: number): string {
  */
 export function arrowToId(from: string, to: string): number {
   if (!isBoardSquare(from) || !isBoardSquare(to)) {
-    throw new Error(`Invalid arrow: ${from}→${to}`);
+    throw new Error(`Invalid arrow: ${from}->${to}`);
   }
   return squareToId(from) * 64 + squareToId(to);
 }
@@ -54,7 +54,7 @@ export function arrowToId(from: string, to: string): number {
  * Convert a numeric arrow ID back to a [from, to] square pair.
  */
 export function idToArrow(id: number): [string, string] {
-  if (id < 0 || id > 4096) {
+  if (id < 0 || id > 4095) {
     throw new Error(`Invalid arrow ID: ${id}`);
   }
   return [idToSquare(Math.floor(id / 64)), idToSquare(id % 64)];

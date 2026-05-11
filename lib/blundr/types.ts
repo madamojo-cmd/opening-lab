@@ -13,6 +13,9 @@
  * No free-form prose, tactics, or unsupported animation/concept names allowed.
  */
 
+import type { BlundrAnimationPackage } from "./animationPackages";
+import type { BlundrConcept } from "./concepts";
+
 export type Color = "w" | "b";
 
 export type ExpectedActor = "user" | "opponent" | "system";
@@ -62,7 +65,7 @@ export type BlundrArrow = {
 export type BlundrSquare = {
   square: string;
   role: BlundrSquareRole;
-  animation: string;
+  animation: BlundrAnimationPackage;
 };
 
 export type BlundrContext = {
@@ -89,8 +92,8 @@ export type BlundrVisualModelRequest = {
 export type BlundrVisualModelOutput = {
   selectedMove: string;
   selectedView: SelectedView;
-  primaryConcept: string;
-  animationPackage: string;
+  primaryConcept: BlundrConcept;
+  animationPackage: BlundrAnimationPackage;
   keySquares: string[];
   arrows: BlundrArrow[];
   squares: BlundrSquare[];
@@ -117,15 +120,4 @@ export type BlundrVisualModelOutput = {
     normalizedFen?: string;
     requestId?: string;
   };
-};
-
-/**
- * BlundrFeaturePacket: Placeholder for phase 1
- * The feature packet builder will define the full shape in handoff 02.
- * For now, this is a marker type for future expansion.
- */
-export type BlundrFeaturePacket = {
-  // To be expanded in handoff 02
-  requestId?: string;
-  source?: string;
 };

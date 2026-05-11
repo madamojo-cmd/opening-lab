@@ -344,7 +344,7 @@ export function validateTrainingState(input: {
  *
  * Key decisions:
  * - opponent_to_move: false in v0 (opponent moves remain book/explorer/Stockfish-backed)
- * - explanation phases: false (no new move recommendation)
+ * - explanation phases: true for visual/context only (no new move recommendation)
  * - user move phases: true if phase/color alignment is correct
  */
 export function decideVisualPhase(input: {
@@ -394,14 +394,14 @@ export function decideVisualPhase(input: {
     };
   }
 
-  // Explanation phases: do not request new move recommendations
+  // Explanation phases: visual/context only, never a move recommendation.
   if (isExplanationPhase(input.trainingPhase)) {
     return {
       trainingPhase: input.trainingPhase,
       expectedActor,
       expectedMoveColor,
-      shouldRequestVisualModel: false,
-      reason: `${input.trainingPhase} is explanation-only; do not request move recommendation.`,
+      shouldRequestVisualModel: true,
+      reason: `${input.trainingPhase} is explanation-only; visual/context output is allowed, move recommendations are not.`,
     };
   }
 

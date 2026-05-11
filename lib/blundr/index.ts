@@ -18,7 +18,6 @@ export type {
   BlundrContext,
   BlundrVisualModelRequest,
   BlundrVisualModelOutput,
-  BlundrFeaturePacket,
 } from "./types";
 
 // Animation packages
