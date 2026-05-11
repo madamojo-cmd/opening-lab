@@ -126,7 +126,7 @@ function uniqueSquares(squares: string[], max: number): string[] {
 }
 
 function line(from: string, to: string, kind: VisualLine["kind"], label?: string, reason?: string, score?: number): VisualLine {
-  return { from, to, kind, label, reason, score };
+  return { from, to, kind, role: kind === "plan" ? "move" : kind, label, reason, score };
 }
 
 function bestPressureArrow(candidate: TeachingCandidate): VisualLine | null {
@@ -165,6 +165,7 @@ function cuesFor(candidate: TeachingCandidate, kind: VisualCue["kind"] = "target
   ).map((square) => ({
     square,
     kind: square === candidate.moveDelta.to ? "target" : kind,
+    role: square === candidate.moveDelta.to ? "destination" : kind,
     score: candidate.topSquares.find((changed) => changed.square === square)?.totalSalience,
     reason: square === candidate.moveDelta.to ? "move destination" : "salient changed square",
   }));
@@ -191,7 +192,8 @@ export function renderVisualRecipe(candidate: TeachingCandidate, packet: BlundrF
   );
   const attackLines = pressureArrow ? [pressureArrow] : candidate.topLines.slice(0, 1).map((changedLine) => line(changedLine.from, changedLine.to, "attack", changedLine.role, "salient line", changedLine.salience));
   const planCues = cuesFor(candidate, "target");
-  const supportCues = [{ square: candidate.moveDelta.from, kind: "origin" as const, reason: "move source" }, ...planCues].slice(0, 4);
+  const supportCues = [{ square: candidate.moveDelta.from, kind: "origin" as const, role: "source", reason: "move source" }, ...planCues].slice(0, 4);
+  const animationName = animationForConcept(candidate.concept);
 
   return {
     source: "salience-selector",
@@ -204,19 +206,29 @@ export function renderVisualRecipe(candidate: TeachingCandidate, packet: BlundrF
     nextPlan: `Play ${candidate.san ?? candidate.selectedMove}.`,
     keySquares,
     planArrows,
+    arrows: planArrows,
+    squares: planCues,
+    animationPackage: { name: animationName, intensity: Math.max(0.25, Math.min(1, candidate.confidence)) },
+    context: {
+      headline: context.title,
+      body: context.message,
+      next: `Play ${candidate.san ?? candidate.selectedMove}.`,
+      concept: candidate.concept,
+      selectedMove: candidate.selectedMove,
+    },
     attack: view(context.title, context.message, attackLines, planCues, context.explanation),
     defense: view("Safety check", "No defensive warning is shown unless the salience packet provides evidence.", [], supportCues, "Defensive visuals remain conservative."),
     plan: view("Verified plan", `Play ${candidate.san ?? candidate.selectedMove}.`, planArrows, planCues, `Score ${candidate.score.toFixed(1)} from deterministic salience.`),
     threatNote: candidate.concept.includes("pressure") || candidate.concept.includes("danger") ? context.message : "",
     suppress: [],
     confidence: candidate.confidence.toFixed(2),
-    animation: animationForConcept(candidate.concept),
+    animation: animationName,
     debug: {
       selectedMove: candidate.selectedMove,
       concept: candidate.concept,
       score: candidate.score,
       scoreBreakdown: candidate.scoreBreakdown,
-      animation: animationForConcept(candidate.concept),
+      animation: animationName,
     },
   };
 }

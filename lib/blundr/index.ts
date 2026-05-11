@@ -9,3 +9,6 @@ export * from "./salience/conceptLabeler";
 export * from "./salience/salienceScorer";
 export * from "./salience/salienceVisualSelector";
 export * from "./salience/visualRecipes";
+export * from "./coaching/adaptiveContext";
+export * from "./coaching/coachingMemory";
+export * from "./coaching/contextVariants";

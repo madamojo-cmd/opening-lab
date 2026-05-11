@@ -24,6 +24,12 @@ type SquareCue = { square: string; kind: "origin" | "target" | "support" | "dang
 type BoardView = { title: string; message: string; lines: ActiveLine[]; cues: SquareCue[] };
 type BrainAnnotation = { source: string; fallback: boolean; selectedView: ActiveBoardView; headline: string; mainExplanation: string; visualExplanation: string; planExplanation: string; nextPlan: string; keySquares: string[]; planArrows: ActiveLine[]; attack: BoardView; defense: BoardView; plan: BoardView; threatNote?: string; suppress?: string[]; confidence?: string; reason?: string };
 type BrainResponse = { pipeline: { facts: string; engine: string; gpt: string; visual: string; latencyMs: number }; engine: { source: string; fallback: boolean; pvs: EngineLine[] }; annotation: BrainAnnotation; candidates?: any; debug?: any };
+type VisualArrowRole = "move" | "pressure" | "defense" | "future" | "threat" | "capture" | "retreat" | "pin" | "castle" | string;
+type VisualSquareRole = "source" | "destination" | "weakness" | "center" | "defense" | "danger" | "future" | "soft_target" | "king_safety" | string;
+type VisualModelArrow = { from: string; to: string; role?: VisualArrowRole; kind?: LineKind; label?: string; reason?: string };
+type VisualModelSquare = { square: string; role?: VisualSquareRole; kind?: SquareCue["kind"]; reason?: string };
+type VisualModelContext = { headline: string; body: string; next: string; checkQuestion?: string; explanationMode?: string; concept?: string; selectedMove?: string };
+type VisualModelOutput = Partial<BrainAnnotation> & { arrows?: VisualModelArrow[]; squares?: VisualModelSquare[]; animation?: string; animationPackage?: { name: string; intensity?: number }; context?: VisualModelContext; suppress?: string[]; debug?: any };
 type OpponentCue = { expiresAt: number; title: string; message: string; lines: ActiveLine[]; cues: SquareCue[] };
 type LiveBrain = { ratingLabel: string; ratingPool: string; book: SystemState; lichess: SystemState; engine: SystemState; gpt: SystemState; source: string; latency?: number; note?: string };
 type BoardTheme = "classic" | "slate" | "blue" | "walnut";
@@ -65,6 +71,9 @@ function classNames(...classes:Array<string|false|null|undefined>){return classe
 function normalizeFen(fen:string){return fen.split(" ").slice(0,4).join(" ")}
 function moveToUci(move:{from:string;to:string;promotion?:string}){return `${move.from}${move.to}${move.promotion??""}`}
 function isValidSquare(square:string){return /^[a-h][1-8]$/.test(square)}
+function visualLineKind(role?:string,kind?:LineKind):LineKind{if(kind&&["attack","defense","plan","opponent"].includes(kind))return kind;if(role==="defense"||role==="retreat"||role==="castle")return"defense";if(role==="pressure"||role==="threat"||role==="capture"||role==="pin")return"attack";return"plan"}
+function visualCueKind(role?:string,kind?:SquareCue["kind"]):SquareCue["kind"]{if(kind&&["origin","target","support","danger","opponent"].includes(kind))return kind;if(role==="source")return"origin";if(role==="defense"||role==="king_safety")return"support";if(role==="weakness"||role==="danger"||role==="soft_target")return"danger";return"target"}
+function visualAnimationClass(name?:string){const known=new Set(["quiet-development-glow","diagonal-pressure-glow","knight-pressure-center","center-break-pulse","castle-safety-aura","weak-square-pulse","pin-line-tension","fork-spark","defensive-shield","open-file-radar","queen-danger-warning","continuation-ghost-plan"]);return known.has(name??"")?`blundr-anim-${name}`:"blundr-anim-quiet-development-glow"}
 function getPiece(game:Chess,square:string){return game.get(square as any)}
 function isOwnPiece(game:Chess,square:string,color:ChessColor){const p=getPiece(game,square);return Boolean(p&&p.color===color)}
 function pickWeighted<T extends {weight:number}>(items:T[]){const total=items.reduce((s,i)=>s+Math.max(0,i.weight),0);if(total<=0)return items[0];let roll=Math.random()*total;for(const item of items){roll-=Math.max(0,item.weight);if(roll<=0)return item}return items[0]}
@@ -284,6 +293,9 @@ export default function App(){
   const [brainResponse,setBrainResponse]=useState<BrainResponse|null>(null);
   const [enginePreview,setEnginePreview]=useState<{fen:string;pvs:EngineLine[];source:string}|null>(null);
   const [annotation,setAnnotation]=useState<BrainAnnotation>(blankAnnotation());
+  const [visualModelOutput,setVisualModelOutput]=useState<VisualModelOutput|null>(null);
+  const [visualModelPending,setVisualModelPending]=useState(false);
+  const [visualModelError,setVisualModelError]=useState<string|null>(null);
   const [thinkingStep,setThinkingStep]=useState<ThinkingStep>("idle");
   const [pipelineNote,setPipelineNote]=useState("Ready");
   const [visualReady,setVisualReady]=useState(false);
@@ -294,8 +306,10 @@ export default function App(){
   const [newLineText,setNewLineText]=useState("e4 e5 Nf3 Nc6 Bc4 Bc5 c3 Nf6 d3 d6 O-O O-O");
   const explorerCache=useRef<Record<string,any>>({});
   const brainSeq=useRef(0);
+  const visualRequestSeq=useRef(0);
   const fenRef=useRef(fen);
   const brainAbortRef=useRef<AbortController|null>(null);
+  const visualAbortRef=useRef<AbortController|null>(null);
   const repertoires=useMemo(()=>[...OPENINGS,...customRepertoires],[customRepertoires]);
   const repertoire=repertoires.find(r=>r.id===selectedRepertoireId)??repertoires[0];
   const tree=useMemo(()=>buildTree(repertoire),[repertoire]);
@@ -312,6 +326,10 @@ export default function App(){
   const safeBoardView:ActiveBoardView=enabledViews.includes(activeBoardView)?activeBoardView:(enabledViews[0]??"plan");
   const currentView=annotation[safeBoardView]??annotation.plan;
   const engineLines=enginePreview&&normalizeFen(enginePreview.fen)===normalizeFen(fen)?enginePreview.pvs:[];
+  const visualSuppressed=Boolean(visualModelOutput?.suppress?.includes("recommendation_pending"));
+  const visualLines:ActiveLine[]=visualModelOutput&&!visualSuppressed?(visualModelOutput.arrows??[]).filter(a=>isValidSquare(a.from)&&isValidSquare(a.to)).slice(0,2).map(a=>({from:a.from,to:a.to,kind:visualLineKind(a.role,a.kind),label:a.label})):currentView.lines;
+  const visualContext=visualModelOutput?.context;
+  const visualAnimationName=visualModelOutput?.animationPackage?.name??visualModelOutput?.animation;
   const moveImpact=impactFromEngine(engineLines[0]);
   const accuracy=getAccuracy(progress);
   const mistakes=Object.values(progress.mistakes).sort((a,b)=>b.count-a.count);
@@ -323,14 +341,60 @@ export default function App(){
   const isReviewingHistory=historyIndex<positionHistory.length-1;
   const selectedLegalMoves=selectedSquare&&!isReviewingHistory&&!game.isGameOver()?(game.moves({square:selectedSquare as any,verbose:true}) as any[]):[];
   const gptDebugText=JSON.stringify({pipeline:brainResponse?.pipeline??null,engine:enginePreview??null,debug:brainResponse?.debug??null},null,2);
+  const visualModelRequestKey=useMemo(()=>JSON.stringify({
+    fen:normalizeFen(fen),
+    moveHistory,
+    trainingPhase:trainingMode==="continuation"?"continuation":bookComplete?"book_complete":isUserTurn?"user_turn":"opponent_turn",
+    userColor,
+    expectedMove:expectedUserOptions[0]?.uci??null,
+    bookStatus:bookComplete?"complete":expectedUserOptions.length?"in_book":"pending",
+    stockfishBest:engineLines[0]?.uci??null,
+    stockfishCp:engineLines[0]?.cp??null,
+    openingName:repertoire.name,
+    rating:rating.label,
+  }),[fen,moveHistory.join("|"),trainingMode,bookComplete,isUserTurn,userColor,expectedUserOptions.map(m=>m.uci).join("|"),engineLines[0]?.uci,engineLines[0]?.cp,repertoire.name,rating.label]);
   useEffect(()=>{const saved=localStorage.getItem("blundr-v22-progress");const savedCustom=localStorage.getItem("blundr-v22-custom");const savedSettings=localStorage.getItem("blundr-board-settings");if(saved)try{setProgress(JSON.parse(saved))}catch{}if(savedCustom)try{setCustomRepertoires(JSON.parse(savedCustom))}catch{}if(savedSettings)try{setBoardSettings({...DEFAULT_BOARD_SETTINGS,...JSON.parse(savedSettings)})}catch{}},[]);
   useEffect(()=>localStorage.setItem("blundr-v22-progress",JSON.stringify(progress)),[progress]);
   useEffect(()=>localStorage.setItem("blundr-v22-custom",JSON.stringify(customRepertoires)),[customRepertoires]);
   useEffect(()=>localStorage.setItem("blundr-board-settings",JSON.stringify(boardSettings)),[boardSettings]);
   useEffect(()=>{const t=window.setInterval(()=>{if(opponentCue&&Date.now()>opponentCue.expiresAt)setOpponentCue(null)},250);return()=>window.clearInterval(t)},[opponentCue]);
   useEffect(()=>setBrain(p=>({...p,ratingLabel:rating.label,ratingPool:rating.target})),[rating.label,rating.target]);
-  useEffect(()=>{fenRef.current=fen;setBrainResponse(null);setEnginePreview(null)},[fen]);
+  useEffect(()=>{fenRef.current=fen;setBrainResponse(null);setEnginePreview(null);setVisualModelOutput(null);setVisualModelError(null)},[fen]);
   useEffect(()=>{if(!enabledViews.includes(activeBoardView)&&enabledViews.length)setActiveBoardView(enabledViews[0])},[activeBoardView,enabledViews.join("|")]);
+  useEffect(()=>{
+    if(activeTab!=="train"||isReviewingHistory)return;
+    const requestFen=fen;
+    const requestSeq=++visualRequestSeq.current;
+    visualAbortRef.current?.abort();
+    const controller=new AbortController();
+    visualAbortRef.current=controller;
+    setVisualModelPending(true);
+    setVisualModelError(null);
+    const trainingPhase=trainingMode==="continuation"?"continuation":bookComplete?"book_complete":isUserTurn?"user_turn":"opponent_turn";
+    const payload={
+      fen:requestFen,
+      moveHistory,
+      userColor,
+      userRatingBucket:rating.label,
+      trainingPhase,
+      trainingMode,
+      expectedMove:expectedUserOptions[0]?{san:expectedUserOptions[0].san,uci:expectedUserOptions[0].uci}:undefined,
+      expectedMoves:expectedUserOptions.map(m=>({san:m.san,uci:m.uci})),
+      bookStatus:bookComplete?"complete":expectedUserOptions.length?"in_book":"pending",
+      openingName:repertoire.name,
+      stockfishSummary:engineLines[0]?{bestMove:{san:engineLines[0].san,uci:engineLines[0].uci},pvs:engineLines}:undefined,
+      coachingMemory:{
+        conceptSeenCount:progress.trainedPositions[normalizeFen(requestFen)]?1:0,
+        missedCount:progress.mistakes[normalizeFen(requestFen)]?.count??0,
+        successCount:progress.trainedPositions[normalizeFen(requestFen)]?1:0,
+      },
+    };
+    void fetch("/api/blundr-visual-model",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload),signal:controller.signal})
+      .then(async(res)=>{if(!res.ok)throw new Error(`visual model ${res.status}`);return await res.json() as VisualModelOutput})
+      .then((data)=>{if(requestSeq!==visualRequestSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen))return;setVisualModelOutput(data);setVisualModelPending(false)})
+      .catch((error)=>{if(error instanceof Error&&error.name==="AbortError")return;if(requestSeq!==visualRequestSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen))return;setVisualModelError(error instanceof Error?error.message:"Visual model failed");setVisualModelPending(false)});
+    return()=>controller.abort();
+  },[activeTab,isReviewingHistory,visualModelRequestKey]);
   useEffect(()=>{if(activeTab!=="train")return;const fast=deriveFastAnnotation({fen,openingName:repertoire.name,userColor,trainingMode,expectedUserOptions,opponentBookOptions});setAnnotation(fast);setVisualReady(true);setThinkingStep("ready");setPipelineNote(trainingMode==="continuation"&&isUserTurn?"Engine pending. No random legal fallback will be shown as the recommendation.":"Fast local visual ready. Brain is refining in the background.");void runBrain("position_update")},[fen,activeTab,selectedRepertoireId,trainingMode,ratingFilter]);
   useEffect(()=>{if(activeTab==="train"&&trainingMode==="restricted"&&isUserTurn&&expectedUserOptions.length===0&&!bookComplete&&!game.isGameOver()){setBookComplete(true);setFeedback("Book complete. Continue against the bot from this position or restart the opening.");setBrain(p=>({...p,book:"complete",source:"book complete",gpt:p.gpt}))}},[activeTab,trainingMode,isUserTurn,expectedUserOptions.length,bookComplete,fen]);
   useEffect(()=>{if(activeTab!=="train"||bookComplete||isReviewingHistory)return;if(game.isGameOver()){setFeedback((endingInfo?.title??"Game over")+". Restart the opening to train again.");return}if(!isUserTurn){const timer=window.setTimeout(()=>void playOpponentMove(),900);return()=>window.clearTimeout(timer)}},[activeTab,fen,bookComplete,isUserTurn,isReviewingHistory,selectedRepertoireId,trainingMode,ratingFilter]);
@@ -435,9 +499,13 @@ export default function App(){
     squareStyles[lastMove.slice(2,4)]={boxShadow:"inset 0 0 0 999px rgba(255,255,255,.16), inset 0 0 24px rgba(255,255,255,.62)"};
   }
   if(activeBoard){
-    for(const cue of currentView.cues.slice(0,3)){
-      const bg=cue.kind==="support"?"rgba(80,190,120,.24)":cue.kind==="danger"?"rgba(255,80,80,.24)":"rgba(255,210,70,.26)";
-      squareStyles[cue.square]={...squareStyles[cue.square],background:`radial-gradient(circle, ${bg} 0%, ${bg} 38%, transparent 72%)`,boxShadow:"inset 0 0 22px rgba(255,210,70,.58)"};
+    const visualSquares=visualModelOutput&&!visualSuppressed?(visualModelOutput.squares??[]):currentView.cues.slice(0,3).map(c=>({square:c.square,kind:c.kind,role:c.kind}));
+    for(const cue of visualSquares.slice(0,4)){
+      if(!isValidSquare(cue.square))continue;
+      const role=cue.role??cue.kind;
+      const bg=role==="source"||cue.kind==="origin"?"rgba(94,126,255,.24)":role==="defense"||role==="king_safety"||cue.kind==="support"?"rgba(80,190,120,.24)":role==="weakness"||role==="danger"||role==="soft_target"||cue.kind==="danger"?"rgba(255,80,80,.24)":role==="center"?"rgba(255,210,70,.30)":"rgba(255,210,70,.26)";
+      const shadow=role==="destination"?"inset 0 0 0 3px rgba(94,126,255,.82), inset 0 0 26px rgba(94,126,255,.48)":role==="king_safety"?"inset 0 0 0 3px rgba(22,163,74,.62), inset 0 0 24px rgba(22,163,74,.42)":role==="weakness"||role==="danger"?"inset 0 0 0 3px rgba(239,68,68,.58), inset 0 0 24px rgba(239,68,68,.34)":"inset 0 0 22px rgba(255,210,70,.58)";
+      squareStyles[cue.square]={...squareStyles[cue.square],background:`radial-gradient(circle, ${bg} 0%, ${bg} 38%, transparent 72%)`,boxShadow:shadow};
     }
     if(opponentCue&&boardSettings.showOpponentCue)for(const cue of opponentCue.cues){
       squareStyles[cue.square]={...squareStyles[cue.square],background:"radial-gradient(circle, rgba(184,132,255,.28) 0%, rgba(184,132,255,.18) 38%, transparent 72%)"};
@@ -474,14 +542,14 @@ export default function App(){
           <PipelineStatus step={thinkingStep} note={pipelineNote}/>
         </div>
         {activeBoard&&enabledViews.length>0&&<div className="mb-3 grid gap-2" style={{gridTemplateColumns:`repeat(${enabledViews.length}, minmax(0,1fr))`}}>{enabledViews.map(v=><button key={v} onClick={()=>setActiveBoardView(v)} className={classNames("rounded-full px-4 py-2 text-sm font-black capitalize",safeBoardView===v?"bg-green-700 text-white shadow-sm":"bg-white text-stone-500 ring-1 ring-stone-200")}>{v}</button>)}</div>}
-        <TapChessboard game={game} orientation={repertoire.color} selectedSquare={selectedSquare} squareStyles={squareStyles} lines={activeBoard&&visualReady?currentView.lines:[]} transientLines={activeBoard&&opponentCue&&boardSettings.showOpponentCue?opponentCue.lines:[]} onSquareTap={handleSquareTap} whitePct={whitePct} evalText={evalText} settings={boardSettings} captured={captured} userColor={userColor}/>
+        <TapChessboard game={game} orientation={repertoire.color} selectedSquare={selectedSquare} squareStyles={squareStyles} lines={activeBoard&&(visualReady||visualModelOutput)?visualLines:[]} transientLines={activeBoard&&opponentCue&&boardSettings.showOpponentCue?opponentCue.lines:[]} onSquareTap={handleSquareTap} whitePct={whitePct} evalText={evalText} settings={boardSettings} captured={captured} userColor={userColor} animationName={visualAnimationName}/>
         <HistoryControls index={historyIndex} total={positionHistory.length} onBack={()=>jumpHistory(-1)} onForward={()=>jumpHistory(1)}/>
       </div>
       {bookComplete&&<div className="rounded-3xl border border-green-200 bg-green-50 p-4 shadow-sm"><h2 className="text-lg font-black text-green-900">Book complete</h2><p className="mt-2 text-sm leading-6 text-green-800">You finished this opening branch. Train it again, or continue against the bot from this position.</p><div className="mt-4 grid grid-cols-2 gap-3"><button onClick={resetBoard} className="rounded-2xl bg-white px-4 py-3 font-black text-green-800 shadow-sm">Train Again</button><button onClick={continueVsBot} className="rounded-2xl bg-green-700 px-4 py-3 font-black text-white shadow-sm">Continue vs Bot</button></div></div>}
       {endingInfo&&<GameEndCard title={endingInfo.title} message={endingInfo.message} onRestart={resetBoard}/>} 
       <button onClick={()=>{setShowAnswer(true);void runBrain("reveal")}} className="w-full rounded-3xl bg-stone-950 px-4 py-4 text-center font-black text-white shadow-lg"><span className="flex items-center justify-center gap-2"><Eye size={18}/> Reveal Next Move</span></button>
       {showAnswer&&<div className="rounded-3xl bg-stone-900 p-4 text-white"><div className="text-sm text-stone-300">Recommended move</div><div className="mt-2 text-2xl font-black">{expectedUserOptions.length?expectedUserOptions.map(m=>m.san).join(" / "):engineLines[0]?.san??"Engine pending"}</div><p className="mt-2 text-xs leading-5 text-stone-400">Source: {expectedUserOptions.length?"selected opening repertoire":trainingMode==="continuation"&&engineLines[0]?"browser Stockfish top move":trainingMode==="continuation"?"engine pending":"no saved training move"}</p></div>}
-      {activeBoard&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 shadow-sm"><div className="mb-2 flex items-center justify-between gap-3"><div><div className="text-xs font-black uppercase tracking-wide text-green-700">{safeBoardView} view • {visualReady?(annotation.source.includes("stockfish")?"Stockfish":annotation.fallback?"fallback":"GPT"):"thinking"}</div><h2 className="text-lg font-black">{visualReady?currentView.title:"Preparing intelligent board..."}</h2></div><button onClick={()=>setShowDetails(!showDetails)} className="rounded-full bg-stone-100 px-3 py-2 text-xs font-black text-stone-600">{showDetails?"Hide":"Show more"}</button></div><p className="text-sm leading-6 text-stone-700">{visualReady?currentView.message:"Blundr is preparing the final validated visual."}</p>{opponentCue&&boardSettings.showOpponentCue&&<p className="mt-2 rounded-2xl bg-purple-50 p-3 text-sm leading-6 text-purple-800"><span className="font-black">Opponent cue: </span>{opponentCue.message}</p>}{annotation.nextPlan&&<p className="mt-2 rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600"><span className="font-black text-stone-900">Next: </span>{annotation.nextPlan}</p>}<MoveImpact impact={moveImpact}/>{showDetails&&<div className="mt-3 space-y-2"><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Headline: {annotation.headline}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual: {annotation.visualExplanation}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Pipeline: {brainResponse?.pipeline?.gpt??"not run"} → {brainResponse?.pipeline?.visual??"not run"}</div>{annotation.reason&&<div className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">Fallback reason: {annotation.reason}</div>}</div>}</div>}
+      {activeBoard&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 shadow-sm"><div className="mb-2 flex items-center justify-between gap-3"><div><div className="text-xs font-black uppercase tracking-wide text-green-700">{safeBoardView} view • {visualModelOutput&&!visualSuppressed?"Rule visual":visualModelPending?"visual pending":visualReady?(annotation.source.includes("stockfish")?"Stockfish":annotation.fallback?"fallback":"GPT"):"thinking"}</div><h2 className="text-lg font-black">{visualContext?.headline??(visualReady?currentView.title:"Preparing intelligent board...")}</h2></div><button onClick={()=>setShowDetails(!showDetails)} className="rounded-full bg-stone-100 px-3 py-2 text-xs font-black text-stone-600">{showDetails?"Hide":"Show more"}</button></div><p className="text-sm leading-6 text-stone-700">{visualContext?.body??(visualReady?currentView.message:"Blundr is preparing the final validated visual.")}</p>{visualContext?.checkQuestion&&<p className="mt-2 rounded-2xl bg-green-50 p-3 text-sm leading-6 text-green-800"><span className="font-black">Check: </span>{visualContext.checkQuestion}</p>}{opponentCue&&boardSettings.showOpponentCue&&<p className="mt-2 rounded-2xl bg-purple-50 p-3 text-sm leading-6 text-purple-800"><span className="font-black">Opponent cue: </span>{opponentCue.message}</p>}{(visualContext?.next||annotation.nextPlan)&&<p className="mt-2 rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600"><span className="font-black text-stone-900">Next: </span>{visualContext?.next??annotation.nextPlan}</p>}{visualModelError&&<p className="mt-2 rounded-2xl bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-700">{visualModelError}</p>}<MoveImpact impact={moveImpact}/>{showDetails&&<div className="mt-3 space-y-2"><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Headline: {visualContext?.headline??annotation.headline}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual: {visualModelOutput?.animationPackage?.name??annotation.visualExplanation}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Pipeline: rule-only visual → {brainResponse?.pipeline?.gpt??"brain not run"}</div>{annotation.reason&&<div className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">Fallback reason: {annotation.reason}</div>}</div>}</div>}
       <div className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm"><div className="flex items-start gap-3">{feedback.toLowerCase().includes("correct")?<CheckCircle2 className="mt-0.5 text-green-700" size={24}/>:feedback.toLowerCase().includes("not quite")||feedback.toLowerCase().includes("illegal")?<XCircle className="mt-0.5 text-red-600" size={24}/>:<Target className="mt-0.5 text-green-700" size={24}/>}<div><div className="font-bold">{endingInfo?endingInfo.title:isReviewingHistory?"Review mode":isUserTurn?"Your move":"Opponent thinking"}</div><p className="text-sm leading-6 text-stone-600">{feedback}</p></div></div></div>
     </section>}
     {activeTab==="review"&&<section className="space-y-5"><header><h1 className="text-2xl font-bold tracking-tight">Review Mistakes</h1><p className="text-sm text-stone-500">Wrong opening moves are saved here.</p></header>{mistakes.length===0?<div className="rounded-3xl bg-white p-6 text-center shadow-sm"><CheckCircle2 className="mx-auto mb-3 text-green-700" size={40}/><h2 className="text-lg font-bold">No mistakes due</h2><p className="mt-2 text-sm text-stone-500">Missed training positions will appear here.</p></div>:<div className="space-y-3">{mistakes.map(m=><button key={m.fen} onClick={()=>practiceMistake(m)} className="w-full rounded-3xl border border-stone-200 bg-white p-4 text-left shadow-sm"><div className="flex items-start justify-between gap-3"><div><div className="font-bold">{m.opening}</div><div className="mt-1 text-sm text-stone-500">Expected: <span className="font-bold text-green-700">{m.expectedMove}</span></div><div className="text-sm text-stone-500">You played: {m.playedMove}</div></div><span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">Missed {m.count}x</span></div></button>)}</div>}</section>}
@@ -500,7 +568,7 @@ function coordTone(theme:BoardTheme,isDark:boolean){
   return isDark?"text-white/70":"text-stone-600/70";
 }
 
-function TapChessboard({game,orientation,selectedSquare,squareStyles,lines,transientLines,onSquareTap,whitePct,evalText,settings,captured,userColor}:{game:Chess;orientation:RepertoireColor;selectedSquare:string|null;squareStyles:Record<string,CSSProperties>;lines:ActiveLine[];transientLines:ActiveLine[];onSquareTap:(s:string)=>void;whitePct:number;evalText:string;settings:BoardSettings;captured:CapturedSummary;userColor:ChessColor}){
+function TapChessboard({game,orientation,selectedSquare,squareStyles,lines,transientLines,onSquareTap,whitePct,evalText,settings,captured,userColor,animationName}:{game:Chess;orientation:RepertoireColor;selectedSquare:string|null;squareStyles:Record<string,CSSProperties>;lines:ActiveLine[];transientLines:ActiveLine[];onSquareTap:(s:string)=>void;whitePct:number;evalText:string;settings:BoardSettings;captured:CapturedSummary;userColor:ChessColor;animationName?:string}){
   const ranks=orientation==="white"?[8,7,6,5,4,3,2,1]:[1,2,3,4,5,6,7,8];
   const files=orientation==="white"?FILES:[...FILES].reverse();
   const centerFor=(sq:string)=>{
@@ -516,7 +584,7 @@ function TapChessboard({game,orientation,selectedSquare,squareStyles,lines,trans
     <div className="flex items-stretch gap-2">
       {settings.showEvalBar?<EvalBar whitePct={whitePct} evalText={evalText}/>:null}
       <div className="flex-1 rounded-[28px] bg-white p-3 shadow-xl shadow-stone-300/40 ring-1 ring-stone-200">
-        <div className="relative aspect-square w-full overflow-hidden rounded-[18px] border border-stone-300 bg-stone-200">
+        <div className={classNames("relative aspect-square w-full overflow-hidden rounded-[18px] border border-stone-300 bg-stone-200",visualAnimationClass(animationName))}>
           <BoardLines lines={lines} centerFor={centerFor} transient={false} showLabels={settings.showLabels}/>
           <BoardLines lines={transientLines} centerFor={centerFor} transient showLabels={settings.showLabels}/>
           <div className="grid h-full w-full grid-cols-8 grid-rows-8">

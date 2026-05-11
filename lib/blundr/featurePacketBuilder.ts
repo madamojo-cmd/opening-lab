@@ -15,6 +15,7 @@ export type VisualLine = {
   from: string;
   to: string;
   kind: LineKind;
+  role?: string;
   label?: string;
   score?: number;
   reason?: string;
@@ -23,8 +24,24 @@ export type VisualLine = {
 export type VisualCue = {
   square: string;
   kind: CueKind;
+  role?: string;
   score?: number;
   reason?: string;
+};
+
+export type BlundrContext = {
+  headline: string;
+  body: string;
+  next: string;
+  concept?: string;
+  selectedMove?: string;
+  checkQuestion?: string;
+  explanationMode?: string;
+};
+
+export type AnimationPackage = {
+  name: string;
+  intensity?: number;
 };
 
 export type VisualView = {
@@ -54,6 +71,10 @@ export type BlundrVisualModelOutput = {
   confidence?: string;
   reason?: string;
   animation?: string;
+  arrows?: VisualLine[];
+  squares?: VisualCue[];
+  animationPackage?: AnimationPackage;
+  context?: BlundrContext;
   debug?: Record<string, unknown>;
 };
 
@@ -196,7 +217,7 @@ function addCandidate(
 }
 
 function visualLine(from: string, to: string, kind: LineKind, label?: string, reason?: string, score?: number): VisualLine {
-  return { from, to, kind, label, reason, score };
+  return { from, to, kind, role: kind, label, reason, score };
 }
 
 function addSquare(squares: Set<string>, square?: string): void {
@@ -490,6 +511,15 @@ function pendingOutput(packet: BlundrFeaturePacket, reason: string): BlundrVisua
     nextPlan: "Recommendation pending.",
     keySquares: [],
     planArrows: [],
+    arrows: [],
+    squares: [],
+    animationPackage: { name: "continuation-ghost-plan", intensity: 0 },
+    context: {
+      headline: "Recommendation pending",
+      body: "No verified visual recommendation is available yet.",
+      next: "Wait for a repertoire or engine-backed candidate.",
+      explanationMode: "continuation",
+    },
     attack: view,
     defense: view,
     plan: view,
@@ -608,6 +638,24 @@ export function verifyVisualOutput(
   if (!repaired.plan.cues.some((cue) => cue.square === selectedMove?.to) && selectedMove) {
     repaired.plan.cues = [{ square: selectedMove.to, kind: "target" as const, reason: "selected destination" }, ...repaired.plan.cues].slice(0, 4);
   }
+  repaired.arrows = uniqueLines(repaired.arrows ?? repaired.planArrows, 2).filter((line) => allowedArrows.has(`${line.from}-${line.to}`));
+  if (selectedMove && !repaired.arrows.some((line) => line.from === selectedMove.from && line.to === selectedMove.to)) {
+    repaired.arrows.unshift(visualLine(selectedMove.from, selectedMove.to, "plan", selectedMove.san, "selected legal move", 999));
+    repaired.arrows = repaired.arrows.slice(0, 2);
+  }
+  repaired.squares = (repaired.squares ?? repaired.keySquares.map((square) => ({ square, kind: "target" as const, role: "destination" })))
+    .filter((cue) => isBoardSquare(cue.square) && allowedSquares.has(cue.square))
+    .slice(0, 4);
+  if (selectedMove && !repaired.squares.some((cue) => cue.square === selectedMove.to)) {
+    repaired.squares.unshift({ square: selectedMove.to, kind: "target", role: "destination", reason: "selected destination" });
+    repaired.squares = repaired.squares.slice(0, 4);
+  }
+  repaired.animationPackage = repaired.animationPackage ?? { name: repaired.animation ?? "continuation-ghost-plan", intensity: 1 };
+  repaired.context = repaired.context ?? {
+    headline: repaired.headline,
+    body: repaired.mainExplanation,
+    next: repaired.nextPlan,
+  };
 
   return repaired;
 }
