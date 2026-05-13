@@ -30,6 +30,22 @@ type VisualModelArrow = { from: string; to: string; role?: VisualArrowRole; kind
 type VisualModelSquare = { square: string; role?: VisualSquareRole; kind?: SquareCue["kind"]; reason?: string };
 type VisualModelContext = { headline: string; body: string; next: string; checkQuestion?: string; explanationMode?: string; concept?: string; selectedMove?: string };
 type VisualModelOutput = Partial<BrainAnnotation> & { arrows?: VisualModelArrow[]; squares?: VisualModelSquare[]; animation?: string; animationPackage?: { name: string; intensity?: number }; context?: VisualModelContext; suppress?: string[]; debug?: any };
+type VisualDebugSnapshot = {
+  requestKey: string | null;
+  requestPayload: Record<string, unknown> | null;
+  responseSummary: Record<string, unknown> | null;
+  responseDebug: Record<string, unknown> | null;
+  error: string | null;
+  durationMs: number | null;
+  updatedAt: number | null;
+};
+type LocalTelemetryEvent = {
+  id: number;
+  ts: number;
+  event: "visual_request" | "visual_response" | "visual_error" | "visual_suppressed";
+  details: Record<string, unknown>;
+};
+type LocalTelemetryStore = { enabled: boolean; events: LocalTelemetryEvent[]; updatedAt: number };
 type OpponentCue = { expiresAt: number; title: string; message: string; lines: ActiveLine[]; cues: SquareCue[] };
 type LiveBrain = { ratingLabel: string; ratingPool: string; book: SystemState; lichess: SystemState; engine: SystemState; gpt: SystemState; source: string; latency?: number; note?: string };
 type BoardTheme = "classic" | "slate" | "blue" | "walnut";
@@ -44,6 +60,8 @@ const NEO_PIECES: Record<string, string> = { wp:"♙", wn:"♘", wb:"♗", wr:"�
 const PIECE_VALUES: Record<string, number> = { p:1, n:3, b:3, r:5, q:9, k:0 };
 const INITIAL_COUNTS: Record<ChessColor, Record<string, number>> = { w:{p:8,n:2,b:2,r:2,q:1,k:1}, b:{p:8,n:2,b:2,r:2,q:1,k:1} };
 const DEFAULT_BOARD_SETTINGS: BoardSettings = { boardTheme:"classic", pieceStyle:"unicode", showAttack:true, showDefense:true, showPlan:true, showMoveDots:true, showEvalBar:true, showCaptured:true, showLabels:true, showOpponentCue:true };
+const LOCAL_TELEMETRY_KEY = "blundr-v27-local-telemetry";
+const MAX_LOCAL_TELEMETRY_EVENTS = 120;
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
 const FILE_TO_INDEX: Record<string, number> = Object.fromEntries(FILES.map((f, i) => [f, i]));
 const RATING_PRESETS = [
@@ -281,6 +299,7 @@ export default function App(){
   const [activeBoard,setActiveBoard]=useState(true);
   const [activeBoardView,setActiveBoardView]=useState<ActiveBoardView>("plan");
   const [showGptDebug,setShowGptDebug]=useState(false);
+  const [showVisualDebug,setShowVisualDebug]=useState(false);
   const [showDetails,setShowDetails]=useState(false);
   const [showSettings,setShowSettings]=useState(false);
   const [boardSettings,setBoardSettings]=useState<BoardSettings>(DEFAULT_BOARD_SETTINGS);
@@ -296,6 +315,9 @@ export default function App(){
   const [visualModelOutput,setVisualModelOutput]=useState<VisualModelOutput|null>(null);
   const [visualModelPending,setVisualModelPending]=useState(false);
   const [visualModelError,setVisualModelError]=useState<string|null>(null);
+  const [visualDebugSnapshot,setVisualDebugSnapshot]=useState<VisualDebugSnapshot>({requestKey:null,requestPayload:null,responseSummary:null,responseDebug:null,error:null,durationMs:null,updatedAt:null});
+  const [telemetryEnabled,setTelemetryEnabled]=useState(false);
+  const [telemetryEvents,setTelemetryEvents]=useState<LocalTelemetryEvent[]>([]);
   const [thinkingStep,setThinkingStep]=useState<ThinkingStep>("idle");
   const [pipelineNote,setPipelineNote]=useState("Ready");
   const [visualReady,setVisualReady]=useState(false);
@@ -307,6 +329,9 @@ export default function App(){
   const explorerCache=useRef<Record<string,any>>({});
   const brainSeq=useRef(0);
   const visualRequestSeq=useRef(0);
+  const telemetrySeq=useRef(0);
+  const telemetryEnabledRef=useRef(false);
+  const telemetryEventsRef=useRef<LocalTelemetryEvent[]>([]);
   const fenRef=useRef(fen);
   const brainAbortRef=useRef<AbortController|null>(null);
   const visualAbortRef=useRef<AbortController|null>(null);
@@ -342,6 +367,8 @@ export default function App(){
   const isReviewingHistory=historyIndex<positionHistory.length-1;
   const selectedLegalMoves=selectedSquare&&!isReviewingHistory&&!game.isGameOver()?(game.moves({square:selectedSquare as any,verbose:true}) as any[]):[];
   const gptDebugText=JSON.stringify({pipeline:brainResponse?.pipeline??null,engine:enginePreview??null,debug:brainResponse?.debug??null},null,2);
+  const visualDebugText=JSON.stringify(visualDebugSnapshot,null,2);
+  const telemetryDebugText=JSON.stringify(telemetryEvents.slice(-30),null,2);
   const visualModelRequestKey=useMemo(()=>JSON.stringify({
     fen:normalizeFen(fen),
     moveHistory,
@@ -354,19 +381,46 @@ export default function App(){
     openingName:repertoire.name,
     rating:rating.label,
   }),[fen,moveHistory.join("|"),trainingMode,bookComplete,isUserTurn,userColor,expectedUserOptions.map(m=>m.uci).join("|"),engineLines[0]?.uci,engineLines[0]?.cp,repertoire.name,rating.label]);
-  useEffect(()=>{const saved=localStorage.getItem("blundr-v22-progress");const savedCustom=localStorage.getItem("blundr-v22-custom");const savedSettings=localStorage.getItem("blundr-board-settings");if(saved)try{setProgress(JSON.parse(saved))}catch{}if(savedCustom)try{setCustomRepertoires(JSON.parse(savedCustom))}catch{}if(savedSettings)try{setBoardSettings({...DEFAULT_BOARD_SETTINGS,...JSON.parse(savedSettings)})}catch{}},[]);
+  function recordLocalTelemetry(event:LocalTelemetryEvent["event"],details:Record<string,unknown>){
+    if(!telemetryEnabledRef.current)return;
+    const entry:LocalTelemetryEvent={id:++telemetrySeq.current,ts:Date.now(),event,details};
+    setTelemetryEvents(prev=>{
+      const next=[...prev,entry].slice(-MAX_LOCAL_TELEMETRY_EVENTS);
+      telemetryEventsRef.current=next;
+      return next;
+    });
+  }
+  useEffect(()=>{const saved=localStorage.getItem("blundr-v22-progress");const savedCustom=localStorage.getItem("blundr-v22-custom");const savedSettings=localStorage.getItem("blundr-board-settings");const savedTelemetry=localStorage.getItem(LOCAL_TELEMETRY_KEY);if(saved)try{setProgress(JSON.parse(saved))}catch{}if(savedCustom)try{setCustomRepertoires(JSON.parse(savedCustom))}catch{}if(savedSettings)try{setBoardSettings({...DEFAULT_BOARD_SETTINGS,...JSON.parse(savedSettings)})}catch{}if(savedTelemetry)try{const parsed=JSON.parse(savedTelemetry) as Partial<LocalTelemetryStore>;const nextEvents=Array.isArray(parsed.events)?parsed.events.slice(-MAX_LOCAL_TELEMETRY_EVENTS):[];setTelemetryEnabled(Boolean(parsed.enabled));setTelemetryEvents(nextEvents);telemetryEventsRef.current=nextEvents;telemetrySeq.current=nextEvents.reduce((max,event)=>Math.max(max,Number(event.id)||0),0)}catch{}},[]);
   useEffect(()=>localStorage.setItem("blundr-v22-progress",JSON.stringify(progress)),[progress]);
   useEffect(()=>localStorage.setItem("blundr-v22-custom",JSON.stringify(customRepertoires)),[customRepertoires]);
   useEffect(()=>localStorage.setItem("blundr-board-settings",JSON.stringify(boardSettings)),[boardSettings]);
+  useEffect(()=>{telemetryEnabledRef.current=telemetryEnabled},[telemetryEnabled]);
+  useEffect(()=>{telemetryEventsRef.current=telemetryEvents},[telemetryEvents]);
+  useEffect(()=>{const store:LocalTelemetryStore={enabled:telemetryEnabled,events:telemetryEvents.slice(-MAX_LOCAL_TELEMETRY_EVENTS),updatedAt:Date.now()};localStorage.setItem(LOCAL_TELEMETRY_KEY,JSON.stringify(store))},[telemetryEnabled,telemetryEvents]);
+  useEffect(()=>{
+    const api={
+      getEvents:()=>telemetryEventsRef.current.slice(),
+      clear:()=>setTelemetryEvents([]),
+      setEnabled:(enabled:boolean)=>setTelemetryEnabled(Boolean(enabled)),
+      getVisualDebug:()=>visualDebugSnapshot,
+    };
+    (window as any).__blundrLocalTelemetry=api;
+    return()=>{if((window as any).__blundrLocalTelemetry===api)delete (window as any).__blundrLocalTelemetry};
+  },[visualDebugSnapshot]);
   useEffect(()=>{const t=window.setInterval(()=>{if(opponentCue&&Date.now()>opponentCue.expiresAt)setOpponentCue(null)},250);return()=>window.clearInterval(t)},[opponentCue]);
   useEffect(()=>setBrain(p=>({...p,ratingLabel:rating.label,ratingPool:rating.target})),[rating.label,rating.target]);
-  useEffect(()=>{fenRef.current=fen;setBrainResponse(null);setEnginePreview(null);setVisualModelOutput(null);setVisualModelError(null)},[fen]);
+  useEffect(()=>{fenRef.current=fen;setBrainResponse(null);setEnginePreview(null);setVisualModelOutput(null);setVisualModelError(null);setVisualDebugSnapshot(prev=>({...prev,responseSummary:null,responseDebug:null,error:null,durationMs:null,updatedAt:Date.now()}))},[fen]);
   useEffect(()=>{if(!enabledViews.includes(activeBoardView)&&enabledViews.length)setActiveBoardView(enabledViews[0])},[activeBoardView,enabledViews.join("|")]);
   useEffect(()=>{
     if(activeTab!=="train"||isReviewingHistory)return;
     const requestFen=fen;
+    const requestStarted=performance.now();
     const requestSeq=++visualRequestSeq.current;
     visualAbortRef.current?.abort();
+    const requestGame=new Chess(requestFen);
+    const continuationEnginePending=trainingMode==="continuation"&&requestGame.turn()===userColor&&!engineLines[0];
+    if(requestGame.isGameOver()){setVisualModelPending(false);setVisualModelError(null);return}
+    if(continuationEnginePending){setVisualModelPending(false);setVisualModelError(null);return}
     const controller=new AbortController();
     visualAbortRef.current=controller;
     setVisualModelPending(true);
@@ -390,10 +444,14 @@ export default function App(){
         successCount:progress.trainedPositions[normalizeFen(requestFen)]?1:0,
       },
     };
+    setVisualDebugSnapshot({requestKey:visualModelRequestKey,requestPayload:payload as Record<string,unknown>,responseSummary:null,responseDebug:null,error:null,durationMs:null,updatedAt:Date.now()});
+    recordLocalTelemetry("visual_request",{requestKey:visualModelRequestKey,fen:normalizeFen(requestFen),trainingPhase,trainingMode,bookStatus:payload.bookStatus,hasExpectedMove:Boolean(expectedUserOptions[0]),hasEngine:Boolean(engineLines[0])});
+    if(controller.signal.aborted)return;
+    if(requestSeq!==visualRequestSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen))return;
     void fetch("/api/blundr-visual-model",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload),signal:controller.signal})
       .then(async(res)=>{if(!res.ok)throw new Error(`visual model ${res.status}`);return await res.json() as VisualModelOutput})
-      .then((data)=>{if(requestSeq!==visualRequestSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen))return;setVisualModelOutput(data);setVisualModelPending(false)})
-      .catch((error)=>{if(error instanceof Error&&error.name==="AbortError")return;if(requestSeq!==visualRequestSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen))return;setVisualModelError(error instanceof Error?error.message:"Visual model failed");setVisualModelPending(false)});
+      .then((data)=>{if(requestSeq!==visualRequestSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen))return;const durationMs=Math.round(performance.now()-requestStarted);const suppress=Array.isArray(data.suppress)?data.suppress:[];const responseSummary={source:typeof data.source==="string"?data.source:null,fallback:Boolean(data.fallback),suppress,arrowCount:Array.isArray(data.arrows)?data.arrows.length:0,squareCount:Array.isArray(data.squares)?data.squares.length:0,animation:data.animationPackage?.name??data.animation??null,contextHeadline:data.context?.headline??null};setVisualDebugSnapshot(prev=>({...prev,responseSummary,responseDebug:data.debug&&typeof data.debug==="object"?data.debug as Record<string,unknown>:null,error:null,durationMs,updatedAt:Date.now()}));setVisualModelOutput(data);setVisualModelPending(false);recordLocalTelemetry("visual_response",{requestKey:visualModelRequestKey,fen:normalizeFen(requestFen),durationMs,source:responseSummary.source,fallback:responseSummary.fallback,suppressed:suppress.includes("recommendation_pending"),arrowCount:responseSummary.arrowCount,squareCount:responseSummary.squareCount});if(suppress.includes("recommendation_pending"))recordLocalTelemetry("visual_suppressed",{requestKey:visualModelRequestKey,fen:normalizeFen(requestFen),reason:"recommendation_pending"})})
+      .catch((error)=>{if(error instanceof Error&&error.name==="AbortError")return;if(requestSeq!==visualRequestSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen))return;const message=error instanceof Error?error.message:"Visual model failed";setVisualDebugSnapshot(prev=>({...prev,error:message,responseSummary:null,responseDebug:null,durationMs:Math.round(performance.now()-requestStarted),updatedAt:Date.now()}));setVisualModelError(message);setVisualModelPending(false);recordLocalTelemetry("visual_error",{requestKey:visualModelRequestKey,fen:normalizeFen(requestFen),message})});
     return()=>controller.abort();
   },[activeTab,isReviewingHistory,visualModelRequestKey]);
   useEffect(()=>{if(activeTab!=="train")return;const fast=deriveFastAnnotation({fen,openingName:repertoire.name,userColor,trainingMode,expectedUserOptions,opponentBookOptions});setAnnotation(fast);setVisualReady(true);setThinkingStep("ready");setPipelineNote(trainingMode==="continuation"&&isUserTurn?"Engine pending. No random legal fallback will be shown as the recommendation.":"Fast local visual ready. Brain is refining in the background.");void runBrain("position_update")},[fen,activeTab,selectedRepertoireId,trainingMode,ratingFilter]);
@@ -536,6 +594,16 @@ export default function App(){
       </header>
       <LiveBrain brain={brain}/>
       <GptDebugPanel open={showGptDebug} setOpen={setShowGptDebug} text={gptDebugText}/>
+      <VisualDebugPanel
+        open={showVisualDebug}
+        setOpen={setShowVisualDebug}
+        visualText={visualDebugText}
+        telemetryText={telemetryDebugText}
+        telemetryEnabled={telemetryEnabled}
+        setTelemetryEnabled={setTelemetryEnabled}
+        telemetryCount={telemetryEvents.length}
+        onClearTelemetry={()=>setTelemetryEvents([])}
+      />
       <div className="rounded-3xl bg-white p-3 shadow-sm">
         <div className="mb-3 grid grid-cols-4 gap-2">{RATING_PRESETS.map(p=><button key={p.value} onClick={()=>setRatingFilter(p.value)} className={classNames("rounded-full px-2 py-2 text-[11px] font-black",ratingFilter===p.value?"bg-green-700 text-white":"bg-stone-100 text-stone-600")}>{p.label}</button>)}</div>
         <div className="mb-3 flex items-center justify-between gap-3">
@@ -651,6 +719,35 @@ function GptDebugPanel({open,setOpen,text}:{open:boolean;setOpen:(v:boolean)=>vo
       <button onClick={()=>setOpen(!open)} className="rounded-full bg-stone-100 px-3 py-2 text-xs font-black text-stone-600">{open?"Hide":"Show"}</button>
     </div>
     {open?<pre className="mt-3 max-h-72 overflow-auto rounded-2xl bg-stone-950 p-3 text-[10px] leading-4 text-green-200 whitespace-pre-wrap">{text}</pre>:null}
+  </div>
+}
+
+function VisualDebugPanel({open,setOpen,visualText,telemetryText,telemetryEnabled,setTelemetryEnabled,telemetryCount,onClearTelemetry}:{open:boolean;setOpen:(v:boolean)=>void;visualText:string;telemetryText:string;telemetryEnabled:boolean;setTelemetryEnabled:(v:boolean)=>void;telemetryCount:number;onClearTelemetry:()=>void}){
+  return <div className="rounded-3xl border border-stone-200 bg-white p-3 shadow-sm">
+    <div className="flex items-center justify-between gap-3">
+      <div>
+        <div className="text-sm font-black text-stone-950">Visual Debug Panel</div>
+        <div className="text-xs font-semibold text-stone-500">Rule visual payload/response plus local-only telemetry events.</div>
+      </div>
+      <button onClick={()=>setOpen(!open)} className="rounded-full bg-stone-100 px-3 py-2 text-xs font-black text-stone-600">{open?"Hide":"Show"}</button>
+    </div>
+    {open?<div className="mt-3 space-y-3">
+      <div className="flex items-center justify-between rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-600">
+        <span>Telemetry: {telemetryEnabled?"enabled":"disabled"} • {telemetryCount} event{telemetryCount===1?"":"s"}</span>
+        <div className="flex items-center gap-2">
+          <button onClick={()=>setTelemetryEnabled(!telemetryEnabled)} className={classNames("rounded-full px-3 py-1 font-black",telemetryEnabled?"bg-green-700 text-white":"bg-stone-200 text-stone-700")}>{telemetryEnabled?"Disable":"Enable"}</button>
+          <button onClick={onClearTelemetry} className="rounded-full bg-stone-200 px-3 py-1 font-black text-stone-700">Clear</button>
+        </div>
+      </div>
+      <div>
+        <div className="mb-1 text-[11px] font-black uppercase tracking-wide text-stone-500">Visual Snapshot</div>
+        <pre className="max-h-52 overflow-auto rounded-2xl bg-stone-950 p-3 text-[10px] leading-4 text-green-200 whitespace-pre-wrap">{visualText}</pre>
+      </div>
+      <div>
+        <div className="mb-1 text-[11px] font-black uppercase tracking-wide text-stone-500">Local Telemetry Events</div>
+        <pre className="max-h-52 overflow-auto rounded-2xl bg-stone-950 p-3 text-[10px] leading-4 text-green-200 whitespace-pre-wrap">{telemetryText}</pre>
+      </div>
+    </div>:null}
   </div>
 }
 
