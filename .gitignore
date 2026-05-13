@@ -8,3 +8,13 @@ node_modules/
 .DS_Store
 
 # Block accidental heavyweight Stockfish artifacts
+
+# Blundr local/generated artifacts
+model/
+handoffs/
+generated_training_data/
+*.jsonl
+*.zip
+REVIEW_*.txt
+REVIEW_*.patch
+blundr-deploy-v*/
