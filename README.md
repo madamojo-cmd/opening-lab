@@ -42,6 +42,12 @@ This release focuses on making the trainer truthful and reliable rather than add
 - The GPT Debug Cell remains visible for diagnosis.
 - It now includes current-FEN Lichess context and sanitized outputs.
 
+## Hardening QA (rule-only visual coach)
+
+- Visual debug hardening and local-only telemetry live in `app/page.tsx`.
+- API smoke test instructions are documented in `API_SMOKE_TEST.md`.
+- QA acceptance checklist is tracked in `QA_ACCEPTANCE_REPORT.md`.
+
 ## Install
 
 ```bash
