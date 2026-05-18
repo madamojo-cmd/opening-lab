@@ -5,7 +5,8 @@ export type LearningEventType =
   | "move_incorrect"
   | "cue_revealed"
   | "trainer_view_changed"
-  | "move_quality_checked";
+  | "move_quality_checked"
+  | "teaching_cue_compiled";
 
 export type LearningEventSource = "train" | "review" | "debug";
 
