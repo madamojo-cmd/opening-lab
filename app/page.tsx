@@ -9,9 +9,10 @@ import {
   MOVE_QUALITY_GATE_VERSION,
   buildMoveQualityCacheKey,
   evaluateTopTwoMatch,
-  type MoveQualityEngineLine,
   type MoveQualityResult,
 } from "@/lib/blundr/teaching/moveQualityGate";
+import { createLearningSessionId, recordLearningEvent } from "@/lib/blundr/learning/learningEvents";
+import type { LearningEvent } from "@/lib/blundr/learning/learningEvents";
 
 type Tab = "home" | "train" | "review" | "progress" | "repertoire";
 type RepertoireColor = "white" | "black";
@@ -128,10 +129,10 @@ function lineFromEngine(fen:string,line:EngineLine,kind:LineKind="plan"):ActiveL
 function engineAnnotationFromLine({fen,line,openingName}: {fen:string;line:EngineLine;openingName:string}):BrainAnnotation{
   const base=blankAnnotation();
   const visual=lineFromEngine(fen,line,"plan");
-  if(!visual)return{...base,source:"engine pending",fallback:true,headline:"Engine analyzing",mainExplanation:"Stockfish is validating the continuation before Blundr highlights a move.",visualExplanation:"No random legal fallback is shown as a recommendation.",planExplanation:"Wait for the engine-backed cue.",nextPlan:"Engine recommendation pending.",plan:{title:"Engine analyzing",message:"Stockfish is checking the best continuation.",lines:[],cues:[]},confidence:"engine-pending"};
+  if(!visual)return{...base,source:"engine pending",fallback:true,headline:"Checking continuation",mainExplanation:"Blundr Brain is checking the continuation before highlighting a move.",visualExplanation:"No random legal fallback is shown as a recommendation.",planExplanation:"Wait for the teaching cue.",nextPlan:"Teaching cue pending.",plan:{title:"Checking continuation",message:"Blundr Brain is checking the continuation.",lines:[],cues:[]},confidence:"engine-pending"};
   const cues:SquareCue[]=[{square:visual.from,kind:"origin"},{square:visual.to,kind:"target"}];
   const move=visual.label??line.san??line.uci;
-  return{...base,source:"browser stockfish",fallback:false,selectedView:"plan",headline:`Best continuation: ${move}`,mainExplanation:`Stockfish currently recommends ${move}.`,visualExplanation:"The highlighted move is engine-backed, not a placeholder legal move.",planExplanation:`Use ${move} as the current best continuation while GPT only refines the explanation.`,nextPlan:`Play ${move}.`,keySquares:[visual.to],planArrows:[visual],attack:{title:"Engine activity",message:`${move} is the engine-backed active continuation.`,lines:[{...visual,kind:"attack"}],cues},defense:{title:"Engine safety",message:"The recommendation is validated by the local browser Stockfish line.",lines:[],cues:[{square:visual.from,kind:"support"}]},plan:{title:`${openingName}: Stockfish plan`,message:`Engine-backed continuation: ${move}.`,lines:[visual],cues},confidence:"stockfish"};
+  return{...base,source:"manual analysis",fallback:false,selectedView:"plan",headline:`Suggested continuation: ${move}`,mainExplanation:`Manual analysis currently prefers ${move}.`,visualExplanation:"The highlighted move is analysis-backed, not a placeholder legal move.",planExplanation:`Use ${move} as the current continuation while explanation text stays concise.`,nextPlan:`Play ${move}.`,keySquares:[visual.to],planArrows:[visual],attack:{title:"Active continuation",message:`${move} is the current continuation.`,lines:[{...visual,kind:"attack"}],cues},defense:{title:"Safety check",message:"The recommendation is validated by local analysis.",lines:[],cues:[{square:visual.from,kind:"support"}]},plan:{title:`${openingName}: continuation plan`,message:`Analysis-backed continuation: ${move}.`,lines:[visual],cues},confidence:"analysis"};
 }
 function deriveFastAnnotation({fen,openingName,userColor,trainingMode,expectedUserOptions,opponentBookOptions}: {fen:string;openingName:string;userColor:ChessColor;trainingMode:TrainingMode;expectedUserOptions:Continuation[];opponentBookOptions:Continuation[]}):BrainAnnotation{
   const local=new Chess(fen);
@@ -142,7 +143,7 @@ function deriveFastAnnotation({fen,openingName,userColor,trainingMode,expectedUs
     const lines=expectedUserOptions.slice(0,2).map(m=>lineFromContinuation(m,"plan"));
     const cues:SquareCue[]=lines.flatMap(l=>[{square:l.from,kind:"origin" as const},{square:l.to,kind:"target" as const}]);
     const moveText=expectedUserOptions.map(m=>m.san).join(" / ");
-    return{...base,source:"fast local repertoire",fallback:true,selectedView:"plan",headline:`${openingName}: play ${moveText}`,mainExplanation:`The saved repertoire expects ${moveText}.`,visualExplanation:"The board is showing the source and destination for the current saved training move immediately, before GPT finishes.",planExplanation:"Stay inside the restricted opening line by playing the highlighted move.",nextPlan:`Play ${moveText}.`,keySquares:lines.map(l=>l.to),planArrows:lines,attack:{title:"Current attacking/development idea",message:`The immediate training move is ${moveText}. Use this view as a fast cue, not a tactical claim.`,lines:lines.map(l=>({...l,kind:"attack" as LineKind})),cues},defense:{title:"Current responsibility",message:"Restricted mode first checks whether the move belongs to your saved repertoire. Deeper defensive motifs are refined by Brain after the local cue appears.",lines:[],cues:lines.map(l=>({square:l.from,kind:"support" as const}))},plan:{title:"Fast local plan",message:`Play ${moveText} to continue the saved ${openingName} branch.`,lines,cues},confidence:"local"};
+    return{...base,source:"fast local repertoire",fallback:true,selectedView:"plan",headline:`${openingName}: play ${moveText}`,mainExplanation:`The saved repertoire expects ${moveText}.`,visualExplanation:"The board is showing the source and destination for the current saved training move immediately.",planExplanation:"Stay inside the restricted opening line by playing the highlighted move.",nextPlan:`Play ${moveText}.`,keySquares:lines.map(l=>l.to),planArrows:lines,attack:{title:"Current attacking/development idea",message:`The immediate training move is ${moveText}. Use this view as a fast cue, not a tactical claim.`,lines:lines.map(l=>({...l,kind:"attack" as LineKind})),cues},defense:{title:"Current responsibility",message:"Restricted mode first checks whether the move belongs to your saved repertoire. Deeper defensive motifs are refined after the local cue appears.",lines:[],cues:lines.map(l=>({square:l.from,kind:"support" as const}))},plan:{title:"Fast local plan",message:`Play ${moveText} to continue the saved ${openingName} branch.`,lines,cues},confidence:"local"};
   }
   if(userTurn&&trainingMode==="restricted"&&!expectedUserOptions.length){
     return{...base,source:"fast local book complete",fallback:true,headline:"Book complete",mainExplanation:"The saved repertoire branch has ended on your turn.",visualExplanation:"No move is highlighted because there is no saved restricted-mode continuation.",planExplanation:"Choose Train Again or Continue vs Bot.",nextPlan:"Continue vs Bot to accept normal legal moves from this position.",plan:{title:"Book complete",message:"No saved move remains for this branch.",lines:[],cues:[]},confidence:"local"};
@@ -153,12 +154,12 @@ function deriveFastAnnotation({fen,openingName,userColor,trainingMode,expectedUs
     const moveText=opponentBookOptions.map(m=>m.san).join(" / ");
     return{...base,source:"fast local opponent book",fallback:true,selectedView:"plan",headline:`Opponent book reply: ${moveText}`,mainExplanation:"The app is about to play a saved opponent reply from the repertoire tree.",visualExplanation:"Purple cues show the opponent-side book move immediately while the bot delay and Brain refinement finish.",planExplanation:"After the opponent move, your next saved repertoire cue will appear.",nextPlan:"Watch the opponent reply, then find your next training move.",keySquares:lines.map(l=>l.to),planArrows:lines,attack:{title:"Opponent reply",message:`Expected opponent book reply: ${moveText}.`,lines,cues},defense:{title:"Prepare for reply",message:"This cue shows where the opponent book move is heading. Your user-side view returns after the move.",lines,cues},plan:{title:"Opponent book reply",message:`Opponent is expected to play ${moveText}.`,lines,cues},confidence:"local"};
   }
-  return{...base,source:"engine pending",fallback:true,selectedView:"plan",headline:trainingMode==="continuation"&&userTurn?"Engine analyzing continuation":"Waiting for opponent",mainExplanation:trainingMode==="continuation"&&userTurn?"Stockfish is choosing the recommended continuation. Blundr will not show a random legal move as the plan.":"The opponent is selecting a continuation.",visualExplanation:"No provisional legal-move recommendation is drawn. The next plan visual appears only when it is repertoire-backed or engine-backed.",planExplanation:trainingMode==="continuation"&&userTurn?"Wait for the engine-backed cue, then use GPT only for explanation.":"Wait for the opponent move.",nextPlan:trainingMode==="continuation"&&userTurn?"Engine recommendation pending.":"Wait for the opponent move.",attack:{title:"Engine pending",message:"Attack cues are withheld until the move is validated.",lines:[],cues:[]},defense:{title:"Engine pending",message:"Defense cues are withheld until the move is validated.",lines:[],cues:[]},plan:{title:"Engine analyzing",message:"Stockfish is checking the best continuation.",lines:[],cues:[]},confidence:"engine-pending"};
+  return{...base,source:"engine pending",fallback:true,selectedView:"plan",headline:trainingMode==="continuation"&&userTurn?"Checking continuation":"Waiting for opponent",mainExplanation:trainingMode==="continuation"&&userTurn?"Blundr Brain is checking the continuation before showing a cue.":"The opponent is selecting a continuation.",visualExplanation:"No provisional legal-move recommendation is drawn. The next plan visual appears only when it is validated.",planExplanation:trainingMode==="continuation"&&userTurn?"Wait for the teaching cue.":"Wait for the opponent move.",nextPlan:trainingMode==="continuation"&&userTurn?"Teaching cue pending.":"Wait for the opponent move.",attack:{title:"Checking",message:"Attack cues are withheld until the move is validated.",lines:[],cues:[]},defense:{title:"Checking",message:"Defense cues are withheld until the move is validated.",lines:[],cues:[]},plan:{title:"Checking continuation",message:"Blundr Brain is checking the continuation.",lines:[],cues:[]},confidence:"engine-pending"};
 }
 function impactFromEngine(line?:EngineLine){
   const cp=line?.cp;
   if(typeof cp!=="number")return{label:"Training",pct:64,tone:"bg-green-700",note:"Move impact will use Brain endpoint engine output when available."};
-  if(cp>180)return{label:"Strong",pct:92,tone:"bg-green-700",note:"Stockfish likes this continuation."};
+  if(cp>180)return{label:"Strong",pct:92,tone:"bg-green-700",note:"Blundr Brain likes this continuation."};
   if(cp>80)return{label:"Stable",pct:74,tone:"bg-green-600",note:"Healthy continuation."};
   if(cp>20)return{label:"Playable",pct:58,tone:"bg-yellow-500",note:"Playable but keep improving the plan."};
   return{label:"Needs care",pct:36,tone:"bg-orange-600",note:"Look for a more forcing or developing move."};
@@ -167,6 +168,39 @@ function impactFromEngine(line?:EngineLine){
 function compactText(value:unknown,fallback:string,max=140){
   const text=typeof value==="string"&&value.trim()?value.trim().replace(/\s+/g," "):fallback;
   return text.length>max?`${text.slice(0,Math.max(0,max-1)).trim()}…`:text;
+}
+
+function isMoveQualityVerified(moveQuality:MoveQualityResult|null){
+  return moveQuality?.status==="verified_top1"||moveQuality?.status==="verified_top2";
+}
+
+function getMoveQualityUserStatus(moveQuality:MoveQualityResult|null,pending:boolean):"idle"|"checking"|"verified"|"needs_review"|"not_verified"{
+  if(pending)return "checking";
+  if(isMoveQualityVerified(moveQuality))return "verified";
+  if(moveQuality?.status==="rejected")return "needs_review";
+  if(moveQuality?.status==="unavailable")return "not_verified";
+  return "idle";
+}
+
+function getMoveQualityBadgeLabel(input:{
+  trainerView:TrainerView;
+  showAnswer:boolean;
+  shouldValidateTrainingMove:boolean;
+  moveQuality:MoveQualityResult|null;
+  moveQualityPending:boolean;
+  patternCueStatus:PatternCueStatus;
+}){
+  if(input.trainerView==="plain"&&!input.showAnswer)return "Plain View • No hints";
+  if(input.shouldValidateTrainingMove&&!input.showAnswer){
+    const status=getMoveQualityUserStatus(input.moveQuality,input.moveQualityPending);
+    if(status==="checking")return "Assisted View • Checking";
+    if(status==="verified")return "Assisted View • Blundr Brain Validated";
+    if(status==="needs_review")return "Assisted View • Needs review";
+    if(status==="not_verified")return "Assisted View • Not verified";
+    return "Assisted View • Checking";
+  }
+  if(input.patternCueStatus==="pending")return "Assisted View • Checking";
+  return "Assisted View • Cue ready";
 }
 
 function buildPatternCue(input:{
@@ -191,8 +225,8 @@ function buildPatternCue(input:{
   }
   if(input.shouldValidateTrainingMove&&!input.showAnswer&&input.moveQualityPending){
     return{
-      title:"Validating move quality",
-      snippet:"Blundr is checking that this training move is one of Stockfish’s top two choices.",
+      title:"Checking position",
+      snippet:"Blundr Brain is checking this move before showing a teaching cue.",
       status:"pending",
       source:"pending",
     };
@@ -200,8 +234,8 @@ function buildPatternCue(input:{
   if(input.shouldValidateTrainingMove&&!input.showAnswer&&input.moveQuality?.status==="rejected"){
     return{
       title:"Line needs review",
-      snippet:"The saved training move was not in Stockfish’s top two from this position.",
-      next:"No teaching cue will be shown for this move.",
+      snippet:"Blundr Brain did not validate this saved line, so no teaching cue will be shown.",
+      next:undefined,
       source:"suppressed",
       status:"suppressed",
     };
@@ -216,11 +250,10 @@ function buildPatternCue(input:{
     };
   }
   if(input.shouldValidateTrainingMove&&!input.showAnswer){
-    const verified=input.moveQuality?.status==="verified_top1"||input.moveQuality?.status==="verified_top2";
-    if(!verified){
+    if(!isMoveQualityVerified(input.moveQuality)){
       return{
-        title:"Validating move quality",
-        snippet:"Blundr is waiting for top-two verification before showing a teaching cue.",
+        title:"Checking position",
+        snippet:"Blundr Brain is checking this move before showing a teaching cue.",
         status:"pending",
         source:"pending",
       };
@@ -254,8 +287,8 @@ function buildPatternCue(input:{
   }
   if(input.showAnswer&&input.expectedUserOptions.length){
     return{
-      title:"Recommended move",
-      snippet:compactText(`Play ${input.expectedUserOptions.map(m=>m.san).join(" / ")}.`,"Play the recommended move.",140),
+      title:"Saved line move",
+      snippet:compactText(`Play ${input.expectedUserOptions.map(m=>m.san).join(" / ")}.`,"Play the saved line move.",140),
       next:"Review the highlighted pattern before continuing.",
       status:"manual_reveal",
       source:"manual",
@@ -447,7 +480,7 @@ export default function App(){
   const [thinkingStep,setThinkingStep]=useState<ThinkingStep>("idle");
   const [pipelineNote,setPipelineNote]=useState("Ready");
   const [visualReady,setVisualReady]=useState(false);
-  const [brain,setBrain]=useState<LiveBrain>({ratingLabel:"Club",ratingPool:"1200–1600",book:"ready",lichess:"ready",engine:"ready",gpt:"ready",source:"rule visual",note:"GPT manual/debug only"});
+  const [brain,setBrain]=useState<LiveBrain>({ratingLabel:"Club",ratingPool:"1200–1600",book:"ready",lichess:"ready",engine:"ready",gpt:"ready",source:"rule visual",note:"Manual reveal/debug only"});
   const [moveQuality,setMoveQuality]=useState<MoveQualityResult|null>(null);
   const [moveQualityPending,setMoveQualityPending]=useState(false);
   const [showAddLine,setShowAddLine]=useState(false);
@@ -458,6 +491,9 @@ export default function App(){
   const brainSeq=useRef(0);
   const visualRequestSeq=useRef(0);
   const moveQualityCacheRef=useRef<Map<string,MoveQualityResult>>(new Map());
+  const learningSessionIdRef=useRef<string>(createLearningSessionId());
+  const positionStartedAtRef=useRef<number>(Date.now());
+  const lastMoveQualityEventKeyRef=useRef<string>("");
   const telemetrySeq=useRef(0);
   const telemetryEnabledRef=useRef(false);
   const telemetryEventsRef=useRef<LocalTelemetryEvent[]>([]);
@@ -487,7 +523,8 @@ export default function App(){
   const currentView=annotation[safeBoardView]??annotation.plan;
   const engineLines=enginePreview&&normalizeFen(enginePreview.fen)===normalizeFen(fen)?enginePreview.pvs:[];
   const shouldValidateTrainingMove=activeTab==="train"&&trainingMode==="restricted"&&isUserTurn&&!bookComplete&&historyIndex>=positionHistory.length-1&&expectedUserOptions.length>0;
-  const moveQualityVerified=moveQuality?.status==="verified_top1"||moveQuality?.status==="verified_top2";
+  const moveQualityUserStatus=getMoveQualityUserStatus(moveQuality,moveQualityPending);
+  const moveQualityVerified=isMoveQualityVerified(moveQuality);
   const hideUnverifiedTrainingHints=trainingMode==="restricted"&&isUserTurn&&!showAnswer&&shouldValidateTrainingMove&&!moveQualityVerified;
   const visualSuppressed=Boolean(visualModelOutput?.suppress?.includes("recommendation_pending"));
   const activeVisualModelOutput=visualModelOutput&&!visualSuppressed?visualModelOutput:null;
@@ -496,6 +533,8 @@ export default function App(){
   const visualContext=activeVisualModelOutput?.context;
   const visualAnimationName=activeVisualModelOutput?.animationPackage?.name??activeVisualModelOutput?.animation;
   const patternCue=buildPatternCue({trainerView,visualModelOutput,visualModelPending,visualModelError,visualSuppressed,moveQuality,moveQualityPending,shouldValidateTrainingMove,annotation,expectedUserOptions,trainingMode,isUserTurn,bookComplete,showAnswer,engineLines});
+  const patternCueBadgeLabel=getMoveQualityBadgeLabel({trainerView,showAnswer,shouldValidateTrainingMove,moveQuality,moveQualityPending,patternCueStatus:patternCue.status});
+  const showValidatedBadge=trainerView==="assisted"&&!showAnswer&&moveQualityUserStatus==="verified"&&shouldValidateTrainingMove;
   const moveImpact=impactFromEngine(engineLines[0]);
   const accuracy=getAccuracy(progress);
   const mistakes=Object.values(progress.mistakes).sort((a,b)=>b.count-a.count);
@@ -530,6 +569,21 @@ export default function App(){
       return next;
     });
   }
+  function trackLearningEvent(input:Partial<LearningEvent>&Pick<LearningEvent,"type"|"source">){
+    recordLearningEvent({
+      sessionId:learningSessionIdRef.current,
+      source:input.source,
+      type:input.type,
+      fen,
+      openingId:selectedRepertoireId,
+      openingName:repertoire.name,
+      trainerView,
+      trainingMode,
+      moveQualityStatus:moveQuality?.status,
+      moveQualityUserStatus,
+      ...input,
+    });
+  }
   useEffect(()=>{const saved=localStorage.getItem("blundr-v22-progress");const savedCustom=localStorage.getItem("blundr-v22-custom");const savedSettings=localStorage.getItem("blundr-board-settings");const savedTelemetry=localStorage.getItem(LOCAL_TELEMETRY_KEY);if(saved)try{setProgress(JSON.parse(saved))}catch{}if(savedCustom)try{setCustomRepertoires(JSON.parse(savedCustom))}catch{}if(savedSettings)try{setBoardSettings({...DEFAULT_BOARD_SETTINGS,...JSON.parse(savedSettings)})}catch{}if(savedTelemetry)try{const parsed=JSON.parse(savedTelemetry) as Partial<LocalTelemetryStore>;const nextEvents=Array.isArray(parsed.events)?parsed.events.slice(-MAX_LOCAL_TELEMETRY_EVENTS):[];setTelemetryEnabled(Boolean(parsed.enabled));setTelemetryEvents(nextEvents);telemetryEventsRef.current=nextEvents;telemetrySeq.current=nextEvents.reduce((max,event)=>Math.max(max,Number(event.id)||0),0)}catch{}},[]);
   useEffect(()=>localStorage.setItem("blundr-v22-progress",JSON.stringify(progress)),[progress]);
   useEffect(()=>localStorage.setItem("blundr-v22-custom",JSON.stringify(customRepertoires)),[customRepertoires]);
@@ -550,6 +604,7 @@ export default function App(){
   useEffect(()=>{const t=window.setInterval(()=>{if(opponentCue&&Date.now()>opponentCue.expiresAt)setOpponentCue(null)},250);return()=>window.clearInterval(t)},[opponentCue]);
   useEffect(()=>setBrain(p=>({...p,ratingLabel:rating.label,ratingPool:rating.target})),[rating.label,rating.target]);
   useEffect(()=>{fenRef.current=fen;setBrainResponse(null);setEnginePreview(null);setVisualModelOutput(null);setVisualModelError(null);setVisualDebugSnapshot(prev=>({...prev,responseSummary:null,responseDebug:null,error:null,durationMs:null,updatedAt:Date.now()}))},[fen]);
+  useEffect(()=>{if(activeTab==="train")positionStartedAtRef.current=Date.now()},[fen,activeTab]);
   useEffect(()=>{if(!enabledViews.includes(activeBoardView)&&enabledViews.length)setActiveBoardView(enabledViews[0])},[activeBoardView,enabledViews.join("|")]);
   useEffect(()=>{
     if(!shouldValidateTrainingMove){
@@ -632,6 +687,24 @@ export default function App(){
     return()=>{cancelled=true};
   },[fen,shouldValidateTrainingMove,expectedUserOptions]);
   useEffect(()=>{
+    if(activeTab!=="train"||!shouldValidateTrainingMove||!moveQuality)return;
+    if(moveQualityPending)return;
+    const eventKey=`${normalizeFen(fen)}|${moveQuality.status}|${moveQuality.checkedAt}`;
+    if(lastMoveQualityEventKeyRef.current===eventKey)return;
+    lastMoveQualityEventKeyRef.current=eventKey;
+    trackLearningEvent({
+      type:"move_quality_checked",
+      source:"train",
+      fen,
+      moveQualityStatus:moveQuality.status,
+      moveQualityUserStatus,
+      metadata:{
+        required:shouldValidateTrainingMove,
+        topMoveCount:moveQuality.topMoves.length,
+      },
+    });
+  },[activeTab,fen,moveQuality,moveQualityPending,moveQualityUserStatus,shouldValidateTrainingMove]);
+  useEffect(()=>{
     if(activeTab!=="train"||isReviewingHistory)return;
     const requestFen=fen;
     const requestStarted=performance.now();
@@ -674,11 +747,11 @@ export default function App(){
       .catch((error)=>{if(error instanceof Error&&error.name==="AbortError")return;if(requestSeq!==visualRequestSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen))return;const message=error instanceof Error?error.message:"Visual model failed";setVisualDebugSnapshot(prev=>({...prev,error:message,responseSummary:null,responseDebug:null,durationMs:Math.round(performance.now()-requestStarted),updatedAt:Date.now()}));setVisualModelError(message);setVisualModelPending(false);recordLocalTelemetry("visual_error",{requestKey:visualModelRequestKey,fen:normalizeFen(requestFen),message})});
     return()=>controller.abort();
   },[activeTab,isReviewingHistory,visualModelRequestKey]);
-  useEffect(()=>{if(activeTab!=="train")return;const fast=deriveFastAnnotation({fen,openingName:repertoire.name,userColor,trainingMode,expectedUserOptions,opponentBookOptions});setAnnotation(fast);setVisualReady(true);setThinkingStep("ready");setPipelineNote(trainingMode==="continuation"&&isUserTurn?"Engine pending. No random legal fallback will be shown as the recommendation.":"Rule visual cue ready. GPT Brain is manual/debug only.");setBrain(p=>({...p,source:"rule visual",gpt:"ready",note:"GPT manual/debug only"}))},[fen,activeTab,selectedRepertoireId,trainingMode,ratingFilter]);
+  useEffect(()=>{if(activeTab!=="train")return;const fast=deriveFastAnnotation({fen,openingName:repertoire.name,userColor,trainingMode,expectedUserOptions,opponentBookOptions});setAnnotation(fast);setVisualReady(true);setThinkingStep("ready");setPipelineNote(trainingMode==="continuation"&&isUserTurn?"Blundr Brain is checking the continuation. No fallback move will be shown.":"Teaching cue ready.");setBrain(p=>({...p,source:"rule visual",gpt:"ready",note:"Manual reveal/debug only"}))},[fen,activeTab,selectedRepertoireId,trainingMode,ratingFilter]);
   useEffect(()=>{
     if(activeTab!=="train"||!shouldValidateTrainingMove)return;
-    if(moveQualityPending){setPipelineNote("Validating expected move with Stockfish.");return}
-    if(moveQuality?.status==="verified_top1"||moveQuality?.status==="verified_top2"){setPipelineNote("Rule visual cue ready after move-quality check.");return}
+    if(moveQualityPending){setPipelineNote("Blundr Brain is checking the position.");return}
+    if(moveQuality?.status==="verified_top1"||moveQuality?.status==="verified_top2"){setPipelineNote("Teaching cue ready.");return}
     if(moveQuality?.status==="rejected"){setPipelineNote("Saved line needs review. Blundr will not invent a teaching cue.");return}
     if(moveQuality?.status==="unavailable"){setPipelineNote("Move not verified. Blundr will stay quiet instead of guessing.");}
   },[activeTab,shouldValidateTrainingMove,moveQualityPending,moveQuality?.status]);
@@ -694,9 +767,9 @@ export default function App(){
     brainAbortRef.current=controller;
     setThinkingStep("facts");
     setPipelineNote("Manual Brain check started.");
-    setBrain(p=>({...p,engine:"loading",gpt:extra.skipGpt?"fallback":"loading",source:"Browser Stockfish"}));
+    setBrain(p=>({...p,engine:"loading",gpt:extra.skipGpt?"fallback":"loading",source:"Manual analysis"}));
     setThinkingStep("engine");
-    setPipelineNote("Running browser Stockfish for manual reveal/debug.");
+    setPipelineNote("Manual analysis started.");
     const browserEngine=extra.skipClientEngine?null:await runBrowserStockfish(requestFen,rating.skill,eventType==="reveal"?1000:700);
     if(requestSeq!==brainSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen))return null;
     const clientEngine=browserEngine?{source:browserEngine.source,pvs:browserEngine.pvs,depth:browserEngine.depth,timeMs:browserEngine.timeMs}:undefined;
@@ -706,13 +779,13 @@ export default function App(){
       if(trainingMode==="continuation"&&requestGame.turn()===userColor){
         setAnnotation(engineAnnotationFromLine({fen:requestFen,line:browserEngine.pvs[0],openingName:repertoire.name}));
         setVisualReady(true);
-        setPipelineNote(`Manual Stockfish result ready: ${browserEngine.pvs[0].san}.`);
+        setPipelineNote(`Manual analysis ready: ${browserEngine.pvs[0].san}.`);
       }
     }
-    setBrain(p=>({...p,engine:browserEngine?"active":"fallback",source:browserEngine?"Browser Stockfish":"Engine fallback",note:browserEngine?`depth ${browserEngine.depth??"?"} • ${browserEngine.timeMs} ms`:"Browser Stockfish unavailable"}));
+    setBrain(p=>({...p,engine:browserEngine?"active":"fallback",source:browserEngine?"Manual analysis":"Engine fallback",note:browserEngine?`depth ${browserEngine.depth??"?"} • ${browserEngine.timeMs} ms`:"Manual analysis unavailable"}));
     const payload={fen:requestFen,openingId:repertoire.id,openingName:repertoire.name,userColor,trainingMode,eventType,selectedView:activeBoardView,moveHistory,lastMoveSan,lastMoveUci:lastMove,expectedMoves:expectedUserOptions.map(m=>({san:m.san,uci:m.uci})),opponentBookMoves:opponentBookOptions.map(m=>({san:m.san,uci:m.uci})),ratingPool:rating.target,ratingLabel:rating.label,ratingFilter,speedFilter,skill:rating.skill,clientEngine,...extra};
     setThinkingStep("brain");
-    setPipelineNote(extra.skipGpt?"Manual bot fallback: engine-only request.":"Sending local facts to Brain because the user requested reveal/debug.");
+    setPipelineNote(extra.skipGpt?"Manual analysis request sent.":"Sending local facts to Brain because the user requested reveal/debug.");
     const start=performance.now();
     try{
       const res=await fetch("/api/brain",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload),signal:controller.signal});
@@ -731,7 +804,7 @@ export default function App(){
       setThinkingStep("visual-update");
       setPipelineNote("Applied manual Brain output.");
       window.setTimeout(()=>{if(requestSeq===brainSeq.current&&normalizeFen(fenRef.current)===normalizeFen(requestFen)){setThinkingStep("ready");setPipelineNote("Manual Brain check complete.")}},250);
-      setBrain(p=>({...p,engine:data.engine?.fallback?"fallback":"active",gpt:data.annotation?.fallback?"fallback":"active",latency:Math.round(performance.now()-start),source:data.annotation?.fallback?"manual brain fallback":"manual brain",note:data.pipeline?.gpt||data.annotation?.reason||"GPT manual/debug only"}));
+      setBrain(p=>({...p,engine:data.engine?.fallback?"fallback":"active",gpt:data.annotation?.fallback?"fallback":"active",latency:Math.round(performance.now()-start),source:data.annotation?.fallback?"manual brain fallback":"manual brain",note:data.pipeline?.gpt||data.annotation?.reason||"Manual reveal/debug only"}));
       return data;
     }catch(e){
       if(e instanceof Error&&e.name==="AbortError")return null;
@@ -773,10 +846,98 @@ export default function App(){
     if(!chosen){const legal=current.moves({verbose:true}) as any[];if(!legal.length)return;const move=legal[0];current.move({from:move.from,to:move.to,promotion:move.promotion??"q"});chosen={san:move.san,uci:moveToUci(move),fen:current.fen()};source="Emergency legal fallback"}
     setFen(chosen.fen);recordPosition(chosen.fen);setLastMove(chosen.uci);setLastMoveSan(chosen.san);setMoveHistory(prev=>[...prev,chosen.san]);setSelectedSquare(null);setShowAnswer(false);setOpponentCue(boardSettings.showOpponentCue?{expiresAt:Date.now()+2500,title:`Opponent: ${chosen.san}`,message:"Brief opponent cue. Your selected user-side view stays visible after this fades.",lines:[{from:chosen.uci.slice(0,2),to:chosen.uci.slice(2,4),kind:"opponent",label:chosen.san}],cues:[{square:chosen.uci.slice(2,4),kind:"opponent"}]}:null);setFeedback(`Opponent played ${chosen.san}. Source: ${source}.`);setBrain(p=>({...p,source,lichess:source.includes("Lichess")?"active":p.lichess}))
   }
+  function handleTrainerViewChange(nextTrainerView:TrainerView){
+    if(nextTrainerView===trainerView)return;
+    setTrainerView(nextTrainerView);
+    trackLearningEvent({
+      type:"trainer_view_changed",
+      source:"train",
+      metadata:{nextTrainerView},
+    });
+  }
+  function handleReveal(){
+    setShowAnswer(true);
+    trackLearningEvent({
+      type:"cue_revealed",
+      source:"train",
+      expectedMoveSan:expectedUserOptions[0]?.san,
+      expectedMoveUci:expectedUserOptions[0]?.uci,
+    });
+    void runBrain("reveal");
+  }
   function continueVsBot(){setTrainingMode("continuation");setBookComplete(false);setFeedback(`Continuation mode active. Legal moves are accepted and evaluated at ${rating.target}.`);setBrain(p=>({...p,source:"continuation mode",book:"complete"}));if(!isUserTurn)setTimeout(()=>void playOpponentMove(true),350)}
   function handleSquareTap(square:string){if(bookComplete)return;if(endingInfo){setFeedback("Game over. Restart the opening to continue.");return}if(isReviewingHistory){setFeedback("You are reviewing an older position. Use the forward arrow to return to the live board before moving.");return}if(!isUserTurn){setFeedback("Opponent is thinking. Wait for your turn.");return}if(!selectedSquare){if(isOwnPiece(game,square,userColor)){setSelectedSquare(square);setFeedback(`Selected ${square}. Legal destinations are highlighted.`)}else setFeedback("Tap one of your pieces first.");return}if(square===selectedSquare){setSelectedSquare(null);setFeedback("Selection cleared.");return}if(isOwnPiece(game,square,userColor)){setSelectedSquare(square);setFeedback(`Selected ${square}. Legal destinations are highlighted.`);return}void attemptMove(selectedSquare,square)}
   function logMistake(positionFen:string,expected:string,played:string){const k=normalizeFen(positionFen);setProgress(prev=>{const old=prev.mistakes[k];return{...prev,attempts:prev.attempts+1,incorrect:prev.incorrect+1,streak:0,mistakes:{...prev.mistakes,[k]:{fen:positionFen,expectedMove:expected,playedMove:played,count:old?old.count+1:1,opening:repertoire.name,repertoireId:repertoire.id}}}})}
-  async function attemptMove(from:string,to:string){const current=new Chess(fen);const beforeFen=fen;const currentKey=normalizeFen(current.fen());let legal:any=null;try{legal=current.move({from,to,promotion:"q"})}catch{}setSelectedSquare(null);if(!legal){setFeedback("Illegal move. Try another move.");return}const playedUci=moveToUci(legal);if(trainingMode==="restricted"){const correct=expectedUserOptions.some(m=>m.uci===playedUci);if(!correct){const expected=expectedUserOptions[0]?.san??"No saved move";logMistake(beforeFen,expected,legal.san);setShowAnswer(true);if(moveQuality?.status==="verified_top1"||moveQuality?.status==="verified_top2")setFeedback(`Not quite. ${legal.san} is legal, but this drill expects ${expected}, which Stockfish verified as a top-two move.`);else if(moveQuality?.status==="rejected"||moveQuality?.status==="unavailable")setFeedback(`Not quite. ${legal.san} is legal, but this saved line needs review before Blundr teaches it as a pattern.`);else setFeedback(`Not quite. ${legal.san} is legal, but this drill expects the saved line move.`);return}}setFen(current.fen());recordPosition(current.fen());setLastMove(playedUci);setLastMoveSan(legal.san);setMoveHistory(prev=>[...prev,legal.san]);setOpponentCue(null);setShowAnswer(false);setFeedback(trainingMode==="restricted"?`Correct: ${legal.san}.`:`Played ${legal.san}. Move will be evaluated.`);setProgress(prev=>{const next={...prev.mistakes};if(reviewingFen&&next[reviewingFen]){if(next[reviewingFen].count<=1)delete next[reviewingFen];else next[reviewingFen]={...next[reviewingFen],count:next[reviewingFen].count-1}}return{...prev,attempts:prev.attempts+1,correct:prev.correct+1,streak:prev.streak+1,trainedPositions:{...prev.trainedPositions,[currentKey]:true},mistakes:next}});setReviewingFen(null)}
+  async function attemptMove(from:string,to:string){
+    const current=new Chess(fen);
+    const beforeFen=fen;
+    const currentKey=normalizeFen(current.fen());
+    const timeToMoveMs=Math.max(0,Date.now()-positionStartedAtRef.current);
+    let legal:any=null;
+    try{legal=current.move({from,to,promotion:"q"})}catch{}
+    setSelectedSquare(null);
+    if(!legal){
+      setFeedback("Illegal move. Try another move.");
+      return;
+    }
+    const playedUci=moveToUci(legal);
+    const expectedMove=expectedUserOptions[0];
+    if(trainingMode==="restricted"){
+      const correct=expectedUserOptions.some(m=>m.uci===playedUci);
+      if(!correct){
+        const expected=expectedMove?.san??"No saved move";
+        logMistake(beforeFen,expected,legal.san);
+        setShowAnswer(true);
+        if(isMoveQualityVerified(moveQuality)){
+          setFeedback(`Not quite. ${legal.san} is legal, but this drill is looking for ${expected}. Blundr Brain validated this pattern.`);
+        }else if(moveQuality?.status==="rejected"||moveQuality?.status==="unavailable"){
+          setFeedback(`Not quite. ${legal.san} is legal, but this saved line needs review before Blundr teaches it as a pattern.`);
+        }else{
+          setFeedback(`Not quite. ${legal.san} is legal, but this drill is looking for the saved line move.`);
+        }
+        trackLearningEvent({
+          type:"move_incorrect",
+          source:"train",
+          fen:beforeFen,
+          expectedMoveSan:expectedMove?.san,
+          expectedMoveUci:expectedMove?.uci,
+          playedMoveSan:legal.san,
+          playedMoveUci:playedUci,
+          correct:false,
+          timeToMoveMs,
+        });
+        return;
+      }
+    }
+    setFen(current.fen());
+    recordPosition(current.fen());
+    setLastMove(playedUci);
+    setLastMoveSan(legal.san);
+    setMoveHistory(prev=>[...prev,legal.san]);
+    setOpponentCue(null);
+    setShowAnswer(false);
+    setFeedback(trainingMode==="restricted"?`Correct: ${legal.san}.`:`Played ${legal.san}. Move will be evaluated.`);
+    setProgress(prev=>{
+      const next={...prev.mistakes};
+      if(reviewingFen&&next[reviewingFen]){
+        if(next[reviewingFen].count<=1)delete next[reviewingFen];
+        else next[reviewingFen]={...next[reviewingFen],count:next[reviewingFen].count-1};
+      }
+      return{...prev,attempts:prev.attempts+1,correct:prev.correct+1,streak:prev.streak+1,trainedPositions:{...prev.trainedPositions,[currentKey]:true},mistakes:next};
+    });
+    trackLearningEvent({
+      type:"move_correct",
+      source:"train",
+      fen:beforeFen,
+      expectedMoveSan:expectedMove?.san,
+      expectedMoveUci:expectedMove?.uci,
+      playedMoveSan:legal.san,
+      playedMoveUci:playedUci,
+      correct:true,
+      timeToMoveMs,
+    });
+    setReviewingFen(null);
+  }
   function practiceMistake(m:Mistake){const rep=repertoires.find(r=>r.id===m.repertoireId);if(rep)setSelectedRepertoireId(rep.id);setFen(m.fen);resetHistory(m.fen);setReviewingFen(normalizeFen(m.fen));setFeedback("Review this opening position. Play the expected move.");setMoveHistory([]);setShowAnswer(false);setTrainingMode("restricted");setBookComplete(false);setActiveTab("train")}
   function createCustomRepertoire(){const moves=newLineText.replace(/\d+\./g," ").replace(/\s+/g," ").trim().split(" ").filter(Boolean);if(!moves.length)return;const test=new Chess();for(const move of moves){try{if(!test.move(move)){setFeedback(`Could not parse move: ${move}`);return}}catch{setFeedback(`Could not parse move: ${move}`);return}}const rep:Repertoire={id:`custom-${Date.now()}`,name:newRepName.trim()||"My Custom Repertoire",color:newRepColor,description:"Custom line saved on this device.",lines:[moves],custom:true};setCustomRepertoires(prev=>[...prev,rep]);setSelectedRepertoireId(rep.id);setShowAddLine(false);const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setTrainingMode("restricted");setBookComplete(false);setFeedback("Custom repertoire saved. Restricted training is active.");setActiveTab("train")}
   const squareStyles:Record<string,CSSProperties>={};
@@ -806,7 +967,7 @@ export default function App(){
   }
   if(selectedSquare)squareStyles[selectedSquare]={...squareStyles[selectedSquare],boxShadow:"inset 0 0 0 3px rgba(22,101,52,.85), inset 0 0 24px rgba(22,101,52,.5)"};
   return <main className="min-h-screen bg-[#f7f7f4] text-stone-950"><div className="mx-auto flex min-h-screen max-w-md flex-col px-4 pb-24 pt-5">
-    {activeTab==="home"&&<section className="space-y-6"><header className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-green-700 text-white shadow-sm"><Beaker size={20}/></div><div><h1 className="text-2xl font-bold tracking-tight">Blundr</h1><p className="text-sm text-stone-500">Visual opening training with a controlled trainer.</p></div></div><button onClick={()=>setShowSettings(true)} className="rounded-2xl bg-white p-3 shadow-sm"><Settings className="text-stone-500" size={20}/></button></header><div className="grid grid-cols-2 gap-3"><MetricCard label="Accuracy" value={`${accuracy}%`} sub="all time" icon={<Trophy size={19}/>}/><MetricCard label="Streak" value={String(progress.streak)} sub="correct" icon={<Flame size={19}/>}/><MetricCard label="Review" value={String(mistakes.length)} sub="mistakes" icon={<XCircle size={19}/>} warning/><MetricCard label="Openings" value={String(repertoires.length)} sub="available" icon={<BookOpen size={19}/>}/></div><div className="rounded-3xl bg-stone-900 p-4 text-white shadow-sm"><div className="flex items-center gap-2 text-sm font-bold text-green-300"><Cloud size={17}/> v2.7.32</div><p className="mt-2 text-sm leading-6 text-stone-300">Training now uses rule-only visual cues by default. GPT Brain is reserved for manual reveal/debug, so normal practice stays fast, deterministic, and inexpensive.</p></div><div className="space-y-3">{repertoires.slice(0,5).map(r=><button key={r.id} onClick={()=>selectRepertoire(r.id)} className="flex w-full items-center gap-3 rounded-3xl border border-stone-200 bg-white p-3 text-left shadow-sm"><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {countPositions(r)} positions</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>)}</div></section>}
+    {activeTab==="home"&&<section className="space-y-6"><header className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-green-700 text-white shadow-sm"><Beaker size={20}/></div><div><h1 className="text-2xl font-bold tracking-tight">Blundr</h1><p className="text-sm text-stone-500">Visual opening training with a controlled trainer.</p></div></div><button onClick={()=>setShowSettings(true)} className="rounded-2xl bg-white p-3 shadow-sm"><Settings className="text-stone-500" size={20}/></button></header><div className="grid grid-cols-2 gap-3"><MetricCard label="Accuracy" value={`${accuracy}%`} sub="all time" icon={<Trophy size={19}/>}/><MetricCard label="Streak" value={String(progress.streak)} sub="correct" icon={<Flame size={19}/>}/><MetricCard label="Review" value={String(mistakes.length)} sub="mistakes" icon={<XCircle size={19}/>} warning/><MetricCard label="Openings" value={String(repertoires.length)} sub="available" icon={<BookOpen size={19}/>}/></div><div className="rounded-3xl bg-stone-900 p-4 text-white shadow-sm"><div className="flex items-center gap-2 text-sm font-bold text-green-300"><Cloud size={17}/> v2.7.33</div><p className="mt-2 text-sm leading-6 text-stone-300">Training now uses rule-only visual cues by default. Blundr Brain is reserved for manual reveal/debug, so normal practice stays fast, deterministic, and inexpensive.</p></div><div className="space-y-3">{repertoires.slice(0,5).map(r=><button key={r.id} onClick={()=>selectRepertoire(r.id)} className="flex w-full items-center gap-3 rounded-3xl border border-stone-200 bg-white p-3 text-left shadow-sm"><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {countPositions(r)} positions</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>)}</div></section>}
     {activeTab==="repertoire"&&<section className="space-y-5"><header className="flex items-start justify-between gap-3"><div><h1 className="text-2xl font-bold tracking-tight">Repertoires</h1><p className="text-sm text-stone-500">Reliable openings included in the app.</p></div><button onClick={()=>setShowAddLine(true)} className="rounded-2xl bg-green-700 px-4 py-2 text-sm font-black text-white">Add</button></header><div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-sm"><Search size={18} className="text-stone-400"/><span className="text-sm text-stone-400">Search repertoires</span></div><div className="space-y-3">{repertoires.map(r=><button key={r.id} onClick={()=>selectRepertoire(r.id)} className={classNames("flex w-full items-center gap-3 rounded-3xl border bg-white p-3 text-left shadow-sm",r.id===selectedRepertoireId?"border-green-700":"border-stone-200")}><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {countPositions(r)} positions • {r.color}</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>)}</div></section>}
     {activeTab==="train"&&<section className="space-y-4">
       <header className="flex items-start justify-between gap-3">
@@ -839,8 +1000,8 @@ export default function App(){
         </div>
         <div className="mb-3 rounded-2xl bg-stone-50 p-2">
           <div className="grid grid-cols-2 gap-2">
-            <button onClick={()=>setTrainerView("assisted")} className={classNames("rounded-full px-3 py-2 text-xs font-black",trainerView==="assisted"?"bg-green-700 text-white":"bg-white text-stone-600 ring-1 ring-stone-200")}>Assisted</button>
-            <button onClick={()=>setTrainerView("plain")} className={classNames("rounded-full px-3 py-2 text-xs font-black",trainerView==="plain"?"bg-green-700 text-white":"bg-white text-stone-600 ring-1 ring-stone-200")}>Plain</button>
+            <button onClick={()=>handleTrainerViewChange("assisted")} className={classNames("rounded-full px-3 py-2 text-xs font-black",trainerView==="assisted"?"bg-green-700 text-white":"bg-white text-stone-600 ring-1 ring-stone-200")}>Assisted</button>
+            <button onClick={()=>handleTrainerViewChange("plain")} className={classNames("rounded-full px-3 py-2 text-xs font-black",trainerView==="plain"?"bg-green-700 text-white":"bg-white text-stone-600 ring-1 ring-stone-200")}>Plain</button>
           </div>
           <p className="mt-2 text-[11px] font-semibold text-stone-500">{trainerView==="assisted"?"Shows the visual pattern cue before the move.":"Hides pre-move hints for independent recall."}</p>
         </div>
@@ -850,9 +1011,9 @@ export default function App(){
       </div>
       {bookComplete&&<div className="rounded-3xl border border-green-200 bg-green-50 p-4 shadow-sm"><h2 className="text-lg font-black text-green-900">Book complete</h2><p className="mt-2 text-sm leading-6 text-green-800">You finished this opening branch. Train it again, or continue against the bot from this position.</p><div className="mt-4 grid grid-cols-2 gap-3"><button onClick={resetBoard} className="rounded-2xl bg-white px-4 py-3 font-black text-green-800 shadow-sm">Train Again</button><button onClick={continueVsBot} className="rounded-2xl bg-green-700 px-4 py-3 font-black text-white shadow-sm">Continue vs Bot</button></div></div>}
       {endingInfo&&<GameEndCard title={endingInfo.title} message={endingInfo.message} onRestart={resetBoard}/>} 
-      <button onClick={()=>{setShowAnswer(true);void runBrain("reveal")}} className="w-full rounded-3xl bg-stone-950 px-4 py-4 text-center font-black text-white shadow-lg"><span className="flex items-center justify-center gap-2"><Eye size={18}/> Reveal Next Move</span></button>
-      {showAnswer&&<div className="rounded-3xl bg-stone-900 p-4 text-white"><div className="text-sm text-stone-300">{moveQuality?.status==="verified_top1"||moveQuality?.status==="verified_top2"?"Verified training move":"Saved line move"}</div><div className="mt-2 text-2xl font-black">{expectedUserOptions.length?expectedUserOptions.map(m=>m.san).join(" / "):engineLines[0]?.san??"Engine pending"}</div><p className="mt-2 text-xs leading-5 text-stone-400">Source: {trainingMode==="restricted"?(moveQuality?.status==="verified_top1"||moveQuality?.status==="verified_top2"?"Stockfish top-two verified":"saved repertoire move"):trainingMode==="continuation"&&engineLines[0]?"browser Stockfish top move":trainingMode==="continuation"?"engine pending":"saved training move"}</p></div>}
-      {activeBoard&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 shadow-sm"><div className="mb-2 flex items-center justify-between gap-3"><div><div className="text-xs font-black uppercase tracking-wide text-green-700">{trainerView==="plain"&&!showAnswer?"Plain View • No hints":patternCue.status==="pending"?"Assisted View • Pending":patternCue.status==="suppressed"?"Assisted View • Suppressed":"Assisted View • Rule visual"}</div><h2 className="text-lg font-black">{patternCue.title}</h2></div><button onClick={()=>setShowDetails(!showDetails)} className="rounded-full bg-stone-100 px-3 py-2 text-xs font-black text-stone-600">{showDetails?"Hide":"Show more"}</button></div><p className="text-sm leading-6 text-stone-700">{patternCue.snippet}</p>{opponentCue&&boardSettings.showOpponentCue&&<p className="mt-2 rounded-2xl bg-purple-50 p-3 text-sm leading-6 text-purple-800"><span className="font-black">Opponent cue: </span>{opponentCue.message}</p>}{patternCue.next&&(trainerView==="assisted"||showAnswer)&&<p className="mt-2 rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600"><span className="font-black text-stone-900">Next: </span>{patternCue.next}</p>}{visualModelError&&<p className="mt-2 rounded-2xl bg-amber-50 p-2 text-[11px] font-bold leading-5 text-amber-700">Visual cue unavailable: {visualModelError}</p>}<MoveImpact impact={moveImpact}/>{showDetails&&<div className="mt-3 space-y-2"><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Headline: {patternCue.title}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual: {activeVisualModelOutput?.animationPackage?.name??annotation.visualExplanation}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Pipeline: rule-only visual → GPT manual/debug only</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Move Quality Gate</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Version: {MOVE_QUALITY_GATE_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Required: {shouldValidateTrainingMove?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Status: {moveQualityPending?"pending":moveQuality?.status??"idle"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected UCI: {moveQuality?.expectedMovesUci?.join(", ")||expectedUserUcis.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected SAN: {expectedUserSans.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Stockfish top two: {moveQuality?.topMoves?.map((line)=>line.uci).join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Reason: {moveQuality?.reason??"No validation result."}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Checked: {moveQuality?.checkedAt?new Date(moveQuality.checkedAt).toLocaleTimeString():"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Hints hidden: {hideUnverifiedTrainingHints?"yes":"no"}</div>{annotation.reason&&<div className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">Fallback reason: {annotation.reason}</div>}</div>}</div>}
+      <button onClick={handleReveal} className="w-full rounded-3xl bg-stone-950 px-4 py-4 text-center font-black text-white shadow-lg"><span className="flex items-center justify-center gap-2"><Eye size={18}/> Reveal Next Move</span></button>
+      {showAnswer&&<div className="rounded-3xl bg-stone-900 p-4 text-white"><div className="text-sm text-stone-300">{isMoveQualityVerified(moveQuality)?"Verified move":"Saved line move"}</div><div className="mt-2 text-2xl font-black">{expectedUserOptions.length?expectedUserOptions.map(m=>m.san).join(" / "):engineLines[0]?.san??"Analysis pending"}</div><p className="mt-2 text-xs leading-5 text-stone-400">Source: {trainingMode==="restricted"?(isMoveQualityVerified(moveQuality)?"Blundr Brain Validated":"Saved repertoire line"):trainingMode==="continuation"&&engineLines[0]?"Manual analysis move":trainingMode==="continuation"?"Manual analysis pending":"Saved line move"}</p></div>}
+      {activeBoard&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 shadow-sm"><div className="mb-2 flex items-center justify-between gap-3"><div><div className="text-xs font-black uppercase tracking-wide text-green-700">{patternCueBadgeLabel}</div><h2 className="text-lg font-black">{patternCue.title}</h2></div><button onClick={()=>setShowDetails(!showDetails)} className="rounded-full bg-stone-100 px-3 py-2 text-xs font-black text-stone-600">{showDetails?"Hide":"Show more"}</button></div><p className="text-sm leading-6 text-stone-700">{patternCue.snippet}</p>{showValidatedBadge&&<p className="mt-2 inline-flex rounded-full bg-green-50 px-3 py-1 text-[11px] font-black text-green-700">Blundr Brain Validated</p>}{opponentCue&&boardSettings.showOpponentCue&&<p className="mt-2 rounded-2xl bg-purple-50 p-3 text-sm leading-6 text-purple-800"><span className="font-black">Opponent cue: </span>{opponentCue.message}</p>}{patternCue.next&&(trainerView==="assisted"||showAnswer)&&<p className="mt-2 rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600"><span className="font-black text-stone-900">Next: </span>{patternCue.next}</p>}{visualModelError&&<p className="mt-2 rounded-2xl bg-amber-50 p-2 text-[11px] font-bold leading-5 text-amber-700">Visual cue unavailable: {visualModelError}</p>}<MoveImpact impact={moveImpact}/>{showDetails&&<div className="mt-3 space-y-2"><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Headline: {patternCue.title}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual: {activeVisualModelOutput?.animationPackage?.name??annotation.visualExplanation}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Pipeline: rule-only visual → GPT manual/debug only</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Move Quality Gate</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Version: {MOVE_QUALITY_GATE_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Required: {shouldValidateTrainingMove?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Status: {moveQualityPending?"pending":moveQuality?.status??"idle"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected UCI: {moveQuality?.expectedMovesUci?.join(", ")||expectedUserUcis.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected SAN: {expectedUserSans.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Stockfish top two: {moveQuality?.topMoves?.map((line)=>line.uci).join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Reason: {moveQuality?.reason??"No validation result."}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Checked: {moveQuality?.checkedAt?new Date(moveQuality.checkedAt).toLocaleTimeString():"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Hints hidden: {hideUnverifiedTrainingHints?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Learning events are being stored locally for future progress and Review features.</div>{annotation.reason&&<div className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">Fallback reason: {annotation.reason}</div>}</div>}</div>}
       <div className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm"><div className="flex items-start gap-3">{feedback.toLowerCase().includes("correct")?<CheckCircle2 className="mt-0.5 text-green-700" size={24}/>:feedback.toLowerCase().includes("not quite")||feedback.toLowerCase().includes("illegal")?<XCircle className="mt-0.5 text-red-600" size={24}/>:<Target className="mt-0.5 text-green-700" size={24}/>}<div><div className="font-bold">{endingInfo?endingInfo.title:isReviewingHistory?"Review mode":isUserTurn?"Your move":"Opponent thinking"}</div><p className="text-sm leading-6 text-stone-600">{feedback}</p></div></div></div>
     </section>}
     {activeTab==="review"&&<section className="space-y-5"><header><h1 className="text-2xl font-bold tracking-tight">Review Mistakes</h1><p className="text-sm text-stone-500">Wrong opening moves are saved here.</p></header>{mistakes.length===0?<div className="rounded-3xl bg-white p-6 text-center shadow-sm"><CheckCircle2 className="mx-auto mb-3 text-green-700" size={40}/><h2 className="text-lg font-bold">No mistakes due</h2><p className="mt-2 text-sm text-stone-500">Missed training positions will appear here.</p></div>:<div className="space-y-3">{mistakes.map(m=><button key={m.fen} onClick={()=>practiceMistake(m)} className="w-full rounded-3xl border border-stone-200 bg-white p-4 text-left shadow-sm"><div className="flex items-start justify-between gap-3"><div><div className="font-bold">{m.opening}</div><div className="mt-1 text-sm text-stone-500">Expected: <span className="font-bold text-green-700">{m.expectedMove}</span></div><div className="text-sm text-stone-500">You played: {m.playedMove}</div></div><span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">Missed {m.count}x</span></div></button>)}</div>}</section>}
@@ -941,7 +1102,7 @@ function SettingsPanel({settings,setSettings,onClose}:{settings:BoardSettings;se
   return <div className="fixed inset-0 z-[70] flex items-end bg-black/35 p-4"><div className="mx-auto max-h-[86vh] w-full max-w-md overflow-auto rounded-3xl bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><div><h2 className="text-xl font-black">Board Settings</h2><p className="text-xs font-semibold text-stone-500">Customize board, pieces, and active displays.</p></div><button onClick={onClose} className="rounded-full bg-stone-100 p-2"><X size={18}/></button></div><div className="space-y-5"><div><div className="mb-2 text-sm font-black">Board</div><div className="grid grid-cols-4 gap-2"><OptionButton active={settings.boardTheme==="classic"} label="Classic" onClick={()=>update("boardTheme","classic")}/><OptionButton active={settings.boardTheme==="slate"} label="Slate" onClick={()=>update("boardTheme","slate")}/><OptionButton active={settings.boardTheme==="blue"} label="Blue" onClick={()=>update("boardTheme","blue")}/><OptionButton active={settings.boardTheme==="walnut"} label="Walnut" onClick={()=>update("boardTheme","walnut")}/></div></div><div><div className="mb-2 text-sm font-black">Pieces</div><div className="grid grid-cols-3 gap-2"><OptionButton active={settings.pieceStyle==="unicode"} label="Classic" onClick={()=>update("pieceStyle","unicode")}/><OptionButton active={settings.pieceStyle==="neo"} label="Neo" onClick={()=>update("pieceStyle","neo")}/><OptionButton active={settings.pieceStyle==="letters"} label="Letters" onClick={()=>update("pieceStyle","letters")}/></div></div><div><div className="mb-2 text-sm font-black">Active displays</div><div className="grid grid-cols-2 gap-2"><Toggle id="showAttack" label="Attack view"/><Toggle id="showDefense" label="Defense view"/><Toggle id="showPlan" label="Plan view"/><Toggle id="showMoveDots" label="Legal move dots"/><Toggle id="showEvalBar" label="Advantage bar"/><Toggle id="showCaptured" label="Captured pieces"/><Toggle id="showLabels" label="Move labels"/><Toggle id="showOpponentCue" label="Opponent cue"/></div></div><button onClick={onClose} className="w-full rounded-2xl bg-stone-950 px-4 py-4 font-black text-white">Done</button></div></div></div>
 }
 
-function PipelineStatus({step,note}:{step:ThinkingStep;note:string}){const labels:Record<ThinkingStep,string>={idle:"Ready",facts:"Analyzing",engine:"Engine",brain:"GPT Brain","gpt-receive":"Receiving","visual-update":"Updating",ready:"Ready",error:"Error"};const tone=step==="error"?"bg-red-50 text-red-700 ring-red-100":step==="ready"||step==="idle"?"bg-green-50 text-green-700 ring-green-100":"bg-blue-50 text-blue-700 ring-blue-100";return <div className={classNames("max-w-[190px] rounded-2xl px-3 py-2 text-right text-[11px] font-black leading-4 ring-1",tone)} title={note}><div>{labels[step]}</div><div className="truncate text-[10px] font-semibold opacity-75">{note}</div></div>}
+function PipelineStatus({step,note}:{step:ThinkingStep;note:string}){const labels:Record<ThinkingStep,string>={idle:"Ready",facts:"Analyzing",engine:"Engine",brain:"Blundr Brain","gpt-receive":"Receiving","visual-update":"Updating",ready:"Ready",error:"Error"};const tone=step==="error"?"bg-red-50 text-red-700 ring-red-100":step==="ready"||step==="idle"?"bg-green-50 text-green-700 ring-green-100":"bg-blue-50 text-blue-700 ring-blue-100";return <div className={classNames("max-w-[190px] rounded-2xl px-3 py-2 text-right text-[11px] font-black leading-4 ring-1",tone)} title={note}><div>{labels[step]}</div><div className="truncate text-[10px] font-semibold opacity-75">{note}</div></div>}
 function MoveImpact({impact}:{impact:{label:string;pct:number;tone:string;note:string}}){return <div className="mt-3 rounded-2xl bg-stone-50 p-3"><div className="mb-2 flex items-center justify-between text-xs font-black"><span>Move Impact</span><span className="text-green-700">{impact.label}</span></div><div className="h-2 rounded-full bg-stone-200"><div className={classNames("h-2 rounded-full",impact.tone)} style={{width:`${impact.pct}%`}}/></div><p className="mt-2 text-xs leading-5 text-stone-500">{impact.note}</p></div>}
 function GptDebugPanel({open,setOpen,text}:{open:boolean;setOpen:(v:boolean)=>void;text:string}){
   return <div className="rounded-3xl border border-stone-200 bg-white p-3 shadow-sm">
@@ -985,7 +1146,7 @@ function VisualDebugPanel({open,setOpen,visualText,telemetryText,telemetryEnable
   </div>
 }
 
-function LiveBrain({brain}:{brain:LiveBrain}){return <div className="rounded-3xl border border-stone-200 bg-white p-3 shadow-sm"><div className="mb-2 flex items-center justify-between"><div className="flex items-center gap-2 text-sm font-black"><Zap size={16} className="text-green-700"/> Live Brain</div><span className="text-xs font-black text-stone-400">{brain.ratingLabel} • {brain.ratingPool}</span></div><div className="grid grid-cols-4 gap-1.5"><Status label="Book" state={brain.book}/><Status label="Lichess" state={brain.lichess}/><Status label="Engine" state={brain.engine}/><Status label="GPT" state={brain.gpt}/></div><div className="mt-2 rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold leading-5 text-stone-500">Source: <span className="font-black text-stone-800">{brain.source}</span>{brain.latency?` • ${brain.latency} ms`:""}{brain.note?` • ${brain.note}`:""}</div></div>}
+function LiveBrain({brain}:{brain:LiveBrain}){return <div className="rounded-3xl border border-stone-200 bg-white p-3 shadow-sm"><div className="mb-2 flex items-center justify-between"><div className="flex items-center gap-2 text-sm font-black"><Zap size={16} className="text-green-700"/> Live Brain</div><span className="text-xs font-black text-stone-400">{brain.ratingLabel} • {brain.ratingPool}</span></div><div className="grid grid-cols-4 gap-1.5"><Status label="Book" state={brain.book}/><Status label="Lichess" state={brain.lichess}/><Status label="Engine" state={brain.engine}/><Status label="Brain" state={brain.gpt}/></div><div className="mt-2 rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold leading-5 text-stone-500">Source: <span className="font-black text-stone-800">{brain.source}</span>{brain.latency?` • ${brain.latency} ms`:""}{brain.note?` • ${brain.note}`:""}</div></div>}
 function Status({label,state}:{label:string;state:SystemState}){const tone=state==="active"||state==="ready"||state==="cached"?"bg-green-50 text-green-700":state==="loading"?"bg-blue-50 text-blue-700":state==="fallback"||state==="complete"?"bg-amber-50 text-amber-700":state==="error"?"bg-red-50 text-red-700":"bg-stone-100 text-stone-500";return <div className={classNames("rounded-full px-2 py-1 text-center text-[10px] font-black",tone)}>{label}: {state}</div>}
 function MetricCard({label,value,sub,icon,warning=false,compact=false}:{label:string;value:string;sub:string;icon:ReactNode;warning?:boolean;compact?:boolean}){return <div className={classNames("rounded-3xl bg-white shadow-sm",compact?"p-3":"p-4")}><div className={classNames("mb-2",warning?"text-orange-600":"text-green-700")}>{icon}</div><div className="text-xs text-stone-500">{label}</div><div className={classNames("font-black tracking-tight",compact?"text-xl":"text-3xl")}>{value}</div><div className="text-xs text-stone-400">{sub}</div></div>}
 function BottomNav({activeTab,setActiveTab}:{activeTab:string;setActiveTab:(tab:Tab)=>void}){const tabs=[{id:"home",label:"Home",icon:Home},{id:"train",label:"Train",icon:Target},{id:"review",label:"Review",icon:CheckCircle2},{id:"progress",label:"Progress",icon:BarChart3},{id:"repertoire",label:"Repertoire",icon:BookOpen}] as const;return <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-stone-200 bg-white/95 px-2 pb-4 pt-2 backdrop-blur"><div className="mx-auto grid max-w-md grid-cols-5 gap-1">{tabs.map(tab=>{const Icon=tab.icon;const active=activeTab===tab.id;return <button key={tab.id} onClick={()=>setActiveTab(tab.id)} className={classNames("flex flex-col items-center gap-1 rounded-2xl px-2 py-2 text-xs font-semibold",active?"bg-green-50 text-green-700":"text-stone-500")}><Icon size={19}/>{tab.label}</button>})}</div></nav>}
