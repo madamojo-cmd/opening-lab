@@ -510,10 +510,12 @@ export default function App(){
   const key=normalizeFen(fen);
   const options=tree[key]??[];
   const expectedUserOptions=options.filter(m=>m.color===userColor);
-  function getExpectedMovesForValidation(expected:Continuation[]){
-    return expected.map(move=>({uci:move.uci,san:move.san})).filter(move=>Boolean(typeof move.uci==="string"&&move.uci.trim()));
-  }
-  const expectedMovesForValidation=getExpectedMovesForValidation(expectedUserOptions);
+  const expectedUserOptionsSignature=expectedUserOptions.map((move)=>`${move.uci??""}:${move.san??""}`).join("|");
+  const expectedMovesForValidation=useMemo(()=>expectedUserOptions.map((move)=>({
+    uci:typeof move.uci==="string"?move.uci.trim().toLowerCase():"",
+    san:typeof move.san==="string"?move.san:undefined,
+  })).filter((move)=>move.uci),[expectedUserOptionsSignature]);
+  const expectedMovesForValidationKey=useMemo(()=>expectedMovesForValidation.map((move)=>`${move.uci}:${move.san??""}`).join("|"),[expectedMovesForValidation]);
   const expectedUserUcis=expectedMovesForValidation.map(move=>move.uci);
   const expectedUserSans=expectedMovesForValidation.map(move=>move.san).filter(Boolean) as string[];
   const opponentBookOptions=options.filter(m=>m.color===opponentColor);
@@ -522,7 +524,7 @@ export default function App(){
   const safeBoardView:ActiveBoardView=enabledViews.includes(activeBoardView)?activeBoardView:(enabledViews[0]??"plan");
   const currentView=annotation[safeBoardView]??annotation.plan;
   const engineLines=enginePreview&&normalizeFen(enginePreview.fen)===normalizeFen(fen)?enginePreview.pvs:[];
-  const shouldValidateTrainingMove=activeTab==="train"&&trainingMode==="restricted"&&isUserTurn&&!bookComplete&&historyIndex>=positionHistory.length-1&&expectedUserOptions.length>0;
+  const shouldValidateTrainingMove=activeTab==="train"&&trainingMode==="restricted"&&isUserTurn&&!bookComplete&&historyIndex>=positionHistory.length-1&&expectedMovesForValidation.length>0;
   const moveQualityUserStatus=getMoveQualityUserStatus(moveQuality,moveQualityPending);
   const moveQualityVerified=isMoveQualityVerified(moveQuality);
   const hideUnverifiedTrainingHints=trainingMode==="restricted"&&isUserTurn&&!showAnswer&&shouldValidateTrainingMove&&!moveQualityVerified;
@@ -685,7 +687,7 @@ export default function App(){
 
     void runValidation();
     return()=>{cancelled=true};
-  },[fen,shouldValidateTrainingMove,expectedUserOptions]);
+  },[fen,shouldValidateTrainingMove,expectedMovesForValidationKey]);
   useEffect(()=>{
     if(activeTab!=="train"||!shouldValidateTrainingMove||!moveQuality)return;
     if(moveQualityPending)return;
