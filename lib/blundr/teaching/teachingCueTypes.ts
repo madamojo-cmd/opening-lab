@@ -1,4 +1,4 @@
-export type TeachingConceptId =
+export type LegacyTeachingConceptId =
   | "development_with_pressure"
   | "quiet_development"
   | "center_control"
@@ -36,6 +36,37 @@ export type TeachingConceptId =
   | "forcing_check"
   | "safe_capture"
   | "default_pattern";
+
+export type TeachingConceptId =
+  | "attack_loose_piece"
+  | "win_loose_piece"
+  | "hanging_piece_warning"
+  | "immediate_tactic"
+  | "king_safety_first"
+  | "center_tension"
+  | "center_control"
+  | "development_lag"
+  | "open_file_context"
+  | "half_open_file"
+  | "weak_square"
+  | "outpost"
+  | "pawn_break"
+  | "improve_worst_piece"
+  | "bad_piece"
+  | "prophylaxis"
+  | "piece_activity"
+  | "coordinate_pieces"
+  | "pressure_target"
+  | "strong_alternative"
+  | "book_pattern"
+  | "context_only"
+  | "endgame_activity"
+  | "rook_activity"
+  | "passed_pawn"
+  | "king_activity"
+  | LegacyTeachingConceptId;
+
+export type TeachingCueMode = "move_teaching" | "context_only" | "alternative_feedback" | "post_move_feedback";
 
 export type TeachingCueInput = {
   fenBefore: string;
@@ -108,6 +139,15 @@ export type ConceptScore = {
 export type TeachingCue = {
   id: string;
   conceptId: TeachingConceptId;
+  cueMode: TeachingCueMode;
+  teachingPermissionTier?: string;
+  primaryFocus?: string;
+  selectedStoryId?: string;
+  storyScore?: number;
+  themesShown?: string[];
+  answerVisualsShown?: boolean;
+  contextVisualsShown?: boolean;
+  confidence?: number;
   userFacing: {
     badge?: string;
     title: string;
@@ -139,7 +179,7 @@ export type TeachingCue = {
   };
 };
 
-export const TEACHING_CUE_COMPILER_VERSION = "2.7.34";
+export const TEACHING_CUE_COMPILER_VERSION = "2.7.35";
 
 export type BoardPiece = {
   square: string;

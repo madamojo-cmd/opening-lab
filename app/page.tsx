@@ -11,8 +11,8 @@ import {
   evaluateTopTwoMatch,
   type MoveQualityResult,
 } from "@/lib/blundr/teaching/moveQualityGate";
-import { compileTeachingCue } from "@/lib/blundr/teaching/teachingCueCompiler";
-import { TEACHING_CUE_COMPILER_VERSION, type TeachingCue } from "@/lib/blundr/teaching/teachingCueTypes";
+import { orchestrateTeaching } from "@/lib/blundr/teaching/teachingOrchestrator";
+import { TEACHING_CUE_COMPILER_VERSION } from "@/lib/blundr/teaching/teachingCueTypes";
 import { createLearningSessionId, recordLearningEvent } from "@/lib/blundr/learning/learningEvents";
 import type { LearningEvent } from "@/lib/blundr/learning/learningEvents";
 
@@ -533,82 +533,80 @@ export default function App(){
   const hideUnverifiedTrainingHints=trainingMode==="restricted"&&isUserTurn&&!showAnswer&&shouldValidateTrainingMove&&!moveQualityVerified;
   const visualSuppressed=Boolean(visualModelOutput?.suppress?.includes("recommendation_pending"));
   const activeVisualModelOutput=visualModelOutput&&!visualSuppressed?visualModelOutput:null;
-  const hidePreMoveHints=(trainerView==="plain"||hideUnverifiedTrainingHints)&&!showAnswer&&trainingMode==="restricted"&&isUserTurn;
-  const compilerResult=useMemo(()=>{
+  const teachingOrchestration=useMemo(()=>{
+    if(activeTab!=="train"||trainingMode!=="restricted"||!isUserTurn)return null;
     const expectedMove=expectedMovesForValidation[0];
-    if(!expectedMove)return { cue:null as TeachingCue|null, error:null as string|null };
-    if(activeTab!=="train"||trainingMode!=="restricted"||!isUserTurn||showAnswer)return { cue:null as TeachingCue|null, error:null as string|null };
-    if(!shouldValidateTrainingMove||moveQualityUserStatus!=="verified")return { cue:null as TeachingCue|null, error:null as string|null };
+    if(!expectedMove)return null;
+    const expectedMoveBook=explorerMoves.find((m)=>m.uci===expectedMove.uci);
+    const totalBookGames=explorerMoves.reduce((sum,m)=>sum+(m.total||0),0);
+    const moveGames=expectedMoveBook?.total??0;
     try{
-      const preview=new Chess(fen);
-      const from=expectedMove.uci.slice(0,2);
-      const to=expectedMove.uci.slice(2,4);
-      const promotion=expectedMove.uci.length>4?expectedMove.uci.slice(4,5):undefined;
-      let moved:any=null;
-      try{moved=preview.move({from,to,promotion:promotion??"q"})}catch{}
-      const cue=compileTeachingCue({
-        fenBefore:fen,
-        fenAfter:moved?preview.fen():undefined,
-        move:{
-          san:expectedMove.san??moved?.san??expectedMove.uci,
-          uci:expectedMove.uci,
-          from,
-          to,
-          promotion,
-          piece:moved?.piece,
-          captured:moved?.captured,
+      return orchestrateTeaching({
+        teachingInput:{
+          fenBefore:fen,
+          move:{
+            san:expectedMove.san??expectedMove.uci,
+            uci:expectedMove.uci,
+            from:expectedMove.uci.slice(0,2),
+            to:expectedMove.uci.slice(2,4),
+            promotion:expectedMove.uci.length>4?expectedMove.uci.slice(4,5):undefined,
+          },
+          sideToMove:userColor,
+          userColor,
+          trainerView,
+          trainingMode,
+          validation:{
+            required:shouldValidateTrainingMove,
+            userStatus:moveQualityUserStatus,
+            internalStatus:moveQuality?.status,
+          },
+          context:{
+            openingName:repertoire.name,
+            isUserTurn,
+            reviewMode:historyIndex<positionHistory.length-1,
+            previousMoveSan:lastMoveSan||undefined,
+          },
+          userMemory:{
+            patternSeenCount:progress.trainedPositions[normalizeFen(fen)]?1:0,
+            patternMissedCount:progress.mistakes[normalizeFen(fen)]?.count??0,
+            patternSuccessCount:progress.trainedPositions[normalizeFen(fen)]?1:0,
+          },
         },
-        sideToMove:userColor,
-        userColor,
+        expectedMove:{uci:expectedMove.uci,san:expectedMove.san},
+        engineTopMoves:engineLines.map((line,index)=>({uci:line.uci,san:line.san,rank:index+1,scoreCp:line.cp})),
+        bookTopMoves:explorerMoves.slice(0,5).map((move)=>({uci:move.uci,san:move.san,moveShare:move.pct/100,moveGames:move.total,totalGames:totalBookGames})),
+        repertoireMoves:expectedMovesForValidation.map((move)=>({uci:move.uci,san:move.san})),
+        bookSupportInput:{
+          source:"explorer",
+          totalGames:totalBookGames,
+          moveGames,
+          moveShare:totalBookGames>0?moveGames/totalBookGames:0,
+        },
         trainerView,
+        showAnswer,
+        isUserTurn,
         trainingMode,
-        validation:{
-          required:shouldValidateTrainingMove,
-          userStatus:moveQualityUserStatus,
-          internalStatus:moveQuality?.status,
-        },
-        context:{
-          openingName:repertoire.name,
-          isUserTurn,
-          reviewMode:historyIndex<positionHistory.length-1,
-          previousMoveSan:lastMoveSan||undefined,
-        },
       });
-      return { cue, error:null as string|null };
-    }catch(error){
-      return { cue:null as TeachingCue|null, error:error instanceof Error?error.message:"Compiler failed" };
+    }catch{
+      return null;
     }
-  },[activeTab,trainingMode,isUserTurn,showAnswer,shouldValidateTrainingMove,moveQualityUserStatus,moveQuality?.status,expectedMovesForValidationKey,fen,userColor,trainerView,repertoire.name,historyIndex,positionHistory.length,lastMoveSan]);
-  const compilerCueExpected=activeTab==="train"&&trainingMode==="restricted"&&isUserTurn&&!showAnswer&&shouldValidateTrainingMove&&moveQualityUserStatus==="verified";
-  const compilerCue=compilerResult.cue;
-  const compilerVisualLines:ActiveLine[]=compilerCue?[
-    ...(compilerCue.visual.primaryArrow?[{from:compilerCue.visual.primaryArrow.from,to:compilerCue.visual.primaryArrow.to,kind:(compilerCue.visual.primaryArrow.kind==="defense"?"defense":compilerCue.visual.primaryArrow.kind==="danger"?"attack":"plan") as LineKind,label:undefined}]:[]),
-    ...compilerCue.visual.relationshipLines.map((line)=>({from:line.from,to:line.to,kind:(line.kind==="defense"?"defense":"attack") as LineKind,label:undefined})),
-  ].filter((line)=>isValidSquare(line.from)&&isValidSquare(line.to)).slice(0,2):[];
-  const compilerVisualSquares=compilerCue?[
-    ...compilerCue.visual.keySquares.map((sq)=>({square:sq.square,kind:(sq.kind==="support"?"support":sq.kind==="danger"?"danger":"target") as SquareCue["kind"],role:sq.kind})),
-    ...compilerCue.visual.dangerSquares.map((sq)=>({square:sq.square,kind:"danger" as SquareCue["kind"],role:sq.kind})),
-    ...compilerCue.visual.ghostSquares.map((sq)=>({square:sq.square,kind:"target" as SquareCue["kind"],role:sq.kind})),
-  ].filter((sq)=>isValidSquare(sq.square)).slice(0,4):[];
-  const visualLines:ActiveLine[]=hidePreMoveHints?[]:(compilerCue?compilerVisualLines:visualModelOutput?(activeVisualModelOutput?(activeVisualModelOutput.arrows??[]).filter(a=>isValidSquare(a.from)&&isValidSquare(a.to)).slice(0,2).map(a=>({from:a.from,to:a.to,kind:visualLineKind(a.role,a.kind),label:a.label})):[]):currentView.lines);
+  },[activeTab,trainingMode,isUserTurn,expectedMovesForValidationKey,fen,userColor,trainerView,showAnswer,shouldValidateTrainingMove,moveQualityUserStatus,moveQuality?.status,repertoire.name,historyIndex,positionHistory.length,lastMoveSan,explorerMoves,engineLines,progress.trainedPositions,progress.mistakes]);
+  const hidePreMoveHints=!showAnswer&&trainingMode==="restricted"&&isUserTurn&&(trainerView==="plain"||Boolean(teachingOrchestration)&&!teachingOrchestration.permission.canShowAnswerOverlays&&!teachingOrchestration.permission.canShowContextOverlays);
+  const orchestrationVisualLines:ActiveLine[]=teachingOrchestration?teachingOrchestration.visualDecision.visualLines.map((line)=>({from:line.from,to:line.to,kind:line.kind,label:line.label})).filter((line)=>isValidSquare(line.from)&&isValidSquare(line.to)).slice(0,2):[];
+  const orchestrationVisualSquares=teachingOrchestration?teachingOrchestration.visualDecision.visualSquares.filter((sq)=>isValidSquare(sq.square)).slice(0,4):[];
+  const visualLines:ActiveLine[]=hidePreMoveHints?[]:(teachingOrchestration?orchestrationVisualLines:visualModelOutput?(activeVisualModelOutput?(activeVisualModelOutput.arrows??[]).filter(a=>isValidSquare(a.from)&&isValidSquare(a.to)).slice(0,2).map(a=>({from:a.from,to:a.to,kind:visualLineKind(a.role,a.kind),label:a.label})):[]):currentView.lines);
   const visualContext=activeVisualModelOutput?.context;
   const visualAnimationName=activeVisualModelOutput?.animationPackage?.name??activeVisualModelOutput?.animation;
   const basePatternCue=buildPatternCue({trainerView,visualModelOutput,visualModelPending,visualModelError,visualSuppressed,moveQuality,moveQualityPending,shouldValidateTrainingMove,annotation,expectedUserOptions,trainingMode,isUserTurn,bookComplete,showAnswer,engineLines});
-  const patternCue=compilerCue&&basePatternCue.status==="ready"?{
+  const patternCue=teachingOrchestration&&(teachingOrchestration.permission.canShowPatternCue||teachingOrchestration.permission.canShowContextCue)&&basePatternCue.status==="ready"?{
     ...basePatternCue,
-    title:compilerCue.userFacing.title||"Follow the pattern",
-    snippet:compilerCue.userFacing.snippet||"This move matches the validated training line.",
-    next:compilerCue.userFacing.next??basePatternCue.next,
-    concept:compilerCue.conceptId,
-  }:(compilerCueExpected&&compilerResult.error?{
-    ...basePatternCue,
-    title:"Follow the pattern",
-    snippet:"This move matches the validated training line.",
-    next:basePatternCue.next,
-    concept:"default_pattern",
-  }:basePatternCue);
-  const patternCueBadgeLabel=getMoveQualityBadgeLabel({trainerView,showAnswer,shouldValidateTrainingMove,moveQuality,moveQualityPending,patternCueStatus:patternCue.status});
-  const showValidatedBadge=trainerView==="assisted"&&!showAnswer&&moveQualityUserStatus==="verified"&&shouldValidateTrainingMove;
+    title:teachingOrchestration.cue.userFacing.title||"Move not verified",
+    snippet:teachingOrchestration.cue.userFacing.snippet||"Blundr will not invent a plan here.",
+    next:teachingOrchestration.cue.userFacing.next??basePatternCue.next,
+    concept:teachingOrchestration.cue.conceptId,
+  }:basePatternCue;
+  const patternCueBadgeLabel=trainerView==="assisted"&&!showAnswer&&teachingOrchestration?`Assisted View • ${teachingOrchestration.userLabel}`:getMoveQualityBadgeLabel({trainerView,showAnswer,shouldValidateTrainingMove,moveQuality,moveQualityPending,patternCueStatus:patternCue.status});
+  const showValidatedBadge=trainerView==="assisted"&&!showAnswer&&Boolean(teachingOrchestration?.cue.userFacing.badge);
   const moveImpact=impactFromEngine(engineLines[0]);
   const accuracy=getAccuracy(progress);
   const mistakes=Object.values(progress.mistakes).sort((a,b)=>b.count-a.count);
@@ -779,24 +777,39 @@ export default function App(){
     });
   },[activeTab,fen,moveQuality,moveQualityPending,moveQualityUserStatus,shouldValidateTrainingMove]);
   useEffect(()=>{
-    if(activeTab!=="train"||!compilerCue||moveQualityUserStatus!=="verified")return;
-    const eventKey=`${normalizeFen(fen)}|${compilerCue.metadata.moveUci}|${compilerCue.conceptId}|${moveQualityUserStatus}`;
+    if(activeTab!=="train"||!teachingOrchestration?.cue)return;
+    const cue=teachingOrchestration.cue;
+    const meta=teachingOrchestration.learningMetadata;
+    const eventKey=`${normalizeFen(fen)}|${cue.metadata.moveUci}|${cue.conceptId}|${teachingOrchestration.classification.tier}|${cue.cueMode}`;
     if(lastTeachingCueEventKeyRef.current===eventKey)return;
     lastTeachingCueEventKeyRef.current=eventKey;
     trackLearningEvent({
       type:"teaching_cue_compiled",
       source:"train",
       fen,
-      expectedMoveSan:compilerCue.metadata.moveSan,
-      expectedMoveUci:compilerCue.metadata.moveUci,
+      expectedMoveSan:cue.metadata.moveSan,
+      expectedMoveUci:cue.metadata.moveUci,
       metadata:{
-        conceptId:compilerCue.conceptId,
-        cueTitle:compilerCue.userFacing.title,
-        confidence:Number(compilerCue.debug.confidence.toFixed(3)),
-        compilerVersion:compilerCue.metadata.compilerVersion,
+        cueMode:meta.cueMode,
+        teachingPermissionTier:meta.teachingPermissionTier,
+        primaryFocus:meta.primaryFocus,
+        selectedStoryId:meta.selectedStoryId,
+        selectedStoryKind:meta.selectedStoryKind,
+        storyScoreTotal:meta.storyScoreTotal??null,
+        themesShown:(meta.themesShown??[]).join("|"),
+        answerVisualsShown:meta.answerVisualsShown,
+        contextVisualsShown:meta.contextVisualsShown,
+        planVisualsShown:meta.planVisualsShown,
+        conceptId:meta.conceptId,
+        confidence:Number(meta.confidence.toFixed(3)),
+        compilerVersion:meta.compilerVersion,
+        suppressionReasons:meta.suppressionReasons.join("|"),
+        bookSupportSummary:meta.bookSupportSummary,
+        alternativeClassification:meta.alternativeClassification??null,
+        visualBudgetUsed:JSON.stringify(meta.visualBudgetUsed),
       },
     });
-  },[activeTab,compilerCue,fen,moveQualityUserStatus]);
+  },[activeTab,teachingOrchestration,fen]);
   useEffect(()=>{
     if(activeTab!=="train"||isReviewingHistory)return;
     const requestFen=fen;
@@ -1039,7 +1052,7 @@ export default function App(){
     squareStyles[lastMove.slice(2,4)]={boxShadow:"inset 0 0 0 999px rgba(255,255,255,.16), inset 0 0 24px rgba(255,255,255,.62)"};
   }
   if(activeBoard){
-    const visualSquares=hidePreMoveHints?[]:(compilerCue?compilerVisualSquares:visualModelOutput?(activeVisualModelOutput?(activeVisualModelOutput.squares??[]):[]):currentView.cues.slice(0,3).map(c=>({square:c.square,kind:c.kind,role:c.kind})));
+    const visualSquares=hidePreMoveHints?[]:(teachingOrchestration?orchestrationVisualSquares:visualModelOutput?(activeVisualModelOutput?(activeVisualModelOutput.squares??[]):[]):currentView.cues.slice(0,3).map(c=>({square:c.square,kind:c.kind,role:c.kind})));
     for(const cue of visualSquares.slice(0,4)){
       if(!isValidSquare(cue.square))continue;
       const role=cue.role??cue.kind;
@@ -1106,7 +1119,7 @@ export default function App(){
       {endingInfo&&<GameEndCard title={endingInfo.title} message={endingInfo.message} onRestart={resetBoard}/>} 
       <button onClick={handleReveal} className="w-full rounded-3xl bg-stone-950 px-4 py-4 text-center font-black text-white shadow-lg"><span className="flex items-center justify-center gap-2"><Eye size={18}/> Reveal Next Move</span></button>
       {showAnswer&&<div className="rounded-3xl bg-stone-900 p-4 text-white"><div className="text-sm text-stone-300">{isMoveQualityVerified(moveQuality)?"Verified move":"Saved line move"}</div><div className="mt-2 text-2xl font-black">{expectedUserOptions.length?expectedUserOptions.map(m=>m.san).join(" / "):engineLines[0]?.san??"Analysis pending"}</div><p className="mt-2 text-xs leading-5 text-stone-400">Source: {trainingMode==="restricted"?(isMoveQualityVerified(moveQuality)?"Blundr Brain Validated":"Saved repertoire line"):trainingMode==="continuation"&&engineLines[0]?"Manual analysis move":trainingMode==="continuation"?"Manual analysis pending":"Saved line move"}</p></div>}
-      {activeBoard&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 shadow-sm"><div className="mb-2 flex items-center justify-between gap-3"><div><div className="text-xs font-black uppercase tracking-wide text-green-700">{patternCueBadgeLabel}</div><h2 className="text-lg font-black">{patternCue.title}</h2></div><button onClick={()=>setShowDetails(!showDetails)} className="rounded-full bg-stone-100 px-3 py-2 text-xs font-black text-stone-600">{showDetails?"Hide":"Show more"}</button></div><p className="text-sm leading-6 text-stone-700">{patternCue.snippet}</p>{showValidatedBadge&&<p className="mt-2 inline-flex rounded-full bg-green-50 px-3 py-1 text-[11px] font-black text-green-700">Blundr Brain Validated</p>}{opponentCue&&boardSettings.showOpponentCue&&<p className="mt-2 rounded-2xl bg-purple-50 p-3 text-sm leading-6 text-purple-800"><span className="font-black">Opponent cue: </span>{opponentCue.message}</p>}{patternCue.next&&(trainerView==="assisted"||showAnswer)&&<p className="mt-2 rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600"><span className="font-black text-stone-900">Next: </span>{patternCue.next}</p>}{visualModelError&&<p className="mt-2 rounded-2xl bg-amber-50 p-2 text-[11px] font-bold leading-5 text-amber-700">Visual cue unavailable: {visualModelError}</p>}<MoveImpact impact={moveImpact}/>{showDetails&&<div className="mt-3 space-y-2"><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Headline: {patternCue.title}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual: {activeVisualModelOutput?.animationPackage?.name??annotation.visualExplanation}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Pipeline: rule-only visual → GPT manual/debug only</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Move Quality Gate</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Version: {MOVE_QUALITY_GATE_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Required: {shouldValidateTrainingMove?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Status: {moveQualityPending?"pending":moveQuality?.status??"idle"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected UCI: {moveQuality?.expectedMovesUci?.join(", ")||expectedUserUcis.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected SAN: {expectedUserSans.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Stockfish top two: {moveQuality?.topMoves?.map((line)=>line.uci).join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Reason: {moveQuality?.reason??"No validation result."}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Checked: {moveQuality?.checkedAt?new Date(moveQuality.checkedAt).toLocaleTimeString():"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Hints hidden: {hideUnverifiedTrainingHints?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Teaching Cue Compiler</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler version: {TEACHING_CUE_COMPILER_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler concept: {compilerCue?.conceptId??"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler confidence: {compilerCue?Number(compilerCue.debug.confidence).toFixed(3):"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler reason: {compilerCue?.debug.selectedReason??(compilerResult.error??"n/a")}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler delta: {compilerCue?.debug.deltaSummary?.join(" | ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler scores: {compilerCue?.debug.detectorScores?.map((s)=>`${s.conceptId}:${s.finalScore.toFixed(2)}`).slice(0,6).join(", ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Learning events are being stored locally for future progress and Review features.</div>{annotation.reason&&<div className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">Fallback reason: {annotation.reason}</div>}</div>}</div>}
+      {activeBoard&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 shadow-sm"><div className="mb-2 flex items-center justify-between gap-3"><div><div className="text-xs font-black uppercase tracking-wide text-green-700">{patternCueBadgeLabel}</div><h2 className="text-lg font-black">{patternCue.title}</h2></div><button onClick={()=>setShowDetails(!showDetails)} className="rounded-full bg-stone-100 px-3 py-2 text-xs font-black text-stone-600">{showDetails?"Hide":"Show more"}</button></div><p className="text-sm leading-6 text-stone-700">{patternCue.snippet}</p>{showValidatedBadge&&<p className="mt-2 inline-flex rounded-full bg-green-50 px-3 py-1 text-[11px] font-black text-green-700">Blundr Brain Validated</p>}{opponentCue&&boardSettings.showOpponentCue&&<p className="mt-2 rounded-2xl bg-purple-50 p-3 text-sm leading-6 text-purple-800"><span className="font-black">Opponent cue: </span>{opponentCue.message}</p>}{patternCue.next&&(trainerView==="assisted"||showAnswer)&&<p className="mt-2 rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600"><span className="font-black text-stone-900">Next: </span>{patternCue.next}</p>}{visualModelError&&<p className="mt-2 rounded-2xl bg-amber-50 p-2 text-[11px] font-bold leading-5 text-amber-700">Visual cue unavailable: {visualModelError}</p>}<MoveImpact impact={moveImpact}/>{showDetails&&<div className="mt-3 space-y-2"><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Headline: {patternCue.title}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual: {activeVisualModelOutput?.animationPackage?.name??annotation.visualExplanation}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Pipeline: rule-only visual → GPT manual/debug only</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Move Quality Gate</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Version: {MOVE_QUALITY_GATE_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Required: {shouldValidateTrainingMove?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Status: {moveQualityPending?"pending":moveQuality?.status??"idle"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected UCI: {moveQuality?.expectedMovesUci?.join(", ")||expectedUserUcis.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected SAN: {expectedUserSans.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Stockfish top two: {moveQuality?.topMoves?.map((line)=>line.uci).join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Reason: {moveQuality?.reason??"No validation result."}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Checked: {moveQuality?.checkedAt?new Date(moveQuality.checkedAt).toLocaleTimeString():"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Hints hidden: {hideUnverifiedTrainingHints?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Teaching Cue Compiler</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler version: {TEACHING_CUE_COMPILER_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler concept: {teachingOrchestration?.cue.conceptId??"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler confidence: {teachingOrchestration?Number((teachingOrchestration.cue.debug.confidence??0).toFixed(3)):"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler reason: {teachingOrchestration?.cue.debug.selectedReason??"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler delta: {teachingOrchestration?.cue.debug.deltaSummary?.join(" | ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler scores: {teachingOrchestration?.cue.debug.detectorScores?.map((s)=>`${s.conceptId}:${s.finalScore.toFixed(2)}`).slice(0,6).join(", ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Orchestrator tier: {teachingOrchestration?.classification.tier??"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Selected story: {teachingOrchestration?.selectedStory?.kind??"n/a"} ({teachingOrchestration?.selectedStory?.score.total?.toFixed?.(2)??"n/a"})</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Rejected stories: {teachingOrchestration?.debug.rejectedStories?.map((r)=>`${r.kind}:${r.total.toFixed(2)}`).join(", ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual budget: {teachingOrchestration?JSON.stringify(teachingOrchestration.debug.visualBudget):"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Suppressed visuals: {teachingOrchestration?.debug.suppressionReasons?.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Learning events are being stored locally for future progress and Review features.</div>{annotation.reason&&<div className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">Fallback reason: {annotation.reason}</div>}</div>}</div>}
       <div className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm"><div className="flex items-start gap-3">{feedback.toLowerCase().includes("correct")?<CheckCircle2 className="mt-0.5 text-green-700" size={24}/>:feedback.toLowerCase().includes("not quite")||feedback.toLowerCase().includes("illegal")?<XCircle className="mt-0.5 text-red-600" size={24}/>:<Target className="mt-0.5 text-green-700" size={24}/>}<div><div className="font-bold">{endingInfo?endingInfo.title:isReviewingHistory?"Review mode":isUserTurn?"Your move":"Opponent thinking"}</div><p className="text-sm leading-6 text-stone-600">{feedback}</p></div></div></div>
     </section>}
     {activeTab==="review"&&<section className="space-y-5"><header><h1 className="text-2xl font-bold tracking-tight">Review Mistakes</h1><p className="text-sm text-stone-500">Wrong opening moves are saved here.</p></header>{mistakes.length===0?<div className="rounded-3xl bg-white p-6 text-center shadow-sm"><CheckCircle2 className="mx-auto mb-3 text-green-700" size={40}/><h2 className="text-lg font-bold">No mistakes due</h2><p className="mt-2 text-sm text-stone-500">Missed training positions will appear here.</p></div>:<div className="space-y-3">{mistakes.map(m=><button key={m.fen} onClick={()=>practiceMistake(m)} className="w-full rounded-3xl border border-stone-200 bg-white p-4 text-left shadow-sm"><div className="flex items-start justify-between gap-3"><div><div className="font-bold">{m.opening}</div><div className="mt-1 text-sm text-stone-500">Expected: <span className="font-bold text-green-700">{m.expectedMove}</span></div><div className="text-sm text-stone-500">You played: {m.playedMove}</div></div><span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">Missed {m.count}x</span></div></button>)}</div>}</section>}

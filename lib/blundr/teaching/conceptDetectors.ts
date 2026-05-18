@@ -1,244 +1,203 @@
-import type { BoardAnalysis, ConceptCandidate, MoveDelta, TeachingCueInput, VisualSquareCue } from "./teachingCueTypes";
-import { centerSquares, fileOf } from "./squareUtils";
+import type { TeachingEvidence } from "./evidenceCollector";
+import type { TeachingConceptId } from "./teachingCueTypes";
 
-type DetectorInput = {
-  before: BoardAnalysis;
-  after: BoardAnalysis;
-  delta: MoveDelta;
-  input: TeachingCueInput;
+export type DetectorConcept = {
+  conceptId: TeachingConceptId;
+  confidence: number;
+  relevantSquares: string[];
+  relevantPieces: string[];
+  reason: string;
+  claimSafety: "safe" | "cautious" | "speculative";
+  suggestedVisuals: {
+    primary?: { from: string; to: string; kind: "move" | "attack" | "defense" | "pressure" | "danger" };
+    keySquares: string[];
+    dangerSquares: string[];
+  };
+  requiresMoveRecommendation: boolean;
 };
 
-function baseCandidate(input: DetectorInput, conceptId: ConceptCandidate["conceptId"], evidence: string[]): ConceptCandidate {
+function makeConcept(partial: Omit<DetectorConcept, "suggestedVisuals"> & { suggestedVisuals?: DetectorConcept["suggestedVisuals"] }): DetectorConcept {
   return {
-    conceptId,
-    templateContext: {
-      moveSan: input.input.move.san,
-      targetSquare: input.delta.newlyAttackedPieces[0] ?? input.input.move.to,
-    },
-    visual: {
-      primaryArrow: { from: input.input.move.from, to: input.input.move.to, kind: "move" },
-      relationshipLines: [],
-      keySquares: [{ square: input.input.move.to, kind: "target" }],
-      ghostSquares: [],
-      dangerSquares: [],
-    },
-    evidence,
-    confidence: 0.55,
-    deltaStrength: 0.5,
-    visualClarity: 0.8,
-    pedagogicalValue: 0.7,
-    simplicity: 0.85,
-    userNeed: 0.5,
-    phaseFit: 0.5,
-    tacticalUrgency: 0.4,
-    penalties: 0,
+    ...partial,
+    suggestedVisuals: partial.suggestedVisuals ?? { keySquares: [], dangerSquares: [] },
   };
 }
 
-function squareCue(square: string, kind: VisualSquareCue["kind"]): VisualSquareCue {
-  return { square, kind };
-}
+export function detectConcepts(evidence: TeachingEvidence): DetectorConcept[] {
+  const out: DetectorConcept[] = [];
+  const delta = evidence.moveDelta;
+  const moveFrom = delta?.from ?? evidence.expectedMoveUci?.slice(0, 2) ?? "";
+  const moveTo = delta?.to ?? evidence.expectedMoveUci?.slice(2, 4) ?? "";
 
-export function detectDevelopmentConcepts(input: DetectorInput): ConceptCandidate[] {
-  const out: ConceptCandidate[] = [];
-  const movedPiece = input.delta.movedPiece;
-  if (movedPiece === "n" || movedPiece === "b") {
-    if (input.delta.developmentDelta > 0 && (input.delta.newlyAttackedPieces.length > 0 || input.delta.kingZonePressureDelta > 0 || input.delta.centerControlDelta > 0)) {
-      const c = baseCandidate(input, "development_with_pressure", ["minor piece developed", "new pressure created"]);
-      c.deltaStrength = 0.8;
-      c.confidence = 0.82;
-      c.visual.relationshipLines = input.delta.newlyAttackedPieces.slice(0, 1).map((sq) => ({ from: input.input.move.to, to: sq, kind: "pressure" }));
-      c.visual.keySquares = [squareCue(input.input.move.to, "target"), ...input.delta.newlyAttackedPieces.slice(0, 1).map((sq) => squareCue(sq, "danger"))].slice(0, 3);
-      out.push(c);
-    } else if (input.delta.developmentDelta > 0) {
-      const c = baseCandidate(input, "quiet_development", ["minor piece developed"]);
-      c.confidence = 0.76;
-      c.deltaStrength = 0.64;
-      out.push(c);
-    }
+  const attackedLoose = evidence.tacticalThemes.find((t) => t.id === "attacked_loose_piece");
+  const loose = evidence.tacticalThemes.find((t) => t.id === "loose_piece");
+  const hanging = evidence.tacticalThemes.find((t) => t.id === "hanging_piece");
+
+  if (delta?.isCapture && (loose || hanging)) {
+    out.push(
+      makeConcept({
+        conceptId: "win_loose_piece",
+        confidence: 0.82,
+        relevantSquares: [moveTo].filter(Boolean),
+        relevantPieces: [moveTo].filter(Boolean),
+        reason: "Capture claims a loose/hanging target immediately.",
+        claimSafety: "safe",
+        suggestedVisuals: { primary: moveFrom && moveTo ? { from: moveFrom, to: moveTo, kind: "attack" } : undefined, keySquares: [moveTo], dangerSquares: [moveTo] },
+        requiresMoveRecommendation: true,
+      }),
+    );
   }
+
+  if (!delta?.isCapture && attackedLoose) {
+    out.push(
+      makeConcept({
+        conceptId: "attack_loose_piece",
+        confidence: attackedLoose.confidence,
+        relevantSquares: attackedLoose.relevantSquares,
+        relevantPieces: attackedLoose.relevantPieces,
+        reason: attackedLoose.reason,
+        claimSafety: "cautious",
+        suggestedVisuals: { primary: moveFrom && moveTo ? { from: moveFrom, to: moveTo, kind: "pressure" } : undefined, keySquares: attackedLoose.relevantSquares, dangerSquares: attackedLoose.relevantSquares },
+        requiresMoveRecommendation: true,
+      }),
+    );
+  }
+
+  if ((loose || hanging) && !delta?.isCapture && !attackedLoose) {
+    const theme = loose ?? hanging;
+    out.push(
+      makeConcept({
+        conceptId: "hanging_piece_warning",
+        confidence: theme?.confidence ?? 0.62,
+        relevantSquares: theme?.relevantSquares ?? [],
+        relevantPieces: theme?.relevantPieces ?? [],
+        reason: "A loose piece exists but immediate win is not confirmed.",
+        claimSafety: "safe",
+        suggestedVisuals: { keySquares: theme?.relevantSquares ?? [], dangerSquares: theme?.relevantSquares ?? [] },
+        requiresMoveRecommendation: false,
+      }),
+    );
+  }
+
+  if (evidence.safetyWarnings.some((w) => /king/i.test(w))) {
+    out.push(
+      makeConcept({
+        conceptId: "king_safety_first",
+        confidence: 0.78,
+        relevantSquares: [evidence.boardBefore.kingSquares[evidence.sideToMove]].filter((s): s is string => Boolean(s)),
+        relevantPieces: [evidence.boardBefore.kingSquares[evidence.sideToMove]].filter((s): s is string => Boolean(s)),
+        reason: "King safety warning is active.",
+        claimSafety: "safe",
+        suggestedVisuals: { keySquares: [evidence.boardBefore.kingSquares[evidence.sideToMove]].filter((s): s is string => Boolean(s)), dangerSquares: [] },
+        requiresMoveRecommendation: false,
+      }),
+    );
+  }
+
+  if (evidence.strategicThemes.some((t) => t.id === "center_tension")) {
+    out.push(
+      makeConcept({
+        conceptId: "center_tension",
+        confidence: 0.68,
+        relevantSquares: ["d4", "e4", "d5", "e5"],
+        relevantPieces: [],
+        reason: "Central pawn structure remains contested.",
+        claimSafety: "safe",
+        suggestedVisuals: { keySquares: ["d4", "e4"], dangerSquares: [] },
+        requiresMoveRecommendation: false,
+      }),
+    );
+  }
+
+  if (evidence.strategicThemes.some((t) => t.id === "center_control")) {
+    out.push(
+      makeConcept({
+        conceptId: "center_control",
+        confidence: 0.72,
+        relevantSquares: ["d4", "e4", "d5", "e5"],
+        relevantPieces: [moveTo].filter(Boolean),
+        reason: "Move affects central control.",
+        claimSafety: "safe",
+        suggestedVisuals: { primary: moveFrom && moveTo ? { from: moveFrom, to: moveTo, kind: "move" } : undefined, keySquares: [moveTo].filter(Boolean), dangerSquares: [] },
+        requiresMoveRecommendation: true,
+      }),
+    );
+  }
+
+  if (evidence.strategicThemes.some((t) => t.id === "development_lag")) {
+    out.push(
+      makeConcept({
+        conceptId: "development_lag",
+        confidence: 0.79,
+        relevantSquares: evidence.strategicThemes.find((t) => t.id === "development_lag")?.relevantSquares ?? [],
+        relevantPieces: evidence.strategicThemes.find((t) => t.id === "development_lag")?.relevantPieces ?? [],
+        reason: "At least one minor piece remains undeveloped.",
+        claimSafety: "safe",
+        suggestedVisuals: { keySquares: evidence.strategicThemes.find((t) => t.id === "development_lag")?.relevantSquares ?? [], dangerSquares: [] },
+        requiresMoveRecommendation: false,
+      }),
+    );
+  }
+
+  if (evidence.strategicThemes.some((t) => t.id === "open_file")) {
+    out.push(
+      makeConcept({
+        conceptId: "open_file_context",
+        confidence: 0.66,
+        relevantSquares: evidence.strategicThemes.find((t) => t.id === "open_file")?.relevantSquares ?? [],
+        relevantPieces: [],
+        reason: "Open file can be used by heavy pieces.",
+        claimSafety: "safe",
+        suggestedVisuals: { keySquares: evidence.strategicThemes.find((t) => t.id === "open_file")?.relevantSquares ?? [], dangerSquares: [] },
+        requiresMoveRecommendation: false,
+      }),
+    );
+  }
+
+  if (evidence.phase === "endgame") {
+    out.push(
+      makeConcept({
+        conceptId: "king_activity",
+        confidence: 0.72,
+        relevantSquares: [evidence.boardBefore.kingSquares[evidence.sideToMove]].filter((s): s is string => Boolean(s)),
+        relevantPieces: [evidence.boardBefore.kingSquares[evidence.sideToMove]].filter((s): s is string => Boolean(s)),
+        reason: "Endgame activity is central.",
+        claimSafety: "safe",
+        suggestedVisuals: { keySquares: [evidence.boardBefore.kingSquares[evidence.sideToMove]].filter((s): s is string => Boolean(s)), dangerSquares: [] },
+        requiresMoveRecommendation: false,
+      }),
+    );
+  }
+
+  if (evidence.boardBefore.pawnStructure.passedPawns[evidence.sideToMove].length > 0) {
+    out.push(
+      makeConcept({
+        conceptId: "passed_pawn",
+        confidence: 0.7,
+        relevantSquares: evidence.boardBefore.pawnStructure.passedPawns[evidence.sideToMove].slice(0, 2),
+        relevantPieces: evidence.boardBefore.pawnStructure.passedPawns[evidence.sideToMove].slice(0, 2),
+        reason: "Passed pawn can become a plan anchor.",
+        claimSafety: "safe",
+        suggestedVisuals: { keySquares: evidence.boardBefore.pawnStructure.passedPawns[evidence.sideToMove].slice(0, 2), dangerSquares: [] },
+        requiresMoveRecommendation: false,
+      }),
+    );
+  }
+
+  if (!out.length) {
+    out.push(
+      makeConcept({
+        conceptId: "context_only",
+        confidence: 0.45,
+        relevantSquares: [moveTo].filter(Boolean),
+        relevantPieces: [],
+        reason: "No stronger conservative concept was found.",
+        claimSafety: "safe",
+        suggestedVisuals: { keySquares: [moveTo].filter(Boolean), dangerSquares: [] },
+        requiresMoveRecommendation: false,
+      }),
+    );
+  }
+
   return out;
-}
-
-export function detectCenterConcepts(input: DetectorInput): ConceptCandidate[] {
-  const out: ConceptCandidate[] = [];
-  const moveTo = input.input.move.to;
-  const moveIsCenter = centerSquares().includes(moveTo);
-  if (moveIsCenter || input.delta.centerControlDelta > 0) {
-    const c = baseCandidate(input, "center_control", [moveIsCenter ? "piece moved into center" : "center control increased"]);
-    c.confidence = 0.75;
-    c.deltaStrength = Math.min(1, 0.6 + input.delta.centerControlDelta * 0.1);
-    c.visual.keySquares = [squareCue(moveTo, centerSquares().includes(moveTo) ? "center" : "target")];
-    out.push(c);
-  }
-  if (input.delta.isPawnMove && input.delta.centerControlDelta > 1) {
-    const c = baseCandidate(input, "center_break", ["pawn challenges center"]);
-    c.confidence = 0.7;
-    c.deltaStrength = 0.72;
-    c.visual.keySquares = [squareCue(moveTo, "center")];
-    out.push(c);
-  }
-  return out;
-}
-
-export function detectKingSafetyConcepts(input: DetectorInput): ConceptCandidate[] {
-  const out: ConceptCandidate[] = [];
-  if (input.delta.isCastle) {
-    const c = baseCandidate(input, "castle_for_safety", ["castling move"]);
-    c.confidence = 0.95;
-    c.deltaStrength = 0.85;
-    c.pedagogicalValue = 0.9;
-    c.visual.keySquares = [squareCue(input.input.move.to, "king_safety")];
-    out.push(c);
-  } else if (input.delta.kingSafetyDelta > 1) {
-    const c = baseCandidate(input, "king_safety_escape", ["king safety improved"]);
-    c.confidence = 0.68;
-    c.deltaStrength = 0.66;
-    c.visual.keySquares = [squareCue(input.input.move.to, "king_safety")];
-    out.push(c);
-  }
-  return out;
-}
-
-export function detectTacticalConcepts(input: DetectorInput): ConceptCandidate[] {
-  const out: ConceptCandidate[] = [];
-  if (input.delta.isCheckmate) {
-    const c = baseCandidate(input, "checkmate_threat", ["mate pattern"]);
-    c.confidence = 0.99;
-    c.tacticalUrgency = 0.95;
-    c.deltaStrength = 0.95;
-    out.push(c);
-    return out;
-  }
-  if (input.delta.isCheck) {
-    const c = baseCandidate(input, "forcing_check", ["forcing check"]);
-    c.confidence = 0.8;
-    c.tacticalUrgency = 0.8;
-    out.push(c);
-  }
-  const targetLoose = input.delta.newlyAttackedPieces.find((sq) => input.after.loosePieces.includes(sq) || input.after.hangingPieces.includes(sq));
-  if (targetLoose) {
-    const c = baseCandidate(input, "win_loose_piece", ["new attack on loose piece"]);
-    c.confidence = 0.85;
-    c.deltaStrength = 0.82;
-    c.tacticalUrgency = 0.78;
-    c.visual.relationshipLines = [{ from: input.input.move.to, to: targetLoose, kind: "attack" }];
-    c.visual.keySquares = [squareCue(input.input.move.to, "target"), squareCue(targetLoose, "danger")];
-    out.push(c);
-  } else if (input.delta.isCapture) {
-    const c = baseCandidate(input, "safe_capture", ["capture move"]);
-    c.confidence = 0.65;
-    c.deltaStrength = 0.62;
-    out.push(c);
-  }
-  if (input.delta.newlyAttackedPieces.length >= 2 && input.delta.movedPiece === "n") {
-    const c = baseCandidate(input, "fork_creation", ["single move attacks multiple targets"]);
-    c.confidence = 0.74;
-    c.tacticalUrgency = 0.7;
-    c.visual.keySquares = [squareCue(input.input.move.to, "target"), ...input.delta.newlyAttackedPieces.slice(0, 2).map((sq) => squareCue(sq, "danger"))];
-    out.push(c);
-  }
-  return out;
-}
-
-export function detectOpenFileConcepts(input: DetectorInput): ConceptCandidate[] {
-  const out: ConceptCandidate[] = [];
-  const movedPiece = input.delta.movedPiece;
-  const toFile = fileOf(input.input.move.to);
-  if ((movedPiece === "r" || movedPiece === "q") && (input.after.openFiles.includes(toFile) || input.after.halfOpenFiles[input.input.sideToMove].includes(toFile))) {
-    const c = baseCandidate(input, movedPiece === "r" ? "rook_activation" : "open_file_pressure", ["heavy piece moved to open/half-open file"]);
-    c.confidence = 0.74;
-    c.deltaStrength = 0.7;
-    c.visual.keySquares = [squareCue(input.input.move.to, "target")];
-    out.push(c);
-  }
-  return out;
-}
-
-export function detectPawnStructureConcepts(input: DetectorInput): ConceptCandidate[] {
-  const out: ConceptCandidate[] = [];
-  if (!input.delta.isPawnMove) return out;
-  const to = input.input.move.to;
-  const rank = Number(to[1]);
-  const side = input.input.sideToMove;
-  const advanced = side === "w" ? rank >= 5 : rank <= 4;
-  if (advanced) {
-    const c = baseCandidate(input, "space_gain", ["pawn advances and gains space"]);
-    c.confidence = 0.64;
-    c.deltaStrength = 0.6;
-    c.visual.keySquares = [squareCue(to, "center")];
-    out.push(c);
-  }
-  const passed = input.after.pawnStructure.passedPawns[side].includes(to);
-  if (passed) {
-    const c = baseCandidate(input, "passed_pawn_push", ["passed pawn advanced"]);
-    c.confidence = 0.8;
-    c.deltaStrength = 0.78;
-    c.visual.keySquares = [squareCue(to, "target")];
-    out.push(c);
-  }
-  return out;
-}
-
-export function detectDefensiveConcepts(input: DetectorInput): ConceptCandidate[] {
-  const out: ConceptCandidate[] = [];
-  const side = input.input.sideToMove;
-  const beforeHanging = input.before.hangingPieces.filter((sq) => input.before.pieces.some((p) => p.square === sq && p.color === side));
-  const afterHanging = input.after.hangingPieces.filter((sq) => input.after.pieces.some((p) => p.square === sq && p.color === side));
-  if (beforeHanging.length > afterHanging.length) {
-    const c = baseCandidate(input, "defensive_resource", ["reduced number of hanging pieces"]);
-    c.confidence = 0.72;
-    c.deltaStrength = 0.7;
-    c.userNeed = 0.72;
-    c.visual.keySquares = afterHanging.length ? afterHanging.slice(0, 1).map((sq) => squareCue(sq, "support")) : [squareCue(input.input.move.to, "support")];
-    out.push(c);
-  }
-  if (input.delta.newlyDefendedPieces.length > 0) {
-    const c = baseCandidate(input, "threat_prevention", ["newly defended own piece"]);
-    c.confidence = 0.66;
-    c.deltaStrength = 0.58;
-    c.userNeed = 0.7;
-    c.visual.keySquares = input.delta.newlyDefendedPieces.slice(0, 2).map((sq) => squareCue(sq, "support"));
-    out.push(c);
-  }
-  return out;
-}
-
-export function detectEndgameConcepts(input: DetectorInput): ConceptCandidate[] {
-  const out: ConceptCandidate[] = [];
-  const totalMaterial = input.after.material.w + input.after.material.b;
-  if (totalMaterial <= 20 && input.delta.movedPiece === "k") {
-    const c = baseCandidate(input, "king_activity_endgame", ["king move in low-material position"]);
-    c.confidence = 0.78;
-    c.phaseFit = 0.9;
-    c.deltaStrength = 0.7;
-    c.visual.keySquares = [squareCue(input.input.move.to, "target")];
-    out.push(c);
-  }
-  return out;
-}
-
-export function detectDefaultConcept(input: DetectorInput): ConceptCandidate[] {
-  const c = baseCandidate(input, "default_pattern", ["fallback validated pattern"]);
-  c.confidence = 0.4;
-  c.deltaStrength = 0.35;
-  c.pedagogicalValue = 0.55;
-  c.simplicity = 0.95;
-  c.visual.relationshipLines = [];
-  c.visual.keySquares = [squareCue(input.input.move.to, "target")];
-  return [c];
-}
-
-export function detectAllConcepts(input: DetectorInput): ConceptCandidate[] {
-  return [
-    ...detectDevelopmentConcepts(input),
-    ...detectCenterConcepts(input),
-    ...detectKingSafetyConcepts(input),
-    ...detectTacticalConcepts(input),
-    ...detectOpenFileConcepts(input),
-    ...detectPawnStructureConcepts(input),
-    ...detectDefensiveConcepts(input),
-    ...detectEndgameConcepts(input),
-    ...detectDefaultConcept(input),
-  ];
 }
