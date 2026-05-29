@@ -4,6 +4,17 @@ import type { TeachingStoryCandidate } from "./storyTypes";
 
 export type VisualRevealLevel = "answer" | "context" | "plan";
 export type VisualEmphasis = "subtle" | "normal" | "strong";
+export type VisualConceptCategory =
+  | "answer_move"
+  | "piece_activity"
+  | "active_square"
+  | "center"
+  | "loose_piece"
+  | "king_safety"
+  | "open_file"
+  | "weak_square"
+  | "endgame_activity"
+  | "minimal";
 
 export type TeachingVisualOverlayDecision = {
   visualLines: Array<{ from: string; to: string; kind: "plan" | "attack" | "defense" | "opponent"; label?: string }>;
@@ -16,6 +27,7 @@ export type TeachingVisualOverlayDecision = {
   selectedVisualStory?: string;
   revealLevel: VisualRevealLevel;
   emphasis: VisualEmphasis;
+  visualConceptAlignment?: "aligned" | "visual_concept_mismatch" | "minimal";
 };
 
 export function routeTeachingVisuals(input: {
@@ -26,6 +38,14 @@ export function routeTeachingVisuals(input: {
   showAnswer: boolean;
 }): TeachingVisualOverlayDecision {
   const suppressedReasons: string[] = [];
+  const expectedCategory: VisualConceptCategory =
+    input.cue.conceptId.includes("loose") ? "loose_piece" :
+    input.cue.conceptId.includes("center") ? "center" :
+    input.cue.conceptId.includes("king") ? "king_safety" :
+    input.cue.conceptId.includes("file") || input.cue.conceptId.includes("rook") ? "open_file" :
+    input.cue.conceptId.includes("weak") || input.cue.conceptId.includes("outpost") ? "weak_square" :
+    input.cue.conceptId.includes("development") || input.cue.conceptId.includes("piece") || input.cue.conceptId.includes("activity") ? "piece_activity" :
+    "minimal";
   if (input.trainerView === "plain" && !input.showAnswer) {
     return {
       visualLines: [],
@@ -38,6 +58,7 @@ export function routeTeachingVisuals(input: {
       selectedVisualStory: input.selectedStory?.id,
       revealLevel: "context",
       emphasis: "subtle",
+      visualConceptAlignment: "minimal",
     };
   }
 
@@ -71,6 +92,7 @@ export function routeTeachingVisuals(input: {
       selectedVisualStory: input.selectedStory?.id,
       revealLevel,
       emphasis,
+      visualConceptAlignment: "minimal",
     };
   }
 
@@ -78,6 +100,9 @@ export function routeTeachingVisuals(input: {
     ...input.cue.visual.keySquares.map((sq) => ({ square: sq.square, kind: (sq.kind === "support" ? "support" : sq.kind === "danger" ? "danger" : "target") as "support" | "danger" | "target", role: sq.kind })),
     ...input.cue.visual.dangerSquares.map((sq) => ({ square: sq.square, kind: "danger" as const, role: sq.kind })),
   ].slice(0, 3);
+
+  const alignment = expectedCategory === "minimal" || squares.length || lines.length ? "aligned" : "visual_concept_mismatch";
+  if (alignment === "visual_concept_mismatch") suppressedReasons.push("visual_concept_mismatch");
 
   return {
     visualLines: lines,
@@ -90,5 +115,6 @@ export function routeTeachingVisuals(input: {
     selectedVisualStory: input.selectedStory?.id,
     revealLevel,
     emphasis,
+    visualConceptAlignment: alignment,
   };
 }

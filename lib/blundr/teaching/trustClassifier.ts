@@ -55,6 +55,10 @@ function mapFocus(story?: TeachingStoryCandidate | null): PrimaryTeachingFocus {
   return "safe_context";
 }
 
+function norm(value?: string): string {
+  return typeof value === "string" ? value.trim().toLowerCase().replace(/\s+/g, "") : "";
+}
+
 export function classifyTeachingTrust(evidence: TeachingEvidence, selectedStory: TeachingStoryCandidate | null): TeachingTrustClassification {
   const primaryFocus = mapFocus(selectedStory);
   const limitations: string[] = [];
@@ -101,7 +105,12 @@ export function classifyTeachingTrust(evidence: TeachingEvidence, selectedStory:
       };
     }
 
-    if (evidence.moveClassification.isAlternativeCandidate) {
+    const userMove = norm(evidence.userMoveUci);
+    const expectedMove = norm(evidence.expectedMoveUci);
+    const userAlternative = Boolean(userMove && expectedMove && userMove !== expectedMove);
+    const contrastStorySelected = selectedStory?.kind === "strong_alternative";
+
+    if (evidence.moveClassification.isAlternativeCandidate && (userAlternative || contrastStorySelected)) {
       return {
         tier: "strong_alternative",
         confidence: selectedStory?.score.confidence ?? 0.62,

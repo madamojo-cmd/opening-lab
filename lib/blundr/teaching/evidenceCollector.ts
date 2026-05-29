@@ -1,8 +1,12 @@
 import { Chess } from "chess.js";
 import { analyzeBoard } from "./boardAnalyzer";
+import { buildChessFeatureGraph, type ChessFeatureGraph } from "./chessFeatureGraph";
 import { evaluateBookSupport, type BookSupportInput, type BookSupportResult } from "./bookSupport";
 import { analyzeMoveDelta } from "./moveDeltaAnalyzer";
+import { analyzeMoveSemantics } from "./moveSemanticAnalyzer";
+import { compareMoveToTopMoves } from "./topMoveComparison";
 import type { BoardAnalysis, MoveDelta, TeachingCueInput } from "./teachingCueTypes";
+import type { MoveSemanticAnalysis, TopMoveComparison } from "./trainingContextTypes";
 import { centerSquares, extendedCenterSquares, isValidSquare, manhattanDistance } from "./squareUtils";
 
 export type PositionPhase = "opening" | "middlegame" | "endgame" | "unclear";
@@ -103,6 +107,19 @@ export type TeachingEvidence = {
   bookSupport: BookSupportResult;
   boardBefore: BoardAnalysis;
   boardAfter?: BoardAnalysis;
+  featureGraphBefore?: ChessFeatureGraph;
+  featureGraphAfter?: ChessFeatureGraph;
+  expectedMoveSemanticAnalysis?: MoveSemanticAnalysis;
+  userMoveSemanticAnalysis?: MoveSemanticAnalysis;
+  topMoveSemanticAnalyses?: MoveSemanticAnalysis[];
+  topMoveComparisons?: TopMoveComparison[];
+  teachingContextAvailability?: {
+    hasRichContext: boolean;
+    hasSafeContext: boolean;
+    hasMinimalContext: boolean;
+    reason: string;
+    bestContextConcepts: string[];
+  };
   moveDelta?: MoveDelta;
   tacticalThemes: TacticalThemeEvidence[];
   strategicThemes: StrategicThemeEvidence[];
@@ -381,6 +398,64 @@ export function collectTeachingEvidence(input: CollectTeachingEvidenceInput): Te
     isAlternativeCandidate: Boolean(userMoveUci && expectedUci && userMoveUci !== expectedUci),
   };
 
+  let featureGraphBefore: ChessFeatureGraph | undefined;
+  let featureGraphAfter: ChessFeatureGraph | undefined;
+  let expectedMoveSemanticAnalysis: MoveSemanticAnalysis | undefined;
+  let userMoveSemanticAnalysis: MoveSemanticAnalysis | undefined;
+  let topMoveSemanticAnalyses: MoveSemanticAnalysis[] | undefined;
+  let topMoveComparisons: TopMoveComparison[] | undefined;
+  try {
+    featureGraphBefore = buildChessFeatureGraph(teachingInput.fenBefore);
+    featureGraphAfter = fenAfter ? buildChessFeatureGraph(fenAfter) : undefined;
+    if (expectedUci) {
+      expectedMoveSemanticAnalysis = analyzeMoveSemantics({
+        fenBefore: teachingInput.fenBefore,
+        fenAfter,
+        moveUci: expectedUci,
+        moveSan: expectedSan,
+        featureGraphBefore,
+        featureGraphAfter,
+      });
+    }
+    if (userMoveUci) {
+      userMoveSemanticAnalysis = analyzeMoveSemantics({
+        fenBefore: teachingInput.fenBefore,
+        moveUci: userMoveUci,
+        moveSan: userMoveSan,
+        featureGraphBefore,
+      });
+    }
+    topMoveSemanticAnalyses = engineTopMoves.slice(0, 5).map((move) => analyzeMoveSemantics({
+      fenBefore: teachingInput.fenBefore,
+      moveUci: move.uci,
+      moveSan: move.san,
+      featureGraphBefore,
+    }));
+    topMoveComparisons = compareMoveToTopMoves({
+      fen: teachingInput.fenBefore,
+      expectedMoveUci: expectedUci,
+      expectedMoveSan: expectedSan,
+      topMoves: engineTopMoves,
+    });
+  } catch {
+    featureGraphBefore = undefined;
+  }
+
+  const safeContextConcepts = [
+    ...(featureGraphBefore?.summary.loosePieces.length ? ["loose_piece"] : []),
+    ...(featureGraphBefore?.summary.centerTensionSquares.length ? ["center_tension"] : []),
+    ...(featureGraphBefore?.summary.exposedKings.length ? ["king_safety"] : []),
+    ...(featureGraphBefore?.summary.openFiles.length ? ["open_file"] : []),
+    ...(topMoveComparisons?.length ? ["top_move_comparison"] : []),
+  ];
+  const teachingContextAvailability = {
+    hasRichContext: safeContextConcepts.length >= 2,
+    hasSafeContext: safeContextConcepts.length >= 1,
+    hasMinimalContext: tacticalThemes.length > 0 || strategicThemes.length > 0,
+    reason: safeContextConcepts.length ? "Concrete board features are available for Assisted Context." : "Only minimal theme evidence was found.",
+    bestContextConcepts: safeContextConcepts,
+  };
+
   return {
     fenBefore: teachingInput.fenBefore,
     fenAfter,
@@ -397,6 +472,13 @@ export function collectTeachingEvidence(input: CollectTeachingEvidenceInput): Te
     bookSupport,
     boardBefore: before,
     boardAfter: after,
+    featureGraphBefore,
+    featureGraphAfter,
+    expectedMoveSemanticAnalysis,
+    userMoveSemanticAnalysis,
+    topMoveSemanticAnalyses,
+    topMoveComparisons,
+    teachingContextAvailability,
     moveDelta: delta,
     tacticalThemes,
     strategicThemes,

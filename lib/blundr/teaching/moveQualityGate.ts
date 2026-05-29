@@ -3,6 +3,8 @@ export type MoveQualityStatus =
   | "pending"
   | "verified_top1"
   | "verified_top2"
+  | "engine_close"
+  | "book_supported"
   | "rejected"
   | "unavailable";
 
@@ -23,6 +25,9 @@ export type MoveQualityResult = {
   selectedMoveSan?: string;
   selectedRank?: 1 | 2;
   topMoves: MoveQualityEngineLine[];
+  expectedMoveCp?: number;
+  bestMoveCp?: number;
+  deltaCp?: number;
   reason: string;
   checkedAt: number;
 };
@@ -31,6 +36,9 @@ export const MOVE_QUALITY_GATE_VERSION = "2.7.32";
 export const MOVE_QUALITY_TOP_N = 2;
 export const MOVE_QUALITY_TIMEOUT_MS = 5000;
 export const MOVE_QUALITY_TARGET_DEPTH = 10;
+export const MOVE_TRUST_ENGINE_CLOSE_CP = 50;
+export const MOVE_TRUST_REPERTOIRE_CP = 100;
+export const MOVE_TRUST_SEVERE_DROP_CP = 180;
 
 export function normalizeUci(value: unknown): string {
   return typeof value === "string"
@@ -107,6 +115,9 @@ export function evaluateTopTwoMatch(input: {
       selectedMoveSan: expectedMatch?.san,
       selectedRank: match.rank === 1 ? 1 : 2,
       topMoves: input.topMoves,
+      expectedMoveCp: match.scoreCp,
+      bestMoveCp: topTwo[0]?.scoreCp,
+      deltaCp: typeof topTwo[0]?.scoreCp === "number" && typeof match.scoreCp === "number" ? Math.max(0, topTwo[0].scoreCp - match.scoreCp) : undefined,
       reason:
         match.rank === 1
           ? "Expected move matched Stockfish's top move."
@@ -120,6 +131,9 @@ export function evaluateTopTwoMatch(input: {
     fen: input.fen,
     expectedMovesUci: expected.map((move) => move.uci),
     topMoves: input.topMoves,
+    expectedMoveCp: undefined,
+    bestMoveCp: topTwo[0]?.scoreCp,
+    deltaCp: undefined,
     reason: "Expected training move did not match Stockfish's top two moves.",
     checkedAt: Date.now(),
   };

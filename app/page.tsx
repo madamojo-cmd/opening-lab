@@ -13,8 +13,17 @@ import {
 } from "@/lib/blundr/teaching/moveQualityGate";
 import { orchestrateTeaching } from "@/lib/blundr/teaching/teachingOrchestrator";
 import { TEACHING_CUE_COMPILER_VERSION } from "@/lib/blundr/teaching/teachingCueTypes";
+import {
+  shouldRenderOpponentLastMoveHighlight,
+  type OverlayPhase,
+} from "@/lib/blundr/teaching/overlayLifecycle";
+import { adaptVisualRecipe } from "@/lib/blundr/visualRecipe/visualRecipeAdapter";
+import { compileVisualRecipe } from "@/lib/blundr/visualRecipe/visualRecipeCompiler";
+import { useVisualRecipePlayback } from "@/components/board/useVisualRecipePlayback";
 import { createLearningSessionId, recordLearningEvent } from "@/lib/blundr/learning/learningEvents";
 import type { LearningEvent } from "@/lib/blundr/learning/learningEvents";
+import { loadOpponentVariationMemory, recordOpponentChoice } from "@/lib/blundr/opponent/opponentVariationMemory";
+import { selectOpponentCandidateWithVariation } from "@/lib/blundr/opponent/opponentVariationPolicy";
 
 type Tab = "home" | "train" | "review" | "progress" | "repertoire";
 type RepertoireColor = "white" | "black";
@@ -68,7 +77,16 @@ type LocalTelemetryEvent = {
   details: Record<string, unknown>;
 };
 type LocalTelemetryStore = { enabled: boolean; events: LocalTelemetryEvent[]; updatedAt: number };
-type OpponentCue = { expiresAt: number; title: string; message: string; lines: ActiveLine[]; cues: SquareCue[] };
+type OpponentCue = { expiresAt: number; title: string; message: string; lines: ActiveLine[]; cues: SquareCue[]; committed: boolean; fen: string };
+type OpponentVariationDebug = {
+  opponentVariationApplied: boolean;
+  opponentVariationReason: string;
+  recentOpponentBranchKeys: string[];
+  selectedOpponentBranchKey?: string;
+  candidateOpponentBranches: Array<{ branchKey: string; uci: string; san?: string; baseWeight: number; adjustedWeight: number }>;
+  blockedThirdRepeatBranches: string[];
+  fallbackUsed: boolean;
+};
 type LiveBrain = { ratingLabel: string; ratingPool: string; book: SystemState; lichess: SystemState; engine: SystemState; gpt: SystemState; source: string; latency?: number; note?: string };
 type BoardTheme = "classic" | "slate" | "blue" | "walnut";
 type PieceStyle = "unicode" | "letters" | "neo";
@@ -151,10 +169,7 @@ function deriveFastAnnotation({fen,openingName,userColor,trainingMode,expectedUs
     return{...base,source:"fast local book complete",fallback:true,headline:"Book complete",mainExplanation:"The saved repertoire branch has ended on your turn.",visualExplanation:"No move is highlighted because there is no saved restricted-mode continuation.",planExplanation:"Choose Train Again or Continue vs Bot.",nextPlan:"Continue vs Bot to accept normal legal moves from this position.",plan:{title:"Book complete",message:"No saved move remains for this branch.",lines:[],cues:[]},confidence:"local"};
   }
   if(!userTurn&&trainingMode==="restricted"&&opponentBookOptions.length){
-    const lines=opponentBookOptions.slice(0,2).map(m=>lineFromContinuation(m,"opponent"));
-    const cues:SquareCue[]=lines.map(l=>({square:l.to,kind:"opponent" as const}));
-    const moveText=opponentBookOptions.map(m=>m.san).join(" / ");
-    return{...base,source:"fast local opponent book",fallback:true,selectedView:"plan",headline:`Opponent book reply: ${moveText}`,mainExplanation:"The app is about to play a saved opponent reply from the repertoire tree.",visualExplanation:"Purple cues show the opponent-side book move immediately while the bot delay and Brain refinement finish.",planExplanation:"After the opponent move, your next saved repertoire cue will appear.",nextPlan:"Watch the opponent reply, then find your next training move.",keySquares:lines.map(l=>l.to),planArrows:lines,attack:{title:"Opponent reply",message:`Expected opponent book reply: ${moveText}.`,lines,cues},defense:{title:"Prepare for reply",message:"This cue shows where the opponent book move is heading. Your user-side view returns after the move.",lines,cues},plan:{title:"Opponent book reply",message:`Opponent is expected to play ${moveText}.`,lines,cues},confidence:"local"};
+    return{...base,source:"fast local opponent book",fallback:true,selectedView:"plan",headline:"Opponent selecting move",mainExplanation:"The opponent is selecting a supported opening reply.",visualExplanation:"Opponent candidate branches are not shown on the main board before commit.",planExplanation:"After commit, the last opponent move is shown briefly.",nextPlan:"Wait for the opponent move to be committed.",keySquares:[],planArrows:[],attack:{title:"Opponent selecting",message:"Candidate branches stay in debug only until commit.",lines:[],cues:[]},defense:{title:"Prepare for reply",message:"Your next teaching cue appears after the opponent move is committed.",lines:[],cues:[]},plan:{title:"Opponent selecting",message:"Waiting for committed opponent move.",lines:[],cues:[]},confidence:"local"};
   }
   return{...base,source:"engine pending",fallback:true,selectedView:"plan",headline:trainingMode==="continuation"&&userTurn?"Checking continuation":"Waiting for opponent",mainExplanation:trainingMode==="continuation"&&userTurn?"Blundr Brain is checking the continuation before showing a cue.":"The opponent is selecting a continuation.",visualExplanation:"No provisional legal-move recommendation is drawn. The next plan visual appears only when it is validated.",planExplanation:trainingMode==="continuation"&&userTurn?"Wait for the teaching cue.":"Wait for the opponent move.",nextPlan:trainingMode==="continuation"&&userTurn?"Teaching cue pending.":"Wait for the opponent move.",attack:{title:"Checking",message:"Attack cues are withheld until the move is validated.",lines:[],cues:[]},defense:{title:"Checking",message:"Defense cues are withheld until the move is validated.",lines:[],cues:[]},plan:{title:"Checking continuation",message:"Blundr Brain is checking the continuation.",lines:[],cues:[]},confidence:"engine-pending"};
 }
@@ -163,7 +178,7 @@ function impactFromEngine(line?:EngineLine){
   if(typeof cp!=="number")return{label:"Training",pct:64,tone:"bg-green-700",note:"Move impact will use Brain endpoint engine output when available."};
   if(cp>180)return{label:"Strong",pct:92,tone:"bg-green-700",note:"Blundr Brain likes this continuation."};
   if(cp>80)return{label:"Stable",pct:74,tone:"bg-green-600",note:"Healthy continuation."};
-  if(cp>20)return{label:"Playable",pct:58,tone:"bg-yellow-500",note:"Playable but keep improving the plan."};
+  if(cp>20)return{label:"Playable",pct:58,tone:"bg-yellow-500",note:"Playable continuation."};
   return{label:"Needs care",pct:36,tone:"bg-orange-600",note:"Look for a more forcing or developing move."};
 }
 
@@ -469,6 +484,7 @@ export default function App(){
   const [trainerView,setTrainerView]=useState<TrainerView>("assisted");
   const [bookComplete,setBookComplete]=useState(false);
   const [opponentCue,setOpponentCue]=useState<OpponentCue|null>(null);
+  const [opponentVariationDebug,setOpponentVariationDebug]=useState<OpponentVariationDebug|null>(null);
   const [explorerMoves,setExplorerMoves]=useState<ExplorerMove[]>([]);
   const [brainResponse,setBrainResponse]=useState<BrainResponse|null>(null);
   const [enginePreview,setEnginePreview]=useState<{fen:string;pvs:EngineLine[];source:string}|null>(null);
@@ -489,6 +505,11 @@ export default function App(){
   const [newRepName,setNewRepName]=useState("My Custom Repertoire");
   const [newRepColor,setNewRepColor]=useState<RepertoireColor>("white");
   const [newLineText,setNewLineText]=useState("e4 e5 Nf3 Nc6 Bc4 Bc5 c3 Nf6 d3 d6 O-O O-O");
+  const [trainerPhase,setTrainerPhase]=useState<OverlayPhase>("ready_for_user");
+  const [trainerFrameId,setTrainerFrameId]=useState(1);
+  const [overlayFrameId,setOverlayFrameId]=useState(1);
+  const [staleOverlayIgnored,setStaleOverlayIgnored]=useState(false);
+  const [overlayClearedOnPhaseChange,setOverlayClearedOnPhaseChange]=useState(false);
   const explorerCache=useRef<Record<string,any>>({});
   const brainSeq=useRef(0);
   const visualRequestSeq=useRef(0);
@@ -591,23 +612,70 @@ export default function App(){
       return null;
     }
   },[activeTab,trainingMode,isUserTurn,expectedMovesForValidationKey,fen,userColor,trainerView,showAnswer,shouldValidateTrainingMove,moveQualityUserStatus,moveQuality?.status,repertoire.name,historyIndex,positionHistory.length,lastMoveSan,explorerMoves,engineLines,progress.trainedPositions,progress.mistakes]);
-  const hidePreMoveHints=!showAnswer&&trainingMode==="restricted"&&isUserTurn&&(trainerView==="plain"||Boolean(teachingOrchestration)&&!teachingOrchestration.permission.canShowAnswerOverlays&&!teachingOrchestration.permission.canShowContextOverlays);
-  const orchestrationVisualLines:ActiveLine[]=teachingOrchestration?teachingOrchestration.visualDecision.visualLines.map((line)=>({from:line.from,to:line.to,kind:line.kind,label:line.label})).filter((line)=>isValidSquare(line.from)&&isValidSquare(line.to)).slice(0,2):[];
-  const orchestrationVisualSquares=teachingOrchestration?teachingOrchestration.visualDecision.visualSquares.filter((sq)=>isValidSquare(sq.square)).slice(0,4):[];
-  const visualLines:ActiveLine[]=hidePreMoveHints?[]:(teachingOrchestration?orchestrationVisualLines:visualModelOutput?(activeVisualModelOutput?(activeVisualModelOutput.arrows??[]).filter(a=>isValidSquare(a.from)&&isValidSquare(a.to)).slice(0,2).map(a=>({from:a.from,to:a.to,kind:visualLineKind(a.role,a.kind),label:a.label})):[]):currentView.lines);
+  const boardFen=normalizeFen(fen);
+  const visualRecipe=useMemo(()=>teachingOrchestration?compileVisualRecipe({
+    trainingContext:teachingOrchestration,
+    expectedMoveUci:teachingOrchestration.cue.metadata.moveUci,
+    expectedMoveSan:teachingOrchestration.cue.metadata.moveSan,
+    openingId:selectedRepertoireId,
+    lineId:selectedRepertoireId,
+    fen,
+    frameId:trainerFrameId,
+    viewMode:trainerView,
+    revealState:showAnswer?"revealed":"hidden",
+    trainerPhase,
+    userToMove:isUserTurn,
+  }):null,[teachingOrchestration,selectedRepertoireId,fen,trainerFrameId,trainerView,showAnswer,trainerPhase,isUserTurn]);
+  const visualRecipeOverlay=useMemo(()=>adaptVisualRecipe({
+    recipe:visualRecipe,
+    phase:trainerPhase,
+    userToMove:isUserTurn,
+    viewMode:trainerView,
+    boardFen,
+    trainerFrameId,
+    overlayFrameId,
+    opponentCandidateRenderedInMainUi:false,
+  }),[visualRecipe,trainerPhase,isUserTurn,trainerView,boardFen,trainerFrameId,overlayFrameId]);
+  const visualRecipePlayback=useVisualRecipePlayback({
+    recipe:visualRecipe,
+    phase:trainerPhase,
+    viewMode:trainerView,
+    boardFen,
+    trainerFrameId,
+    overlayFrameId,
+    userToMove:isUserTurn,
+    adapterAllowed:visualRecipeOverlay.adapterAllowed,
+    adapterSuppressedReason:visualRecipeOverlay.adapterSuppressedReason,
+    opponentCandidateRenderedInMainUi:false,
+    enabled:trainerPhase==="ready_for_user"&&isUserTurn&&visualRecipeOverlay.adapterAllowed&&trainerView==="assisted",
+  });
+  const overlayFen=teachingOrchestration?normalizeFen(teachingOrchestration.cue.metadata.fenBefore):undefined;
+  const overlaySource=teachingOrchestration?visualRecipeOverlay.overlaySource:activeVisualModelOutput?"visual_model":"annotation";
+  const overlaySuppressedReason=teachingOrchestration?visualRecipeOverlay.suppressedReason:
+    trainerView==="plain"&&!showAnswer?"plain_view":
+    trainerPhase!=="ready_for_user"?"phase_not_ready_for_user":
+    !isUserTurn?"not_user_turn":
+    undefined;
+  const staleOverlayFlag=staleOverlayIgnored||visualRecipeOverlay.staleOverlayIgnored;
+  const visualLines:ActiveLine[]=
+    overlaySuppressedReason?[]:
+    teachingOrchestration?visualRecipePlayback.lines.filter((line)=>isValidSquare(line.from)&&isValidSquare(line.to)).slice(0,2):
+    visualModelOutput?(activeVisualModelOutput&&trainerPhase==="ready_for_user"&&isUserTurn&&trainerView==="assisted"?(activeVisualModelOutput.arrows??[]).filter(a=>isValidSquare(a.from)&&isValidSquare(a.to)).slice(0,2).map(a=>({from:a.from,to:a.to,kind:visualLineKind(a.role,a.kind),label:a.label})):[]):currentView.lines;
   const visualContext=activeVisualModelOutput?.context;
   const visualAnimationName=activeVisualModelOutput?.animationPackage?.name??activeVisualModelOutput?.animation;
   const basePatternCue=buildPatternCue({trainerView,visualModelOutput,visualModelPending,visualModelError,visualSuppressed,moveQuality,moveQualityPending,shouldValidateTrainingMove,annotation,expectedUserOptions,trainingMode,isUserTurn,bookComplete,showAnswer,engineLines});
-  const patternCue=teachingOrchestration&&(teachingOrchestration.permission.canShowPatternCue||teachingOrchestration.permission.canShowContextCue)&&basePatternCue.status==="ready"?{
+  const patternCue=teachingOrchestration&&(teachingOrchestration.permission.canShowPatternCue||teachingOrchestration.permission.canShowContextCue)?{
     ...basePatternCue,
+    status:"ready" as PatternCueStatus,
+    source:teachingOrchestration.permission.canShowPatternCue?"rule_visual" as const:"local_fast" as const,
     title:teachingOrchestration.cue.userFacing.title||"Move not verified",
     snippet:teachingOrchestration.cue.userFacing.snippet||"Blundr will not invent a plan here.",
-    next:teachingOrchestration.cue.userFacing.next??basePatternCue.next,
+    next:teachingOrchestration.nextPlay.allowed?teachingOrchestration.cue.userFacing.next:undefined,
     concept:teachingOrchestration.cue.conceptId,
   }:basePatternCue;
   const patternCueBadgeLabel=trainerView==="assisted"&&!showAnswer&&teachingOrchestration?`Assisted View • ${teachingOrchestration.userLabel}`:getMoveQualityBadgeLabel({trainerView,showAnswer,shouldValidateTrainingMove,moveQuality,moveQualityPending,patternCueStatus:patternCue.status});
   const showValidatedBadge=trainerView==="assisted"&&!showAnswer&&Boolean(teachingOrchestration?.cue.userFacing.badge);
-  const moveImpact=impactFromEngine(engineLines[0]);
+  const moveImpact=teachingOrchestration?.moveImpact??impactFromEngine(engineLines[0]);
   const accuracy=getAccuracy(progress);
   const mistakes=Object.values(progress.mistakes).sort((a,b)=>b.count-a.count);
   const cpWhite=evalForWhite(engineLines[0]?.cp,game.turn() as ChessColor);
@@ -674,9 +742,25 @@ export default function App(){
     return()=>{if((window as any).__blundrLocalTelemetry===api)delete (window as any).__blundrLocalTelemetry};
   },[visualDebugSnapshot]);
   useEffect(()=>{const t=window.setInterval(()=>{if(opponentCue&&Date.now()>opponentCue.expiresAt)setOpponentCue(null)},250);return()=>window.clearInterval(t)},[opponentCue]);
+  useEffect(()=>{setStaleOverlayIgnored(false)},[trainerFrameId]);
+  useEffect(()=>{
+    if(trainerPhase==="ready_for_user")setOverlayFrameId(trainerFrameId);
+  },[trainerPhase,trainerFrameId,fen]);
+  useEffect(()=>{
+    if(!overlaySuppressedReason&&visualLines.length>0&&trainerPhase==="ready_for_user")setOverlayClearedOnPhaseChange(false);
+  },[overlaySuppressedReason,visualLines.length,trainerPhase]);
   useEffect(()=>setBrain(p=>({...p,ratingLabel:rating.label,ratingPool:rating.target})),[rating.label,rating.target]);
-  useEffect(()=>{fenRef.current=fen;setBrainResponse(null);setEnginePreview(null);setVisualModelOutput(null);setVisualModelError(null);setVisualDebugSnapshot(prev=>({...prev,responseSummary:null,responseDebug:null,error:null,durationMs:null,updatedAt:Date.now()}))},[fen]);
+  useEffect(()=>{fenRef.current=fen;setBrainResponse(null);setEnginePreview(null);setVisualModelOutput(null);setVisualModelError(null);setVisualDebugSnapshot(prev=>({...prev,responseSummary:null,responseDebug:null,error:null,durationMs:null,updatedAt:Date.now()}));setOverlayClearedOnPhaseChange(true)},[fen]);
   useEffect(()=>{if(activeTab==="train")positionStartedAtRef.current=Date.now()},[fen,activeTab]);
+  useEffect(()=>{
+    if(activeTab!=="train")return;
+    if(isUserTurn)setTrainerPhase("ready_for_user");
+    else if(trainerPhase==="ready_for_user")setTrainerPhase("opponent_selecting");
+  },[activeTab,isUserTurn,fen]);
+  useEffect(()=>{
+    setTrainerFrameId((id)=>id+1);
+    setOverlayClearedOnPhaseChange(true);
+  },[fen,trainerPhase,trainerView]);
   useEffect(()=>{if(!enabledViews.includes(activeBoardView)&&enabledViews.length)setActiveBoardView(enabledViews[0])},[activeBoardView,enabledViews.join("|")]);
   useEffect(()=>{
     if(!shouldValidateTrainingMove){
@@ -780,7 +864,10 @@ export default function App(){
     if(activeTab!=="train"||!teachingOrchestration?.cue)return;
     const cue=teachingOrchestration.cue;
     const meta=teachingOrchestration.learningMetadata;
-    const eventKey=`${normalizeFen(fen)}|${cue.metadata.moveUci}|${cue.conceptId}|${teachingOrchestration.classification.tier}|${cue.cueMode}`;
+    const metaText=(key:string)=>typeof meta[key]==="string"?meta[key] as string:"";
+    const metaNumber=(key:string)=>typeof meta[key]==="number"?Number(meta[key]):null;
+    const metaBoolean=(key:string)=>typeof meta[key]==="boolean"?Boolean(meta[key]):false;
+    const eventKey=`${normalizeFen(fen)}|${cue.metadata.moveUci}|${cue.conceptId}|${metaText("trainingContextMode")}|${metaText("moveTrust")}|${cue.cueMode}`;
     if(lastTeachingCueEventKeyRef.current===eventKey)return;
     lastTeachingCueEventKeyRef.current=eventKey;
     trackLearningEvent({
@@ -790,23 +877,31 @@ export default function App(){
       expectedMoveSan:cue.metadata.moveSan,
       expectedMoveUci:cue.metadata.moveUci,
       metadata:{
-        cueMode:meta.cueMode,
-        teachingPermissionTier:meta.teachingPermissionTier,
-        primaryFocus:meta.primaryFocus,
-        selectedStoryId:meta.selectedStoryId,
-        selectedStoryKind:meta.selectedStoryKind,
-        storyScoreTotal:meta.storyScoreTotal??null,
-        themesShown:(meta.themesShown??[]).join("|"),
-        answerVisualsShown:meta.answerVisualsShown,
-        contextVisualsShown:meta.contextVisualsShown,
-        planVisualsShown:meta.planVisualsShown,
-        conceptId:meta.conceptId,
-        confidence:Number(meta.confidence.toFixed(3)),
-        compilerVersion:meta.compilerVersion,
-        suppressionReasons:meta.suppressionReasons.join("|"),
-        bookSupportSummary:meta.bookSupportSummary,
-        alternativeClassification:meta.alternativeClassification??null,
-        visualBudgetUsed:JSON.stringify(meta.visualBudgetUsed),
+        cueMode:metaText("cueMode"),
+        trainingContextMode:metaText("trainingContextMode"),
+        moveTrust:metaText("moveTrust"),
+        contextTrust:metaText("contextTrust"),
+        userFacingMode:metaText("userFacingMode"),
+        selectedStoryId:metaText("selectedStoryId"),
+        selectedStoryKind:metaText("selectedStoryKind"),
+        storyScoreTotal:metaNumber("storyScoreTotal"),
+        storySpecificityScore:metaNumber("storySpecificityScore"),
+        concreteGroundingScore:metaNumber("concreteGroundingScore"),
+        genericnessPenalty:metaNumber("genericnessPenalty"),
+        moveSemanticEffects:metaText("moveSemanticEffects"),
+        topAlternativeThemes:metaText("topAlternativeThemes"),
+        answerVisualsShown:metaBoolean("answerVisualsShown"),
+        contextVisualsShown:metaBoolean("contextVisualsShown"),
+        planVisualsShown:metaBoolean("planVisualsShown"),
+        nextPlayAllowed:metaBoolean("nextPlayAllowed"),
+        nextPlaySuppressed:metaBoolean("nextPlaySuppressed"),
+        nextPlaySuppressionReason:metaText("nextPlaySuppressionReason"),
+        visualConceptAlignment:metaText("visualConceptAlignment"),
+        conceptId:metaText("conceptId"),
+        confidence:metaNumber("confidence"),
+        compilerVersion:metaText("compilerVersion"),
+        suppressionReasons:metaText("suppressionReasons"),
+        visualBudgetUsed:metaText("visualBudgetUsed"),
       },
     });
   },[activeTab,teachingOrchestration,fen]);
@@ -846,11 +941,11 @@ export default function App(){
     setVisualDebugSnapshot({requestKey:visualModelRequestKey,requestPayload:payload as Record<string,unknown>,responseSummary:null,responseDebug:null,error:null,durationMs:null,updatedAt:Date.now()});
     recordLocalTelemetry("visual_request",{requestKey:visualModelRequestKey,fen:normalizeFen(requestFen),trainingPhase,trainingMode,bookStatus:payload.bookStatus,hasExpectedMove:Boolean(expectedUserOptions[0]),hasEngine:Boolean(engineLines[0])});
     if(controller.signal.aborted)return;
-    if(requestSeq!==visualRequestSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen))return;
+    if(requestSeq!==visualRequestSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen)){setStaleOverlayIgnored(true);return;}
     void fetch("/api/blundr-visual-model",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload),signal:controller.signal})
       .then(async(res)=>{if(!res.ok)throw new Error(`visual model ${res.status}`);return await res.json() as VisualModelOutput})
-      .then((data)=>{if(requestSeq!==visualRequestSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen))return;const durationMs=Math.round(performance.now()-requestStarted);const suppress=Array.isArray(data.suppress)?data.suppress:[];const responseSummary={source:typeof data.source==="string"?data.source:null,fallback:Boolean(data.fallback),suppress,arrowCount:Array.isArray(data.arrows)?data.arrows.length:0,squareCount:Array.isArray(data.squares)?data.squares.length:0,animation:data.animationPackage?.name??data.animation??null,contextHeadline:data.context?.headline??null};setVisualDebugSnapshot(prev=>({...prev,responseSummary,responseDebug:data.debug&&typeof data.debug==="object"?data.debug as Record<string,unknown>:null,error:null,durationMs,updatedAt:Date.now()}));setVisualModelOutput(data);setVisualModelPending(false);recordLocalTelemetry("visual_response",{requestKey:visualModelRequestKey,fen:normalizeFen(requestFen),durationMs,source:responseSummary.source,fallback:responseSummary.fallback,suppressed:suppress.includes("recommendation_pending"),arrowCount:responseSummary.arrowCount,squareCount:responseSummary.squareCount});if(suppress.includes("recommendation_pending"))recordLocalTelemetry("visual_suppressed",{requestKey:visualModelRequestKey,fen:normalizeFen(requestFen),reason:"recommendation_pending"})})
-      .catch((error)=>{if(error instanceof Error&&error.name==="AbortError")return;if(requestSeq!==visualRequestSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen))return;const message=error instanceof Error?error.message:"Visual model failed";setVisualDebugSnapshot(prev=>({...prev,error:message,responseSummary:null,responseDebug:null,durationMs:Math.round(performance.now()-requestStarted),updatedAt:Date.now()}));setVisualModelError(message);setVisualModelPending(false);recordLocalTelemetry("visual_error",{requestKey:visualModelRequestKey,fen:normalizeFen(requestFen),message})});
+      .then((data)=>{if(requestSeq!==visualRequestSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen)){setStaleOverlayIgnored(true);return;}const durationMs=Math.round(performance.now()-requestStarted);const suppress=Array.isArray(data.suppress)?data.suppress:[];const responseSummary={source:typeof data.source==="string"?data.source:null,fallback:Boolean(data.fallback),suppress,arrowCount:Array.isArray(data.arrows)?data.arrows.length:0,squareCount:Array.isArray(data.squares)?data.squares.length:0,animation:data.animationPackage?.name??data.animation??null,contextHeadline:data.context?.headline??null};setVisualDebugSnapshot(prev=>({...prev,responseSummary,responseDebug:data.debug&&typeof data.debug==="object"?data.debug as Record<string,unknown>:null,error:null,durationMs,updatedAt:Date.now()}));setVisualModelOutput(data);setVisualModelPending(false);recordLocalTelemetry("visual_response",{requestKey:visualModelRequestKey,fen:normalizeFen(requestFen),durationMs,source:responseSummary.source,fallback:responseSummary.fallback,suppressed:suppress.includes("recommendation_pending"),arrowCount:responseSummary.arrowCount,squareCount:responseSummary.squareCount});if(suppress.includes("recommendation_pending"))recordLocalTelemetry("visual_suppressed",{requestKey:visualModelRequestKey,fen:normalizeFen(requestFen),reason:"recommendation_pending"})})
+      .catch((error)=>{if(error instanceof Error&&error.name==="AbortError")return;if(requestSeq!==visualRequestSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen)){setStaleOverlayIgnored(true);return;}const message=error instanceof Error?error.message:"Visual model failed";setVisualDebugSnapshot(prev=>({...prev,error:message,responseSummary:null,responseDebug:null,durationMs:Math.round(performance.now()-requestStarted),updatedAt:Date.now()}));setVisualModelError(message);setVisualModelPending(false);recordLocalTelemetry("visual_error",{requestKey:visualModelRequestKey,fen:normalizeFen(requestFen),message})});
     return()=>controller.abort();
   },[activeTab,isReviewingHistory,visualModelRequestKey]);
   useEffect(()=>{if(activeTab!=="train")return;const fast=deriveFastAnnotation({fen,openingName:repertoire.name,userColor,trainingMode,expectedUserOptions,opponentBookOptions});setAnnotation(fast);setVisualReady(true);setThinkingStep("ready");setPipelineNote(trainingMode==="continuation"&&isUserTurn?"Blundr Brain is checking the continuation. No fallback move will be shown.":"Teaching cue ready.");setBrain(p=>({...p,source:"rule visual",gpt:"ready",note:"Manual reveal/debug only"}))},[fen,activeTab,selectedRepertoireId,trainingMode,ratingFilter]);
@@ -862,7 +957,7 @@ export default function App(){
     if(moveQuality?.status==="unavailable"){setPipelineNote("Move not verified. Blundr will stay quiet instead of guessing.");}
   },[activeTab,shouldValidateTrainingMove,moveQualityPending,moveQuality?.status]);
   useEffect(()=>{if(activeTab==="train"&&trainingMode==="restricted"&&isUserTurn&&expectedUserOptions.length===0&&!bookComplete&&!game.isGameOver()){setBookComplete(true);setFeedback("Book complete. Continue against the bot from this position or restart the opening.");setBrain(p=>({...p,book:"complete",source:"book complete",gpt:p.gpt}))}},[activeTab,trainingMode,isUserTurn,expectedUserOptions.length,bookComplete,fen]);
-  useEffect(()=>{if(activeTab!=="train"||bookComplete||isReviewingHistory)return;if(game.isGameOver()){setFeedback((endingInfo?.title??"Game over")+". Restart the opening to train again.");return}if(!isUserTurn){const timer=window.setTimeout(()=>void playOpponentMove(),900);return()=>window.clearTimeout(timer)}},[activeTab,fen,bookComplete,isUserTurn,isReviewingHistory,selectedRepertoireId,trainingMode,ratingFilter]);
+  useEffect(()=>{if(activeTab!=="train"||bookComplete||isReviewingHistory)return;if(game.isGameOver()){setFeedback((endingInfo?.title??"Game over")+". Restart the opening to train again.");return}if(!isUserTurn){setTrainerPhase("opponent_selecting");const timer=window.setTimeout(()=>void playOpponentMove(),900);return()=>window.clearTimeout(timer)}},[activeTab,fen,bookComplete,isUserTurn,isReviewingHistory,selectedRepertoireId,trainingMode,ratingFilter]);
   async function loadExplorer(positionFen:string){const cacheKey=`${normalizeFen(positionFen)}|${ratingFilter}|${speedFilter}`;if(explorerCache.current[cacheKey]){const parsed=parseExplorerMoves(explorerCache.current[cacheKey]);setExplorerMoves(parsed);setBrain(p=>({...p,lichess:"cached"}));return parsed}setBrain(p=>({...p,lichess:"loading"}));const start=performance.now();try{const params=new URLSearchParams({fen:positionFen,source:"lichess",moves:"25",ratings:ratingFilter,speeds:speedFilter});const res=await fetch(`/api/explorer?${params.toString()}`);const payload=await res.json();explorerCache.current[cacheKey]=payload;const parsed=parseExplorerMoves(payload);setExplorerMoves(parsed);setBrain(p=>({...p,lichess:payload.fallback?"fallback":"active",latency:Math.round(performance.now()-start),note:payload.reason??`${parsed.length} Lichess moves`}));return parsed}catch(e){setBrain(p=>({...p,lichess:"error",note:e instanceof Error?e.message:"Explorer failed"}));return[]}}
   async function runBrain(eventType:string,extra:Record<string,any>={}){
     if(activeTab!=="train")return null;
@@ -877,7 +972,7 @@ export default function App(){
     setThinkingStep("engine");
     setPipelineNote("Manual analysis started.");
     const browserEngine=extra.skipClientEngine?null:await runBrowserStockfish(requestFen,rating.skill,eventType==="reveal"?1000:700);
-    if(requestSeq!==brainSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen))return null;
+    if(requestSeq!==brainSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen)){setStaleOverlayIgnored(true);return null;}
     const clientEngine=browserEngine?{source:browserEngine.source,pvs:browserEngine.pvs,depth:browserEngine.depth,timeMs:browserEngine.timeMs}:undefined;
     if(browserEngine?.pvs?.length){
       setEnginePreview({fen:requestFen,pvs:browserEngine.pvs,source:browserEngine.source});
@@ -896,7 +991,7 @@ export default function App(){
     try{
       const res=await fetch("/api/brain",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload),signal:controller.signal});
       const data=await res.json() as BrainResponse;
-      if(requestSeq!==brainSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen))return null;
+      if(requestSeq!==brainSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen)){setStaleOverlayIgnored(true);return null;}
       setThinkingStep("gpt-receive");
       setPipelineNote(data.annotation?.fallback?"Manual Brain response received (fallback).":"Manual Brain response received.");
       setBrainResponse(data);
@@ -914,7 +1009,7 @@ export default function App(){
       return data;
     }catch(e){
       if(e instanceof Error&&e.name==="AbortError")return null;
-      if(requestSeq!==brainSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen))return null;
+      if(requestSeq!==brainSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen)){setStaleOverlayIgnored(true);return null;}
       setVisualReady(true);
       setThinkingStep("error");
       setPipelineNote(e instanceof Error?e.message:"Brain endpoint failed");
@@ -923,15 +1018,30 @@ export default function App(){
     }
   }
   function resetHistory(startFen:string){setPositionHistory([startFen]);setHistoryIndex(0)}
-  function selectRepertoire(id:string){const startFen=new Chess().fen();setSelectedRepertoireId(id);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setMoveHistory([]);setShowAnswer(false);setTrainingMode("restricted");setBookComplete(false);setOpponentCue(null);setAnnotation(blankAnnotation());setEnginePreview(null);setActiveBoardView("plan");setActiveTab("train")}
-  function resetBoard(){const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setMoveHistory([]);setShowAnswer(false);setTrainingMode("restricted");setBookComplete(false);setOpponentCue(null);setAnnotation(blankAnnotation());setEnginePreview(null);setActiveTab("train")}
+  function selectRepertoire(id:string){const startFen=new Chess().fen();setSelectedRepertoireId(id);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setMoveHistory([]);setShowAnswer(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);setOpponentCue(null);setOpponentVariationDebug(null);setAnnotation(blankAnnotation());setEnginePreview(null);setActiveBoardView("plan");setActiveTab("train")}
+  function resetBoard(){const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setMoveHistory([]);setShowAnswer(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);setOpponentCue(null);setOpponentVariationDebug(null);setAnnotation(blankAnnotation());setEnginePreview(null);setActiveTab("train")}
   function recordPosition(nextFen:string){const nextIndex=historyIndex+1;setPositionHistory(prev=>[...prev.slice(0,nextIndex),nextFen]);setHistoryIndex(nextIndex)}
-  function jumpHistory(direction:-1|1){const next=Math.max(0,Math.min(positionHistory.length-1,historyIndex+direction));if(next===historyIndex)return;setHistoryIndex(next);setFen(positionHistory[next]);setSelectedSquare(null);setOpponentCue(null);setBookComplete(false);setFeedback(next===positionHistory.length-1?"Returned to the live position.":`Reviewing previous position ${next} of ${positionHistory.length-1}. Use the arrows to return to live play.`)}
+  function jumpHistory(direction:-1|1){const next=Math.max(0,Math.min(positionHistory.length-1,historyIndex+direction));if(next===historyIndex)return;setHistoryIndex(next);setFen(positionHistory[next]);setSelectedSquare(null);setOpponentCue(null);setOpponentVariationDebug(null);setBookComplete(false);setFeedback(next===positionHistory.length-1?"Returned to the live position.":`Reviewing previous position ${next} of ${positionHistory.length-1}. Use the arrows to return to live play.`)}
   async function playOpponentMove(forceContinuation=false){
     const current=new Chess(fen);
     const mode:TrainingMode=forceContinuation?"continuation":trainingMode;
     const currentOptions=tree[normalizeFen(current.fen())]??[];
     const currentOpponentBookOptions=currentOptions.filter(m=>m.color===opponentColor);
+    const positionKey=normalizeFen(current.fen());
+    const variationContext={openingId:repertoire.id,lineId:selectedRepertoireId,trainingMode:mode,positionKey};
+    const memory=loadOpponentVariationMemory();
+    let variationDebug:OpponentVariationDebug={
+      opponentVariationApplied:false,
+      opponentVariationReason:"not_applied",
+      recentOpponentBranchKeys:[],
+      selectedOpponentBranchKey:undefined,
+      candidateOpponentBranches:[],
+      blockedThirdRepeatBranches:[],
+      fallbackUsed:false,
+    };
+    setTrainerPhase("opponent_selecting");
+    setOverlayClearedOnPhaseChange(true);
+    setOverlayFrameId(trainerFrameId);
     setBrain(p=>({...p,source:"opponent thinking",book:mode==="restricted"?(currentOpponentBookOptions.length?"active":"complete"):"complete",lichess:"loading"}));
     await new Promise(r=>setTimeout(r,700));
     let chosen:{san:string;uci:string;fen:string}|null=null;
@@ -939,18 +1049,91 @@ export default function App(){
     if(mode==="restricted"){
       if(!currentOpponentBookOptions.length){setBookComplete(true);setFeedback("Book complete. Train this branch again or continue vs bot.");setBrain(p=>({...p,book:"complete",source:"book complete",lichess:"ready"}));return}
       const explorer=await loadExplorer(current.fen());
-      const valid=currentOpponentBookOptions.map(book=>{const match=explorer.find(m=>m.uci===book.uci);return{...book,weight:match?.total??1,pct:match?.pct??0}});
-      const weighted=pickWeighted(valid);
+      const valid=currentOpponentBookOptions.map(book=>{const match=explorer.find(m=>m.uci===book.uci);return{...book,weight:match?.total??1,pct:match?.pct??0,branchKey:`${positionKey}::${book.uci}`}});
+      const decision=selectOpponentCandidateWithVariation({
+        context:variationContext,
+        memory,
+        candidates:valid.map((candidate)=>({
+          uci:candidate.uci,
+          san:candidate.san,
+          branchKey:candidate.branchKey,
+          weight:candidate.weight,
+          legal:true,
+          supported:true,
+          engineSafe:true,
+          severeBlunder:false,
+          source:"opening_branch",
+          pct:candidate.pct,
+        })),
+      });
+      const weighted=decision?valid.find((candidate)=>candidate.branchKey===decision.selected.branchKey)??valid[0]:pickWeighted(valid);
+      variationDebug=decision?{...decision}:variationDebug;
       chosen={san:weighted.san,uci:weighted.uci,fen:weighted.resultingFen};
       source=weighted.pct?`Lichess-weighted opening branch (${weighted.pct}%)`:"Saved opening branch";
     }else{
       const explorer=await loadExplorer(current.fen());
-      const playable=explorer.map(m=>{const a=applyUci(current.fen(),m.uci);return a?{...a,weight:m.total,pct:m.pct}:null}).filter(Boolean) as Array<{san:string;uci:string;fen:string;weight:number;pct:number}>;
-      if(playable.length){const pick=pickWeighted(playable);chosen=pick;source=`Lichess continuation (${pick.pct}%)`}
+      const playable=explorer.map(m=>{const a=applyUci(current.fen(),m.uci);return a?{...a,weight:m.total,pct:m.pct,branchKey:`${positionKey}::${m.uci}`}:null}).filter(Boolean) as Array<{san:string;uci:string;fen:string;weight:number;pct:number;branchKey:string}>;
+      if(playable.length){
+        const decision=selectOpponentCandidateWithVariation({
+          context:variationContext,
+          memory,
+          candidates:playable.map((candidate)=>({
+            uci:candidate.uci,
+            san:candidate.san,
+            branchKey:candidate.branchKey,
+            weight:candidate.weight,
+            legal:true,
+            supported:true,
+            engineSafe:true,
+            severeBlunder:false,
+            source:"lichess_continuation",
+            pct:candidate.pct,
+          })),
+        });
+        const pick=decision?playable.find((candidate)=>candidate.branchKey===decision.selected.branchKey)??playable[0]:pickWeighted(playable);
+        variationDebug=decision?{...decision}:variationDebug;
+        chosen=pick;
+        source=`Lichess continuation (${pick.pct}%)`;
+      }
       else{const data=await runBrain("bot_select",{skipGpt:true});const top=data?.engine?.pvs?.[0];const a=top?applyUci(current.fen(),top.uci):null;if(a){chosen=a;source=`Engine continuation (${rating.target})`}}
     }
-    if(!chosen){const legal=current.moves({verbose:true}) as any[];if(!legal.length)return;const move=legal[0];current.move({from:move.from,to:move.to,promotion:move.promotion??"q"});chosen={san:move.san,uci:moveToUci(move),fen:current.fen()};source="Emergency legal fallback"}
-    setFen(chosen.fen);recordPosition(chosen.fen);setLastMove(chosen.uci);setLastMoveSan(chosen.san);setMoveHistory(prev=>[...prev,chosen.san]);setSelectedSquare(null);setShowAnswer(false);setOpponentCue(boardSettings.showOpponentCue?{expiresAt:Date.now()+2500,title:`Opponent: ${chosen.san}`,message:"Brief opponent cue. Your selected user-side view stays visible after this fades.",lines:[{from:chosen.uci.slice(0,2),to:chosen.uci.slice(2,4),kind:"opponent",label:chosen.san}],cues:[{square:chosen.uci.slice(2,4),kind:"opponent"}]}:null);setFeedback(`Opponent played ${chosen.san}. Source: ${source}.`);setBrain(p=>({...p,source,lichess:source.includes("Lichess")?"active":p.lichess}))
+    if(!chosen){const legal=current.moves({verbose:true}) as any[];if(!legal.length)return;const move=legal[0];current.move({from:move.from,to:move.to,promotion:move.promotion??"q"});chosen={san:move.san,uci:moveToUci(move),fen:current.fen()};source="Emergency legal fallback";variationDebug.fallbackUsed=true;variationDebug.opponentVariationReason="no_supported_alternative"}
+    const selectedBranchKey=`${positionKey}::${chosen.uci}`;
+    variationDebug.selectedOpponentBranchKey=selectedBranchKey;
+    if(!variationDebug.opponentVariationReason||variationDebug.opponentVariationReason==="not_applied"){
+      const recent=variationDebug.recentOpponentBranchKeys;
+      if(recent.length>=2&&recent[0]===selectedBranchKey&&recent[1]===selectedBranchKey)variationDebug.opponentVariationReason="no_supported_alternative";
+      else if(recent[0]===selectedBranchKey)variationDebug.opponentVariationReason="allowed_repeat_not_third_consecutive";
+      else variationDebug.opponentVariationReason="normal_weighted_selection";
+    }
+    const variationNote=
+      variationDebug.opponentVariationApplied
+        ? `Variation: avoided third repeat (${variationDebug.blockedThirdRepeatBranches.join(", ")}).`
+        : variationDebug.opponentVariationReason==="allowed_repeat_not_third_consecutive"
+          ? "Variation: allowed repeat, not third consecutive."
+          : variationDebug.opponentVariationReason==="no_supported_alternative"
+            ? "Variation: no supported alternative."
+            : "Variation: normal weighted selection.";
+    recordOpponentChoice({
+      openingId:repertoire.id,
+      lineId:selectedRepertoireId,
+      trainingMode:mode,
+      positionKey,
+      opponentMoveUci:chosen.uci,
+      opponentMoveSan:chosen.san,
+      branchKey:selectedBranchKey,
+      source,
+      playedAt:Date.now(),
+    });
+    setOpponentVariationDebug(variationDebug);
+    setTrainerPhase("opponent_animating");
+    setOverlayClearedOnPhaseChange(true);
+    setOverlayFrameId(trainerFrameId);
+    setFen(chosen.fen);recordPosition(chosen.fen);setLastMove(chosen.uci);setLastMoveSan(chosen.san);setMoveHistory(prev=>[...prev,chosen.san]);setSelectedSquare(null);setShowAnswer(false);setOpponentCue(boardSettings.showOpponentCue?{expiresAt:Date.now()+2500,title:`Opponent: ${chosen.san}`,message:"Brief opponent cue. Your selected user-side view stays visible after this fades.",lines:[{from:chosen.uci.slice(0,2),to:chosen.uci.slice(2,4),kind:"opponent",label:chosen.san}],cues:[{square:chosen.uci.slice(2,4),kind:"opponent"}],committed:true,fen:normalizeFen(chosen.fen)}:null);setFeedback(`Opponent played ${chosen.san}. Source: ${source}. ${variationNote}`);setBrain(p=>({...p,source,lichess:source.includes("Lichess")?"active":p.lichess,note:variationNote}))
+    window.setTimeout(()=>{
+      const next=new Chess(chosen.fen);
+      setTrainerPhase(next.turn()===userColor?"ready_for_user":"opponent_selecting");
+    },160);
   }
   function handleTrainerViewChange(nextTrainerView:TrainerView){
     if(nextTrainerView===trainerView)return;
@@ -971,8 +1154,18 @@ export default function App(){
     });
     void runBrain("reveal");
   }
-  function continueVsBot(){setTrainingMode("continuation");setBookComplete(false);setFeedback(`Continuation mode active. Legal moves are accepted and evaluated at ${rating.target}.`);setBrain(p=>({...p,source:"continuation mode",book:"complete"}));if(!isUserTurn)setTimeout(()=>void playOpponentMove(true),350)}
-  function handleSquareTap(square:string){if(bookComplete)return;if(endingInfo){setFeedback("Game over. Restart the opening to continue.");return}if(isReviewingHistory){setFeedback("You are reviewing an older position. Use the forward arrow to return to the live board before moving.");return}if(!isUserTurn){setFeedback("Opponent is thinking. Wait for your turn.");return}if(!selectedSquare){if(isOwnPiece(game,square,userColor)){setSelectedSquare(square);setFeedback(`Selected ${square}. Legal destinations are highlighted.`)}else setFeedback("Tap one of your pieces first.");return}if(square===selectedSquare){setSelectedSquare(null);setFeedback("Selection cleared.");return}if(isOwnPiece(game,square,userColor)){setSelectedSquare(square);setFeedback(`Selected ${square}. Legal destinations are highlighted.`);return}void attemptMove(selectedSquare,square)}
+  function continueVsBot(){setTrainingMode("continuation");setTrainerPhase(isUserTurn?"ready_for_user":"opponent_selecting");setBookComplete(false);setFeedback(`Continuation mode active. Legal moves are accepted and evaluated at ${rating.target}.`);setBrain(p=>({...p,source:"continuation mode",book:"complete"}));if(!isUserTurn)setTimeout(()=>void playOpponentMove(true),350)}
+  function handleSquareTap(square:string){
+    if(bookComplete)return;
+    visualRecipePlayback.consumeSkipOnInteraction();
+    if(endingInfo){setFeedback("Game over. Restart the opening to continue.");return}
+    if(isReviewingHistory){setFeedback("You are reviewing an older position. Use the forward arrow to return to the live board before moving.");return}
+    if(!isUserTurn){setFeedback("Opponent is thinking. Wait for your turn.");return}
+    if(!selectedSquare){if(isOwnPiece(game,square,userColor)){setSelectedSquare(square);setFeedback(`Selected ${square}. Legal destinations are highlighted.`)}else setFeedback("Tap one of your pieces first.");return}
+    if(square===selectedSquare){setSelectedSquare(null);setFeedback("Selection cleared.");return}
+    if(isOwnPiece(game,square,userColor)){setSelectedSquare(square);setFeedback(`Selected ${square}. Legal destinations are highlighted.`);return}
+    void attemptMove(selectedSquare,square)
+  }
   function logMistake(positionFen:string,expected:string,played:string){const k=normalizeFen(positionFen);setProgress(prev=>{const old=prev.mistakes[k];return{...prev,attempts:prev.attempts+1,incorrect:prev.incorrect+1,streak:0,mistakes:{...prev.mistakes,[k]:{fen:positionFen,expectedMove:expected,playedMove:played,count:old?old.count+1:1,opening:repertoire.name,repertoireId:repertoire.id}}}})}
   async function attemptMove(from:string,to:string){
     const current=new Chess(fen);
@@ -1015,12 +1208,16 @@ export default function App(){
         return;
       }
     }
+    setTrainerPhase("transitioning");
+    setOverlayClearedOnPhaseChange(true);
+    setOverlayFrameId(trainerFrameId);
     setFen(current.fen());
     recordPosition(current.fen());
     setLastMove(playedUci);
     setLastMoveSan(legal.san);
     setMoveHistory(prev=>[...prev,legal.san]);
     setOpponentCue(null);
+    setOpponentVariationDebug(null);
     setShowAnswer(false);
     setFeedback(trainingMode==="restricted"?`Correct: ${legal.san}.`:`Played ${legal.san}. Move will be evaluated.`);
     setProgress(prev=>{
@@ -1044,7 +1241,7 @@ export default function App(){
     });
     setReviewingFen(null);
   }
-  function practiceMistake(m:Mistake){const rep=repertoires.find(r=>r.id===m.repertoireId);if(rep)setSelectedRepertoireId(rep.id);setFen(m.fen);resetHistory(m.fen);setReviewingFen(normalizeFen(m.fen));setFeedback("Review this opening position. Play the expected move.");setMoveHistory([]);setShowAnswer(false);setTrainingMode("restricted");setBookComplete(false);setActiveTab("train")}
+  function practiceMistake(m:Mistake){const rep=repertoires.find(r=>r.id===m.repertoireId);if(rep)setSelectedRepertoireId(rep.id);setFen(m.fen);resetHistory(m.fen);setReviewingFen(normalizeFen(m.fen));setFeedback("Review this opening position. Play the expected move.");setMoveHistory([]);setShowAnswer(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);setOpponentVariationDebug(null);setActiveTab("train")}
   function createCustomRepertoire(){const moves=newLineText.replace(/\d+\./g," ").replace(/\s+/g," ").trim().split(" ").filter(Boolean);if(!moves.length)return;const test=new Chess();for(const move of moves){try{if(!test.move(move)){setFeedback(`Could not parse move: ${move}`);return}}catch{setFeedback(`Could not parse move: ${move}`);return}}const rep:Repertoire={id:`custom-${Date.now()}`,name:newRepName.trim()||"My Custom Repertoire",color:newRepColor,description:"Custom line saved on this device.",lines:[moves],custom:true};setCustomRepertoires(prev=>[...prev,rep]);setSelectedRepertoireId(rep.id);setShowAddLine(false);const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setTrainingMode("restricted");setBookComplete(false);setFeedback("Custom repertoire saved. Restricted training is active.");setActiveTab("train")}
   const squareStyles:Record<string,CSSProperties>={};
   if(lastMove&&lastMove.length>=4){
@@ -1052,7 +1249,7 @@ export default function App(){
     squareStyles[lastMove.slice(2,4)]={boxShadow:"inset 0 0 0 999px rgba(255,255,255,.16), inset 0 0 24px rgba(255,255,255,.62)"};
   }
   if(activeBoard){
-    const visualSquares=hidePreMoveHints?[]:(teachingOrchestration?orchestrationVisualSquares:visualModelOutput?(activeVisualModelOutput?(activeVisualModelOutput.squares??[]):[]):currentView.cues.slice(0,3).map(c=>({square:c.square,kind:c.kind,role:c.kind})));
+    const visualSquares=overlaySuppressedReason?[]:(teachingOrchestration?visualRecipePlayback.squares.filter((sq)=>isValidSquare(sq.square)).slice(0,4):visualModelOutput?(activeVisualModelOutput&&trainerPhase==="ready_for_user"&&isUserTurn&&trainerView==="assisted"?(activeVisualModelOutput.squares??[]):[]):currentView.cues.slice(0,3).map(c=>({square:c.square,kind:c.kind,role:c.kind})));
     for(const cue of visualSquares.slice(0,4)){
       if(!isValidSquare(cue.square))continue;
       const role=cue.role??cue.kind;
@@ -1060,7 +1257,7 @@ export default function App(){
       const shadow=role==="destination"?"inset 0 0 0 3px rgba(94,126,255,.82), inset 0 0 26px rgba(94,126,255,.48)":role==="king_safety"?"inset 0 0 0 3px rgba(22,163,74,.62), inset 0 0 24px rgba(22,163,74,.42)":role==="weakness"||role==="danger"?"inset 0 0 0 3px rgba(239,68,68,.58), inset 0 0 24px rgba(239,68,68,.34)":"inset 0 0 22px rgba(255,210,70,.58)";
       squareStyles[cue.square]={...squareStyles[cue.square],background:`radial-gradient(circle, ${bg} 0%, ${bg} 38%, transparent 72%)`,boxShadow:shadow};
     }
-    if(opponentCue&&boardSettings.showOpponentCue)for(const cue of opponentCue.cues){
+    if(opponentCue&&boardSettings.showOpponentCue&&shouldRenderOpponentLastMoveHighlight({committed:opponentCue.committed,cueFen:opponentCue.fen,boardFen:normalizeFen(fen)}))for(const cue of opponentCue.cues){
       squareStyles[cue.square]={...squareStyles[cue.square],background:"radial-gradient(circle, rgba(184,132,255,.28) 0%, rgba(184,132,255,.18) 38%, transparent 72%)"};
     }
   }
@@ -1112,14 +1309,19 @@ export default function App(){
           <p className="mt-2 text-[11px] font-semibold text-stone-500">{trainerView==="assisted"?"Shows the visual pattern cue before the move.":"Hides pre-move hints for independent recall."}</p>
         </div>
         {activeBoard&&enabledViews.length>0&&<div className="mb-3 grid gap-2" style={{gridTemplateColumns:`repeat(${enabledViews.length}, minmax(0,1fr))`}}>{enabledViews.map(v=><button key={v} onClick={()=>setActiveBoardView(v)} className={classNames("rounded-full px-4 py-2 text-sm font-black capitalize",safeBoardView===v?"bg-green-700 text-white shadow-sm":"bg-white text-stone-500 ring-1 ring-stone-200")}>{v}</button>)}</div>}
-        <TapChessboard game={game} orientation={repertoire.color} selectedSquare={selectedSquare} squareStyles={squareStyles} lines={activeBoard&&(visualReady||visualModelOutput)?visualLines:[]} transientLines={activeBoard&&opponentCue&&boardSettings.showOpponentCue?opponentCue.lines:[]} onSquareTap={handleSquareTap} whitePct={whitePct} evalText={evalText} settings={boardSettings} captured={captured} userColor={userColor} animationName={visualAnimationName}/>
+        <TapChessboard game={game} orientation={repertoire.color} selectedSquare={selectedSquare} squareStyles={squareStyles} lines={activeBoard&&(visualReady||visualModelOutput)?visualLines:[]} transientLines={activeBoard&&opponentCue&&boardSettings.showOpponentCue&&shouldRenderOpponentLastMoveHighlight({committed:opponentCue.committed,cueFen:opponentCue.fen,boardFen:normalizeFen(fen)})?opponentCue.lines:[]} onSquareTap={handleSquareTap} whitePct={whitePct} evalText={evalText} settings={boardSettings} captured={captured} userColor={userColor} animationName={visualAnimationName}/>
         <HistoryControls index={historyIndex} total={positionHistory.length} onBack={()=>jumpHistory(-1)} onForward={()=>jumpHistory(1)}/>
       </div>
       {bookComplete&&<div className="rounded-3xl border border-green-200 bg-green-50 p-4 shadow-sm"><h2 className="text-lg font-black text-green-900">Book complete</h2><p className="mt-2 text-sm leading-6 text-green-800">You finished this opening branch. Train it again, or continue against the bot from this position.</p><div className="mt-4 grid grid-cols-2 gap-3"><button onClick={resetBoard} className="rounded-2xl bg-white px-4 py-3 font-black text-green-800 shadow-sm">Train Again</button><button onClick={continueVsBot} className="rounded-2xl bg-green-700 px-4 py-3 font-black text-white shadow-sm">Continue vs Bot</button></div></div>}
       {endingInfo&&<GameEndCard title={endingInfo.title} message={endingInfo.message} onRestart={resetBoard}/>} 
       <button onClick={handleReveal} className="w-full rounded-3xl bg-stone-950 px-4 py-4 text-center font-black text-white shadow-lg"><span className="flex items-center justify-center gap-2"><Eye size={18}/> Reveal Next Move</span></button>
       {showAnswer&&<div className="rounded-3xl bg-stone-900 p-4 text-white"><div className="text-sm text-stone-300">{isMoveQualityVerified(moveQuality)?"Verified move":"Saved line move"}</div><div className="mt-2 text-2xl font-black">{expectedUserOptions.length?expectedUserOptions.map(m=>m.san).join(" / "):engineLines[0]?.san??"Analysis pending"}</div><p className="mt-2 text-xs leading-5 text-stone-400">Source: {trainingMode==="restricted"?(isMoveQualityVerified(moveQuality)?"Blundr Brain Validated":"Saved repertoire line"):trainingMode==="continuation"&&engineLines[0]?"Manual analysis move":trainingMode==="continuation"?"Manual analysis pending":"Saved line move"}</p></div>}
-      {activeBoard&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 shadow-sm"><div className="mb-2 flex items-center justify-between gap-3"><div><div className="text-xs font-black uppercase tracking-wide text-green-700">{patternCueBadgeLabel}</div><h2 className="text-lg font-black">{patternCue.title}</h2></div><button onClick={()=>setShowDetails(!showDetails)} className="rounded-full bg-stone-100 px-3 py-2 text-xs font-black text-stone-600">{showDetails?"Hide":"Show more"}</button></div><p className="text-sm leading-6 text-stone-700">{patternCue.snippet}</p>{showValidatedBadge&&<p className="mt-2 inline-flex rounded-full bg-green-50 px-3 py-1 text-[11px] font-black text-green-700">Blundr Brain Validated</p>}{opponentCue&&boardSettings.showOpponentCue&&<p className="mt-2 rounded-2xl bg-purple-50 p-3 text-sm leading-6 text-purple-800"><span className="font-black">Opponent cue: </span>{opponentCue.message}</p>}{patternCue.next&&(trainerView==="assisted"||showAnswer)&&<p className="mt-2 rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600"><span className="font-black text-stone-900">Next: </span>{patternCue.next}</p>}{visualModelError&&<p className="mt-2 rounded-2xl bg-amber-50 p-2 text-[11px] font-bold leading-5 text-amber-700">Visual cue unavailable: {visualModelError}</p>}<MoveImpact impact={moveImpact}/>{showDetails&&<div className="mt-3 space-y-2"><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Headline: {patternCue.title}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual: {activeVisualModelOutput?.animationPackage?.name??annotation.visualExplanation}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Pipeline: rule-only visual → GPT manual/debug only</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Move Quality Gate</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Version: {MOVE_QUALITY_GATE_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Required: {shouldValidateTrainingMove?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Status: {moveQualityPending?"pending":moveQuality?.status??"idle"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected UCI: {moveQuality?.expectedMovesUci?.join(", ")||expectedUserUcis.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected SAN: {expectedUserSans.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Stockfish top two: {moveQuality?.topMoves?.map((line)=>line.uci).join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Reason: {moveQuality?.reason??"No validation result."}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Checked: {moveQuality?.checkedAt?new Date(moveQuality.checkedAt).toLocaleTimeString():"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Hints hidden: {hideUnverifiedTrainingHints?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Teaching Cue Compiler</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler version: {TEACHING_CUE_COMPILER_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler concept: {teachingOrchestration?.cue.conceptId??"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler confidence: {teachingOrchestration?Number((teachingOrchestration.cue.debug.confidence??0).toFixed(3)):"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler reason: {teachingOrchestration?.cue.debug.selectedReason??"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler delta: {teachingOrchestration?.cue.debug.deltaSummary?.join(" | ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler scores: {teachingOrchestration?.cue.debug.detectorScores?.map((s)=>`${s.conceptId}:${s.finalScore.toFixed(2)}`).slice(0,6).join(", ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Orchestrator tier: {teachingOrchestration?.classification.tier??"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Selected story: {teachingOrchestration?.selectedStory?.kind??"n/a"} ({teachingOrchestration?.selectedStory?.score.total?.toFixed?.(2)??"n/a"})</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Rejected stories: {teachingOrchestration?.debug.rejectedStories?.map((r)=>`${r.kind}:${r.total.toFixed(2)}`).join(", ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual budget: {teachingOrchestration?JSON.stringify(teachingOrchestration.debug.visualBudget):"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Suppressed visuals: {teachingOrchestration?.debug.suppressionReasons?.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Learning events are being stored locally for future progress and Review features.</div>{annotation.reason&&<div className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">Fallback reason: {annotation.reason}</div>}</div>}</div>}
+      {activeBoard&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 shadow-sm"><div className="mb-2 flex items-center justify-between gap-3"><div><div className="text-xs font-black uppercase tracking-wide text-green-700">{patternCueBadgeLabel}</div><h2 className="text-lg font-black">{patternCue.title}</h2></div><button onClick={()=>setShowDetails(!showDetails)} className="rounded-full bg-stone-100 px-3 py-2 text-xs font-black text-stone-600">{showDetails?"Hide":"Show more"}</button></div><p className="text-sm leading-6 text-stone-700">{patternCue.snippet}</p>{showValidatedBadge&&<p className="mt-2 inline-flex rounded-full bg-green-50 px-3 py-1 text-[11px] font-black text-green-700">Blundr Brain Validated</p>}{opponentCue&&boardSettings.showOpponentCue&&shouldRenderOpponentLastMoveHighlight({committed:opponentCue.committed,cueFen:opponentCue.fen,boardFen:normalizeFen(fen)})&&<p className="mt-2 rounded-2xl bg-purple-50 p-3 text-sm leading-6 text-purple-800"><span className="font-black">Opponent cue: </span>{opponentCue.message}</p>}{patternCue.next&&(trainerView==="assisted"||showAnswer)&&<p className="mt-2 rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600"><span className="font-black text-stone-900">Next: </span>{patternCue.next}</p>}{visualModelError&&<p className="mt-2 rounded-2xl bg-amber-50 p-2 text-[11px] font-bold leading-5 text-amber-700">Visual cue unavailable: {visualModelError}</p>}<MoveImpact impact={moveImpact}/>{showDetails&&<div className="mt-3 space-y-2"><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Headline: {patternCue.title}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual: {activeVisualModelOutput?.animationPackage?.name??annotation.visualExplanation}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Pipeline: rule-only visual → GPT manual/debug only</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Move Quality Gate</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Version: {MOVE_QUALITY_GATE_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Required: {shouldValidateTrainingMove?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Status: {moveQualityPending?"pending":moveQuality?.status??"idle"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected UCI: {moveQuality?.expectedMovesUci?.join(", ")||expectedUserUcis.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected SAN: {expectedUserSans.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Stockfish top two: {moveQuality?.topMoves?.map((line)=>line.uci).join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Reason: {moveQuality?.reason??"No validation result."}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Checked: {moveQuality?.checkedAt?new Date(moveQuality.checkedAt).toLocaleTimeString():"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Hints hidden: {hideUnverifiedTrainingHints?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Teaching Cue Compiler</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler version: {TEACHING_CUE_COMPILER_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler concept: {teachingOrchestration?.cue.conceptId??"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler confidence: {teachingOrchestration?Number((teachingOrchestration.cue.debug.confidence??0).toFixed(3)):"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler reason: {teachingOrchestration?.cue.debug.selectedReason??"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler delta: {teachingOrchestration?.cue.debug.deltaSummary?.join(" | ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler scores: {teachingOrchestration?.cue.debug.detectorScores?.map((s)=>`${s.conceptId}:${s.finalScore.toFixed(2)}`).slice(0,6).join(", ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Orchestrator tier: {teachingOrchestration?.classification.tier??"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Selected story: {teachingOrchestration?.selectedStory?.kind??"n/a"} ({teachingOrchestration?.selectedStory?.score.total?.toFixed?.(2)??"n/a"})</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Rejected stories: {teachingOrchestration?.debug.rejectedStories?.map((r)=>`${r.kind}:${r.total.toFixed(2)}`).join(", ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual budget: {teachingOrchestration?JSON.stringify(teachingOrchestration.debug.visualBudget):"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Suppressed visuals: {teachingOrchestration?.debug.suppressionReasons?.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Learning events are being stored locally for future progress and Review features.</div>{annotation.reason&&<div className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">Fallback reason: {annotation.reason}</div>}</div>}</div>}
+      {showDetails&&teachingOrchestration&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Training Context Engine</div><div className="mt-2">Mode: {teachingOrchestration.mode}</div><div>Move trust / context trust: {teachingOrchestration.moveTrust} / {teachingOrchestration.contextTrust}</div><div>Saved move not validated: {teachingOrchestration.debug.savedMoveNotValidated?"yes":"no"}</div><div>Next suppressed: {teachingOrchestration.debug.nextPlaySuppressionReason??"no"}</div><div>Move semantic effects: {teachingOrchestration.debug.moveSemanticSummary.join(" | ")||"n/a"}</div><div>Top move comparisons: {teachingOrchestration.debug.topMoveComparisons.map((c)=>`${c.relationship}:${c.alternativeTheme}`).join(", ")||"n/a"}</div><div>Selected grounding: {teachingOrchestration.debug.selectedStoryGrounding?JSON.stringify(teachingOrchestration.debug.selectedStoryGrounding):"n/a"}</div><div>Visual alignment: {teachingOrchestration.debug.visualConceptAlignment}</div></div>}
+      {showDetails&&visualRecipe&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Visual Recipe</div><div className="mt-2">visualRecipeId: {visualRecipe.visualRecipeId}</div><div>recipeSchemaVersion: {visualRecipe.recipeSchemaVersion}</div><div>patternId: {visualRecipe.patternId}</div><div>recipeMode: {visualRecipe.mode}</div><div>recipeConceptId: {visualRecipe.conceptId}</div><div>recipeFrameId: {visualRecipe.frameId??"n/a"}</div><div>recipeFen: {visualRecipe.fen}</div><div>recipeBeatCount: {visualRecipe.beats.length}</div><div>recipePrimitiveCount: {visualRecipe.beats.reduce((sum,beat)=>sum+beat.primitives.length,0)}</div><div>recipePrimitives: {visualRecipe.beats.flatMap((beat)=>beat.primitives.map((primitive)=>`${primitive.type}:${primitive.id}`)).join(", ")||"none"}</div><div>recipePermissions: {JSON.stringify(visualRecipe.permissions)}</div><div>recipeLearningAnchor: {JSON.stringify(visualRecipe.learningAnchor)}</div><div>recipeSuppressedReason: {visualRecipe.debug?.recipeSuppressedReason??"none"}</div><div>recipeLanes: {visualRecipe.debug?.recipeLanes?.join(", ")||"none"}</div><div>recipeEffectFamilies: {visualRecipe.debug?.recipeEffectFamilies?.join(", ")||"none"}</div><div>recipePrioritySummary: {visualRecipe.debug?.recipePrioritySummary??"none"}</div><div>recipeTimingProfile: {visualRecipe.debug?.recipeTimingProfile?JSON.stringify(visualRecipe.debug.recipeTimingProfile):"n/a"}</div><div>recipeOpacityPolicy: {visualRecipe.debug?.recipeOpacityPolicy?JSON.stringify(visualRecipe.debug.recipeOpacityPolicy):"n/a"}</div><div>suppressedByPriority: {visualRecipe.debug?.suppressedByPriority?.join(", ")||"none"}</div><div>suppressedByBudget: {visualRecipe.debug?.suppressedByBudget?.join(", ")||"none"}</div><div>tacticalPrimitivesPresent: {visualRecipe.debug?.tacticalPrimitivesPresent?"true":"false"}</div><div>tacticalPrimitivesRendered: {visualRecipeOverlay.tacticalPrimitivesRendered?"true":"false"}</div><div>schemaSerializable: {visualRecipe.debug?.schemaSerializable?"true":"false"}</div><div>adapterAllowed: {visualRecipeOverlay.adapterAllowed?"true":"false"}</div><div>adapterSuppressedReason: {visualRecipeOverlay.adapterSuppressedReason??"none"}</div><div>recipeFenRaw: {visualRecipeOverlay.recipeFenRaw??"n/a"}</div><div>boardFenRaw: {visualRecipeOverlay.boardFenRaw}</div><div>recipeFenNormalized: {visualRecipeOverlay.recipeFenNormalized??"n/a"}</div><div>boardFenNormalized: {visualRecipeOverlay.boardFenNormalized??"n/a"}</div><div>recipeFrameIdRaw: {String(visualRecipeOverlay.recipeFrameIdRaw??"n/a")}</div><div>boardFrameIdRaw: {String(visualRecipeOverlay.boardFrameIdRaw)}</div><div>recipeFrameMatchesBoard: {visualRecipeOverlay.recipeFrameMatchesBoard?"true":"false"}</div><div>recipeFenMatchesBoard: {visualRecipeOverlay.recipeFenMatchesBoard?"true":"false"}</div></div>}
+      {showDetails&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Overlay Lifecycle</div><div className="mt-2">trainerFrameId: {trainerFrameId}</div><div>overlayFrameId: {overlayFrameId}</div><div>overlayFen: {overlayFen??visualRecipe?.fen??"n/a"}</div><div>boardFen: {boardFen}</div><div>overlaySuppressedReason: {overlaySuppressedReason??"none"}</div><div>overlaySource: {overlaySource}</div><div>opponentCandidateRenderedInMainUi: {visualRecipeOverlay.opponentCandidateRenderedInMainUi?"true":"false"}</div><div>staleOverlayIgnored: {staleOverlayFlag?"true":"false"}</div><div>overlayClearedOnPhaseChange: {overlayClearedOnPhaseChange?"true":"false"}</div></div>}
+      {showDetails&&visualRecipe&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="flex items-center justify-between gap-3"><div className="font-black text-stone-800">Animation Playback</div><div className="flex items-center gap-2"><button onClick={visualRecipePlayback.replay} disabled={!visualRecipePlayback.replayAvailable||trainerView==="plain"} className={classNames("rounded-full px-3 py-1 text-[11px] font-black",visualRecipePlayback.replayAvailable&&trainerView!=="plain"?"bg-stone-900 text-white":"bg-stone-100 text-stone-400")}>Replay</button><button onClick={visualRecipePlayback.skipToEnd} disabled={visualRecipePlayback.animationState!=="playing"} className={classNames("rounded-full px-3 py-1 text-[11px] font-black",visualRecipePlayback.animationState==="playing"?"bg-stone-900 text-white":"bg-stone-100 text-stone-400")}>Skip</button></div></div><div className="mt-2">animationState: {visualRecipePlayback.animationState}</div><div>activeVisualRecipeId: {visualRecipePlayback.activeVisualRecipeId??"none"}</div><div>activePatternId: {visualRecipePlayback.activePatternId??"none"}</div><div>activeBeatIndex: {visualRecipePlayback.activeBeatIndex??"n/a"}</div><div>activeBeatId: {visualRecipePlayback.activeBeatId??"n/a"}</div><div>activePrimitiveIds: {visualRecipePlayback.activePrimitiveIds.join(", ")||"none"}</div><div>animationReducedMotion: {visualRecipePlayback.animationReducedMotion?"true":"false"}</div><div>animationSkippedToEnd: {visualRecipePlayback.animationSkippedToEnd?"true":"false"}</div><div>animationClearedReason: {visualRecipePlayback.animationClearedReason??"none"}</div><div>animationSuppressedReason: {visualRecipePlayback.animationSuppressedReason??"none"}</div><div>recipeFrameMatchesBoard: {visualRecipePlayback.recipeFrameMatchesBoard?"true":"false"}</div><div>recipeFenMatchesBoard: {visualRecipePlayback.recipeFenMatchesBoard?"true":"false"}</div><div>replayAvailable: {visualRecipePlayback.replayAvailable?"true":"false"}</div><div>tacticalPrimitivesRendered: {visualRecipePlayback.tacticalPrimitivesRendered?"true":"false"}</div></div>}
+      {showDetails&&opponentVariationDebug&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Opponent Variation Guard</div><div className="mt-2">Variation applied: {opponentVariationDebug.opponentVariationApplied?"yes":"no"}</div><div>Reason: {opponentVariationDebug.opponentVariationReason||"n/a"}</div><div>Recent branch keys: {opponentVariationDebug.recentOpponentBranchKeys.join(", ")||"n/a"}</div><div>Selected branch key: {opponentVariationDebug.selectedOpponentBranchKey??"n/a"}</div><div>Candidates: {opponentVariationDebug.candidateOpponentBranches.map((c)=>`${c.san??c.uci}:${c.baseWeight.toFixed(2)}→${c.adjustedWeight.toFixed(2)}`).join(", ")||"n/a"}</div><div>Blocked third-repeat branches: {opponentVariationDebug.blockedThirdRepeatBranches.join(", ")||"none"}</div><div>Fallback used: {opponentVariationDebug.fallbackUsed?"yes":"no"}</div></div>}
       <div className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm"><div className="flex items-start gap-3">{feedback.toLowerCase().includes("correct")?<CheckCircle2 className="mt-0.5 text-green-700" size={24}/>:feedback.toLowerCase().includes("not quite")||feedback.toLowerCase().includes("illegal")?<XCircle className="mt-0.5 text-red-600" size={24}/>:<Target className="mt-0.5 text-green-700" size={24}/>}<div><div className="font-bold">{endingInfo?endingInfo.title:isReviewingHistory?"Review mode":isUserTurn?"Your move":"Opponent thinking"}</div><p className="text-sm leading-6 text-stone-600">{feedback}</p></div></div></div>
     </section>}
     {activeTab==="review"&&<section className="space-y-5"><header><h1 className="text-2xl font-bold tracking-tight">Review Mistakes</h1><p className="text-sm text-stone-500">Wrong opening moves are saved here.</p></header>{mistakes.length===0?<div className="rounded-3xl bg-white p-6 text-center shadow-sm"><CheckCircle2 className="mx-auto mb-3 text-green-700" size={40}/><h2 className="text-lg font-bold">No mistakes due</h2><p className="mt-2 text-sm text-stone-500">Missed training positions will appear here.</p></div>:<div className="space-y-3">{mistakes.map(m=><button key={m.fen} onClick={()=>practiceMistake(m)} className="w-full rounded-3xl border border-stone-200 bg-white p-4 text-left shadow-sm"><div className="flex items-start justify-between gap-3"><div><div className="font-bold">{m.opening}</div><div className="mt-1 text-sm text-stone-500">Expected: <span className="font-bold text-green-700">{m.expectedMove}</span></div><div className="text-sm text-stone-500">You played: {m.playedMove}</div></div><span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">Missed {m.count}x</span></div></button>)}</div>}</section>}

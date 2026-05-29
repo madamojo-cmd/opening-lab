@@ -1,55 +1,35 @@
-import { collectTeachingEvidence, type CollectTeachingEvidenceInput, type TeachingEvidence } from "./evidenceCollector";
-import { compilePositionContextCue, compileTeachingCue } from "./teachingCueCompiler";
-import { deriveTeachingPermission, type TeachingPermission } from "./teachingPermissions";
-import { selectBestTeachingStory, generateTeachingStoryCandidates } from "./storyRanker";
-import type { TeachingStoryCandidate, TeachingStorySelectionResult } from "./storyTypes";
-import { classifyTeachingTrust, type TeachingTrustClassification } from "./trustClassifier";
-import { routeTeachingVisuals, type TeachingVisualOverlayDecision } from "./visualOverlayRouter";
-import type { TeachingCue } from "./teachingCueTypes";
+import { collectTeachingEvidence, type CollectTeachingEvidenceInput } from "./evidenceCollector";
+import { buildTrainingContext } from "./trainingContextEngine";
+import type { TeachingTrustTier } from "./trustClassifier";
+import type { TrainingContextResult } from "./trainingContextTypes";
 
-export type TeachingOrchestrationResult = {
-  evidence: TeachingEvidence;
-  storyCandidates: TeachingStoryCandidate[];
-  selectedStory: TeachingStoryCandidate | null;
-  selection: TeachingStorySelectionResult;
-  classification: TeachingTrustClassification;
-  permission: TeachingPermission;
-  cue: TeachingCue;
-  visualDecision: TeachingVisualOverlayDecision;
-  userLabel: string;
-  debug: {
-    evidenceSummary: string[];
-    selectedStoryId?: string;
-    selectedStoryKind?: string;
-    selectedStoryScore?: number;
-    rejectedStories: Array<{ id: string; kind: string; total: number; reasons: string[] }>;
-    trustTier: string;
-    permissionFlags: Record<string, boolean | string>;
-    suppressionReasons: string[];
-    visualBudget: TeachingVisualOverlayDecision["visualBudgetUsed"];
-    bookSupport: TeachingEvidence["bookSupport"];
-    safetyWarnings: string[];
+export type TeachingOrchestrationResult = TrainingContextResult & {
+  classification: {
+    tier: TeachingTrustTier;
+    moveTrust: TrainingContextResult["moveTrust"];
+    contextTrust: TrainingContextResult["contextTrust"];
+    safeToRecommendMove: boolean;
+    safeToShowAnswerVisuals: boolean;
+    safeToShowContextVisuals: boolean;
+    reason: string;
   };
-  learningMetadata: {
-    cueMode: TeachingCue["cueMode"];
-    teachingPermissionTier: string;
-    primaryFocus?: string;
-    selectedStoryId?: string;
-    selectedStoryKind?: string;
-    storyScoreTotal?: number;
-    themesShown?: string[];
-    answerVisualsShown: boolean;
-    contextVisualsShown: boolean;
-    planVisualsShown: boolean;
-    conceptId: string;
-    confidence: number;
-    compilerVersion: string;
-    suppressionReasons: string[];
-    bookSupportSummary: string;
-    alternativeClassification?: string;
-    visualBudgetUsed: TeachingVisualOverlayDecision["visualBudgetUsed"];
+  debug: TrainingContextResult["debug"] & {
+    visualBudget: TrainingContextResult["visualDecision"]["visualBudgetUsed"];
+    rejectedStories: Array<{ id: string; kind: string; total: number; reasons: string[] }>;
   };
 };
+
+function legacyTier(result: TrainingContextResult): TeachingTrustTier {
+  if (result.moveTrust === "engine_verified") return "engine_verified";
+  if (result.moveTrust === "book_supported") return "book_supported";
+  if (result.moveTrust === "repertoire_supported") return "repertoire_supported";
+  if (result.moveTrust === "engine_close") return "repertoire_supported";
+  if (result.moveTrust === "reveal_only_unverified") return "context_only";
+  if (result.moveTrust === "strong_alternative") return "strong_alternative";
+  if (result.mode === "assisted_context") return "context_only";
+  if (result.mode === "line_needs_review") return "needs_review";
+  return "unavailable";
+}
 
 export function orchestrateTeaching(input: CollectTeachingEvidenceInput & {
   trainerView: "assisted" | "plain";
@@ -58,99 +38,51 @@ export function orchestrateTeaching(input: CollectTeachingEvidenceInput & {
   trainingMode: "restricted" | "continuation";
 }): TeachingOrchestrationResult {
   const evidence = collectTeachingEvidence(input);
-  const bootstrapPermission = {
-    canRecommendMove: evidence.validationUserStatus === "verified",
-    canShowAnswerOverlays: evidence.validationUserStatus === "verified",
-  };
-
-  const candidates = generateTeachingStoryCandidates(evidence);
-  const selection = selectBestTeachingStory(candidates, evidence, bootstrapPermission);
-  const selectedStory = selection.selected;
-
-  const classification = classifyTeachingTrust(evidence, selectedStory);
-  const permission = deriveTeachingPermission(classification, {
-    trainerView: input.trainerView,
-    showAnswer: input.showAnswer,
-  });
-
-  const cue = permission.canRecommendMove
-    ? compileTeachingCue({ evidence, selectedStory, canRecommendMove: permission.canRecommendMove })
-    : compilePositionContextCue({ evidence, selectedStory });
-
-  const visualDecision = routeTeachingVisuals({
-    cue,
-    permission,
-    selectedStory,
-    trainerView: input.trainerView,
-    showAnswer: input.showAnswer,
-  });
-
-  cue.teachingPermissionTier = classification.tier;
-  cue.primaryFocus = classification.primaryFocus;
-  cue.answerVisualsShown = visualDecision.answerVisualsShown;
-  cue.contextVisualsShown = visualDecision.contextVisualsShown;
-
-  const evidenceSummary = [
-    `Phase: ${evidence.phase}`,
-    `Validation: ${evidence.validationUserStatus}`,
-    `Book support: ${evidence.bookSupport.userLabel}`,
-    ...(evidence.safetyWarnings.length ? evidence.safetyWarnings : ["No major safety warning."]),
-  ];
-
-  return {
-    evidence,
-    storyCandidates: candidates,
-    selectedStory,
-    selection,
-    classification,
-    permission,
-    cue,
-    visualDecision,
-    userLabel: permission.userLabel,
-    debug: {
-      evidenceSummary,
-      selectedStoryId: selectedStory?.id,
-      selectedStoryKind: selectedStory?.kind,
-      selectedStoryScore: selectedStory?.score.total,
-      rejectedStories: selection.rejectedTop.map((story) => ({
-        id: story.id,
-        kind: story.kind,
-        total: story.score.total,
-        reasons: story.rejectionReasons,
-      })),
-      trustTier: classification.tier,
-      permissionFlags: {
-        userLabel: permission.userLabel,
-        canRecommendMove: permission.canRecommendMove,
-        canShowMoveArrow: permission.canShowMoveArrow,
-        canShowPatternCue: permission.canShowPatternCue,
-        canShowContextCue: permission.canShowContextCue,
-        canShowAnswerOverlays: permission.canShowAnswerOverlays,
-        canShowContextOverlays: permission.canShowContextOverlays,
-      },
-      suppressionReasons: visualDecision.suppressedReasons,
-      visualBudget: visualDecision.visualBudgetUsed,
-      bookSupport: evidence.bookSupport,
-      safetyWarnings: evidence.safetyWarnings,
+  const result = buildTrainingContext({
+    fenBefore: input.teachingInput.fenBefore,
+    fenAfter: input.teachingInput.fenAfter,
+    expectedMoveUci: input.expectedMove?.uci ?? input.teachingInput.move.uci,
+    expectedMoveSan: input.expectedMove?.san ?? input.teachingInput.move.san,
+    topMoves: input.engineTopMoves?.map((move) => ({
+      uci: move.uci,
+      san: move.san,
+      rank: move.rank,
+      scoreCp: move.scoreCp,
+    })),
+    moveQuality: {
+      status: input.teachingInput.validation.internalStatus,
+      topMoves: input.engineTopMoves?.map((move) => ({
+        rank: move.rank ?? 0,
+        uci: move.uci,
+        san: move.san,
+        scoreCp: move.scoreCp,
+        mate: move.mate,
+      })) ?? [],
     },
-    learningMetadata: {
-      cueMode: cue.cueMode,
-      teachingPermissionTier: classification.tier,
-      primaryFocus: classification.primaryFocus,
-      selectedStoryId: selectedStory?.id,
-      selectedStoryKind: selectedStory?.kind,
-      storyScoreTotal: selectedStory?.score.total,
-      themesShown: cue.themesShown,
-      answerVisualsShown: visualDecision.answerVisualsShown,
-      contextVisualsShown: visualDecision.contextVisualsShown,
-      planVisualsShown: visualDecision.planVisualsShown,
-      conceptId: cue.conceptId,
-      confidence: cue.confidence ?? 0,
-      compilerVersion: cue.metadata.compilerVersion,
-      suppressionReasons: visualDecision.suppressedReasons,
-      bookSupportSummary: evidence.bookSupport.userLabel,
-      alternativeClassification: classification.tier === "strong_alternative" ? "strong_alternative" : undefined,
-      visualBudgetUsed: visualDecision.visualBudgetUsed,
+    moveQualityUserStatus: input.teachingInput.validation.userStatus,
+    bookSupport: evidence.bookSupport,
+    repertoireSupport: Boolean(input.repertoireMoves?.some((move) => move.uci === (input.expectedMove?.uci ?? input.teachingInput.move.uci))),
+    trainerView: input.trainerView,
+    trainingMode: input.trainingMode,
+    isUserTurn: input.isUserTurn,
+    showAnswer: input.showAnswer,
+  });
+  const tier = legacyTier(result);
+  return {
+    ...result,
+    classification: {
+      tier,
+      moveTrust: result.moveTrust,
+      contextTrust: result.contextTrust,
+      safeToRecommendMove: result.permission.canRecommendMove,
+      safeToShowAnswerVisuals: result.permission.canShowAnswerOverlays,
+      safeToShowContextVisuals: result.permission.canShowContextOverlays,
+      reason: result.debug.moveTrustReason,
+    },
+    debug: {
+      ...result.debug,
+      visualBudget: result.visualDecision.visualBudgetUsed,
+      rejectedStories: result.debug.rejectedStories,
     },
   };
 }

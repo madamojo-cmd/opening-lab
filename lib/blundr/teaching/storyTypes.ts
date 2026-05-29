@@ -37,6 +37,7 @@ export type TeachingStoryRejectionReason =
   | "overclaim_risk"
   | "reveal_risk_blocked"
   | "requires_untrusted_move"
+  | "trusted_expected_move_prefers_move_teaching"
   | "visual_clutter"
   | "inferior_score";
 

@@ -39,18 +39,26 @@ export type LegacyTeachingConceptId =
 
 export type TeachingConceptId =
   | "attack_loose_piece"
+  | "attacks_loose_piece"
   | "win_loose_piece"
+  | "wins_loose_piece"
   | "hanging_piece_warning"
   | "immediate_tactic"
   | "king_safety_first"
   | "center_tension"
   | "center_control"
+  | "develops_with_pressure"
+  | "develop_and_control"
+  | "same_piece_active_square"
+  | "active_square_comparison"
+  | "passive_development"
   | "development_lag"
   | "open_file_context"
   | "half_open_file"
   | "weak_square"
   | "outpost"
   | "pawn_break"
+  | "improves_piece_activity"
   | "improve_worst_piece"
   | "bad_piece"
   | "prophylaxis"
@@ -179,7 +187,7 @@ export type TeachingCue = {
   };
 };
 
-export const TEACHING_CUE_COMPILER_VERSION = "2.7.35";
+export const TEACHING_CUE_COMPILER_VERSION = "2.7.35b";
 
 export type BoardPiece = {
   square: string;

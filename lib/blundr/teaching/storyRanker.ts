@@ -128,7 +128,7 @@ export function generateTeachingStoryCandidates(evidence: TeachingEvidence): Tea
 export function selectBestTeachingStory(
   candidates: TeachingStoryCandidate[],
   evidence: TeachingEvidence,
-  permissionContext: { canRecommendMove: boolean; canShowAnswerOverlays: boolean },
+  permissionContext: { canRecommendMove: boolean; canShowAnswerOverlays: boolean; trustedExpectedMove?: boolean },
 ): TeachingStorySelectionResult {
   const scored = candidates.map((candidate) => scoreTeachingStoryCandidate(candidate, evidence));
 
@@ -136,6 +136,7 @@ export function selectBestTeachingStory(
     const rejectionReasons = [...candidate.rejectionReasons];
     if (candidate.revealRisk === "high" && !permissionContext.canShowAnswerOverlays) rejectionReasons.push("reveal_risk_blocked");
     if (candidate.isMoveRecommendation && !permissionContext.canRecommendMove) rejectionReasons.push("requires_untrusted_move");
+    if (permissionContext.trustedExpectedMove && candidate.kind === "strong_alternative") rejectionReasons.push("trusted_expected_move_prefers_move_teaching");
     if (candidate.score.confidence < 0.42 && candidate.conceptId !== "context_only") rejectionReasons.push("low_confidence");
     if (candidate.score.overclaimPenalty > 0.15) rejectionReasons.push("overclaim_risk");
     return { ...candidate, rejectionReasons };
