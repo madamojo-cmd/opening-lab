@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "copy-stockfish": "node scripts/copy-stockfish.js",
-    "postinstall": "node scripts/copy-stockfish.js"
+    "postinstall": "node scripts/copy-stockfish.js",
+    "test:coach-quality": "node --import tsx lib/blundr/coachQuality/testCoachQuality.ts",
+    "test:trainer-debug": "tsx lib/blundr/debug/testTrainerDebug.ts",
+    "test:multi-move-qa": "RUN_MULTI_MOVE_QA=1 tsx lib/blundr/debug/testMultiMoveTrainingQa.ts"
   },
   "dependencies": {
     "@tailwindcss/postcss": "latest",
@@ -23,6 +26,7 @@
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
-    "typescript": "latest"
+    "typescript": "latest",
+    "tsx": "^4.22.3"
   }
 }

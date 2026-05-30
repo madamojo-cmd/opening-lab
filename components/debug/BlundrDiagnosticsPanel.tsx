@@ -1,0 +1,222 @@
+"use client";
+
+import { useEffect, useMemo, useState, type ReactElement } from "react";
+import type { TrainerDebugSnapshot } from "@/lib/blundr/debug/trainerDebugTypes";
+import { setBlundrDebugEnabled } from "@/lib/blundr/debug/trainerDebugGuards";
+import { stringifyDebugJson } from "@/lib/blundr/debug/trainerDebugSanitizer";
+import { DebugBadge } from "./DebugBadge";
+import { DebugCopyButton } from "./DebugCopyButton";
+import { DebugEventTimeline } from "./DebugEventTimeline";
+import { DebugJsonViewer } from "./DebugJsonViewer";
+import { DebugSection } from "./DebugSection";
+
+type Props = {
+  snapshot: TrainerDebugSnapshot | null;
+  enabled: boolean;
+  onEnabledChange: (enabled: boolean) => void;
+  onClearEvents: () => void;
+};
+
+function status(hasFail: boolean, hasWarn: boolean) {
+  return hasFail ? "fail" : hasWarn ? "warn" : "pass";
+}
+
+function issueReport(snapshot: TrainerDebugSnapshot): string {
+  return `BLUNDR DEBUG ISSUE REPORT
+timestamp: ${new Date(snapshot.generatedAt).toISOString()}
+frame: ${snapshot.frame.trainerFrameId}
+fen4: ${snapshot.board.boardFen4}
+view: ${snapshot.frame.trainerView}
+phase: ${snapshot.frame.trainerPhase}
+mode: ${snapshot.frame.trainingMode}
+expectedMoveSan: ${snapshot.frame.expectedMoveSan ?? "none"}
+expectedMoveUci: ${snapshot.frame.expectedMoveUci ?? "none"}
+
+visual:
+source: ${snapshot.visual.visualLayerSource}
+shouldRender: ${snapshot.visual.shouldRenderVisualRecipeLayer}
+blockedReason: ${snapshot.visual.visualLayerBlockedReason ?? "none"}
+recipeId: ${snapshot.visual.visualRecipeId ?? "none"}
+primitiveIds: ${JSON.stringify(snapshot.visual.visualRecipePrimitiveIds ?? [])}
+lineCountPassedToBoard: ${snapshot.visual.activeLineCountPassedToBoard}
+
+continuation:
+candidate: ${snapshot.continuation.selectedCandidateSan ?? snapshot.continuation.selectedCandidateUci ?? "none"}
+exactMoveAllowed: ${snapshot.continuation.exactMoveAllowed}
+linesPassedToBoard: ${snapshot.continuation.continuationLinesPassedToBoard}
+blockedReason: ${snapshot.continuation.continuationVisualBlockedReason ?? "none"}
+
+coach:
+owner: ${snapshot.coach.visibleCoachOwner}
+intent: ${snapshot.coach.coachIntent ?? "none"}
+title: ${snapshot.coach.visibleTitle ?? "none"}
+body: ${snapshot.coach.visibleBody ?? "none"}
+selectedOpportunity: ${snapshot.coach.selectedOpportunityId ?? "none"}
+selectedTemplate: ${snapshot.coach.selectedTemplateId ?? "none"}
+failureKind: ${snapshot.coach.coachFailureKind}
+
+actions:
+lastClicked: ${snapshot.actions.lastClickedAction ?? "none"}
+result: ${snapshot.actions.actionResult ?? "none"}
+stateChanged: ${snapshot.actions.stateChanged ?? "unknown"}
+
+health:
+criticalIssues: ${JSON.stringify(snapshot.health.criticalIssues)}
+warnings: ${JSON.stringify(snapshot.health.warnings)}
+`;
+}
+
+export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onClearEvents }: Props): ReactElement | null {
+  const [collapsed, setCollapsed] = useState(true);
+  const [pinned, setPinned] = useState(false);
+  const [expanded, setExpanded] = useState(true);
+  const [timelineFilter, setTimelineFilter] = useState<"all" | "instructional" | "status" | "fallback" | "low_quality" | "debug_leak" | "mismatch" | "critical">("all");
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (!enabled) return;
+      if (event.shiftKey && event.key.toLowerCase() === "d") {
+        setCollapsed((value) => !value);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [enabled]);
+
+  const statuses = useMemo(() => {
+    const critical = (snapshot?.health.criticalIssues.length ?? 0) > 0;
+    const warnings = (snapshot?.health.warnings.length ?? 0) > 0;
+    return {
+      visual: status(snapshot?.visual.visualFailureKind !== "none", false),
+      coach: status(snapshot?.coach.coachFailureKind !== "none", false),
+      actions: status(Boolean(snapshot?.health.criticalIssues.some((issue) => issue.includes("Action"))), false),
+      continuation: status(Boolean(snapshot?.health.criticalIssues.some((issue) => issue.includes("Continuation"))), Boolean(snapshot?.continuation.isContinuationMode && snapshot?.continuation.continuationLinesPassedToBoard === 0)),
+      legacy: status(Boolean(snapshot?.legacy.legacyBypassDetected), false),
+      cache: status(false, warnings && !critical),
+    };
+  }, [snapshot]);
+  const coachTimeline = useMemo(() => (Array.isArray(snapshot?.coachTimeline) ? snapshot.coachTimeline : []), [snapshot]);
+  const filteredCoachTimeline = useMemo(() => {
+    return coachTimeline.filter((entry: any) => {
+      if (timelineFilter === "all") return true;
+      if (timelineFilter === "instructional") return entry?.entryKind === "instructional";
+      if (timelineFilter === "status") return entry?.entryKind === "opponent_status" || entry?.entryKind === "terminal" || entry?.entryKind === "line_complete";
+      if (timelineFilter === "fallback") return Boolean(entry?.runtimeSafeFallbackUsed);
+      if (timelineFilter === "low_quality") return Number(entry?.qualityScore ?? 0) > 0 && Number(entry?.qualityScore ?? 0) < 80;
+      if (timelineFilter === "debug_leak") return Boolean(entry?.containsDebugLeak);
+      if (timelineFilter === "mismatch") return entry?.targetAligned === false || entry?.pieceAligned === false;
+      if (timelineFilter === "critical") return Array.isArray(entry?.criticalIssuesAtFrame) && entry.criticalIssuesAtFrame.length > 0;
+      return true;
+    });
+  }, [coachTimeline, timelineFilter]);
+  const coachQaSummary = useMemo(() => {
+    const instructional = coachTimeline.filter((entry: any) => entry?.entryKind === "instructional");
+    const instructionalScores = instructional.map((entry: any) => Number(entry?.qualityScore)).filter((score) => Number.isFinite(score));
+    const averageInstructionalQualityScore = instructionalScores.length ? Number((instructionalScores.reduce((sum, score) => sum + score, 0) / instructionalScores.length).toFixed(1)) : null;
+    return {
+      totalCoachFrames: coachTimeline.length,
+      instructionalFrameCount: instructional.length,
+      opponentStatusFrameCount: coachTimeline.filter((entry: any) => entry?.entryKind === "opponent_status").length,
+      terminalOrLineCompleteFrameCount: coachTimeline.filter((entry: any) => entry?.entryKind === "terminal" || entry?.entryKind === "line_complete").length,
+      fallbackCount: coachTimeline.filter((entry: any) => Boolean(entry?.runtimeSafeFallbackUsed)).length,
+      lowQualityCount: coachTimeline.filter((entry: any) => Number(entry?.qualityScore ?? 0) > 0 && Number(entry?.qualityScore ?? 0) < 80).length,
+      debugLeakCount: coachTimeline.filter((entry: any) => Boolean(entry?.containsDebugLeak)).length,
+      repeatedGenericCount: coachTimeline.filter((entry: any) => Boolean(entry?.repeatedGeneric)).length,
+      pieceMismatchCount: coachTimeline.filter((entry: any) => entry?.pieceAligned === false).length,
+      targetMismatchCount: coachTimeline.filter((entry: any) => entry?.targetAligned === false).length,
+      averageInstructionalQualityScore,
+      uniqueSelectedThemes: Array.from(new Set(coachTimeline.map((entry: any) => String(entry?.selectedTheme ?? "").trim()).filter(Boolean))),
+      visibleBodiesInOrder: coachTimeline.map((entry: any) => entry?.visibleBody).filter(Boolean),
+      framesWithCriticalIssues: coachTimeline.filter((entry: any) => Array.isArray(entry?.criticalIssuesAtFrame) && entry.criticalIssuesAtFrame.length > 0).map((entry: any) => ({
+        frame: entry?.trainerFrameId,
+        issues: entry?.criticalIssuesAtFrame,
+      })),
+    };
+  }, [coachTimeline]);
+
+  if (!enabled && !snapshot?.build.debugEnabled) return null;
+  if (!snapshot) return null;
+
+  if (collapsed) {
+    return (
+      <button type="button" onClick={() => setCollapsed(false)} className="fixed bottom-20 right-3 z-[90] rounded-full bg-stone-950 px-4 py-3 text-xs font-black text-white shadow-2xl">
+        Blundr Diagnostics {snapshot.health.criticalIssues.length ? `(${snapshot.health.criticalIssues.length})` : ""}
+      </button>
+    );
+  }
+
+  return (
+    <aside className={`fixed ${pinned ? "inset-y-3 right-3" : "bottom-3 right-3 max-h-[82vh]"} z-[90] w-[min(92vw,430px)] overflow-hidden rounded-3xl border border-stone-700 bg-stone-950 text-white shadow-2xl`}>
+      <div className="flex items-start justify-between gap-3 border-b border-stone-800 p-3">
+        <div>
+          <div className="text-sm font-black">Blundr Diagnostics</div>
+          <div className="text-[11px] text-stone-400">debug0 • frame {String(snapshot.frame.trainerFrameId)}</div>
+        </div>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setExpanded((value) => !value)} className="rounded-full bg-stone-800 px-2 py-1 text-[10px] font-black">{expanded ? "Collapse" : "Expand"}</button>
+          <button type="button" onClick={() => setPinned((value) => !value)} className="rounded-full bg-stone-800 px-2 py-1 text-[10px] font-black">{pinned ? "Unpin" : "Pin"}</button>
+          <button type="button" onClick={() => setCollapsed(true)} className="rounded-full bg-stone-800 px-2 py-1 text-[10px] font-black">Hide</button>
+        </div>
+      </div>
+      {expanded && (
+        <div className="max-h-[calc(82vh-64px)] space-y-3 overflow-auto p-3">
+          <div className="flex flex-wrap gap-2">
+            <DebugBadge label="Visual" status={statuses.visual as any} />
+            <DebugBadge label="Coach" status={statuses.coach as any} />
+            <DebugBadge label="Actions" status={statuses.actions as any} />
+            <DebugBadge label="Continuation" status={statuses.continuation as any} />
+            <DebugBadge label="Legacy" status={statuses.legacy as any} />
+            <DebugBadge label="Cache" status={statuses.cache as any} />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <DebugCopyButton label="Copy JSON" getText={() => stringifyDebugJson(snapshot)} />
+            <DebugCopyButton label="Copy Issue Report" getText={() => issueReport(snapshot)} />
+            <DebugCopyButton label="Copy FEN/Opp" getText={() => JSON.stringify({ fen4: snapshot.board.boardFen4, expectedMoveSan: snapshot.frame.expectedMoveSan, expectedMoveUci: snapshot.frame.expectedMoveUci, selectedOpportunity: snapshot.coach.selectedOpportunityId }, null, 2)} />
+            <DebugCopyButton label="Copy Coach Timeline JSON" getText={() => JSON.stringify(coachTimeline, null, 2)} />
+            <DebugCopyButton label="Copy Coach QA Summary" getText={() => JSON.stringify(coachQaSummary, null, 2)} />
+            <button type="button" onClick={onClearEvents} className="rounded-full bg-stone-100 px-3 py-1 text-[11px] font-black text-stone-900">Clear Events</button>
+            <button type="button" onClick={() => { setBlundrDebugEnabled(!enabled); onEnabledChange(!enabled); }} className="rounded-full bg-stone-100 px-3 py-1 text-[11px] font-black text-stone-900">{enabled ? "Disable" : "Enable"}</button>
+          </div>
+          <DebugSection title="Health" defaultOpen><DebugJsonViewer value={snapshot.health} /></DebugSection>
+          <DebugSection title="Frame"><DebugJsonViewer value={snapshot.frame} /></DebugSection>
+          <DebugSection title="Board/FEN"><DebugJsonViewer value={snapshot.board} /></DebugSection>
+          <DebugSection title="Visuals"><DebugJsonViewer value={snapshot.visual} /></DebugSection>
+          <DebugSection title="Continuation"><DebugJsonViewer value={snapshot.continuation} /></DebugSection>
+          <DebugSection title="Coach"><DebugJsonViewer value={snapshot.coach} /></DebugSection>
+          <DebugSection title="Coach Pipeline"><DebugJsonViewer value={snapshot.coachPipeline} /></DebugSection>
+          <DebugSection title="Actions"><DebugJsonViewer value={snapshot.actions} /></DebugSection>
+          <DebugSection title="Features"><DebugJsonViewer value={snapshot.features} /></DebugSection>
+          <DebugSection title="Plans"><DebugJsonViewer value={snapshot.plans} /></DebugSection>
+          <DebugSection title="Opportunities"><DebugJsonViewer value={snapshot.opportunities} /></DebugSection>
+          <DebugSection title="Templates"><DebugJsonViewer value={snapshot.explanation} /></DebugSection>
+          <DebugSection title="Presentation"><DebugJsonViewer value={snapshot.presentation} /></DebugSection>
+          <DebugSection title="Legacy"><DebugJsonViewer value={snapshot.legacy} /></DebugSection>
+          <DebugSection title="Cache/Performance"><DebugJsonViewer value={{ cache: snapshot.cache, performance: snapshot.performance }} /></DebugSection>
+          <DebugSection title="Coach Timeline" defaultOpen>
+            <div className="mb-2 flex flex-wrap gap-2">
+              <button type="button" onClick={() => setTimelineFilter("all")} className={`rounded-full px-2 py-1 text-[10px] font-black ${timelineFilter === "all" ? "bg-white text-stone-900" : "bg-stone-800 text-stone-200"}`}>All</button>
+              <button type="button" onClick={() => setTimelineFilter("instructional")} className={`rounded-full px-2 py-1 text-[10px] font-black ${timelineFilter === "instructional" ? "bg-white text-stone-900" : "bg-stone-800 text-stone-200"}`}>Instructional only</button>
+              <button type="button" onClick={() => setTimelineFilter("status")} className={`rounded-full px-2 py-1 text-[10px] font-black ${timelineFilter === "status" ? "bg-white text-stone-900" : "bg-stone-800 text-stone-200"}`}>Opponent/status only</button>
+              <button type="button" onClick={() => setTimelineFilter("fallback")} className={`rounded-full px-2 py-1 text-[10px] font-black ${timelineFilter === "fallback" ? "bg-white text-stone-900" : "bg-stone-800 text-stone-200"}`}>Fallbacks only</button>
+              <button type="button" onClick={() => setTimelineFilter("low_quality")} className={`rounded-full px-2 py-1 text-[10px] font-black ${timelineFilter === "low_quality" ? "bg-white text-stone-900" : "bg-stone-800 text-stone-200"}`}>Low quality only</button>
+              <button type="button" onClick={() => setTimelineFilter("debug_leak")} className={`rounded-full px-2 py-1 text-[10px] font-black ${timelineFilter === "debug_leak" ? "bg-white text-stone-900" : "bg-stone-800 text-stone-200"}`}>Debug leaks only</button>
+              <button type="button" onClick={() => setTimelineFilter("mismatch")} className={`rounded-full px-2 py-1 text-[10px] font-black ${timelineFilter === "mismatch" ? "bg-white text-stone-900" : "bg-stone-800 text-stone-200"}`}>Mismatches only</button>
+              <button type="button" onClick={() => setTimelineFilter("critical")} className={`rounded-full px-2 py-1 text-[10px] font-black ${timelineFilter === "critical" ? "bg-white text-stone-900" : "bg-stone-800 text-stone-200"}`}>Critical issues only</button>
+            </div>
+            <div className="space-y-1">
+              {filteredCoachTimeline.map((entry: any) => (
+                <div key={String(entry?.id ?? `${entry?.trainerFrameId}:${entry?.ts}`)} className="rounded-xl bg-stone-900/60 p-2 text-[11px] text-stone-200">
+                  {`Frame ${entry?.trainerFrameId} | ${entry?.entryKind} | ${entry?.instructionTargetSan ?? entry?.instructionTargetUci ?? "—"} | ${entry?.visibleTitle ?? "—"} | score ${entry?.qualityScore ?? "n/a"} | ${entry?.coachDecisionSource ?? "n/a"}`}
+                </div>
+              ))}
+              {filteredCoachTimeline.length === 0 && <div className="text-[11px] text-stone-400">No entries for this filter.</div>}
+            </div>
+            <div className="mt-2"><DebugJsonViewer value={snapshot.coachTimelineSummary} /></div>
+          </DebugSection>
+          <DebugSection title="Event Log"><DebugEventTimeline events={snapshot.eventLog} /></DebugSection>
+          <DebugSection title="Raw JSON"><DebugJsonViewer value={snapshot} /></DebugSection>
+        </div>
+      )}
+    </aside>
+  );
+}

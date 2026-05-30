@@ -24,6 +24,41 @@ import { createLearningSessionId, recordLearningEvent } from "@/lib/blundr/learn
 import type { LearningEvent } from "@/lib/blundr/learning/learningEvents";
 import { loadOpponentVariationMemory, recordOpponentChoice } from "@/lib/blundr/opponent/opponentVariationMemory";
 import { selectOpponentCandidateWithVariation } from "@/lib/blundr/opponent/opponentVariationPolicy";
+import { CoachCard } from "@/components/coach/CoachCard";
+import { buildCoachContext } from "@/lib/blundr/coach/coachContextBuilder";
+import { decideCoachOutput } from "@/lib/blundr/coach/coachDecisionEngine";
+import { buildCoachUtteranceRecordKey, loadCoachUtteranceMemory, readCoachUtteranceMemoryMeta, recordCoachUtterance } from "@/lib/blundr/coach/coachUtteranceMemory";
+import type { CoachButton } from "@/lib/blundr/coach/coachTypes";
+import { buildPositionEvidence } from "@/lib/blundr/liveCoach/positionEvidenceBuilder";
+import { profileCandidateMoves } from "@/lib/blundr/liveCoach/candidateMoveProfiler";
+import { rankPedagogicalOpportunities } from "@/lib/blundr/liveCoach/pedagogicalOpportunityEngine";
+import { selectBestLiveComment } from "@/lib/blundr/liveCoach/liveCoachCommentRanker";
+import { pickLiveCoachCopy } from "@/lib/blundr/liveCoach/liveCoachCopyLibrary";
+import { selectIntentForOpportunity } from "@/lib/blundr/liveCoach/liveCoachIntentSelector";
+import { shouldLiveCoachStaySilent } from "@/lib/blundr/liveCoach/liveCoachSilencePolicy";
+import { validateLiveCoachCopy } from "@/lib/blundr/liveCoach/liveCoachSafety";
+import { buildLiveCoachDebug } from "@/lib/blundr/liveCoach/liveCoachDebug";
+import { buildCoachExplanationPipeline, buildVerifiedUserFacingFallback, isDebugLeakText } from "@/lib/blundr/coachBrain/coachExplanationPipeline";
+import { filterLegacyMainUiLines } from "@/lib/blundr/visualRecipe/legacyVisualSuppression";
+import { selectContinuedPlayMove } from "@/lib/blundr/continuedPlay/continuedPlayMovePolicy";
+import { decideCoachSurfacePolicy } from "@/lib/blundr/coachSurface/coachSurfacePolicy";
+import { presentMoveImpact } from "@/lib/blundr/coachSurface/moveImpactPresenter";
+import { computeTrainerPresentationFrame } from "@/lib/blundr/presentation/trainerPresentationFrame";
+import { attributeLastMove, decideTrainerPhaseActionGate } from "@/lib/blundr/presentation/phaseActionGating";
+import { buildContinuationCandidateVisual } from "@/lib/blundr/visual/continuationCandidateVisual";
+import { buildOpeningTree } from "@/lib/blundr/openings/openingTree";
+import { resolveExpectedMoveForFrame } from "@/lib/blundr/openings/expectedMoveResolver";
+import { buildOpeningResolverDebug } from "@/lib/blundr/openings/openingResolverDebug";
+import { decideGuidedCoveragePolicy } from "@/lib/blundr/openings/guidedCoveragePolicy";
+import type { RepertoireLineInput } from "@/lib/blundr/openings/openingTypes";
+import { buildCurrentInstructionFrame, isBookLikeInstructionTarget } from "@/lib/blundr/runtime/currentInstructionFrame";
+import { shouldFlagStaleOpponentReplyCommit } from "@/lib/blundr/runtime/opponentReplyGuard";
+import { classifyContinuationRuntimeState, type ContinuationRuntimeStatus } from "@/lib/blundr/runtime/continuationRuntimeState";
+import { BlundrDiagnosticsPanel } from "@/components/debug/BlundrDiagnosticsPanel";
+import { collectTrainerDebugSnapshot } from "@/lib/blundr/debug/trainerDebugCollector";
+import { appendDebugEvent } from "@/lib/blundr/debug/trainerDebugEventLog";
+import { isBlundrDebugEnabled } from "@/lib/blundr/debug/trainerDebugGuards";
+import type { DebugEvent } from "@/lib/blundr/debug/trainerDebugTypes";
 
 type Tab = "home" | "train" | "review" | "progress" | "repertoire";
 type RepertoireColor = "white" | "black";
@@ -83,11 +118,75 @@ type OpponentVariationDebug = {
   opponentVariationReason: string;
   recentOpponentBranchKeys: string[];
   selectedOpponentBranchKey?: string;
-  candidateOpponentBranches: Array<{ branchKey: string; uci: string; san?: string; baseWeight: number; adjustedWeight: number }>;
+  candidateOpponentBranches: Array<{ branchKey: string; uci: string; san?: string; baseWeight: number; adjustedWeight: number; source?: string; safetyStatus?: string; selectionScore?: number; blockedReason?: string }>;
   blockedThirdRepeatBranches: string[];
   fallbackUsed: boolean;
+  continuedPlaySelectedMoveInCandidateList?: boolean;
+  continuedPlaySelectionConsistency?: "consistent" | "inconsistent";
+  continuationMoveSafetySource?: string;
+};
+type PendingOpponentRequest = {
+  requestId: number;
+  baseFen: string;
+  mode: TrainingMode;
+  startedAt: number;
 };
 type LiveBrain = { ratingLabel: string; ratingPool: string; book: SystemState; lichess: SystemState; engine: SystemState; gpt: SystemState; source: string; latency?: number; note?: string };
+type LastCoachRecord = {
+  frameId: number;
+  fen4: string;
+  trainerPhase: string;
+  trainingMode: string;
+  instructionTargetKind: string | null;
+  instructionTargetUci: string | null;
+  instructionTargetSan: string | null;
+  instructionTargetPieceType: string | null;
+  coachMoveUci: string | null;
+  coachPieceType: string | null;
+  visualMoveUci: string | null;
+  revealTargetUci: string | null;
+  selectedTemplateId: string | null;
+  utteranceFamily: string | null;
+  selectedOpportunityId: string | null;
+  selectedPlanId: string | null;
+  body: string;
+  normalizedBody: string;
+  verifiedClaims: string[];
+  unverifiedClaims: string[];
+  blockedUnsafeTemplateIds: string[];
+};
+type CoachSessionLogEntry = {
+  id: number;
+  ts: number;
+  trainerFrameId: number;
+  fen4: string;
+  trainerPhase: string;
+  trainingMode: string;
+  isUserTurn: boolean;
+  entryKind: "instructional" | "opponent_status" | "terminal" | "line_complete" | "system" | "error";
+  instructionTargetUci: string | null;
+  instructionTargetSan: string | null;
+  instructionTargetPieceType: string | null;
+  visibleTitle: string | null;
+  visibleBody: string | null;
+  visibleButtons: string[];
+  coachDecisionSource: string | null;
+  selectedTheme: string | null;
+  selectedOpportunityId: string | null;
+  selectedOpportunityLayer: string | null;
+  selectedOpportunityScore: number | null;
+  selectedTemplateId: string | null;
+  runtimeSafeFallbackUsed: boolean;
+  runtimeSafeFallbackReason: string | null;
+  containsDebugLeak: boolean;
+  qualityScore: number | null;
+  hasPedagogicalReason: boolean;
+  repeatedGeneric: boolean;
+  targetAligned: boolean | "not_applicable";
+  pieceAligned: boolean | "not_applicable";
+  criticalIssuesAtFrame: string[];
+  warningsAtFrame: string[];
+};
 type BoardTheme = "classic" | "slate" | "blue" | "walnut";
 type PieceStyle = "unicode" | "letters" | "neo";
 type BoardSettings = { boardTheme: BoardTheme; pieceStyle: PieceStyle; showAttack: boolean; showDefense: boolean; showPlan: boolean; showMoveDots: boolean; showEvalBar: boolean; showCaptured: boolean; showLabels: boolean; showOpponentCue: boolean };
@@ -127,6 +226,7 @@ const OPENINGS: Repertoire[] = [
 
 function classNames(...classes:Array<string|false|null|undefined>){return classes.filter(Boolean).join(" ")}
 function normalizeFen(fen:string){return fen.split(" ").slice(0,4).join(" ")}
+function buildRuntimeFrameKey(input:{fen:string;trainerPhase:string;trainerView:TrainerView;trainingMode:TrainingMode;isUserTurn:boolean;instructionTargetUci:string|null}){return `${normalizeFen(input.fen)}|${input.trainerPhase}|${input.trainerView}|${input.trainingMode}|${input.isUserTurn?"user":"opp"}|${input.instructionTargetUci??"none"}`}
 function moveToUci(move:{from:string;to:string;promotion?:string}){return `${move.from}${move.to}${move.promotion??""}`}
 function isValidSquare(square:string){return /^[a-h][1-8]$/.test(square)}
 function visualLineKind(role?:string,kind?:LineKind):LineKind{if(kind&&["attack","defense","plan","opponent"].includes(kind))return kind;if(role==="defense"||role==="retreat"||role==="castle")return"defense";if(role==="pressure"||role==="threat"||role==="capture"||role==="pin")return"attack";return"plan"}
@@ -137,7 +237,8 @@ function isOwnPiece(game:Chess,square:string,color:ChessColor){const p=getPiece(
 function pickWeighted<T extends {weight:number}>(items:T[]){const total=items.reduce((s,i)=>s+Math.max(0,i.weight),0);if(total<=0)return items[0];let roll=Math.random()*total;for(const item of items){roll-=Math.max(0,item.weight);if(roll<=0)return item}return items[0]}
 function ratingPreset(value:string){return RATING_PRESETS.find(p=>p.value===value)??RATING_PRESETS[3]}
 function buildTree(rep:Repertoire){const tree:Record<string,Continuation[]>={};for(const line of rep.lines){const game=new Chess();for(const san of line){const key=normalizeFen(game.fen());try{const move=game.move(san);if(!move)break;const cont={san:move.san,uci:moveToUci(move),color:move.color as ChessColor,resultingFen:game.fen()};const ex=tree[key]??[];tree[key]=ex.some(x=>x.uci===cont.uci)?ex:[...ex,cont]}catch{break}}}return tree}
-function countPositions(rep:Repertoire){return Object.keys(buildTree(rep)).length}
+function repertoireLineInputs(rep:Repertoire):RepertoireLineInput[]{return rep.lines.map((line,index)=>({openingId:rep.id,lineId:`${rep.id}:${index}`,openingName:rep.name,sideToTrain:rep.color,movesSan:line}))}
+function countPositions(rep:Repertoire){return buildOpeningTree(repertoireLineInputs(rep)).nodeCount}
 function getAccuracy(progress:Progress){return progress.attempts?Math.round((progress.correct/progress.attempts)*100):0}
 function parseExplorerMoves(payload:any):ExplorerMove[]{const moves=Array.isArray(payload?.moves)?payload.moves:[];const denom=moves.reduce((s:number,m:any)=>s+(m.white??0)+(m.draws??0)+(m.black??0),0)||1;return moves.map((m:any)=>{const total=(m.white??0)+(m.draws??0)+(m.black??0);return{uci:m.uci,san:m.san,total,pct:Math.round((total/denom)*100),averageRating:m.averageRating}}).filter((m:ExplorerMove)=>m.uci&&m.total>0)}
 function applyUci(fen:string,uci:string){try{const game=new Chess(fen);const move=game.move({from:uci.slice(0,2),to:uci.slice(2,4),promotion:uci.length>4?uci.slice(4,5):"q"});if(!move)return null;return{san:move.san,uci:moveToUci(move),fen:game.fen(),color:move.color as ChessColor}}catch{return null}}
@@ -185,6 +286,157 @@ function impactFromEngine(line?:EngineLine){
 function compactText(value:unknown,fallback:string,max=140){
   const text=typeof value==="string"&&value.trim()?value.trim().replace(/\s+/g," "):fallback;
   return text.length>max?`${text.slice(0,Math.max(0,max-1)).trim()}…`:text;
+}
+
+function normalizeCoachBody(body:string){
+  return body
+    .toLowerCase()
+    .replace(/[.,!?;:]/g," ")
+    .replace(/\b[a-h][1-8][a-h][1-8][qrbn]?\b/g," {MOVE} ")
+    .replace(/\b[a-h][1-8]\b/g," {SQUARE} ")
+    .replace(/\b(pawn|knight|bishop|rook|queen|king)\b/g," {PIECE} ")
+    .replace(/\s+/g," ")
+    .trim();
+}
+
+function getRecentInstructionalCoachRecords(records:LastCoachRecord[],limit=5){
+  return records.filter((entry)=>entry.trainerPhase==="ready_for_user"&&Boolean(entry.instructionTargetUci)).slice(-limit);
+}
+
+function normalizeCoachEntryKind(input:{trainerPhase:string;isUserTurn:boolean;instructionTargetUci:string|null;runtimeCriticalIssues?:string[]}):CoachSessionLogEntry["entryKind"]{
+  if((input.runtimeCriticalIssues??[]).some((issue)=>String(issue).toLowerCase().includes("error")))return "error";
+  if(input.trainerPhase==="terminal")return "terminal";
+  if(input.trainerPhase==="line_complete")return "line_complete";
+  if(input.trainerPhase==="opponent_selecting"||input.trainerPhase==="opponent_replying")return "opponent_status";
+  if(input.trainerPhase==="ready_for_user"&&input.isUserTurn&&input.instructionTargetUci)return "instructional";
+  return "system";
+}
+
+function applyThemeProvenance(debug:any){
+  const theme=String(debug?.selectedTheme??debug?.coachQuality?.selectedTheme??"").trim()||null;
+  if(!theme)return debug;
+  const map:Record<string,{layer:string;minScore:number;planTypes:string[];templateHints:string[]}>={
+    minor_piece_development:{layer:"development",minScore:320,planTypes:["development","opportunity:minor_piece_development"],templateHints:["minor_piece_development"]},
+    central_pawn_advance:{layer:"center",minScore:330,planTypes:["center","opportunity:central_pawn_advance"],templateHints:["central_pawn_advance"]},
+    capture_or_recapture:{layer:"tactical",minScore:450,planTypes:["tactical","opportunity:capture_or_recapture"],templateHints:["capture_or_recapture"]},
+    bishop_activation:{layer:"development",minScore:300,planTypes:["development","opportunity:bishop_activation"],templateHints:["bishop_activation"]},
+    checkmate:{layer:"tactical",minScore:1000,planTypes:["tactical","opportunity:checkmate"],templateHints:["checkmate"]},
+    castle_king_safety:{layer:"king_safety",minScore:350,planTypes:["king_safety","opportunity:castle_king_safety"],templateHints:["castle","king_safety"]},
+    center_support:{layer:"center",minScore:280,planTypes:["center","opportunity:center_support"],templateHints:["center_support"]},
+    stable_continuation:{layer:"fallback",minScore:100,planTypes:["stable_continuation"],templateHints:["stable_continuation"]},
+  };
+  const rule=map[theme];
+  if(!rule)return debug;
+  const currentTemplate=String(debug?.selectedTemplateId??"");
+  const templateMatches=rule.templateHints.some((hint)=>currentTemplate.includes(hint));
+  const selectedTemplateId=templateMatches?currentTemplate:(debug?.verifiedFallbackUsed||debug?.candidateCoachFallbackUsed||debug?.coachQuality?.usedFallback?`fallback:${theme}:verified_safe`:`live:${theme}:${rule.layer==="tactical"?"explain_tactic":rule.layer==="center"?"explain_center":rule.layer==="development"?"explain_development":"explain_plan"}`);
+  const existingPlanTypes=Array.isArray(debug?.recognizedPlanTypes)?debug.recognizedPlanTypes:[];
+  const selectedPlanType=String(debug?.selectedPlanType??existingPlanTypes[0]??"");
+  const selectedOpportunityScore=Math.max(Number(debug?.selectedOpportunityScore??0)||0,rule.minScore);
+  return {
+    ...debug,
+    selectedTheme:theme,
+    selectedOpportunityId:theme==="stable_continuation"&&debug?.selectedOpportunityId&&!String(debug.selectedOpportunityId).includes("supported_continuation")?debug.selectedOpportunityId:theme,
+    selectedOpportunityLayer:rule.layer,
+    selectedOpportunityScore,
+    selectedPlanType:selectedPlanType||rule.planTypes[0],
+    recognizedPlanTypes:existingPlanTypes.length?existingPlanTypes:[rule.planTypes[0]],
+    selectedTemplateId,
+  };
+}
+
+function normalizeCoachDebugMetadata(debug:any){
+  const withProvenance=applyThemeProvenance(debug??{});
+  const quality=withProvenance?.coachQuality??{};
+  const fallbackByReason=Boolean(withProvenance?.fallbackReason||quality?.fallbackReason);
+  const fallbackByFlag=Boolean(withProvenance?.verifiedFallbackUsed||withProvenance?.candidateCoachFallbackUsed||quality?.usedFallback);
+  const source=String(withProvenance?.coachDecisionSource??quality?.source??"").trim();
+  const fallbackBySource=source==="verified_safe_fallback";
+  const runtimeSafeFallbackUsed=fallbackByFlag||fallbackBySource||fallbackByReason;
+  const runtimeSafeFallbackReason=String(withProvenance?.fallbackReason??quality?.fallbackReason??"").trim()||null;
+  const normalizedSource=runtimeSafeFallbackUsed?"verified_safe_fallback":(source||"live_coach");
+  const hasTarget=Boolean(withProvenance?.coachMoveUci);
+  const numericScore=Number(withProvenance?.selectedOpportunityScore);
+  const selectedOpportunityScore=Number.isFinite(numericScore)&&numericScore>0?numericScore:(hasTarget?100:null);
+  return {
+    ...withProvenance,
+    coachDecisionSource:normalizedSource,
+    verifiedFallbackUsed:runtimeSafeFallbackUsed,
+    fallbackReason:runtimeSafeFallbackUsed?(runtimeSafeFallbackReason??"verified_safe_fallback"):null,
+    selectedOpportunityScore,
+    coachQuality:{
+      ...quality,
+      source:normalizedSource,
+      usedFallback:runtimeSafeFallbackUsed,
+      fallbackReason:runtimeSafeFallbackUsed?(runtimeSafeFallbackReason??"verified_safe_fallback"):null,
+      selectedTheme:withProvenance?.selectedTheme??quality?.selectedTheme??null,
+      qualityScore:quality?.qualityScore??withProvenance?.qualityScore??null,
+    },
+  };
+}
+
+function buildUserFacingTargetFallback(input:{
+  fen:string;
+  target:NonNullable<ReturnType<typeof buildCurrentInstructionFrame>["target"]>;
+  trainingMode:TrainingMode;
+  trainerPhase:string;
+  openingId?:string|null;
+  lineId?:string|null;
+  activeLineName?:string|null;
+  recentCoachBodies?:string[];
+  recentCoachThemes?:string[];
+}){
+  const pipeline=buildCoachExplanationPipeline({
+    fenBefore:input.fen,
+    target:input.target,
+    trainerMode:input.trainingMode,
+    trainerPhase:input.trainerPhase,
+    isContinuation:input.trainingMode==="continuation",
+    openingId:input.openingId,
+    lineId:input.lineId,
+    activeLineName:input.activeLineName,
+    recentCoachBodies:input.recentCoachBodies,
+    recentCoachThemes:input.recentCoachThemes,
+  });
+  const fallback=buildVerifiedUserFacingFallback(pipeline.moveFactPacket);
+  return {
+    title:fallback.title,
+    body:fallback.body,
+    reason:fallback.reason,
+    theme:pipeline.coachExplanation.selectedTheme,
+    quality:pipeline.coachQuality,
+  };
+}
+
+function detectUnverifiedCoachClaims(input:{
+  body:string;
+  target:{pieceType:string;isDevelopment:boolean;isDiagonalMove:boolean;isCapture:boolean;isCheck:boolean;isMate:boolean;isPromotion:boolean;isKingSafetyMove:boolean;isCentralPawnAdvance:boolean}|null;
+  featureClaims:string[];
+  planClaims:string[];
+}){
+  const text=input.body.toLowerCase();
+  const claims:string[]=[];
+  const verified:string[]=[];
+  const features=new Set<string>([...input.featureClaims,...input.planClaims].map((x)=>String(x)));
+  const target=input.target;
+  const pieceChecks:[string,string][]=[["bishop","b"],["knight","n"],["rook","r"],["queen","q"],["king","k"],["pawn","p"]];
+  for(const [name,code] of pieceChecks){
+    if(new RegExp(`\\b${name}\\b`).test(text)){
+      if(target?.pieceType===code)verified.push(`piece:${name}`);
+      else claims.push("unverified_piece_claim");
+    }
+  }
+  if(/\bdevelops?\b|\bdevelopment\b/.test(text) && !target?.isDevelopment)claims.push("unverified_development_claim");
+  if(/\bdiagonal\b/.test(text) && !(target&&(target.pieceType==="b"||target.pieceType==="q")&&target.isDiagonalMove))claims.push("unverified_diagonal_claim");
+  if(/\bcenter\b|\bcentral\b|center tension/.test(text) && !(target?.isCentralPawnAdvance||features.has("center_tension")||features.has("maintain_center_tension")||features.has("central_break_preparation")))claims.push("unverified_center_tension_claim");
+  if(/\bpressure\b|\battack\b/.test(text) && !(features.has("attacks_square")||features.has("bishop_diagonal_pressure")||features.has("rook_on_open_file")))claims.push("unverified_pressure_claim");
+  if(/king safety|castle|shelter/.test(text) && !(target?.isKingSafetyMove||features.has("king_safety_urgent")||features.has("castle_and_connect_rooks")))claims.push("unverified_king_safety_claim");
+  if(/\bcaptures?\b|\btakes\b/.test(text) && !target?.isCapture)claims.push("unverified_capture_claim");
+  if(/\bcheckmate\b|\bmate\b/.test(text) && !target?.isMate)claims.push("unverified_mate_claim");
+  if(/\bcheck\b/.test(text) && !/\bcheckmate\b|\bmate\b/.test(text) && !target?.isCheck)claims.push("unverified_check_claim");
+  if(/\bpromotion\b|=[qrbn]/.test(text) && !target?.isPromotion)claims.push("unverified_promotion_claim");
+  if(/verified move:|pawn from|knight from|bishop from|rook from|queen from|king from|not_exposed_from_module|pipeline|fallback|runtime|candidate source/.test(text))claims.push("debug_copy_leaked_to_user");
+  return {verifiedClaims:verified,unverifiedClaims:Array.from(new Set(claims))};
 }
 
 function isMoveQualityVerified(moveQuality:MoveQualityResult|null){
@@ -399,8 +651,9 @@ async function resolveStockfishWorkerPath(){
   return null;
 }
 
-async function runBrowserStockfish(fen:string,skill:number,movetime=750,multiPv=3):Promise<{source:string;pvs:EngineLine[];depth?:number;timeMs:number}|null>{
+async function runBrowserStockfish(fen:string,skill:number,movetime=750,multiPv=3,signal?:AbortSignal):Promise<{source:string;pvs:EngineLine[];depth?:number;timeMs:number}|null>{
   if(typeof window==="undefined"||typeof Worker==="undefined")return null;
+  if(signal?.aborted)return null;
   const enginePath=await resolveStockfishWorkerPath();
   if(!enginePath)return null;
 
@@ -413,15 +666,24 @@ async function runBrowserStockfish(fen:string,skill:number,movetime=750,multiPv=
     const finish=()=>{
       if(resolved)return;
       resolved=true;
+      signal?.removeEventListener("abort",abortHandler);
       try{worker?.terminate()}catch{}
       const pvs=Array.from(bestByPv.entries()).sort((a,b)=>a[0]-b[0]).map(([,v])=>v).filter(Boolean).slice(0,5);
       if(!pvs.length){resolve(null);return}
       const maxDepth=Math.max(...pvs.map((pv)=>pv.depth??0));
       resolve({source:"stockfish-browser",pvs:pvs.map((pv)=>({san:pv.san,uci:pv.uci,cp:pv.cp,line:pv.line})),depth:maxDepth||undefined,timeMs:Math.round(performance.now()-started)});
     };
+    const abortHandler=()=>{
+      if(resolved)return;
+      resolved=true;
+      window.clearTimeout(timeout);
+      try{worker?.terminate()}catch{}
+      resolve(null);
+    };
 
     const send=(cmd:string)=>{try{worker?.postMessage(cmd)}catch{}};
     const timeout=window.setTimeout(finish,Math.max(1600,movetime+1200));
+    signal?.addEventListener("abort",abortHandler,{once:true});
 
     try{
       worker=new Worker(enginePath);
@@ -436,6 +698,7 @@ async function runBrowserStockfish(fen:string,skill:number,movetime=750,multiPv=
       };
       worker.onerror=()=>{
         window.clearTimeout(timeout);
+        signal?.removeEventListener("abort",abortHandler);
         try{worker?.terminate()}catch{}
         resolve(null);
       };
@@ -449,6 +712,7 @@ async function runBrowserStockfish(fen:string,skill:number,movetime=750,multiPv=
       send(`go movetime ${movetime}`);
     }catch{
       window.clearTimeout(timeout);
+      signal?.removeEventListener("abort",abortHandler);
       try{worker?.terminate()}catch{}
       resolve(null);
     }
@@ -467,6 +731,9 @@ export default function App(){
   const [feedback,setFeedback]=useState("Choose an opening and begin training.");
   const [lastMove,setLastMove]=useState<string|null>(null);
   const [lastMoveSan,setLastMoveSan]=useState("");
+  const [lastMoveColor,setLastMoveColor]=useState<ChessColor|null>(null);
+  const [userExplicitlyEnteredContinuation,setUserExplicitlyEnteredContinuation]=useState(false);
+  const [continueFromHereClicked,setContinueFromHereClicked]=useState(false);
   const [moveHistory,setMoveHistory]=useState<string[]>([]);
   const [progress,setProgress]=useState<Progress>(DEFAULT_PROGRESS);
   const [showAnswer,setShowAnswer]=useState(false);
@@ -510,6 +777,20 @@ export default function App(){
   const [overlayFrameId,setOverlayFrameId]=useState(1);
   const [staleOverlayIgnored,setStaleOverlayIgnored]=useState(false);
   const [overlayClearedOnPhaseChange,setOverlayClearedOnPhaseChange]=useState(false);
+  const [pendingOpponentRequest,setPendingOpponentRequest]=useState<PendingOpponentRequest|null>(null);
+  const [runtimeCriticalIssues,setRuntimeCriticalIssues]=useState<string[]>([]);
+  const [coachInteraction,setCoachInteraction]=useState<"none"|"hint"|"answer"|"why"|"hide"|"show_plan"|"analyze_idea"|"show_move">("none");
+  const [coachHintRequestCount,setCoachHintRequestCount]=useState(0);
+  const [coachHiddenFrameId,setCoachHiddenFrameId]=useState<string|null>(null);
+  const [coachReviewMarked,setCoachReviewMarked]=useState(false);
+  const [coachUtteranceMemory,setCoachUtteranceMemory]=useState<any[]>([]);
+  const [coachMemoryMigration,setCoachMemoryMigration]=useState({migratedOrCleared:false,clearedLegacyCount:0,legacyDetected:false});
+  const [lastCoachRecords,setLastCoachRecords]=useState<LastCoachRecord[]>([]);
+  const [coachTimeline,setCoachTimeline]=useState<CoachSessionLogEntry[]>([]);
+  const [continuationAnalysisStatus,setContinuationAnalysisStatus]=useState<ContinuationRuntimeStatus>("idle");
+  const [blundrDebugEnabled,setBlundrDebugEnabled]=useState(false);
+  const [debugEventLog,setDebugEventLog]=useState<DebugEvent[]>([]);
+  const [lastActionDebug,setLastActionDebug]=useState<Record<string,unknown>|null>(null);
   const explorerCache=useRef<Record<string,any>>({});
   const brainSeq=useRef(0);
   const visualRequestSeq=useRef(0);
@@ -521,19 +802,157 @@ export default function App(){
   const telemetrySeq=useRef(0);
   const telemetryEnabledRef=useRef(false);
   const telemetryEventsRef=useRef<LocalTelemetryEvent[]>([]);
+  const coachUtteranceMemoryRef=useRef<any[]>([]);
+  const lastCoachRecordsRef=useRef<LastCoachRecord[]>([]);
+  const coachTimelineRef=useRef<CoachSessionLogEntry[]>([]);
+  const coachTimelineSeqRef=useRef(0);
+  const previousSelectedCandidateUciRef=useRef<string|null>(null);
+  const candidateSyncDebugRef=useRef<Record<string,unknown>>({});
   const fenRef=useRef(fen);
+  const lastRecordedCoachUtteranceKeyRef=useRef<string>("");
+  const continuationAnalysisDebounceRef=useRef<number|null>(null);
+  const continuationAnalysisAbortRef=useRef<AbortController|null>(null);
+  const continuationAnalysisSeqRef=useRef(0);
+  const continuationEngineCacheRef=useRef<Record<string,{fen:string;pvs:EngineLine[];source:string}>>({});
+  const opponentRequestSeqRef=useRef(0);
+  const pendingOpponentRequestRef=useRef<PendingOpponentRequest|null>(null);
+  const opponentReplyTimeoutRef=useRef<number|null>(null);
   const brainAbortRef=useRef<AbortController|null>(null);
   const visualAbortRef=useRef<AbortController|null>(null);
+  useEffect(()=>{setBlundrDebugEnabled(isBlundrDebugEnabled())},[]);
   const repertoires=useMemo(()=>[...OPENINGS,...customRepertoires],[customRepertoires]);
   const repertoire=repertoires.find(r=>r.id===selectedRepertoireId)??repertoires[0];
-  const tree=useMemo(()=>buildTree(repertoire),[repertoire]);
+  const openingTree=useMemo(()=>buildOpeningTree(repertoireLineInputs(repertoire)),[repertoire]);
   const game=useMemo(()=>new Chess(fen),[fen]);
   const userColor:ChessColor=repertoire.color==="white"?"w":"b";
   const opponentColor:ChessColor=userColor==="w"?"b":"w";
   const isUserTurn=game.turn()===userColor;
   const key=normalizeFen(fen);
-  const options=tree[key]??[];
-  const expectedUserOptions=options.filter(m=>m.color===userColor);
+  const exactOpeningNodes=openingTree.nodesByFen4[key]??[];
+  const expectedMoveResolution=useMemo(()=>resolveExpectedMoveForFrame({
+    openingTree,
+    fen,
+    trainerPhase,
+    trainingMode,
+    trainerView,
+    isUserTurn,
+    userColor,
+    opponentColor,
+    lastOpponentMoveUci:lastMoveColor===opponentColor?lastMove:null,
+    lastOpponentMoveSan:lastMoveColor===opponentColor?lastMoveSan:null,
+    legacyExpectedMoveCandidate:null,
+    enginePreview,
+    allowEngineFallbackInRestricted:false,
+  }),[openingTree,fen,trainerPhase,trainingMode,trainerView,isUserTurn,userColor,opponentColor,lastMoveColor,lastMove,lastMoveSan,enginePreview]);
+  const expectedMoveResolverDebug=useMemo(()=>buildOpeningResolverDebug(expectedMoveResolution),[expectedMoveResolution]);
+  const opponentBookOptions=exactOpeningNodes.flatMap((node)=>node.continuations).filter((move,index,all)=>move.color===opponentColor&&all.findIndex((candidate)=>candidate.uci===move.uci)===index).map((move)=>({
+    san:move.san,
+    uci:move.uci,
+    color:move.color as ChessColor,
+    resultingFen:move.resultingFen,
+  }));
+  const guidedCoveragePolicy=useMemo(()=>decideGuidedCoveragePolicy({
+    currentPly:moveHistory.length,
+    fullMoveNumber:Number(fen.split(" ")[5]??Math.floor(moveHistory.length/2)+1),
+    activeOpeningId:repertoire.id,
+    activeLineId:selectedRepertoireId,
+    normalizedFen:key,
+    sideToMove:game.turn() as ChessColor,
+    userColor,
+    branchFrequency:null,
+    cumulativeBranchCoverage:null,
+    nodeContinuationCount:exactOpeningNodes.reduce((sum,node)=>sum+node.continuations.length,0),
+    userContinuationCount:expectedMoveResolution.candidateMoves.filter((move)=>move.color===userColor).length,
+    opponentContinuationCount:opponentBookOptions.length,
+    legalMoveCount:game.moves().length,
+    knownBranchAvailable:expectedMoveResolution.candidateMoves.some((move)=>move.color===userColor),
+    adaptiveBranchAvailable:false,
+    continuationCandidateExists:Boolean(enginePreview&&normalizeFen(enginePreview.fen)===key&&enginePreview.pvs[0]),
+    explicitCuratedTerminalNode:false,
+  }),[moveHistory.length,fen,repertoire.id,selectedRepertoireId,key,game,userColor,exactOpeningNodes,expectedMoveResolution.candidateMoves,opponentBookOptions.length,enginePreview]);
+  const rating=ratingPreset(ratingFilter);
+  const enabledViews:ActiveBoardView[]=([] as ActiveBoardView[]).concat(boardSettings.showAttack?["attack"]:[],boardSettings.showDefense?["defense"]:[],boardSettings.showPlan?["plan"]:[]);
+  const safeBoardView:ActiveBoardView=enabledViews.includes(activeBoardView)?activeBoardView:(enabledViews[0]??"plan");
+  const currentView=annotation[safeBoardView]??annotation.plan;
+  const engineLines=enginePreview&&normalizeFen(enginePreview.fen)===normalizeFen(fen)?enginePreview.pvs:[];
+  const continuationPolicyCandidate=useMemo(()=>{
+    if(trainingMode!=="continuation"||!isUserTurn)return null;
+    const legalVerboseMoves=(game.moves({verbose:true}) as any[]);
+    if(game.isGameOver()||legalVerboseMoves.length===0)return null;
+    const legalUcis=new Set(legalVerboseMoves.map((move)=>moveToUci(move)));
+    const legalExplorer=explorerMoves
+      .filter((move)=>legalUcis.has(move.uci))
+      .map((move)=>({uci:move.uci,san:move.san,source:"lichess" as const,pct:move.pct,weight:move.total,supported:true,engineSafe:false}));
+    const policy=selectContinuedPlayMove({
+      fen,
+      lichessCandidates:legalExplorer,
+      engineTop:engineLines[0]?{uci:engineLines[0].uci,san:engineLines[0].san,source:"engine",engineSafe:true,supported:true}:null,
+    });
+    const fallbackMove=legalVerboseMoves[0];
+    const selectedUci=policy?.selectedUci&&legalUcis.has(policy.selectedUci)?policy.selectedUci:moveToUci(fallbackMove);
+    const applied=applyUci(fen,selectedUci);
+    if(!applied)return null;
+    const usedEmergencyFallback=!policy?.selectedUci||!legalUcis.has(policy.selectedUci);
+    return {
+      uci:applied.uci,
+      san:applied.san,
+      source:usedEmergencyFallback?"emergency_legal_fallback":policy.source,
+      reason:usedEmergencyFallback?"no_policy_candidate_available_used_first_legal_move":policy.reason,
+      debug:usedEmergencyFallback?{
+        ...(policy?.debug??{}),
+        emergencyFallbackApplied:true,
+        fallbackLegalMoveCount:legalVerboseMoves.length,
+        fallbackMoveUci:applied.uci,
+      }:policy.debug,
+    };
+  },[trainingMode,isUserTurn,fen,game,explorerMoves,engineLines]);
+  const currentInstructionFrame=useMemo(()=>buildCurrentInstructionFrame({
+    frameId:trainerFrameId,
+    fen,
+    trainingMode,
+    trainerPhase,
+    trainerView,
+    isUserTurn,
+    guidedMove:expectedMoveResolution.expectedMoveUci&&expectedMoveResolution.source!=="continuation_candidate"?{
+      uci:expectedMoveResolution.expectedMoveUci,
+      san:expectedMoveResolution.expectedMoveSan,
+      source:expectedMoveResolution.source,
+      kind:expectedMoveResolution.source==="opening_branch"?"lichess_branch_move":expectedMoveResolution.source==="opening_family_plan"?"adaptive_branch_move":"guided_move",
+      trust:"book_verified",
+    }:null,
+    continuationCandidate:trainingMode==="continuation"&&isUserTurn?{
+      uci:expectedMoveResolution.source==="continuation_candidate"
+        ? expectedMoveResolution.expectedMoveUci
+        : (continuationPolicyCandidate?.uci??engineLines[0]?.uci??null),
+      san:expectedMoveResolution.source==="continuation_candidate"
+        ? expectedMoveResolution.expectedMoveSan
+        : (continuationPolicyCandidate?.san??engineLines[0]?.san??null),
+      source:expectedMoveResolution.source==="continuation_candidate"
+        ? "continuation_candidate"
+        : continuationPolicyCandidate?.source??(engineLines[0]?.uci?"engine_preview":"continued_play_policy"),
+      trust:"continuation_verified",
+    }:null,
+    preferredTargetKind:trainingMode==="continuation"?"continuation_candidate":"guided_move",
+  }),[trainerFrameId,fen,trainingMode,trainerPhase,trainerView,isUserTurn,expectedMoveResolution,engineLines,continuationPolicyCandidate]);
+  const instructionTarget=currentInstructionFrame.target;
+  const continuationRuntimeState=useMemo(()=>classifyContinuationRuntimeState({
+    fen,
+    trainingMode,
+    isUserTurn,
+    userExplicitlyEnteredContinuation,
+    hasContinuationCandidate:instructionTarget?.kind==="continuation_candidate",
+    analysisStatus:continuationAnalysisStatus,
+  }),[fen,trainingMode,isUserTurn,userExplicitlyEnteredContinuation,instructionTarget?.kind,continuationAnalysisStatus]);
+  const expectedUserOptions=useMemo<Continuation[]>(()=>isBookLikeInstructionTarget(instructionTarget)?[{
+    san:instructionTarget.san,
+    uci:instructionTarget.uci,
+    color:instructionTarget.color,
+    resultingFen:instructionTarget.resultingFen,
+  }]:[],[instructionTarget]);
+  const currentSelectedCandidateUci=instructionTarget?.kind==="continuation_candidate"?instructionTarget.uci:null;
+  const currentSelectedCandidateSan=instructionTarget?.kind==="continuation_candidate"?instructionTarget.san:null;
+  const currentSelectedCandidateSource=instructionTarget?.source??"none";
+  const currentSelectedCandidateLegal=Boolean(currentSelectedCandidateUci&&(game.moves({verbose:true}) as any[]).some((move)=>moveToUci(move)===currentSelectedCandidateUci));
   const expectedUserOptionsSignature=expectedUserOptions.map((move)=>`${move.uci??""}:${move.san??""}`).join("|");
   const expectedMovesForValidation=useMemo(()=>expectedUserOptions.map((move)=>({
     uci:typeof move.uci==="string"?move.uci.trim().toLowerCase():"",
@@ -542,12 +961,25 @@ export default function App(){
   const expectedMovesForValidationKey=useMemo(()=>expectedMovesForValidation.map((move)=>`${move.uci}:${move.san??""}`).join("|"),[expectedMovesForValidation]);
   const expectedUserUcis=expectedMovesForValidation.map(move=>move.uci);
   const expectedUserSans=expectedMovesForValidation.map(move=>move.san).filter(Boolean) as string[];
-  const opponentBookOptions=options.filter(m=>m.color===opponentColor);
-  const rating=ratingPreset(ratingFilter);
-  const enabledViews:ActiveBoardView[]=([] as ActiveBoardView[]).concat(boardSettings.showAttack?["attack"]:[],boardSettings.showDefense?["defense"]:[],boardSettings.showPlan?["plan"]:[]);
-  const safeBoardView:ActiveBoardView=enabledViews.includes(activeBoardView)?activeBoardView:(enabledViews[0]??"plan");
-  const currentView=annotation[safeBoardView]??annotation.plan;
-  const engineLines=enginePreview&&normalizeFen(enginePreview.fen)===normalizeFen(fen)?enginePreview.pvs:[];
+  const frameKey=useMemo(()=>buildRuntimeFrameKey({
+    fen,
+    trainerPhase,
+    trainerView,
+    trainingMode,
+    isUserTurn,
+    instructionTargetUci:instructionTarget?.uci??null,
+  }),[fen,trainerPhase,trainerView,trainingMode,isUserTurn,instructionTarget?.uci]);
+  useEffect(()=>{
+    const previous=previousSelectedCandidateUciRef.current;
+    const staleDetected=Boolean(previous&&currentSelectedCandidateUci&&previous!==currentSelectedCandidateUci);
+    candidateSyncDebugRef.current={
+      currentSelectedCandidateUci,
+      previousSelectedCandidateUci:previous,
+      staleSelectedCandidateDetected:staleDetected,
+      staleSelectedCandidateCleared:staleDetected,
+    };
+    previousSelectedCandidateUciRef.current=currentSelectedCandidateUci??null;
+  },[currentSelectedCandidateUci]);
   const shouldValidateTrainingMove=activeTab==="train"&&trainingMode==="restricted"&&isUserTurn&&!bookComplete&&historyIndex>=positionHistory.length-1&&expectedMovesForValidation.length>0;
   const moveQualityUserStatus=getMoveQualityUserStatus(moveQuality,moveQualityPending);
   const moveQualityVerified=isMoveQualityVerified(moveQuality);
@@ -626,8 +1058,12 @@ export default function App(){
     trainerPhase,
     userToMove:isUserTurn,
   }):null,[teachingOrchestration,selectedRepertoireId,fen,trainerFrameId,trainerView,showAnswer,trainerPhase,isUserTurn]);
+  const visualRecipeMoveUci=visualRecipe?.moveUci?.toLowerCase()??null;
+  const visualRecipeTargetMatchesInstructionTarget=instructionTarget?.uci?(!visualRecipeMoveUci||visualRecipeMoveUci===instructionTarget.uci):"unknown";
+  const visualRecipeBlockedByTargetMismatch=Boolean(instructionTarget?.uci&&visualRecipeMoveUci&&visualRecipeMoveUci!==instructionTarget.uci);
+  const visualRecipeForRender=visualRecipeBlockedByTargetMismatch?null:visualRecipe;
   const visualRecipeOverlay=useMemo(()=>adaptVisualRecipe({
-    recipe:visualRecipe,
+    recipe:visualRecipeForRender,
     phase:trainerPhase,
     userToMove:isUserTurn,
     viewMode:trainerView,
@@ -635,9 +1071,9 @@ export default function App(){
     trainerFrameId,
     overlayFrameId,
     opponentCandidateRenderedInMainUi:false,
-  }),[visualRecipe,trainerPhase,isUserTurn,trainerView,boardFen,trainerFrameId,overlayFrameId]);
+  }),[visualRecipeForRender,trainerPhase,isUserTurn,trainerView,boardFen,trainerFrameId,overlayFrameId]);
   const visualRecipePlayback=useVisualRecipePlayback({
-    recipe:visualRecipe,
+    recipe:visualRecipeForRender,
     phase:trainerPhase,
     viewMode:trainerView,
     boardFen,
@@ -657,12 +1093,35 @@ export default function App(){
     !isUserTurn?"not_user_turn":
     undefined;
   const staleOverlayFlag=staleOverlayIgnored||visualRecipeOverlay.staleOverlayIgnored;
-  const visualLines:ActiveLine[]=
-    overlaySuppressedReason?[]:
-    teachingOrchestration?visualRecipePlayback.lines.filter((line)=>isValidSquare(line.from)&&isValidSquare(line.to)).slice(0,2):
-    visualModelOutput?(activeVisualModelOutput&&trainerPhase==="ready_for_user"&&isUserTurn&&trainerView==="assisted"?(activeVisualModelOutput.arrows??[]).filter(a=>isValidSquare(a.from)&&isValidSquare(a.to)).slice(0,2).map(a=>({from:a.from,to:a.to,kind:visualLineKind(a.role,a.kind),label:a.label})):[]):currentView.lines;
+  const visualRecipeMainLines:ActiveLine[]=overlaySuppressedReason?[]:visualRecipePlayback.lines.filter((line)=>isValidSquare(line.from)&&isValidSquare(line.to)).slice(0,4);
+  const legacyVisualLines:ActiveLine[]=visualModelOutput?(activeVisualModelOutput&&trainerPhase==="ready_for_user"&&isUserTurn&&trainerView==="assisted"?filterLegacyMainUiLines((activeVisualModelOutput.arrows??[]).filter(a=>isValidSquare(a.from)&&isValidSquare(a.to)).slice(0,2).map(a=>({from:a.from,to:a.to,kind:visualLineKind(a.role,a.kind),label:a.label}))):[]):filterLegacyMainUiLines(currentView.lines);
   const visualContext=activeVisualModelOutput?.context;
   const visualAnimationName=activeVisualModelOutput?.animationPackage?.name??activeVisualModelOutput?.animation;
+  const safeMoveArrowVisual=useMemo(()=> {
+    const moveUci=trainingMode==="restricted"&&isBookLikeInstructionTarget(instructionTarget)?instructionTarget.uci:null;
+    const moveSan=trainingMode==="restricted"&&isBookLikeInstructionTarget(instructionTarget)?instructionTarget.san:null;
+    const moveLegal=Boolean(moveUci&&(game.moves({verbose:true}) as any[]).some((move)=>moveToUci(move)===moveUci));
+    const shouldRender=Boolean(
+      activeBoard &&
+      trainerPhase==="ready_for_user" &&
+      isUserTurn &&
+      trainerView==="assisted" &&
+      moveUci &&
+      moveLegal &&
+      trainingMode==="restricted" &&
+      !visualRecipeMainLines.length
+    );
+    if(!shouldRender||!moveUci){
+      return {source:"guided_target_fallback" as const,shouldRender:false,lines:[],highlights:[],blockedReason:moveUci?"not_authorized_visual_surface":"missing_candidate_uci"};
+    }
+    return {
+      source:"guided_target_fallback" as const,
+      shouldRender:true,
+      lines:[{from:moveUci.slice(0,2),to:moveUci.slice(2,4),kind:"plan",label:moveSan??moveUci}],
+      highlights:[{square:moveUci.slice(2,4),role:"target"}],
+      blockedReason:undefined,
+    };
+  },[activeBoard,trainerPhase,isUserTurn,trainerView,trainingMode,instructionTarget,visualRecipeMainLines.length,game]);
   const basePatternCue=buildPatternCue({trainerView,visualModelOutput,visualModelPending,visualModelError,visualSuppressed,moveQuality,moveQualityPending,shouldValidateTrainingMove,annotation,expectedUserOptions,trainingMode,isUserTurn,bookComplete,showAnswer,engineLines});
   const patternCue=teachingOrchestration&&(teachingOrchestration.permission.canShowPatternCue||teachingOrchestration.permission.canShowContextCue)?{
     ...basePatternCue,
@@ -676,6 +1135,788 @@ export default function App(){
   const patternCueBadgeLabel=trainerView==="assisted"&&!showAnswer&&teachingOrchestration?`Assisted View • ${teachingOrchestration.userLabel}`:getMoveQualityBadgeLabel({trainerView,showAnswer,shouldValidateTrainingMove,moveQuality,moveQualityPending,patternCueStatus:patternCue.status});
   const showValidatedBadge=trainerView==="assisted"&&!showAnswer&&Boolean(teachingOrchestration?.cue.userFacing.badge);
   const moveImpact=teachingOrchestration?.moveImpact??impactFromEngine(engineLines[0]);
+  const coachMemoryForDecision=coachUtteranceMemoryRef.current;
+  const coachContextResult=useMemo(()=>buildCoachContext({
+    frameId:trainerFrameId,
+    boardFen:fen,
+    viewMode:trainingMode==="continuation"?"freeplay":(trainerView==="assisted"?"assisted":"plain"),
+    revealState:showAnswer?"revealed":"hidden",
+    phase:trainerPhase,
+    userToMove:isUserTurn,
+    bookStatus:bookComplete?"book_complete":trainingMode==="continuation"?"out_of_book":"in_book",
+    trainingContext:teachingOrchestration?{
+      conceptId:teachingOrchestration.cue.conceptId,
+      patternId:`${selectedRepertoireId}:${teachingOrchestration.cue.conceptId}`,
+      moveTrust:teachingOrchestration.moveTrust,
+      contextTrust:teachingOrchestration.contextTrust,
+    }:undefined,
+    visualRecipe:visualRecipe?{
+      frameId:visualRecipe.frameId,
+      fen:visualRecipe.fen,
+      mode:visualRecipe.mode,
+      conceptId:visualRecipe.conceptId,
+      patternId:visualRecipe.patternId,
+      visualRecipeId:visualRecipe.visualRecipeId,
+      moveUci:visualRecipe.moveUci,
+      moveSan:visualRecipe.moveSan,
+      keySquares:visualRecipe.learningAnchor.keySquares,
+      keyPieces:visualRecipe.learningAnchor.keyPieces,
+      primitiveTypes:visualRecipe.beats.flatMap((beat)=>beat.primitives.map((primitive)=>primitive.type)),
+      canShowAnswerMove:visualRecipe.permissions.canShowAnswerMove,
+      canShowContext:visualRecipe.permissions.canShowContext,
+    }:null,
+    attempts:progress.attempts,
+    wrongAttempts:reviewingFen&&progress.mistakes[reviewingFen]?progress.mistakes[reviewingFen].count:0,
+    hintUsed:coachHintRequestCount>0,
+    answerShown:showAnswer,
+    elapsedMs:Math.max(0,Date.now()-positionStartedAtRef.current),
+    priorPatternMisses:progress.mistakes[normalizeFen(fen)]?.count??0,
+    priorPatternSuccesses:progress.trainedPositions[normalizeFen(fen)]?1:0,
+    recentUtteranceIds:coachMemoryForDecision.slice(-5).map((entry:any)=>entry.utteranceId),
+    recentUtteranceFamilies:coachMemoryForDecision.slice(-5).map((entry:any)=>entry.utteranceFamily),
+  }),[trainerFrameId,fen,trainingMode,trainerView,showAnswer,trainerPhase,isUserTurn,bookComplete,teachingOrchestration,visualRecipe,progress,reviewingFen,coachHintRequestCount,selectedRepertoireId,coachMemoryForDecision]);
+  const adaptiveCoachDecision=useMemo(()=>decideCoachOutput({
+    context:coachContextResult.context,
+    interaction:coachInteraction,
+    outcome:reviewingFen&&progress.mistakes[reviewingFen]?"wrong":"none",
+    hintRequestCount:coachHintRequestCount,
+    utteranceMemory:coachMemoryForDecision,
+    brainInput:{
+      fen,
+      trainerFrameId:String(trainerFrameId),
+      trainingMode:bookComplete||trainingMode==="continuation"?"continuation":"restricted",
+      viewMode:trainingMode==="continuation"?"freeplay":(trainerView==="assisted"?"assisted":"plain"),
+      bookStatus:bookComplete?"book_complete":trainingMode==="continuation"?"out_of_book":"in_book",
+      expectedMoveUci:expectedUserOptions[0]?.uci,
+      expectedMoveSan:expectedUserOptions[0]?.san,
+      selectedCandidateMoveUci:currentSelectedCandidateUci??undefined,
+      selectedCandidateMoveSan:currentSelectedCandidateSan??undefined,
+      enginePreview,
+      visualRecipe,
+      trainingContext:teachingOrchestration,
+      teachingOrchestration,
+      repertoireMoves:expectedUserOptions.map((move)=>move.uci),
+      lichessContinuationMoves:explorerMoves.map((move)=>move.uci),
+      stale:coachContextResult.context?(!coachContextResult.context.recipeFrameMatchesBoard||!coachContextResult.context.recipeFenMatchesBoard):true,
+      expectedMoveSource:expectedMoveResolution.source,
+      expectedMoveCoverageTier:expectedMoveResolution.coverageTier,
+      expectedMoveResolutionReason:expectedMoveResolution.reason,
+    },
+  }),[coachContextResult,coachInteraction,reviewingFen,progress.mistakes,coachHintRequestCount,coachMemoryForDecision,fen,trainerFrameId,bookComplete,trainingMode,trainerView,expectedUserOptionsSignature,currentSelectedCandidateUci,currentSelectedCandidateSan,enginePreview,visualRecipe,teachingOrchestration,explorerMoves,expectedMoveResolution]);
+  const liveCoachState=useMemo(()=>{
+    if(trainerPhase==="ready_for_user"&&isUserTurn&&instructionTarget){
+      const evidence=buildPositionEvidence({
+        frameId:String(trainerFrameId),
+        trainerFrameId:String(trainerFrameId),
+        fen,
+        boardFen:fen,
+        moveHistorySan:moveHistory,
+        bookStatus:bookComplete?"book_complete":trainingMode==="continuation"?"out_of_book":"in_book",
+        focusMove:instructionTarget?{uci:instructionTarget.uci}:null,
+      });
+      const candidates=profileCandidateMoves(evidence);
+      const opportunities=rankPedagogicalOpportunities(evidence,candidates);
+      const selected=selectBestLiveComment(opportunities);
+      const recentInstructional=getRecentInstructionalCoachRecords(lastCoachRecordsRef.current,5);
+      const coachPipeline=buildCoachExplanationPipeline({
+        fenBefore:fen,
+        target:instructionTarget,
+        trainerMode:trainingMode,
+        trainerPhase,
+        isContinuation:trainingMode==="continuation",
+        openingId:repertoire.id,
+        lineId:selectedRepertoireId,
+        activeLineName:repertoire.name,
+        recentCoachBodies:recentInstructional.map((entry)=>entry.body),
+        recentCoachThemes:recentInstructional.map((entry)=>String(entry.selectedOpportunityId??"")),
+      });
+      const silence=shouldLiveCoachStaySilent({
+        evidence,
+        selected,
+        userRequestedHelp:coachInteraction==="hint"||coachInteraction==="why",
+        repeatedConcept:false,
+      });
+      const text=silence.silent?"":coachPipeline.coachExplanation.body||pickLiveCoachCopy(selected?.opportunity??"silence",`${selectedRepertoireId}:${normalizeFen(fen)}`);
+      const lintedText=validateLiveCoachCopy(text).allowed&&!isDebugLeakText(text)?text:buildVerifiedUserFacingFallback(coachPipeline.moveFactPacket).body;
+      const safeText=lintedText;
+      const exactMoveAllowed=Boolean(selected?.exactMoveAllowed&&selected?.candidateMoveUci&&selected?.candidateMoveSan);
+      const mode=exactMoveAllowed?"supported_continuation":"freeplay_principle";
+      const selectedCandidate=candidates.find((candidate)=>candidate.moveUci===instructionTarget.uci)??null;
+      const selectedTemplateId=coachPipeline.coachExplanation.selectedTheme?`live:${coachPipeline.coachExplanation.selectedTheme}:${coachPipeline.coachExplanation.selectedTheme==="capture_or_recapture"||coachPipeline.coachExplanation.selectedTheme==="checkmate"?"explain_tactic":coachPipeline.coachExplanation.selectedTheme==="central_pawn_advance"?"explain_center":"explain_development"}`:(selected?`live:${selected.opportunity}:${selected.intent}`:null);
+      const normalizedLiveDebug=normalizeCoachDebugMetadata({
+        ...buildLiveCoachDebug({evidence,candidates,selected,silenceReason:silence.reason}),
+        coachCopySource:"live_coach",
+        advancedFeatureClaimTypes:selectedCandidate?.featureSupport??[],
+        recognizedPlanTypes:selected?[`opportunity:${selected.opportunity}`]:[],
+        selectedOpportunityId:coachPipeline.coachExplanation.selectedTheme??selected?.opportunity??null,
+        selectedOpportunityMoveUci:selected?.candidateMoveUci??instructionTarget.uci,
+        selectedTemplateId:selectedTemplateId??undefined,
+        templateCandidatesTop5:selected?[{id:selectedTemplateId??"live:none",score:selected.totalScore??0,intent:selected.intent,opportunity:selected.opportunity}]:[],
+        blockedTemplatesTop10:[],
+        whySelectedOpportunityWon:selected?.reason??null,
+        featureClaimCount:selectedCandidate?.featureSupport?.length??0,
+        blockedFeatureClaims:[],
+        blockedPlans:[],
+        opportunityCount:opportunities.length,
+        renderableOpportunityCount:opportunities.filter((opportunity)=>opportunity.totalScore!==undefined).length,
+        explanationRenderMs:0,
+        coachDecisionSource:coachPipeline.coachExplanation.usedFallback?"verified_safe_fallback":"live_coach",
+        selectedTheme:coachPipeline.coachExplanation.selectedTheme,
+        selectedOpportunityLayer:coachPipeline.coachExplanation.selectedOpportunityLayer??null,
+        selectedOpportunityScore:coachPipeline.coachExplanation.selectedOpportunityScore??coachPipeline.opportunityPacket.selected?.score??null,
+        selectedPlanType:coachPipeline.coachExplanation.selectedPlanType??coachPipeline.planPacket.plans[0]?.planType??null,
+        coachQuality:coachPipeline.coachQuality,
+        moveFactPacket:coachPipeline.moveFactPacket,
+        positionDeltaPacket:coachPipeline.positionDeltaPacket,
+        featurePacket:{status:coachPipeline.featurePacket.status,...coachPipeline.featurePacket},
+        planPacket:{status:coachPipeline.planPacket.status,plans:coachPipeline.planPacket.plans},
+        opportunityPacket:{
+          status:coachPipeline.opportunityPacket.opportunities.length?"ran":"ran_empty",
+          opportunitiesTop5:coachPipeline.opportunityPacket.opportunities.slice(0,5),
+          selectedOpportunity:coachPipeline.opportunityPacket.selected,
+        },
+        safetyResult:coachPipeline.safetyResult,
+      });
+      return{
+        mode,
+        title:coachPipeline.coachExplanation.title,
+        text:safeText,
+        evidence,
+        candidates,
+        opportunities,
+        selected,
+        coachPipeline,
+        silent:silence.silent||!safeText,
+        buttons:exactMoveAllowed?(["hint","show_plan","analyze_idea","show_move"] as CoachButton[]):(["hint","show_plan","analyze_idea"] as CoachButton[]),
+        debug:normalizedLiveDebug,
+      };
+    }
+    return null;
+  },[bookComplete,trainingMode,trainerPhase,isUserTurn,trainerFrameId,fen,moveHistory,coachInteraction,selectedRepertoireId,instructionTarget,repertoire.id,repertoire.name]);
+  const selectedContinuationCandidateForCoach=trainingMode==="continuation"&&currentSelectedCandidateUci?{uci:currentSelectedCandidateUci,san:currentSelectedCandidateSan??currentSelectedCandidateUci}:null;
+  const rawCoachDecision=useMemo<any>(()=>{
+    if(coachHiddenFrameId===String(trainerFrameId))return{...adaptiveCoachDecision,shouldShowCoachCard:false,suppressedReason:"hidden_for_frame"};
+    if(trainingMode==="continuation"&&continuationRuntimeState.status==="terminal"){
+      return {
+        mode:"freeplay_principle",
+        action:"show_plan",
+        frameId:String(trainerFrameId),
+        normalizedFen:normalizeFen(fen),
+        title:"Line complete",
+        body:continuationRuntimeState.reason==="checkmate"?"This line has reached checkmate. Restart the line or review the pattern.":"This position has no legal continuation. Restart the line or choose another branch.",
+        buttons:["hide"],
+        shouldShowCoachCard:true,
+        shouldMarkReviewWorthy:true,
+        exactMoveAllowed:false,
+        revealRisk:"none" as const,
+        givesAnswer:false,
+        claimTypes:["terminal_position"],
+        utteranceId:`${normalizeFen(fen)}:continuation_terminal`,
+        utteranceFamily:"continuation_terminal",
+        debug:{coachIntent:"continuation_terminal",continuationRuntimeStatus:"terminal",continuationTerminalReason:continuationRuntimeState.reason,coachMoveUci:null,coachPieceType:null,coachVerifiedFactsUsed:false,verifiedFallbackUsed:true,fallbackReason:"terminal_position"},
+      };
+    }
+    if(trainingMode==="continuation"&&continuationRuntimeState.status==="opponent_replying"){
+      return {
+        mode:"freeplay_principle",
+        action:"show_plan",
+        frameId:String(trainerFrameId),
+        normalizedFen:normalizeFen(fen),
+        title:"Opponent reply",
+        body:"The opponent is choosing a reply before Blundr can suggest your continuation.",
+        buttons:["hide"],
+        shouldShowCoachCard:true,
+        shouldMarkReviewWorthy:false,
+        exactMoveAllowed:false,
+        revealRisk:"none" as const,
+        givesAnswer:false,
+        claimTypes:["transition_context"],
+        utteranceId:`${normalizeFen(fen)}:continuation_opponent_replying`,
+        utteranceFamily:"continuation_transition",
+        debug:{coachIntent:"opponent_replying",continuationRuntimeStatus:"opponent_replying",coachMoveUci:null,coachPieceType:null,coachVerifiedFactsUsed:false,verifiedFallbackUsed:true,fallbackReason:"opponent_replying"},
+      };
+    }
+    if(trainingMode==="continuation"&&isUserTurn&&continuationRuntimeState.status==="analyzing"){
+      return {
+        mode:"freeplay_principle",
+        action:"show_plan",
+        frameId:String(trainerFrameId),
+        normalizedFen:normalizeFen(fen),
+        title:"Analyzing continuation",
+        body:"Blundr is analyzing the continuation candidate.",
+        buttons:["analyze_idea"],
+        shouldShowCoachCard:true,
+        shouldMarkReviewWorthy:false,
+        exactMoveAllowed:false,
+        revealRisk:"none" as const,
+        givesAnswer:false,
+        claimTypes:["plan_principle"],
+        debug:{coachIntent:"analyzing_continuation",coachMoveUci:null,coachPieceType:null,coachVerifiedFactsUsed:false,advancedFeatureClaimTypes:[],recognizedPlanTypes:[],selectedOpportunityId:undefined},
+      };
+    }
+    if(liveCoachState){
+      return{
+        mode:liveCoachState.mode as any,
+        action:"show_plan" as const,
+        frameId:String(trainerFrameId),
+        normalizedFen:normalizeFen(fen),
+        title:liveCoachState.title??(liveCoachState.mode==="supported_continuation"?"Suggested continuation":"Position context"),
+        body:liveCoachState.text,
+        buttons:liveCoachState.buttons,
+        shouldShowCoachCard:!liveCoachState.silent,
+        shouldMarkReviewWorthy:coachReviewMarked,
+        exactMoveAllowed:Boolean(liveCoachState.selected?.exactMoveAllowed),
+        revealRisk:"none" as const,
+        givesAnswer:false,
+        claimTypes:["plan_principle"],
+        debug:{
+          ...liveCoachState.debug,
+          selectedIntent:liveCoachState.selected?.intent??(liveCoachState.selected?selectIntentForOpportunity(liveCoachState.selected.opportunity):undefined),
+          coachMoveUci:instructionTarget?.uci??null,
+          coachPieceType:instructionTarget?.pieceType??null,
+          coachVerifiedFactsUsed:Boolean(instructionTarget),
+          advancedFeaturePacketExists:Array.isArray((liveCoachState.debug as any)?.advancedFeatureClaimTypes),
+          strategicPlanPacketExists:Array.isArray((liveCoachState.debug as any)?.recognizedPlanTypes),
+          selectedOpportunityId:(liveCoachState.debug as any)?.selectedOpportunityId??liveCoachState.selected?.opportunity??undefined,
+          selectedOpportunityMoveUci:(liveCoachState.debug as any)?.selectedOpportunityMoveUci??instructionTarget?.uci??null,
+          selectedTemplateId:(liveCoachState.debug as any)?.selectedTemplateId,
+          templateCandidatesTop5:(liveCoachState.debug as any)?.templateCandidatesTop5??[],
+          blockedTemplatesTop10:(liveCoachState.debug as any)?.blockedTemplatesTop10??[],
+          whySelectedOpportunityWon:(liveCoachState.debug as any)?.whySelectedOpportunityWon??null,
+          opportunityCount:(liveCoachState.debug as any)?.opportunityCount??liveCoachState.opportunities?.length??0,
+          renderableOpportunityCount:(liveCoachState.debug as any)?.renderableOpportunityCount??liveCoachState.opportunities?.length??0,
+        },
+      };
+    }
+    return adaptiveCoachDecision;
+  },[adaptiveCoachDecision,liveCoachState,coachHiddenFrameId,trainerFrameId,coachReviewMarked,instructionTarget,trainingMode,trainerPhase,isUserTurn,continuationAnalysisStatus,continuationRuntimeState,fen]);
+  const phaseActionGate=useMemo(()=>decideTrainerPhaseActionGate({
+    trainerPhase,
+    isUserTurn,
+    trainingMode,
+    expectedMoveSan:instructionTarget?.san??null,
+    expectedMoveUci:instructionTarget?.uci??null,
+    trustedContinuationCandidateAvailable:Boolean(selectedContinuationCandidateForCoach),
+    coachShouldShow:Boolean(rawCoachDecision?.shouldShowCoachCard),
+    coachButtons:(rawCoachDecision?.buttons??[]) as CoachButton[],
+  }),[trainerPhase,isUserTurn,trainingMode,instructionTarget,rawCoachDecision,selectedContinuationCandidateForCoach]);
+  const coachDecision=useMemo<any>(()=>{
+    const coachDebugBase={coachMoveUci:instructionTarget?.uci??null,coachPieceType:instructionTarget?.pieceType??null,coachVerifiedFactsUsed:Boolean(instructionTarget)};
+    const recentInstructional=getRecentInstructionalCoachRecords(lastCoachRecordsRef.current,5);
+    const candidateCoachAllowed=trainingMode==="continuation"&&instructionTarget?.kind==="continuation_candidate"&&currentSelectedCandidateLegal;
+    const transitionCoachAllowed=trainingMode==="continuation"&&["continuation_terminal","opponent_replying","analyzing_continuation"].includes(String(rawCoachDecision?.debug?.coachIntent??""));
+    const rawIntent=rawCoachDecision?.debug?.coachIntent??rawCoachDecision?.debug?.selectedIntent;
+    const missingDeepCoach=!(rawCoachDecision?.debug?.selectedTemplateId||rawCoachDecision?.debug?.mappingTemplateId)&&!rawCoachDecision?.debug?.selectedOpportunityId;
+    const genericCandidateCoach=rawCoachDecision?.title==="Position context"||rawIntent==="silent"||missingDeepCoach;
+    if(!phaseActionGate.shouldRenderCoach&&!transitionCoachAllowed){
+      return {
+        ...rawCoachDecision,
+        shouldShowCoachCard:false,
+        buttons:[],
+        suppressedReason:phaseActionGate.blockedReason??rawCoachDecision?.suppressedReason,
+        debug:normalizeCoachDebugMetadata({...(rawCoachDecision?.debug??{}),...coachDebugBase,phaseActionGate}),
+      };
+    }
+    if(candidateCoachAllowed&&genericCandidateCoach){
+      const safeFallback=instructionTarget?buildUserFacingTargetFallback({
+        fen,
+        target:instructionTarget,
+        trainingMode,
+        trainerPhase,
+        openingId:repertoire.id,
+        lineId:selectedRepertoireId,
+        activeLineName:repertoire.name,
+        recentCoachBodies:recentInstructional.map((entry)=>entry.body),
+        recentCoachThemes:recentInstructional.map((entry)=>String(entry.selectedOpportunityId??"")),
+      }):null;
+      return {
+        ...rawCoachDecision,
+        mode:"supported_continuation",
+        action:"show_plan",
+        title:safeFallback?.title??"Suggested continuation",
+        body:safeFallback?.body??"A verified continuation is available.",
+        buttons:phaseActionGate.filteredButtons.length?phaseActionGate.filteredButtons:["show_plan","analyze_idea","show_move","hide"],
+        shouldShowCoachCard:true,
+        exactMoveAllowed:true,
+        givesAnswer:false,
+        revealRisk:"low",
+        utteranceId:`${normalizeFen(fen)}:candidate_fallback:${currentSelectedCandidateUci}`,
+        utteranceFamily:"candidate_fallback",
+        debug:normalizeCoachDebugMetadata({...(rawCoachDecision?.debug??{}),...coachDebugBase,phaseActionGate,coachIntent:"show_continued_plan",candidateCoachFallbackUsed:true,candidateCoachFallbackReason:"missing_template_or_silent_generic_candidate",coachSelectedCandidateMove:currentSelectedCandidateUci,coachDecisionSource:"verified_safe_fallback",selectedTheme:safeFallback?.theme,coachQuality:safeFallback?.quality,fallbackReason:safeFallback?.reason??"candidate_safe_fallback"}),
+      };
+    }
+    if(rawIntent==="silent"){
+      return {
+        ...rawCoachDecision,
+        shouldShowCoachCard:false,
+        buttons:[],
+        suppressedReason:"silent_intent",
+        debug:normalizeCoachDebugMetadata({...(rawCoachDecision?.debug??{}),...coachDebugBase,phaseActionGate,coachRenderedDespiteSilentIntent:false}),
+      };
+    }
+    let out={
+      ...rawCoachDecision,
+      buttons:phaseActionGate.filteredButtons,
+      debug:{...(rawCoachDecision?.debug??{}),...coachDebugBase,phaseActionGate},
+    };
+    const body=String(out.body??"").trim();
+    const normalizedBody=normalizeCoachBody(body);
+    const recent=lastCoachRecordsRef.current.slice(-5);
+    const sameNormalizedCount=recent.filter((record)=>record.normalizedBody===normalizedBody).length;
+    const sameFamilyCount=recent.filter((record)=>record.utteranceFamily&&record.utteranceFamily===out.utteranceFamily).length;
+    const repeatedGenericPattern=sameNormalizedCount>=2||sameFamilyCount>=2;
+    if(repeatedGenericPattern&&instructionTarget){
+      const safeFallback=buildUserFacingTargetFallback({
+        fen,
+        target:instructionTarget,
+        trainingMode,
+        trainerPhase,
+        openingId:repertoire.id,
+        lineId:selectedRepertoireId,
+        activeLineName:repertoire.name,
+        recentCoachBodies:recentInstructional.map((entry)=>entry.body),
+        recentCoachThemes:recentInstructional.map((entry)=>String(entry.selectedOpportunityId??"")),
+      });
+      out={
+        ...out,
+        title:safeFallback.title,
+        body:safeFallback.body,
+        debug:{
+          ...(out.debug??{}),
+          repetitionGuardApplied:true,
+          repetitionGuardReason:sameNormalizedCount>=2?"same_normalized_body_3_in_5":"same_family_3_in_5",
+          repeatedGenericCoachCopyDetected:true,
+          verifiedFallbackUsed:true,
+          fallbackReason:"repetition_guard",
+          coachDecisionSource:"verified_safe_fallback",
+          selectedTheme:safeFallback.theme,
+          coachQuality:safeFallback.quality,
+        },
+      };
+    }
+    const featureClaims=Array.isArray((out.debug as any)?.advancedFeatureClaimTypes)?(out.debug as any).advancedFeatureClaimTypes:[];
+    const planClaims=Array.isArray((out.debug as any)?.recognizedPlanTypes)?(out.debug as any).recognizedPlanTypes:[];
+    const bodyForValidation=String(out.body??"").trim();
+    const claimValidation=detectUnverifiedCoachClaims({
+      body:bodyForValidation,
+      target:instructionTarget?{
+        pieceType:instructionTarget.pieceType,
+        isDevelopment:instructionTarget.isDevelopment,
+        isDiagonalMove:instructionTarget.isDiagonalMove,
+        isCapture:instructionTarget.isCapture,
+        isCheck:instructionTarget.isCheck,
+        isMate:instructionTarget.isMate,
+        isPromotion:instructionTarget.isPromotion,
+        isKingSafetyMove:instructionTarget.isKingSafetyMove,
+        isCentralPawnAdvance:instructionTarget.isCentralPawnAdvance,
+      }:null,
+      featureClaims,
+      planClaims,
+    });
+    if(instructionTarget&&claimValidation.unverifiedClaims.length){
+      const safeFallback=buildUserFacingTargetFallback({
+        fen,
+        target:instructionTarget,
+        trainingMode,
+        trainerPhase,
+        openingId:repertoire.id,
+        lineId:selectedRepertoireId,
+        activeLineName:repertoire.name,
+        recentCoachBodies:recentInstructional.map((entry)=>entry.body),
+        recentCoachThemes:recentInstructional.map((entry)=>String(entry.selectedOpportunityId??"")),
+      });
+      out={
+        ...out,
+        title:out.title==="Analyzing continuation"?out.title:safeFallback.title,
+        body:safeFallback.body,
+        debug:{
+          ...(out.debug??{}),
+          verifiedFallbackUsed:true,
+          fallbackReason:"claim_validation_failed",
+          unverifiedClaims:claimValidation.unverifiedClaims,
+          verifiedClaims:claimValidation.verifiedClaims,
+          coachDecisionSource:"verified_safe_fallback",
+          selectedTheme:safeFallback.theme,
+          coachQuality:safeFallback.quality,
+        },
+      };
+    }else{
+      out={
+        ...out,
+        debug:{
+          ...(out.debug??{}),
+          verifiedClaims:claimValidation.verifiedClaims,
+          unverifiedClaims:claimValidation.unverifiedClaims,
+        },
+      };
+    }
+    return {...out,debug:normalizeCoachDebugMetadata(out.debug??{})};
+  },[rawCoachDecision,phaseActionGate,trainingMode,currentSelectedCandidateUci,currentSelectedCandidateLegal,instructionTarget,fen,trainerPhase,repertoire.id,repertoire.name,selectedRepertoireId]);
+  const coachHiddenForFrame=coachHiddenFrameId===String(trainerFrameId);
+  const coachSurfacePolicy=useMemo(()=>decideCoachSurfacePolicy({
+    coachShouldShow:Boolean(coachDecision?.shouldShowCoachCard),
+    coachSuppressedReason:coachDecision?.suppressedReason,
+    coachHiddenForFrame,
+    trainingMode,
+    viewMode:trainingMode==="continuation"?"freeplay":(trainerView==="assisted"?"assisted":"plain"),
+    hasExpectedMove:expectedUserOptions.length>0,
+    exactMoveAllowed:Boolean(coachDecision?.exactMoveAllowed),
+    moveQualityGateStatus:moveQuality?.status,
+    engineValidationStatus:(coachDecision?.debug as any)?.coachEngineStatus??(enginePreview?.pvs?.length?"ready":"idle"),
+    visualRecipeValid:Boolean(visualRecipe&&visualRecipeOverlay.adapterAllowed&&trainerPhase==="ready_for_user"&&isUserTurn),
+  }),[coachDecision,coachHiddenForFrame,trainingMode,trainerView,expectedUserOptions.length,moveQuality?.status,enginePreview,visualRecipe,visualRecipeOverlay.adapterAllowed,trainerPhase,isUserTurn]);
+  const branchTransitionSurface=useMemo(()=>{
+    const needsTransition=
+      activeTab==="train" &&
+      trainingMode==="restricted" &&
+      trainerPhase==="ready_for_user" &&
+      isUserTurn &&
+      !bookComplete &&
+      !coachHiddenForFrame &&
+      !coachDecision?.shouldShowCoachCard &&
+      !currentSelectedCandidateUci &&
+      (expectedMoveResolution.source==="guided_branch_needs_continuation" || expectedMoveResolution.source==="none");
+    if(!needsTransition){
+      return null;
+    }
+    const reason=expectedMoveResolution.reason==="repertoire_line_exhausted_needs_continuation"
+      ? "This branch is beyond the guided line. Continue from here to practice adapting."
+      : "This branch is not fully mapped yet. Continue from here to practice adapting.";
+    return {
+      render:true,
+      title:"Continue from here",
+      body:reason,
+      buttons:["continue_from_here"],
+      reason:expectedMoveResolution.reason,
+    } as const;
+  },[activeTab,trainingMode,trainerPhase,isUserTurn,bookComplete,coachHiddenForFrame,coachDecision?.shouldShowCoachCard,currentSelectedCandidateUci,expectedMoveResolution.source,expectedMoveResolution.reason]);
+  const moveImpactPresentation=useMemo(()=>presentMoveImpact({
+    exactMoveAllowed:Boolean(coachDecision?.exactMoveAllowed),
+    engineStatus:(coachDecision?.debug as any)?.coachEngineStatus??(enginePreview?.pvs?.length?"ready":"idle"),
+    isSafeMove:Boolean((coachDecision?.debug as any)?.coachEngineSafeMoves?.length),
+    isPlayableMove:Boolean((coachDecision?.debug as any)?.coachSelectedCandidateMove),
+    isStudyLineMove:Boolean(teachingOrchestration?.moveTrust==="book_supported"||teachingOrchestration?.moveTrust==="repertoire_supported"),
+    reviewWorthy:Boolean(coachDecision?.shouldMarkReviewWorthy),
+  }),[coachDecision,enginePreview,teachingOrchestration]);
+  const continuationCandidateVisual=useMemo(()=>buildContinuationCandidateVisual({
+    boardFen:fen,
+    candidateUci:trainingMode==="continuation"&&instructionTarget?.kind==="continuation_candidate"?instructionTarget.uci:null,
+    candidateSan:trainingMode==="continuation"&&instructionTarget?.kind==="continuation_candidate"?instructionTarget.san:null,
+  }),[fen,trainingMode,instructionTarget]);
+  const presentationFrame=useMemo(()=>computeTrainerPresentationFrame({
+    frameId:trainerFrameId,
+    fen,
+    activeBoard,
+    trainerView,
+    trainerPhase,
+    trainingMode,
+    isUserTurn,
+    answerShown:showAnswer,
+    visualRecipeId:visualRecipeForRender?.visualRecipeId,
+    visualRecipeLines:visualRecipeMainLines,
+    continuationCandidateLines:continuationCandidateVisual.lines,
+    safeMoveArrowLines:safeMoveArrowVisual.lines,
+    legacyLines:legacyVisualLines,
+    activePrimitiveIds:visualRecipePlayback.activePrimitiveIds,
+    recipeFrameMatchesBoard:visualRecipeOverlay.recipeFrameMatchesBoard,
+    recipeFenMatchesBoard:visualRecipeOverlay.recipeFenMatchesBoard,
+    adapterAllowed:visualRecipeOverlay.adapterAllowed,
+    overlayFrameId,
+    playbackReady:visualRecipePlayback.animationState==="playing"||visualRecipePlayback.animationState==="held_end_state"||visualRecipePlayback.animationState==="skipped_to_end",
+    coachShouldShow:Boolean(coachDecision?.shouldShowCoachCard),
+    coachHiddenForFrame,
+    coachIntent:(coachDecision?.debug as any)?.coachIntent,
+    coachTitle:coachDecision?.title,
+    coachBody:coachDecision?.body,
+    coachButtons:coachDecision?.buttons,
+    coachSuppressedReason:coachDecision?.suppressedReason,
+    coachUtteranceFamily:coachDecision?.utteranceFamily,
+    coachTemplateId:(coachDecision?.debug as any)?.selectedTemplateId,
+    coachSelectedTheme:(coachDecision?.debug as any)?.selectedTheme??null,
+    coachQuality:(coachDecision?.debug as any)?.coachQuality??null,
+    moveFactPacket:(coachDecision?.debug as any)?.moveFactPacket??null,
+    positionDeltaPacket:(coachDecision?.debug as any)?.positionDeltaPacket??null,
+    featurePacket:(coachDecision?.debug as any)?.featurePacket??null,
+    planPacket:(coachDecision?.debug as any)?.planPacket??null,
+    opportunityPacket:(coachDecision?.debug as any)?.opportunityPacket??null,
+    safetyResult:(coachDecision?.debug as any)?.safetyResult??null,
+    branchTransitionSurface:Boolean(branchTransitionSurface?.render),
+    branchTransitionTitle:branchTransitionSurface?.title,
+    branchTransitionBody:branchTransitionSurface?.body,
+    branchTransitionButtons:branchTransitionSurface?.buttons as any,
+    coachSurfacePolicy,
+  }),[trainerFrameId,fen,activeBoard,trainerView,trainerPhase,trainingMode,isUserTurn,visualRecipeForRender,visualRecipeMainLines,safeMoveArrowVisual.lines,continuationCandidateVisual.lines,legacyVisualLines,visualRecipePlayback.activePrimitiveIds,visualRecipePlayback.animationState,visualRecipeOverlay,overlayFrameId,coachDecision,coachHiddenForFrame,coachSurfacePolicy,branchTransitionSurface]);
+  const displayedCoachDecision=useMemo(()=>{
+    const normalizedCurrentFen=normalizeFen(fen);
+    const decisionFrameId=String((coachDecision as any)?.frameId??"");
+    const decisionFen=String((coachDecision as any)?.normalizedFen??"");
+    const staleCoachFrame=Boolean((coachDecision as any)?.shouldShowCoachCard&&(decisionFrameId&&decisionFrameId!==String(trainerFrameId)||decisionFen&&decisionFen!==normalizedCurrentFen));
+    if(staleCoachFrame){
+      return{
+        ...coachDecision,
+        shouldShowCoachCard:false,
+        suppressedReason:"stale_coach_frame",
+        debug:{
+          ...(coachDecision?.debug??{}),
+          staleCoachFrame:true,
+          currentFrameKey:frameKey,
+        },
+      };
+    }
+    if(presentationFrame.coach.owner!=="branch_transition_surface")return coachDecision;
+    return {
+      ...coachDecision,
+      shouldShowCoachCard:true,
+      title:presentationFrame.coach.title??"Continue from here",
+      body:presentationFrame.coach.body??"This branch is beyond the guided line. Continue from here to practice adapting.",
+      buttons:["continue_from_here"] as CoachButton[],
+      mode:"supported_continuation" as const,
+      action:"show_plan" as const,
+      revealRisk:"none" as const,
+      givesAnswer:false,
+      suppressedReason:undefined,
+      debug:{
+        ...(coachDecision?.debug??{}),
+        coachIntent:"branch_transition",
+        branchTransitionSurfaceRendered:true,
+        branchTransitionPayloadValid:true,
+        currentFrameKey:frameKey,
+      },
+    };
+  },[presentationFrame.coach.owner,presentationFrame.coach.title,presentationFrame.coach.body,coachDecision,fen,trainerFrameId,frameKey]);
+  const coachFrameStale=Boolean((displayedCoachDecision?.debug as any)?.staleCoachFrame);
+  const visualFrameStale=Boolean(trainerPhase==="ready_for_user"&&presentationFrame.visual.shouldRender&&overlayFrameId!==trainerFrameId);
+  const revealTargetStale=Boolean((lastActionDebug as any)?.revealTargetUci&&instructionTarget?.uci&&(lastActionDebug as any)?.revealTargetUci!==instructionTarget.uci);
+  const displayedCoachButtons=displayedCoachDecision?.buttons??[];
+  useEffect(()=>{
+    if(!displayedCoachDecision?.shouldShowCoachCard)return;
+    if(!displayedCoachDecision?.utteranceId)return;
+    if(typeof window==="undefined")return;
+    const frameId=(displayedCoachDecision as any)?.frameId??coachContextResult.context?.frameId??String(trainerFrameId);
+    const normalizedDecisionFen=(displayedCoachDecision as any)?.normalizedFen??coachContextResult.context?.normalizedFen??normalizeFen(fen);
+    const viewMode=coachContextResult.context?.viewMode??(trainerView==="assisted"?"assisted":"plain");
+    const recordKey=buildCoachUtteranceRecordKey({
+      frameId,
+      normalizedFen:normalizedDecisionFen,
+      viewMode,
+      coachMode:displayedCoachDecision.mode,
+      coachAction:displayedCoachDecision.action,
+      utteranceId:displayedCoachDecision.utteranceId,
+    });
+    if(lastRecordedCoachUtteranceKeyRef.current===recordKey)return;
+    lastRecordedCoachUtteranceKeyRef.current=recordKey;
+    const entry={
+      patternId:coachContextResult.context?.patternId??normalizedDecisionFen,
+      conceptId:coachContextResult.context?.conceptId??"center_tension",
+      visualRecipeId:coachContextResult.context?.visualRecipeId??"",
+      coachMode:displayedCoachDecision.mode,
+      coachAction:displayedCoachDecision.action,
+      utteranceId:displayedCoachDecision.utteranceId,
+      utteranceFamily:displayedCoachDecision.utteranceFamily??"",
+      text:displayedCoachDecision.body??displayedCoachDecision.hint??displayedCoachDecision.answer??"",
+      shownAt:Date.now(),
+    } as any;
+    const next=recordCoachUtterance(entry,window.localStorage);
+    coachUtteranceMemoryRef.current=next;
+    const bodyText=String(displayedCoachDecision.body??displayedCoachDecision.hint??displayedCoachDecision.answer??"");
+    const blockedUnsafeTemplateIds=(displayedCoachDecision.debug as any)?.mappingBlockedReasons??[];
+    const record:LastCoachRecord={
+      frameId:Number(trainerFrameId),
+      fen4:normalizeFen(fen),
+      trainerPhase,
+      trainingMode,
+      instructionTargetKind:instructionTarget?.kind??null,
+      instructionTargetUci:instructionTarget?.uci??null,
+      instructionTargetSan:instructionTarget?.san??null,
+      instructionTargetPieceType:instructionTarget?.pieceType??null,
+      coachMoveUci:(displayedCoachDecision.debug as any)?.coachMoveUci??instructionTarget?.uci??null,
+      coachPieceType:(displayedCoachDecision.debug as any)?.coachPieceType??instructionTarget?.pieceType??null,
+      visualMoveUci:presentationFrame.visual.shouldRender&&Array.isArray(presentationFrame.visual.lines)&&presentationFrame.visual.lines[0]?(String((presentationFrame.visual.lines[0] as any).from)+String((presentationFrame.visual.lines[0] as any).to)):null,
+      revealTargetUci:(lastActionDebug as any)?.revealTargetUci??instructionTarget?.uci??null,
+      selectedTemplateId:(displayedCoachDecision.debug as any)?.selectedTemplateId??null,
+      utteranceFamily:displayedCoachDecision.utteranceFamily??null,
+      selectedOpportunityId:(displayedCoachDecision.debug as any)?.selectedOpportunityId??null,
+      selectedPlanId:(displayedCoachDecision.debug as any)?.selectedPlanId??null,
+      body:bodyText,
+      normalizedBody:normalizeCoachBody(bodyText),
+      verifiedClaims:(displayedCoachDecision.debug as any)?.verifiedClaims??[],
+      unverifiedClaims:(displayedCoachDecision.debug as any)?.unverifiedClaims??[],
+      blockedUnsafeTemplateIds:Array.isArray(blockedUnsafeTemplateIds)?blockedUnsafeTemplateIds:[],
+    };
+    const isInstructionalRecord=trainerPhase==="ready_for_user"&&isUserTurn&&Boolean(instructionTarget?.uci);
+    if(isInstructionalRecord)setLastCoachRecords((prev)=>[...prev.slice(-19),record]);
+  },[
+    displayedCoachDecision?.shouldShowCoachCard,
+    displayedCoachDecision?.utteranceId,
+    displayedCoachDecision?.mode,
+    displayedCoachDecision?.action,
+    trainerFrameId,
+    fen,
+    trainerView,
+    coachContextResult.context?.frameId,
+    coachContextResult.context?.viewMode,
+    coachContextResult.context?.patternId,
+    coachContextResult.context?.conceptId,
+    coachContextResult.context?.visualRecipeId,
+    displayedCoachDecision?.utteranceFamily,
+    displayedCoachDecision?.body,
+    displayedCoachDecision?.hint,
+    displayedCoachDecision?.answer,
+    trainerPhase,
+    isUserTurn,
+    trainingMode,
+    instructionTarget,
+    presentationFrame.visual.shouldRender,
+    presentationFrame.visual.lines,
+    lastActionDebug,
+  ]);
+  useEffect(()=>{
+    const visibleTitle=presentationFrame.coach.shouldRender?String(presentationFrame.coach.title??"").trim():(displayedCoachDecision?.shouldShowCoachCard?String(displayedCoachDecision?.title??"").trim():"");
+    const visibleBody=presentationFrame.coach.shouldRender?String(presentationFrame.coach.body??"").trim():(displayedCoachDecision?.shouldShowCoachCard?String(displayedCoachDecision?.body??"").trim():"");
+    const visibleButtons=(presentationFrame.coach.shouldRender?presentationFrame.coach.buttons:displayedCoachDecision?.buttons)??[];
+    const instructionTargetUci=instructionTarget?.uci??null;
+    const entryKind=normalizeCoachEntryKind({trainerPhase,isUserTurn,instructionTargetUci,runtimeCriticalIssues});
+    const shouldLog=Boolean(visibleTitle||visibleBody||visibleButtons.length||["opponent_status","terminal","line_complete","error"].includes(entryKind));
+    if(!shouldLog)return;
+    const normalizedDebug=normalizeCoachDebugMetadata((displayedCoachDecision?.debug as any)??{});
+    const nextEntry:CoachSessionLogEntry={
+      id:++coachTimelineSeqRef.current,
+      ts:Date.now(),
+      trainerFrameId:Number(trainerFrameId),
+      fen4:normalizeFen(fen),
+      trainerPhase,
+      trainingMode,
+      isUserTurn,
+      entryKind,
+      instructionTargetUci,
+      instructionTargetSan:instructionTarget?.san??null,
+      instructionTargetPieceType:instructionTarget?.pieceType??null,
+      visibleTitle:visibleTitle||null,
+      visibleBody:visibleBody||null,
+      visibleButtons:visibleButtons.map(String),
+      coachDecisionSource:normalizedDebug.coachDecisionSource??null,
+      selectedTheme:normalizedDebug.selectedTheme??null,
+      selectedOpportunityId:normalizedDebug.selectedOpportunityId??null,
+      selectedOpportunityLayer:normalizedDebug.selectedOpportunityLayer??null,
+      selectedOpportunityScore:typeof normalizedDebug.selectedOpportunityScore==="number"?normalizedDebug.selectedOpportunityScore:null,
+      selectedTemplateId:normalizedDebug.selectedTemplateId??null,
+      runtimeSafeFallbackUsed:Boolean(normalizedDebug.verifiedFallbackUsed),
+      runtimeSafeFallbackReason:normalizedDebug.fallbackReason??null,
+      containsDebugLeak:Boolean(normalizedDebug.coachQuality?.containsDebugLeak||isDebugLeakText(visibleBody||"")),
+      qualityScore:typeof normalizedDebug.coachQuality?.qualityScore==="number"?normalizedDebug.coachQuality.qualityScore:null,
+      hasPedagogicalReason:Boolean(normalizedDebug.coachQuality?.hasPedagogicalReason),
+      repeatedGeneric:Boolean(normalizedDebug.coachQuality?.repeatedGeneric),
+      targetAligned:instructionTargetUci?Boolean(normalizedDebug.coachQuality?.targetAligned):"not_applicable",
+      pieceAligned:instructionTarget?.pieceType?Boolean(normalizedDebug.coachQuality?.pieceAligned):"not_applicable",
+      criticalIssuesAtFrame:runtimeCriticalIssues.slice(),
+      warningsAtFrame:[],
+    };
+    setCoachTimeline((prev)=>{
+      const last=prev[prev.length-1];
+      if(last&&last.trainerFrameId===nextEntry.trainerFrameId&&last.visibleTitle===nextEntry.visibleTitle&&last.visibleBody===nextEntry.visibleBody)return prev;
+      return [...prev.slice(-99),nextEntry];
+    });
+  },[
+    trainerFrameId,
+    fen,
+    trainerPhase,
+    trainingMode,
+    isUserTurn,
+    instructionTarget?.uci,
+    instructionTarget?.san,
+    instructionTarget?.pieceType,
+    presentationFrame.coach.shouldRender,
+    presentationFrame.coach.title,
+    presentationFrame.coach.body,
+    presentationFrame.coach.buttons,
+    displayedCoachDecision?.shouldShowCoachCard,
+    displayedCoachDecision?.title,
+    displayedCoachDecision?.body,
+    displayedCoachDecision?.buttons,
+    displayedCoachDecision?.debug,
+    runtimeCriticalIssues,
+  ]);
+  function currentDebugActionState(){
+    return {
+      answerShown:showAnswer,
+      hintShown:coachHintRequestCount>0,
+      coachInteraction,
+      showAnswer,
+      selectedCandidate:currentSelectedCandidateUci,
+      enginePreviewExists:Boolean(enginePreview),
+    };
+  }
+  function recordDebugAction(input:{action:string;normalizedAction:string;before:Record<string,unknown>;after:Record<string,unknown>;result:"handled"|"ignored"|"no_op"|"blocked"|"error";reason?:string;extra?:Record<string,unknown>}){
+    if(!blundrDebugEnabled)return;
+    const stateChanged=JSON.stringify(input.before)!==JSON.stringify(input.after);
+    const details={
+      lastButtonRendered:displayedCoachButtons[0]??null,
+      renderedButtonActions:displayedCoachButtons,
+      lastClickedAction:input.action,
+      lastClickedAt:Date.now(),
+      actionHandlerEntered:true,
+      actionHandlerName:"handleCoachAction",
+      normalizedAction:input.normalizedAction,
+      actionAliasApplied:input.action!==input.normalizedAction,
+      actionBeforeState:input.before,
+      actionAfterState:input.after,
+      actionResult:input.result,
+      actionBlockedReason:input.reason??null,
+      revealExpectedMoveTriggered:input.normalizedAction==="answer"||input.normalizedAction==="reveal_next_move",
+      revealCandidateTriggered:input.normalizedAction==="show_move",
+      candidateAnalysisTriggered:input.normalizedAction==="analyze_idea",
+      stateChanged,
+      revealTargetUci:input.extra?.revealTargetUci??(input.normalizedAction.includes("reveal")||input.normalizedAction==="answer"?instructionTarget?.uci??null:null),
+      revealTargetSource:input.extra?.revealTargetSource??(instructionTarget?"instruction_target":"none"),
+      revealIdempotentNoop:Boolean(input.extra?.revealIdempotentNoop),
+      revealBlockedBecauseCoachHidden:Boolean(input.extra?.revealBlockedBecauseCoachHidden),
+      ...input.extra,
+    };
+    setLastActionDebug(details);
+    setDebugEventLog((events)=>appendDebugEvent(events,{type:"coach_action_clicked",action:input.action,normalizedAction:input.normalizedAction,before:input.before,after:input.after,result:input.result,reason:input.reason,details}));
+  }
+  function handleCoachAction(button:CoachButton){
+    const before=currentDebugActionState();
+    if(button==="continue_from_here"){
+      const after={...before,coachInteraction:"continue_from_here",showAnswer:false};
+      const current=new Chess(fen);
+      const legalMoveCount=current.moves().length;
+      const terminalDetected=current.isGameOver()||legalMoveCount===0;
+      const continuationUserTurn=!terminalDetected&&current.turn()===userColor;
+      setCoachInteraction("show_plan");
+      recordDebugAction({
+        action:button,
+        normalizedAction:"continue_from_here",
+        before,
+        after,
+        result:terminalDetected?"handled":"handled",
+        reason:terminalDetected?"user_continue_from_here_terminal":"user_continue_from_here",
+        extra:{
+          continueFromHereClicked:true,
+          terminalDetected,
+          continuationTerminalReason:terminalDetected?(current.isCheckmate?.()?"checkmate":"no_legal_moves"):null,
+          candidateAnalysisTriggered:continuationUserTurn,
+          continuationRuntimeStatus:terminalDetected?"terminal":continuationUserTurn?"analyzing":"opponent_replying",
+        },
+      });
+      continueVsBot();
+      return;
+    }
+    if(button!=="replay"&&button!=="hide"&&!phaseActionGate.filteredButtons.includes(button)){
+      recordDebugAction({action:button,normalizedAction:String(button),before,after:before,result:"blocked",reason:phaseActionGate.blockedReason??"button_not_allowed_in_current_phase"});
+      return;
+    }
+    if(button==="replay"){visualRecipePlayback.replay();recordDebugAction({action:button,normalizedAction:"replay",before,after:before,result:"handled",reason:"playback_replay_requested"});return;}
+    if(button==="hide"){const after={...before,coachInteraction:"hide"};setCoachHiddenFrameId(String(trainerFrameId));setCoachInteraction("hide");recordDebugAction({action:button,normalizedAction:"hide",before,after,result:"handled"});return;}
+    if(button==="hint"){const after={...before,hintShown:true,coachInteraction:"hint"};setCoachHintRequestCount((count)=>count+1);setCoachInteraction("hint");recordDebugAction({action:button,normalizedAction:"hint",before,after,result:"handled"});return;}
+    if(button==="answer"){const after={...before,answerShown:true,showAnswer:true,coachInteraction:"answer"};setCoachInteraction("answer");setCoachReviewMarked(true);recordDebugAction({action:button,normalizedAction:"answer",before,after,result:"handled"});handleReveal();return;}
+    if(button==="why"){const after={...before,coachInteraction:"why"};setCoachInteraction("why");recordDebugAction({action:button,normalizedAction:"why",before,after,result:"handled"});return;}
+    if(button==="show_plan"){const after={...before,coachInteraction:"show_plan"};setCoachInteraction("show_plan");recordDebugAction({action:button,normalizedAction:"show_plan",before,after,result:"handled"});return;}
+    if(button==="analyze_idea"){const after={...before,coachInteraction:"analyze_idea"};setCoachInteraction("analyze_idea");recordDebugAction({action:button,normalizedAction:"analyze_idea",before,after,result:"handled",reason:(bookComplete||trainingMode==="continuation")&&isUserTurn?"analysis_requested":"state_only"});if((bookComplete||trainingMode==="continuation")&&isUserTurn)void runBrain("coach_analyze",{skipGpt:true});return;}
+    if(button==="show_move"){if(!coachDecision?.exactMoveAllowed){recordDebugAction({action:button,normalizedAction:"show_move",before,after:before,result:"blocked",reason:"exact_move_not_allowed"});return;}const after={...before,answerShown:true,showAnswer:true,coachInteraction:"show_move"};setCoachInteraction("show_move");setCoachReviewMarked(true);setShowAnswer(true);recordDebugAction({action:button,normalizedAction:"show_move",before,after,result:"handled"});return;}
+    recordDebugAction({action:String(button),normalizedAction:"none",before,after:before,result:"ignored",reason:"unknown_button"});
+    setCoachInteraction("none");
+  }
   const accuracy=getAccuracy(progress);
   const mistakes=Object.values(progress.mistakes).sort((a,b)=>b.count-a.count);
   const cpWhite=evalForWhite(engineLines[0]?.cp,game.turn() as ChessColor);
@@ -724,12 +1965,103 @@ export default function App(){
       ...input,
     });
   }
+  function pushRuntimeCriticalIssue(issue:string){
+    setRuntimeCriticalIssues((prev)=>prev.includes(issue)?prev:[...prev.slice(-19),issue]);
+  }
+  function clearRuntimeCriticalIssue(issue:string){
+    setRuntimeCriticalIssues((prev)=>prev.filter((entry)=>entry!==issue));
+  }
+  function clearOpponentReplyTimeout(){
+    if(opponentReplyTimeoutRef.current!==null){
+      window.clearTimeout(opponentReplyTimeoutRef.current);
+      opponentReplyTimeoutRef.current=null;
+    }
+  }
+  function clearPendingOpponentReplyRequest(options?:{clearStaleIssue?:boolean}){
+    clearOpponentReplyTimeout();
+    pendingOpponentRequestRef.current=null;
+    setPendingOpponentRequest(null);
+    if(options?.clearStaleIssue)clearRuntimeCriticalIssue("stale_opponent_reply_commit");
+  }
+  function commitRuntimeFrame(input:{
+    nextFen?:string;
+    nextPhase:OverlayPhase;
+    recordHistory?:boolean;
+    clearPendingOpponentRequest?:boolean;
+  }){
+    if(typeof input.nextFen==="string"){
+      setFen(input.nextFen);
+      if(input.recordHistory)recordPosition(input.nextFen);
+    }
+    setTrainerPhase(input.nextPhase);
+    setOverlayClearedOnPhaseChange(true);
+    setTrainerFrameId((id)=>{
+      const next=id+1;
+      setOverlayFrameId(next);
+      return next;
+    });
+    if(input.clearPendingOpponentRequest)clearPendingOpponentReplyRequest({clearStaleIssue:true});
+  }
+  function bumpRuntimeFrame(){
+    setTrainerFrameId((id)=>{
+      const next=id+1;
+      setOverlayFrameId(next);
+      return next;
+    });
+  }
+  function scheduleOpponentReply(input:{mode:TrainingMode;delayMs?:number;baseFen?:string}){
+    const baseFenNormalized=normalizeFen(input.baseFen??fenRef.current??fen);
+    const currentPending=pendingOpponentRequestRef.current;
+    if(currentPending&&currentPending.baseFen===baseFenNormalized&&currentPending.mode===input.mode){
+      clearRuntimeCriticalIssue("stale_opponent_reply_commit");
+      setTrainerPhase("opponent_replying");
+      return currentPending;
+    }
+    const request:PendingOpponentRequest={
+      requestId:++opponentRequestSeqRef.current,
+      baseFen:baseFenNormalized,
+      mode:input.mode,
+      startedAt:Date.now(),
+    };
+    clearOpponentReplyTimeout();
+    pendingOpponentRequestRef.current=request;
+    setPendingOpponentRequest(request);
+    clearRuntimeCriticalIssue("stale_opponent_reply_commit");
+    setTrainerPhase("opponent_replying");
+    opponentReplyTimeoutRef.current=window.setTimeout(()=>{
+      if(pendingOpponentRequestRef.current?.requestId!==request.requestId)return;
+      void playOpponentMove(request);
+    },Math.max(0,input.delayMs??350));
+    return request;
+  }
   useEffect(()=>{const saved=localStorage.getItem("blundr-v22-progress");const savedCustom=localStorage.getItem("blundr-v22-custom");const savedSettings=localStorage.getItem("blundr-board-settings");const savedTelemetry=localStorage.getItem(LOCAL_TELEMETRY_KEY);if(saved)try{setProgress(JSON.parse(saved))}catch{}if(savedCustom)try{setCustomRepertoires(JSON.parse(savedCustom))}catch{}if(savedSettings)try{setBoardSettings({...DEFAULT_BOARD_SETTINGS,...JSON.parse(savedSettings)})}catch{}if(savedTelemetry)try{const parsed=JSON.parse(savedTelemetry) as Partial<LocalTelemetryStore>;const nextEvents=Array.isArray(parsed.events)?parsed.events.slice(-MAX_LOCAL_TELEMETRY_EVENTS):[];setTelemetryEnabled(Boolean(parsed.enabled));setTelemetryEvents(nextEvents);telemetryEventsRef.current=nextEvents;telemetrySeq.current=nextEvents.reduce((max,event)=>Math.max(max,Number(event.id)||0),0)}catch{}},[]);
+  useEffect(()=>{
+    if(typeof window==="undefined")return;
+    const loaded=loadCoachUtteranceMemory(window.localStorage);
+    const meta=readCoachUtteranceMemoryMeta(window.localStorage);
+    coachUtteranceMemoryRef.current=loaded;
+    setCoachUtteranceMemory(loaded);
+    setCoachMemoryMigration(meta);
+  },[]);
+  useEffect(()=>{setContinueFromHereClicked(false)},[trainerFrameId,fen]);
   useEffect(()=>localStorage.setItem("blundr-v22-progress",JSON.stringify(progress)),[progress]);
   useEffect(()=>localStorage.setItem("blundr-v22-custom",JSON.stringify(customRepertoires)),[customRepertoires]);
   useEffect(()=>localStorage.setItem("blundr-board-settings",JSON.stringify(boardSettings)),[boardSettings]);
   useEffect(()=>{telemetryEnabledRef.current=telemetryEnabled},[telemetryEnabled]);
   useEffect(()=>{telemetryEventsRef.current=telemetryEvents},[telemetryEvents]);
+  useEffect(()=>{lastCoachRecordsRef.current=lastCoachRecords},[lastCoachRecords]);
+  useEffect(()=>{coachTimelineRef.current=coachTimeline},[coachTimeline]);
+  useEffect(()=>{
+    pendingOpponentRequestRef.current=pendingOpponentRequest;
+    if(!pendingOpponentRequest)clearOpponentReplyTimeout();
+  },[pendingOpponentRequest]);
+  useEffect(()=>{
+    if(!pendingOpponentRequest)return;
+    const pendingMatchesBoard=normalizeFen(fen)===pendingOpponentRequest.baseFen;
+    if(trainerPhase==="opponent_replying"&&!isUserTurn&&pendingMatchesBoard){
+      clearRuntimeCriticalIssue("stale_opponent_reply_commit");
+    }
+  },[pendingOpponentRequest,fen,trainerPhase,isUserTurn]);
   useEffect(()=>{const store:LocalTelemetryStore={enabled:telemetryEnabled,events:telemetryEvents.slice(-MAX_LOCAL_TELEMETRY_EVENTS),updatedAt:Date.now()};localStorage.setItem(LOCAL_TELEMETRY_KEY,JSON.stringify(store))},[telemetryEnabled,telemetryEvents]);
   useEffect(()=>{
     const api={
@@ -742,25 +2074,115 @@ export default function App(){
     return()=>{if((window as any).__blundrLocalTelemetry===api)delete (window as any).__blundrLocalTelemetry};
   },[visualDebugSnapshot]);
   useEffect(()=>{const t=window.setInterval(()=>{if(opponentCue&&Date.now()>opponentCue.expiresAt)setOpponentCue(null)},250);return()=>window.clearInterval(t)},[opponentCue]);
+  useEffect(()=>()=>{continuationAnalysisAbortRef.current?.abort();if(continuationAnalysisDebounceRef.current!==null)window.clearTimeout(continuationAnalysisDebounceRef.current);clearOpponentReplyTimeout()},[]);
   useEffect(()=>{setStaleOverlayIgnored(false)},[trainerFrameId]);
   useEffect(()=>{
     if(trainerPhase==="ready_for_user")setOverlayFrameId(trainerFrameId);
   },[trainerPhase,trainerFrameId,fen]);
   useEffect(()=>{
-    if(!overlaySuppressedReason&&visualLines.length>0&&trainerPhase==="ready_for_user")setOverlayClearedOnPhaseChange(false);
-  },[overlaySuppressedReason,visualLines.length,trainerPhase]);
+    if(presentationFrame.visual.shouldRender&&trainerPhase==="ready_for_user")setOverlayClearedOnPhaseChange(false);
+  },[presentationFrame.visual.shouldRender,trainerPhase]);
   useEffect(()=>setBrain(p=>({...p,ratingLabel:rating.label,ratingPool:rating.target})),[rating.label,rating.target]);
   useEffect(()=>{fenRef.current=fen;setBrainResponse(null);setEnginePreview(null);setVisualModelOutput(null);setVisualModelError(null);setVisualDebugSnapshot(prev=>({...prev,responseSummary:null,responseDebug:null,error:null,durationMs:null,updatedAt:Date.now()}));setOverlayClearedOnPhaseChange(true)},[fen]);
-  useEffect(()=>{if(activeTab==="train")positionStartedAtRef.current=Date.now()},[fen,activeTab]);
   useEffect(()=>{
     if(activeTab!=="train")return;
-    if(isUserTurn)setTrainerPhase("ready_for_user");
-    else if(trainerPhase==="ready_for_user")setTrainerPhase("opponent_selecting");
-  },[activeTab,isUserTurn,fen]);
+    if(trainingMode!=="continuation"){
+      setContinuationAnalysisStatus("idle");
+      return;
+    }
+    if(game.isGameOver()||game.moves().length===0){
+      setContinuationAnalysisStatus("terminal");
+      return;
+    }
+    if(!isUserTurn){
+      setContinuationAnalysisStatus("opponent_replying");
+      return;
+    }
+    if(trainerPhase!=="ready_for_user"){
+      setContinuationAnalysisStatus("idle");
+      return;
+    }
+    if(continuationPolicyCandidate){
+      setContinuationAnalysisStatus("ready");
+    }
+    const normalized=normalizeFen(fen);
+    const cacheKey=`${normalized}|${userColor}|${rating.skill}|3`;
+    const cached=continuationEngineCacheRef.current[cacheKey];
+    if(cached){
+      setContinuationAnalysisStatus("ready");
+      if(!enginePreview||normalizeFen(enginePreview.fen)!==normalized){
+        setEnginePreview(cached);
+      }
+      return;
+    }
+    if(enginePreview&&normalizeFen(enginePreview.fen)===normalized&&enginePreview.pvs.length>0){
+      setContinuationAnalysisStatus("ready");
+      return;
+    }
+
+    setContinuationAnalysisStatus("analyzing");
+
+    if(continuationAnalysisDebounceRef.current!==null){
+      window.clearTimeout(continuationAnalysisDebounceRef.current);
+      continuationAnalysisDebounceRef.current=null;
+    }
+    continuationAnalysisDebounceRef.current=window.setTimeout(()=>{
+      continuationAnalysisDebounceRef.current=null;
+      continuationAnalysisAbortRef.current?.abort();
+      const controller=new AbortController();
+      continuationAnalysisAbortRef.current=controller;
+      const requestSeq=++continuationAnalysisSeqRef.current;
+      void runBrowserStockfish(fen,rating.skill,650,3,controller.signal).then((result)=>{
+        if(controller.signal.aborted)return;
+        if(requestSeq!==continuationAnalysisSeqRef.current)return;
+        if(normalizeFen(fenRef.current)!==normalized)return;
+        if(!result?.pvs?.length){
+          setContinuationAnalysisStatus("error");
+          return;
+        }
+        const next={fen,pvs:result.pvs,source:result.source};
+        continuationEngineCacheRef.current[cacheKey]=next;
+        setEnginePreview(next);
+        setContinuationAnalysisStatus("ready");
+      }).catch(()=>{
+        if(controller.signal.aborted)return;
+        setContinuationAnalysisStatus("error");
+      });
+    },250);
+    return()=>{
+      if(continuationAnalysisDebounceRef.current!==null){
+        window.clearTimeout(continuationAnalysisDebounceRef.current);
+        continuationAnalysisDebounceRef.current=null;
+      }
+    };
+  },[activeTab,trainingMode,isUserTurn,trainerPhase,fen,userColor,rating.skill,enginePreview,game,continuationPolicyCandidate]);
   useEffect(()=>{
-    setTrainerFrameId((id)=>id+1);
-    setOverlayClearedOnPhaseChange(true);
-  },[fen,trainerPhase,trainerView]);
+    if(activeTab!=="train"||trainingMode!=="continuation"||trainerPhase!=="ready_for_user"||!isUserTurn)return;
+    if(game.isGameOver()||game.moves().length===0)return;
+    if(instructionTarget?.kind==="continuation_candidate"){
+      clearRuntimeCriticalIssue("continuation_ready_without_candidate");
+      return;
+    }
+    const legal=(game.moves({verbose:true}) as any[]);
+    if(!legal.length)return;
+    const fallback=legal[0];
+    const uci=moveToUci(fallback);
+    pushRuntimeCriticalIssue("continuation_ready_without_candidate");
+    setEnginePreview((prev)=>{
+      if(prev&&normalizeFen(prev.fen)===normalizeFen(fen)&&prev.pvs[0]?.uci===uci)return prev;
+      return {
+        fen,
+        source:"runtime_continuation_fallback",
+        pvs:[{
+          uci,
+          san:fallback.san,
+          line:fallback.san,
+        }],
+      };
+    });
+  },[activeTab,trainingMode,trainerPhase,isUserTurn,instructionTarget?.kind,fen,game]);
+  useEffect(()=>{if(activeTab==="train")positionStartedAtRef.current=Date.now()},[fen,activeTab]);
+  useEffect(()=>{setCoachInteraction("none");setCoachHintRequestCount(0);setCoachReviewMarked(false);setCoachHiddenFrameId(null);},[fen,trainerFrameId,trainerView,trainerPhase]);
   useEffect(()=>{if(!enabledViews.includes(activeBoardView)&&enabledViews.length)setActiveBoardView(enabledViews[0])},[activeBoardView,enabledViews.join("|")]);
   useEffect(()=>{
     if(!shouldValidateTrainingMove){
@@ -948,7 +2370,7 @@ export default function App(){
       .catch((error)=>{if(error instanceof Error&&error.name==="AbortError")return;if(requestSeq!==visualRequestSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen)){setStaleOverlayIgnored(true);return;}const message=error instanceof Error?error.message:"Visual model failed";setVisualDebugSnapshot(prev=>({...prev,error:message,responseSummary:null,responseDebug:null,durationMs:Math.round(performance.now()-requestStarted),updatedAt:Date.now()}));setVisualModelError(message);setVisualModelPending(false);recordLocalTelemetry("visual_error",{requestKey:visualModelRequestKey,fen:normalizeFen(requestFen),message})});
     return()=>controller.abort();
   },[activeTab,isReviewingHistory,visualModelRequestKey]);
-  useEffect(()=>{if(activeTab!=="train")return;const fast=deriveFastAnnotation({fen,openingName:repertoire.name,userColor,trainingMode,expectedUserOptions,opponentBookOptions});setAnnotation(fast);setVisualReady(true);setThinkingStep("ready");setPipelineNote(trainingMode==="continuation"&&isUserTurn?"Blundr Brain is checking the continuation. No fallback move will be shown.":"Teaching cue ready.");setBrain(p=>({...p,source:"rule visual",gpt:"ready",note:"Manual reveal/debug only"}))},[fen,activeTab,selectedRepertoireId,trainingMode,ratingFilter]);
+  useEffect(()=>{if(activeTab!=="train")return;const fast=deriveFastAnnotation({fen,openingName:repertoire.name,userColor,trainingMode,expectedUserOptions,opponentBookOptions});setAnnotation(fast);setVisualReady(true);setThinkingStep("ready");setPipelineNote(trainingMode==="continuation"&&isUserTurn?continuationAnalysisStatus==="analyzing"?"Analyzing continuation candidate.":"Continuation candidate ready.":"Teaching cue ready.");setBrain(p=>({...p,source:"rule visual",gpt:"ready",note:"Manual reveal/debug only"}))},[fen,activeTab,selectedRepertoireId,trainingMode,ratingFilter,continuationAnalysisStatus]);
   useEffect(()=>{
     if(activeTab!=="train"||!shouldValidateTrainingMove)return;
     if(moveQualityPending){setPipelineNote("Blundr Brain is checking the position.");return}
@@ -956,8 +2378,35 @@ export default function App(){
     if(moveQuality?.status==="rejected"){setPipelineNote("Saved line needs review. Blundr will not invent a teaching cue.");return}
     if(moveQuality?.status==="unavailable"){setPipelineNote("Move not verified. Blundr will stay quiet instead of guessing.");}
   },[activeTab,shouldValidateTrainingMove,moveQualityPending,moveQuality?.status]);
-  useEffect(()=>{if(activeTab==="train"&&trainingMode==="restricted"&&isUserTurn&&expectedUserOptions.length===0&&!bookComplete&&!game.isGameOver()){setBookComplete(true);setFeedback("Book complete. Continue against the bot from this position or restart the opening.");setBrain(p=>({...p,book:"complete",source:"book complete",gpt:p.gpt}))}},[activeTab,trainingMode,isUserTurn,expectedUserOptions.length,bookComplete,fen]);
-  useEffect(()=>{if(activeTab!=="train"||bookComplete||isReviewingHistory)return;if(game.isGameOver()){setFeedback((endingInfo?.title??"Game over")+". Restart the opening to train again.");return}if(!isUserTurn){setTrainerPhase("opponent_selecting");const timer=window.setTimeout(()=>void playOpponentMove(),900);return()=>window.clearTimeout(timer)}},[activeTab,fen,bookComplete,isUserTurn,isReviewingHistory,selectedRepertoireId,trainingMode,ratingFilter]);
+  useEffect(()=>{if(activeTab==="train"&&trainingMode==="restricted"&&isUserTurn&&expectedMoveResolution.shouldTransitionToContinuation&&guidedCoveragePolicy.guidedCompleteAllowed&&!bookComplete&&!game.isGameOver()){setBookComplete(true);setFeedback("Guided line complete. Continue from here against the bot, or restart the opening.");setBrain(p=>({...p,book:"complete",source:guidedCoveragePolicy.guidedCoverageState,gpt:p.gpt}))}},[activeTab,trainingMode,isUserTurn,expectedMoveResolution.shouldTransitionToContinuation,guidedCoveragePolicy.guidedCompleteAllowed,guidedCoveragePolicy.guidedCoverageState,bookComplete,fen]);
+  useEffect(()=>{
+    if(activeTab!=="train"||trainingMode!=="restricted"||!isUserTurn||bookComplete||game.isGameOver())return;
+    if(expectedMoveResolution.source==="guided_branch_needs_continuation"){
+      setFeedback("This branch is beyond the guided line. Continue from here, or restart the opening.");
+      setBrain(p=>({...p,book:"ready",source:"guided branch needs continuation",note:expectedMoveResolution.reason,gpt:p.gpt}));
+      return;
+    }
+    if(expectedUserOptions.length===0&&expectedMoveResolution.source==="none"){
+      setFeedback("This branch is not mapped yet. Continue from here, or restart the opening.");
+      setBrain(p=>({...p,book:"ready",source:"resolver unresolved",note:guidedCoveragePolicy.bookCompleteBlockedReason??expectedMoveResolution.reason,gpt:p.gpt}));
+    }
+  },[activeTab,trainingMode,isUserTurn,expectedUserOptions.length,expectedMoveResolution.source,expectedMoveResolution.reason,guidedCoveragePolicy.bookCompleteBlockedReason,guidedCoveragePolicy.guidedCompleteBlockedReason,bookComplete,fen,game.isGameOver()]);
+  useEffect(()=>{
+    if(activeTab!=="train"||bookComplete||isReviewingHistory)return;
+    if(game.isGameOver()){
+      if(trainingMode==="continuation")setContinuationAnalysisStatus("terminal");
+      setTrainerPhase("terminal");
+      clearPendingOpponentReplyRequest({clearStaleIssue:true});
+      setFeedback((endingInfo?.title??"Game over")+". Restart the opening to train again.");
+      return;
+    }
+    if(!isUserTurn){
+      if(pendingOpponentRequest)return;
+      scheduleOpponentReply({mode:trainingMode,delayMs:900,baseFen:fen});
+      return;
+    }
+    if(pendingOpponentRequest) clearPendingOpponentReplyRequest({clearStaleIssue:true});
+  },[activeTab,fen,bookComplete,isUserTurn,isReviewingHistory,selectedRepertoireId,trainingMode,ratingFilter,game,endingInfo?.title,trainerPhase,pendingOpponentRequest]);
   async function loadExplorer(positionFen:string){const cacheKey=`${normalizeFen(positionFen)}|${ratingFilter}|${speedFilter}`;if(explorerCache.current[cacheKey]){const parsed=parseExplorerMoves(explorerCache.current[cacheKey]);setExplorerMoves(parsed);setBrain(p=>({...p,lichess:"cached"}));return parsed}setBrain(p=>({...p,lichess:"loading"}));const start=performance.now();try{const params=new URLSearchParams({fen:positionFen,source:"lichess",moves:"25",ratings:ratingFilter,speeds:speedFilter});const res=await fetch(`/api/explorer?${params.toString()}`);const payload=await res.json();explorerCache.current[cacheKey]=payload;const parsed=parseExplorerMoves(payload);setExplorerMoves(parsed);setBrain(p=>({...p,lichess:payload.fallback?"fallback":"active",latency:Math.round(performance.now()-start),note:payload.reason??`${parsed.length} Lichess moves`}));return parsed}catch(e){setBrain(p=>({...p,lichess:"error",note:e instanceof Error?e.message:"Explorer failed"}));return[]}}
   async function runBrain(eventType:string,extra:Record<string,any>={}){
     if(activeTab!=="train")return null;
@@ -1018,15 +2467,30 @@ export default function App(){
     }
   }
   function resetHistory(startFen:string){setPositionHistory([startFen]);setHistoryIndex(0)}
-  function selectRepertoire(id:string){const startFen=new Chess().fen();setSelectedRepertoireId(id);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setMoveHistory([]);setShowAnswer(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);setOpponentCue(null);setOpponentVariationDebug(null);setAnnotation(blankAnnotation());setEnginePreview(null);setActiveBoardView("plan");setActiveTab("train")}
-  function resetBoard(){const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setMoveHistory([]);setShowAnswer(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);setOpponentCue(null);setOpponentVariationDebug(null);setAnnotation(blankAnnotation());setEnginePreview(null);setActiveTab("train")}
+  function selectRepertoire(id:string){const startFen=new Chess().fen();setSelectedRepertoireId(id);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setUserExplicitlyEnteredContinuation(false);setContinueFromHereClicked(false);setMoveHistory([]);setShowAnswer(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setRuntimeCriticalIssues([]);setOpponentCue(null);setOpponentVariationDebug(null);setAnnotation(blankAnnotation());setEnginePreview(null);setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
+  function resetBoard(){const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setUserExplicitlyEnteredContinuation(false);setContinueFromHereClicked(false);setMoveHistory([]);setShowAnswer(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setRuntimeCriticalIssues([]);setOpponentCue(null);setOpponentVariationDebug(null);setAnnotation(blankAnnotation());setEnginePreview(null);setActiveTab("train");bumpRuntimeFrame()}
   function recordPosition(nextFen:string){const nextIndex=historyIndex+1;setPositionHistory(prev=>[...prev.slice(0,nextIndex),nextFen]);setHistoryIndex(nextIndex)}
-  function jumpHistory(direction:-1|1){const next=Math.max(0,Math.min(positionHistory.length-1,historyIndex+direction));if(next===historyIndex)return;setHistoryIndex(next);setFen(positionHistory[next]);setSelectedSquare(null);setOpponentCue(null);setOpponentVariationDebug(null);setBookComplete(false);setFeedback(next===positionHistory.length-1?"Returned to the live position.":`Reviewing previous position ${next} of ${positionHistory.length-1}. Use the arrows to return to live play.`)}
-  async function playOpponentMove(forceContinuation=false){
-    const current=new Chess(fen);
-    const mode:TrainingMode=forceContinuation?"continuation":trainingMode;
-    const currentOptions=tree[normalizeFen(current.fen())]??[];
-    const currentOpponentBookOptions=currentOptions.filter(m=>m.color===opponentColor);
+  function jumpHistory(direction:-1|1){const next=Math.max(0,Math.min(positionHistory.length-1,historyIndex+direction));if(next===historyIndex)return;setHistoryIndex(next);setFen(positionHistory[next]);setSelectedSquare(null);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);clearPendingOpponentReplyRequest({clearStaleIssue:true});setOpponentCue(null);setOpponentVariationDebug(null);setBookComplete(false);setFeedback(next===positionHistory.length-1?"Returned to the live position.":`Reviewing previous position ${next} of ${positionHistory.length-1}. Use the arrows to return to live play.`);bumpRuntimeFrame()}
+  async function playOpponentMove(request:PendingOpponentRequest){
+    const liveFenRaw=fenRef.current;
+    const currentRequest=pendingOpponentRequestRef.current;
+    if(shouldFlagStaleOpponentReplyCommit({
+      request:{requestId:request.requestId,baseFen:request.baseFen},
+      currentPendingRequest:currentRequest?{requestId:currentRequest.requestId,baseFen:currentRequest.baseFen}:null,
+      liveFen:liveFenRaw,
+    })){
+      pushRuntimeCriticalIssue("stale_opponent_reply_commit");
+      return;
+    }
+    const current=new Chess(liveFenRaw);
+    const mode:TrainingMode=request.mode;
+    const currentOpeningNodes=openingTree.nodesByFen4[normalizeFen(current.fen())]??[];
+    const currentOpponentBookOptions=currentOpeningNodes.flatMap((node)=>node.continuations).filter((move,index,all)=>move.color===opponentColor&&all.findIndex((candidate)=>candidate.uci===move.uci)===index).map((move)=>({
+      san:move.san,
+      uci:move.uci,
+      color:move.color as ChessColor,
+      resultingFen:move.resultingFen,
+    }));
     const positionKey=normalizeFen(current.fen());
     const variationContext={openingId:repertoire.id,lineId:selectedRepertoireId,trainingMode:mode,positionKey};
     const memory=loadOpponentVariationMemory();
@@ -1039,15 +2503,23 @@ export default function App(){
       blockedThirdRepeatBranches:[],
       fallbackUsed:false,
     };
-    setTrainerPhase("opponent_selecting");
+    setTrainerPhase("opponent_replying");
     setOverlayClearedOnPhaseChange(true);
-    setOverlayFrameId(trainerFrameId);
     setBrain(p=>({...p,source:"opponent thinking",book:mode==="restricted"?(currentOpponentBookOptions.length?"active":"complete"):"complete",lichess:"loading"}));
     await new Promise(r=>setTimeout(r,700));
     let chosen:{san:string;uci:string;fen:string}|null=null;
     let source="";
+    let continuationPolicyDecision:ReturnType<typeof selectContinuedPlayMove>|null=null;
     if(mode==="restricted"){
-      if(!currentOpponentBookOptions.length){setBookComplete(true);setFeedback("Book complete. Train this branch again or continue vs bot.");setBrain(p=>({...p,book:"complete",source:"book complete",lichess:"ready"}));return}
+      if(!currentOpponentBookOptions.length){
+        setTrainingMode("continuation");
+        setUserExplicitlyEnteredContinuation(true);
+        setContinuationAnalysisStatus("opponent_replying");
+        setFeedback("Guided opponent branch ended. Continuing from here against the bot.");
+        setBrain(p=>({...p,book:"complete",source:"opponent branch exhausted",lichess:"ready"}));
+        scheduleOpponentReply({mode:"continuation",delayMs:0,baseFen:current.fen()});
+        return;
+      }
       const explorer=await loadExplorer(current.fen());
       const valid=currentOpponentBookOptions.map(book=>{const match=explorer.find(m=>m.uci===book.uci);return{...book,weight:match?.total??1,pct:match?.pct??0,branchKey:`${positionKey}::${book.uci}`}});
       const decision=selectOpponentCandidateWithVariation({
@@ -1073,6 +2545,17 @@ export default function App(){
     }else{
       const explorer=await loadExplorer(current.fen());
       const playable=explorer.map(m=>{const a=applyUci(current.fen(),m.uci);return a?{...a,weight:m.total,pct:m.pct,branchKey:`${positionKey}::${m.uci}`}:null}).filter(Boolean) as Array<{san:string;uci:string;fen:string;weight:number;pct:number;branchKey:string}>;
+      const policyEngine=(engineLines.length?{source:"engine_preview",pvs:engineLines}:await runBrowserStockfish(current.fen(),rating.skill,550,3));
+      const bestCp=typeof policyEngine?.pvs?.[0]?.cp==="number"?Number(policyEngine.pvs[0].cp):undefined;
+      const safeUcis=new Set<string>(
+        (policyEngine?.pvs??[])
+          .filter((line,index)=>{
+            if(index===0)return true;
+            if(bestCp===undefined||typeof line.cp!=="number")return false;
+            return Math.abs(bestCp-Number(line.cp))<=100;
+          })
+          .map((line)=>line.uci),
+      );
       if(playable.length){
         const decision=selectOpponentCandidateWithVariation({
           context:variationContext,
@@ -1084,22 +2567,119 @@ export default function App(){
             weight:candidate.weight,
             legal:true,
             supported:true,
-            engineSafe:true,
+            engineSafe:safeUcis.has(candidate.uci),
             severeBlunder:false,
             source:"lichess_continuation",
             pct:candidate.pct,
           })),
         });
-        const pick=decision?playable.find((candidate)=>candidate.branchKey===decision.selected.branchKey)??playable[0]:pickWeighted(playable);
+        const policy=selectContinuedPlayMove({
+          fen:current.fen(),
+          lichessCandidates:playable.map((candidate)=>({
+            uci:candidate.uci,
+            san:candidate.san,
+            source:"lichess",
+            pct:candidate.pct,
+            weight:candidate.weight,
+            engineSafe:safeUcis.has(candidate.uci),
+            supported:true,
+          })),
+          engineTop:policyEngine?.pvs?.[0]?{uci:policyEngine.pvs[0].uci,san:policyEngine.pvs[0].san,source:"engine",engineSafe:true,supported:true}:null,
+        });
+        continuationPolicyDecision=policy;
+        const preferredUci=policy?.selectedUci??(decision?playable.find((candidate)=>candidate.branchKey===decision.selected.branchKey)?.uci:undefined);
+        const pick=playable.find((candidate)=>candidate.uci===preferredUci)??(decision?playable.find((candidate)=>candidate.branchKey===decision.selected.branchKey)??playable[0]:pickWeighted(playable));
         variationDebug=decision?{...decision}:variationDebug;
         chosen=pick;
-        source=`Lichess continuation (${pick.pct}%)`;
+        source=
+          policy?.source==="lichess_engine_validated"
+            ? `Lichess continuation (${pick.pct}%)`
+            : policy?.source==="human_continuation_unverified"
+              ? "Lichess continuation"
+              : policy?.source==="engine_top"
+                ? `Engine continuation (${rating.target})`
+                : `Lichess continuation (${pick.pct}%)`;
+        variationDebug.opponentVariationReason=policy?.reason??variationDebug.opponentVariationReason;
       }
-      else{const data=await runBrain("bot_select",{skipGpt:true});const top=data?.engine?.pvs?.[0];const a=top?applyUci(current.fen(),top.uci):null;if(a){chosen=a;source=`Engine continuation (${rating.target})`}}
+      else{
+        const policy=selectContinuedPlayMove({
+          fen:current.fen(),
+          engineTop:policyEngine?.pvs?.[0]?{uci:policyEngine.pvs[0].uci,san:policyEngine.pvs[0].san,source:"engine",engineSafe:true,supported:true}:null,
+        });
+        continuationPolicyDecision=policy;
+        if(policy?.selectedUci){
+          const a=applyUci(current.fen(),policy.selectedUci);
+          if(a){
+            chosen=a;
+            source=policy.source==="emergency_legal_fallback"?"Emergency legal fallback":`Engine continuation (${rating.target})`;
+            variationDebug.opponentVariationReason=policy.reason;
+          }
+        }
+        if(!chosen){
+          const data=await runBrain("bot_select",{skipGpt:true});
+          const top=data?.engine?.pvs?.[0];
+          const a=top?applyUci(current.fen(),top.uci):null;
+          if(a){chosen=a;source=`Engine continuation (${rating.target})`;}
+        }
+      }
     }
-    if(!chosen){const legal=current.moves({verbose:true}) as any[];if(!legal.length)return;const move=legal[0];current.move({from:move.from,to:move.to,promotion:move.promotion??"q"});chosen={san:move.san,uci:moveToUci(move),fen:current.fen()};source="Emergency legal fallback";variationDebug.fallbackUsed=true;variationDebug.opponentVariationReason="no_supported_alternative"}
+    if(!chosen){
+      const emergency=selectContinuedPlayMove({fen:current.fen()});
+      continuationPolicyDecision=emergency;
+      if(emergency?.selectedUci){
+        const a=applyUci(current.fen(),emergency.selectedUci);
+        if(a){
+          chosen={san:a.san,uci:a.uci,fen:a.fen};
+          source="Emergency legal fallback";
+          variationDebug.fallbackUsed=true;
+          variationDebug.opponentVariationReason=emergency.reason;
+        }
+      }
+      if(!chosen){
+        const legal=current.moves({verbose:true}) as any[];
+        if(!legal.length){
+          clearPendingOpponentReplyRequest({clearStaleIssue:true});
+          setTrainerPhase("terminal");
+          return;
+        }
+        const move=legal[0];
+        current.move({from:move.from,to:move.to,promotion:move.promotion??"q"});
+        chosen={san:move.san,uci:moveToUci(move),fen:current.fen()};
+        source="Emergency legal fallback";
+        variationDebug.fallbackUsed=true;
+        variationDebug.opponentVariationReason="no_supported_alternative";
+      }
+    }
+    const requestAfterCompute=pendingOpponentRequestRef.current;
+    if(shouldFlagStaleOpponentReplyCommit({
+      request:{requestId:request.requestId,baseFen:request.baseFen},
+      currentPendingRequest:requestAfterCompute?{requestId:requestAfterCompute.requestId,baseFen:requestAfterCompute.baseFen}:null,
+      liveFen:fenRef.current,
+    })){
+      pushRuntimeCriticalIssue("stale_opponent_reply_commit");
+      return;
+    }
     const selectedBranchKey=`${positionKey}::${chosen.uci}`;
     variationDebug.selectedOpponentBranchKey=selectedBranchKey;
+    if(continuationPolicyDecision?.debug){
+      variationDebug.candidateOpponentBranches=continuationPolicyDecision.debug.candidates.map((candidate)=>({
+        branchKey:`${positionKey}::${candidate.moveUci}`,
+        uci:candidate.moveUci,
+        san:candidate.moveSan,
+        baseWeight:candidate.selectionScore,
+        adjustedWeight:candidate.selectionScore,
+        source:candidate.source,
+        safetyStatus:candidate.safetyStatus,
+        selectionScore:candidate.selectionScore,
+        blockedReason:candidate.blockedReason,
+      }));
+      variationDebug.continuedPlaySelectedMoveInCandidateList=continuationPolicyDecision.debug.selectedMoveInCandidateList;
+      variationDebug.continuedPlaySelectionConsistency=continuationPolicyDecision.debug.selectionConsistency;
+      variationDebug.continuationMoveSafetySource=continuationPolicyDecision.debug.continuationMoveSafetySource;
+      if(!continuationPolicyDecision.debug.selectedMoveInCandidateList){
+        variationDebug.opponentVariationReason="selection_inconsistent_with_candidates";
+      }
+    }
     if(!variationDebug.opponentVariationReason||variationDebug.opponentVariationReason==="not_applied"){
       const recent=variationDebug.recentOpponentBranchKeys;
       if(recent.length>=2&&recent[0]===selectedBranchKey&&recent[1]===selectedBranchKey)variationDebug.opponentVariationReason="no_supported_alternative";
@@ -1126,14 +2706,11 @@ export default function App(){
       playedAt:Date.now(),
     });
     setOpponentVariationDebug(variationDebug);
-    setTrainerPhase("opponent_animating");
-    setOverlayClearedOnPhaseChange(true);
-    setOverlayFrameId(trainerFrameId);
-    setFen(chosen.fen);recordPosition(chosen.fen);setLastMove(chosen.uci);setLastMoveSan(chosen.san);setMoveHistory(prev=>[...prev,chosen.san]);setSelectedSquare(null);setShowAnswer(false);setOpponentCue(boardSettings.showOpponentCue?{expiresAt:Date.now()+2500,title:`Opponent: ${chosen.san}`,message:"Brief opponent cue. Your selected user-side view stays visible after this fades.",lines:[{from:chosen.uci.slice(0,2),to:chosen.uci.slice(2,4),kind:"opponent",label:chosen.san}],cues:[{square:chosen.uci.slice(2,4),kind:"opponent"}],committed:true,fen:normalizeFen(chosen.fen)}:null);setFeedback(`Opponent played ${chosen.san}. Source: ${source}. ${variationNote}`);setBrain(p=>({...p,source,lichess:source.includes("Lichess")?"active":p.lichess,note:variationNote}))
-    window.setTimeout(()=>{
-      const next=new Chess(chosen.fen);
-      setTrainerPhase(next.turn()===userColor?"ready_for_user":"opponent_selecting");
-    },160);
+    const next=new Chess(chosen.fen);
+    const nextPhase:OverlayPhase=next.isGameOver()?"terminal":(next.turn()===userColor?"ready_for_user":"opponent_selecting");
+    commitRuntimeFrame({nextFen:chosen.fen,nextPhase,recordHistory:true,clearPendingOpponentRequest:true});
+    clearRuntimeCriticalIssue("stale_opponent_reply_commit");
+    setLastMove(chosen.uci);setLastMoveSan(chosen.san);setLastMoveColor(opponentColor);setMoveHistory(prev=>[...prev,chosen.san]);setSelectedSquare(null);setShowAnswer(false);setOpponentCue(boardSettings.showOpponentCue?{expiresAt:Date.now()+2500,title:`Opponent: ${chosen.san}`,message:"Brief opponent cue. Your selected user-side view stays visible after this fades.",lines:[{from:chosen.uci.slice(0,2),to:chosen.uci.slice(2,4),kind:"opponent",label:chosen.san}],cues:[{square:chosen.uci.slice(2,4),kind:"opponent"}],committed:true,fen:normalizeFen(chosen.fen)}:null);setFeedback(`Opponent played ${chosen.san}. Source: ${source}. ${variationNote}`);setBrain(p=>({...p,source,lichess:source.includes("Lichess")?"active":p.lichess,note:variationNote}))
   }
   function handleTrainerViewChange(nextTrainerView:TrainerView){
     if(nextTrainerView===trainerView)return;
@@ -1145,16 +2722,58 @@ export default function App(){
     });
   }
   function handleReveal(){
+    const before=currentDebugActionState();
+    if(!phaseActionGate.revealButtonVisible){
+      recordDebugAction({action:"reveal_next_move",normalizedAction:"reveal_next_move",before,after:before,result:"blocked",reason:coachHiddenForFrame?"coach_hidden":phaseActionGate.blockedReason??"no_revealable_move",extra:{revealBlockedBecauseCoachHidden:coachHiddenForFrame,revealTargetUci:instructionTarget?.uci??null,revealTargetSource:instructionTarget?"instruction_target":"none"}});
+      return;
+    }
+    if(showAnswer){
+      recordDebugAction({action:"reveal_next_move",normalizedAction:"reveal_next_move",before,after:before,result:"no_op",reason:"reveal_idempotent",extra:{revealIdempotentNoop:true,revealTargetUci:instructionTarget?.uci??null,revealTargetSource:instructionTarget?"instruction_target":"none"}});
+      return;
+    }
+    const after={...before,answerShown:true,showAnswer:true,coachInteraction:coachInteraction==="none"?"answer":coachInteraction};
+    if(coachHiddenForFrame)setCoachHiddenFrameId(null);
     setShowAnswer(true);
+    recordDebugAction({action:"reveal_next_move",normalizedAction:"reveal_next_move",before,after,result:"handled",reason:"manual_reveal_button",extra:{revealTargetUci:instructionTarget?.uci??null,revealTargetSource:instructionTarget?"instruction_target":"none"}});
     trackLearningEvent({
       type:"cue_revealed",
       source:"train",
-      expectedMoveSan:expectedUserOptions[0]?.san,
-      expectedMoveUci:expectedUserOptions[0]?.uci,
+      expectedMoveSan:instructionTarget?.san,
+      expectedMoveUci:instructionTarget?.uci,
     });
     void runBrain("reveal");
   }
-  function continueVsBot(){setTrainingMode("continuation");setTrainerPhase(isUserTurn?"ready_for_user":"opponent_selecting");setBookComplete(false);setFeedback(`Continuation mode active. Legal moves are accepted and evaluated at ${rating.target}.`);setBrain(p=>({...p,source:"continuation mode",book:"complete"}));if(!isUserTurn)setTimeout(()=>void playOpponentMove(true),350)}
+  function continueVsBot(){
+    const current=new Chess(fen);
+    const legal=current.moves().length;
+    const terminal=current.isGameOver()||legal===0;
+    setUserExplicitlyEnteredContinuation(true);
+    setContinueFromHereClicked(true);
+    setTrainingMode("continuation");
+    setBookComplete(false);
+    setEnginePreview(null);
+    if(terminal){
+      setContinuationAnalysisStatus("terminal");
+      setTrainerPhase("terminal");
+      setFeedback("Line complete. Restart the line or review the pattern.");
+      setBrain(p=>({...p,source:"continuation terminal",book:"complete",note:"No legal continuation exists."}));
+      trackLearningEvent({type:"cue_revealed",source:"train",fen,metadata:{eventType:"continuation_terminal",lastUserMoveSan:lastMoveSan,lastUserMoveUci:lastMove,terminalReason:current.isCheckmate?.()?"checkmate":"no_legal_moves"}});
+      return;
+    }
+    if(current.turn()!==userColor){
+      setContinuationAnalysisStatus("opponent_replying");
+      setTrainerPhase("opponent_replying");
+      setFeedback("Continuation mode active. Opponent is choosing a reply.");
+      setBrain(p=>({...p,source:"continuation mode",book:"complete"}));
+      scheduleOpponentReply({mode:"continuation",delayMs:250,baseFen:current.fen()});
+      return;
+    }
+    setContinuationAnalysisStatus("analyzing");
+    setTrainerPhase("ready_for_user");
+    setFeedback(`Continuation mode active. Blundr is selecting a continuation at ${rating.target}.`);
+    setBrain(p=>({...p,source:"continuation mode",book:"complete"}));
+  }
+  function continueFromHere(){setCoachInteraction("show_plan");continueVsBot()}
   function handleSquareTap(square:string){
     if(bookComplete)return;
     visualRecipePlayback.consumeSkipOnInteraction();
@@ -1187,6 +2806,7 @@ export default function App(){
         const expected=expectedMove?.san??"No saved move";
         logMistake(beforeFen,expected,legal.san);
         setShowAnswer(true);
+        setCoachReviewMarked(true);
         if(isMoveQualityVerified(moveQuality)){
           setFeedback(`Not quite. ${legal.san} is legal, but this drill is looking for ${expected}. Blundr Brain validated this pattern.`);
         }else if(moveQuality?.status==="rejected"||moveQuality?.status==="unavailable"){
@@ -1208,18 +2828,27 @@ export default function App(){
         return;
       }
     }
-    setTrainerPhase("transitioning");
-    setOverlayClearedOnPhaseChange(true);
-    setOverlayFrameId(trainerFrameId);
-    setFen(current.fen());
-    recordPosition(current.fen());
+    const nextFen=current.fen();
+    const nextGame=new Chess(nextFen);
+    const needsOpponentReply=!nextGame.isGameOver()&&nextGame.turn()!==userColor;
+    commitRuntimeFrame({
+      nextFen,
+      nextPhase:nextGame.isGameOver()?"terminal":(needsOpponentReply?"opponent_selecting":"ready_for_user"),
+      recordHistory:true,
+      clearPendingOpponentRequest:!needsOpponentReply,
+    });
+    setCoachInteraction("none");
     setLastMove(playedUci);
     setLastMoveSan(legal.san);
+    setLastMoveColor(userColor);
     setMoveHistory(prev=>[...prev,legal.san]);
     setOpponentCue(null);
     setOpponentVariationDebug(null);
     setShowAnswer(false);
     setFeedback(trainingMode==="restricted"?`Correct: ${legal.san}.`:`Played ${legal.san}. Move will be evaluated.`);
+    if(needsOpponentReply){
+      scheduleOpponentReply({mode:trainingMode,delayMs:350,baseFen:nextFen});
+    }
     setProgress(prev=>{
       const next={...prev.mistakes};
       if(reviewingFen&&next[reviewingFen]){
@@ -1241,15 +2870,15 @@ export default function App(){
     });
     setReviewingFen(null);
   }
-  function practiceMistake(m:Mistake){const rep=repertoires.find(r=>r.id===m.repertoireId);if(rep)setSelectedRepertoireId(rep.id);setFen(m.fen);resetHistory(m.fen);setReviewingFen(normalizeFen(m.fen));setFeedback("Review this opening position. Play the expected move.");setMoveHistory([]);setShowAnswer(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);setOpponentVariationDebug(null);setActiveTab("train")}
-  function createCustomRepertoire(){const moves=newLineText.replace(/\d+\./g," ").replace(/\s+/g," ").trim().split(" ").filter(Boolean);if(!moves.length)return;const test=new Chess();for(const move of moves){try{if(!test.move(move)){setFeedback(`Could not parse move: ${move}`);return}}catch{setFeedback(`Could not parse move: ${move}`);return}}const rep:Repertoire={id:`custom-${Date.now()}`,name:newRepName.trim()||"My Custom Repertoire",color:newRepColor,description:"Custom line saved on this device.",lines:[moves],custom:true};setCustomRepertoires(prev=>[...prev,rep]);setSelectedRepertoireId(rep.id);setShowAddLine(false);const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setTrainingMode("restricted");setBookComplete(false);setFeedback("Custom repertoire saved. Restricted training is active.");setActiveTab("train")}
+  function practiceMistake(m:Mistake){const rep=repertoires.find(r=>r.id===m.repertoireId);if(rep)setSelectedRepertoireId(rep.id);setFen(m.fen);resetHistory(m.fen);setReviewingFen(normalizeFen(m.fen));setFeedback("Review this opening position. Play the expected move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setUserExplicitlyEnteredContinuation(false);setContinueFromHereClicked(false);setMoveHistory([]);setShowAnswer(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setOpponentVariationDebug(null);setActiveTab("train");bumpRuntimeFrame()}
+  function createCustomRepertoire(){const moves=newLineText.replace(/\d+\./g," ").replace(/\s+/g," ").trim().split(" ").filter(Boolean);if(!moves.length)return;const test=new Chess();for(const move of moves){try{if(!test.move(move)){setFeedback(`Could not parse move: ${move}`);return}}catch{setFeedback(`Could not parse move: ${move}`);return}}const rep:Repertoire={id:`custom-${Date.now()}`,name:newRepName.trim()||"My Custom Repertoire",color:newRepColor,description:"Custom line saved on this device.",lines:[moves],custom:true};setCustomRepertoires(prev=>[...prev,rep]);setSelectedRepertoireId(rep.id);setShowAddLine(false);const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setTrainingMode("restricted");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setFeedback("Custom repertoire saved. Restricted training is active.");setActiveTab("train");bumpRuntimeFrame()}
   const squareStyles:Record<string,CSSProperties>={};
   if(lastMove&&lastMove.length>=4){
     squareStyles[lastMove.slice(0,2)]={boxShadow:"inset 0 0 0 999px rgba(255,255,255,.12), inset 0 0 22px rgba(255,255,255,.5)"};
     squareStyles[lastMove.slice(2,4)]={boxShadow:"inset 0 0 0 999px rgba(255,255,255,.16), inset 0 0 24px rgba(255,255,255,.62)"};
   }
   if(activeBoard){
-    const visualSquares=overlaySuppressedReason?[]:(teachingOrchestration?visualRecipePlayback.squares.filter((sq)=>isValidSquare(sq.square)).slice(0,4):visualModelOutput?(activeVisualModelOutput&&trainerPhase==="ready_for_user"&&isUserTurn&&trainerView==="assisted"?(activeVisualModelOutput.squares??[]):[]):currentView.cues.slice(0,3).map(c=>({square:c.square,kind:c.kind,role:c.kind})));
+    const visualSquares=!presentationFrame.visual.shouldRender?[]:(presentationFrame.visual.source==="visual_recipe"?visualRecipePlayback.squares.filter((sq)=>isValidSquare(sq.square)).slice(0,4):visualModelOutput?(activeVisualModelOutput&&trainerPhase==="ready_for_user"&&isUserTurn&&trainerView==="assisted"?(activeVisualModelOutput.squares??[]):[]):currentView.cues.slice(0,3).map(c=>({square:c.square,kind:c.kind,role:c.kind})));
     for(const cue of visualSquares.slice(0,4)){
       if(!isValidSquare(cue.square))continue;
       const role=cue.role??cue.kind;
@@ -1268,7 +2897,152 @@ export default function App(){
       squareStyles[m.to]={...squareStyles[m.to],background:`radial-gradient(circle, ${dot} 0%, ${dot} 18%, transparent 23%)`,boxShadow:isCapture?"inset 0 0 0 3px rgba(239,68,68,.58)":"inset 0 0 0 2px rgba(22,163,74,.30)"};
     }
   }
+  if((presentationFrame.visual.source==="continuation_candidate"||presentationFrame.visual.source==="guided_target_fallback"))for(const highlight of [...continuationCandidateVisual.highlights,...safeMoveArrowVisual.highlights]){
+    squareStyles[highlight.square]={...squareStyles[highlight.square],background:"radial-gradient(circle, rgba(22,163,74,.24) 0%, rgba(22,163,74,.16) 38%, transparent 72%)",boxShadow:"inset 0 0 0 3px rgba(22,163,74,.45)"};
+  }
   if(selectedSquare)squareStyles[selectedSquare]={...squareStyles[selectedSquare],boxShadow:"inset 0 0 0 3px rgba(22,101,52,.85), inset 0 0 24px rgba(22,101,52,.5)"};
+  const visualSourceForRender=String(presentationFrame.visual.source??"none");
+  const staleCanSuppressVisual=visualFrameStale&&visualSourceForRender==="visual_recipe";
+  const boardLinesToRender:ActiveLine[]=presentationFrame.visual.shouldRender&&!staleCanSuppressVisual?(presentationFrame.visual.lines as ActiveLine[]):[];
+  const transientLinesToRender:ActiveLine[]=activeBoard&&opponentCue&&boardSettings.showOpponentCue&&shouldRenderOpponentLastMoveHighlight({committed:opponentCue.committed,cueFen:opponentCue.fen,boardFen:normalizeFen(fen)})?opponentCue.lines:[];
+  const legalVerboseMoves=(game.moves({verbose:true}) as any[]);
+  const expectedMoveLegal=expectedUserOptions[0]?legalVerboseMoves.some((move)=>moveToUci(move)===expectedUserOptions[0].uci):null;
+  const visualMoveUciForDebug=boardLinesToRender[0]?`${boardLinesToRender[0].from}${boardLinesToRender[0].to}`:null;
+  const visualTargetMatchesInstructionTarget=instructionTarget?.uci?visualMoveUciForDebug===instructionTarget.uci:"unknown";
+  const selectedContinuationCandidate=trainingMode==="continuation"&&currentSelectedCandidateUci?{uci:currentSelectedCandidateUci,san:currentSelectedCandidateSan??currentSelectedCandidateUci}:null;
+  const lastMoveAttribution=attributeLastMove({lastMoveSan,lastMoveUci:lastMove,lastMoveColor,userColor});
+  const legacyTrainingCardActuallyRendered=Boolean(activeBoard&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface&&coachSurfacePolicy.allowLegacyTrainingCard);
+  const legacyAnswerCardActuallyRendered=Boolean(showAnswer&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface&&coachSurfacePolicy.allowLegacyAnswerCard);
+  const legacyMoveImpactActuallyRendered=Boolean(legacyTrainingCardActuallyRendered&&coachSurfacePolicy.allowMoveImpactCard&&moveImpactPresentation.show);
+  const legacyNextTextActuallyRendered=Boolean(legacyTrainingCardActuallyRendered&&coachSurfacePolicy.allowNextMoveText&&patternCue.next&&(trainerView==="assisted"||showAnswer));
+  const diagnosticsSnapshot=blundrDebugEnabled?collectTrainerDebugSnapshot({
+    debugEnabled:blundrDebugEnabled,
+    trainerFrameId,
+    historyIndex,
+    trainerPhase,
+    trainerView,
+    trainingMode,
+    bookComplete,
+    isUserTurn,
+    showAnswer,
+    coachHintRequestCount,
+    coachHiddenForFrame,
+    coachInteraction,
+    instructionTargetUci:instructionTarget?.uci??null,
+    instructionTargetFrom:instructionTarget?.from??null,
+    instructionTargetTo:instructionTarget?.to??null,
+    instructionTargetPieceType:instructionTarget?.pieceType??null,
+    instructionTargetKind:instructionTarget?.kind??null,
+    expectedMoveSan:expectedUserOptions[0]?.san,
+    expectedMoveUci:expectedUserOptions[0]?.uci,
+    expectedMoveResolution,
+    expectedMoveResolverDebug,
+    guidedCoveragePolicy,
+    lastUserMoveSan:lastMoveAttribution.lastUserMoveSan,
+    lastUserMoveUci:lastMoveAttribution.lastUserMoveUci,
+    lastOpponentMoveSan:lastMoveAttribution.lastOpponentMoveSan,
+    lastOpponentMoveUci:lastMoveAttribution.lastOpponentMoveUci,
+    selectedLineId:selectedRepertoireId,
+    selectedOpeningId:selectedRepertoireId,
+    selectedConceptId:visualRecipe?.conceptId??teachingOrchestration?.cue.conceptId,
+    activeLineName:repertoire.name,
+    moveHistory,
+    fen,
+    feedback,
+    overlayFen,
+    sideToMove:game.turn(),
+    legalMoveCount:legalVerboseMoves.length,
+    expectedMoveLegal,
+    expectedMoveResolvedFromSan:expectedUserOptions[0]?.san??null,
+    expectedMoveResolvedFromUci:expectedUserOptions[0]?.uci??null,
+    sanUciResolutionStatus:expectedUserOptions[0]?"resolved":expectedMoveResolution.source,
+    sanUciResolutionReason:expectedMoveResolution.reason,
+    visualRecipe:visualRecipeForRender,
+    visualRecipeOverlay,
+    visualRecipePlayback,
+    visualRecipePrimitiveIds:visualRecipe?.beats.flatMap((beat)=>beat.primitives.map((primitive)=>primitive.id))??[],
+    playbackKey:visualRecipePlayback.playbackKey,
+    playbackReady:visualRecipePlayback.animationState==="playing"||visualRecipePlayback.animationState==="held_end_state"||visualRecipePlayback.animationState==="skipped_to_end",
+    boardLines:boardLinesToRender,
+    squareStyles,
+    overlayFrameId,
+    visualReady,
+    visualModelOutput,
+    coachSurfacePolicyAffectsVisualLayer:false,
+    selectedCandidateSan:selectedContinuationCandidate?.san,
+    selectedCandidateUci:selectedContinuationCandidate?.uci,
+    selectedCandidateSource:currentSelectedCandidateSource,
+    visualMoveUci:visualMoveUciForDebug,
+    visualRecipeMoveUci,
+    visualRecipeTargetMatchesInstructionTarget,
+    visualRecipeBlockedByTargetMismatch,
+    visualTargetMatchesInstructionTarget,
+    selectedCandidateSafetySource:(coachDecision?.debug as any)?.coachEngineStatus,
+    enginePreview,
+    continuationCandidateLines:continuationCandidateVisual.lines,
+    shouldRenderContinuationLines:trainingMode==="continuation"&&continuationCandidateVisual.shouldRender&&boardLinesToRender.length>0,
+    continuationVisualBlockedReason:trainingMode==="continuation"&&selectedContinuationCandidate&&!boardLinesToRender.length?(continuationCandidateVisual.blockedReason??"candidate_exists_but_no_board_lines"):"none",
+    continuationAnalysisStatus,
+    continuationRuntimeStatus:continuationRuntimeState.status,
+    continuationTerminalReason:continuationRuntimeState.reason??null,
+    continuationAnalysisRequestId:continuationAnalysisSeqRef.current,
+    continuationAnalysisFen4:enginePreview?.fen?normalizeFen(enginePreview.fen):null,
+    opponentVariationDebug,
+    coachDecision:displayedCoachDecision,
+    coachMoveUci:(displayedCoachDecision?.debug as any)?.coachMoveUci??instructionTarget?.uci??null,
+    coachPieceType:(displayedCoachDecision?.debug as any)?.coachPieceType??instructionTarget?.pieceType??null,
+    revealTargetUci:(lastActionDebug as any)?.revealTargetUci??instructionTarget?.uci??null,
+    revealTargetSource:(lastActionDebug as any)?.revealTargetSource??(instructionTarget?"instruction_target":"none"),
+    frameKey,
+    coachFrameStale,
+    visualFrameStale,
+    revealTargetStale,
+    overlayFrameLagDetected:trainerPhase==="ready_for_user"&&overlayFrameId!==trainerFrameId,
+    memoryMigratedOrCleared:coachMemoryMigration.migratedOrCleared,
+    coachMemoryLegacyDetected:coachMemoryMigration.legacyDetected,
+    coachMemoryClearedLegacyCount:coachMemoryMigration.clearedLegacyCount,
+    liveCoachState,
+    presentationFrame,
+    coachSurfacePolicy,
+    branchTransitionSurfaceRendered:Boolean(branchTransitionSurface?.render),
+    branchTransitionReason:branchTransitionSurface?.reason??null,
+    continueFromHereAvailable:Boolean(branchTransitionSurface?.render),
+    continueFromHereClicked,
+    opportunityCount:(displayedCoachDecision?.debug as any)?.opportunityCount??liveCoachState?.opportunities?.length,
+    renderableOpportunityCount:(displayedCoachDecision?.debug as any)?.renderableOpportunityCount??liveCoachState?.opportunities?.length,
+    coachQuality:(displayedCoachDecision?.debug as any)?.coachQuality??null,
+    moveFactPacket:(displayedCoachDecision?.debug as any)?.moveFactPacket??null,
+    positionDeltaPacket:(displayedCoachDecision?.debug as any)?.positionDeltaPacket??null,
+    featurePacket:(displayedCoachDecision?.debug as any)?.featurePacket??null,
+    planPacket:(displayedCoachDecision?.debug as any)?.planPacket??null,
+    opportunityPacket:(displayedCoachDecision?.debug as any)?.opportunityPacket??null,
+    safetyResult:(displayedCoachDecision?.debug as any)?.safetyResult??null,
+    pendingOpponentRequest,
+    runtimeCriticalIssues,
+    lastActionDebug,
+    eventLog:debugEventLog,
+    lastCoachRecords,
+    lastCoachBodies:getRecentInstructionalCoachRecords(lastCoachRecordsRef.current,5).map((entry)=>entry.body),
+    coachTimeline,
+    legacyTrainingCardWouldRender:Boolean(activeBoard&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface),
+    legacyTrainingCardActuallyRendered,
+    legacyAnswerCardWouldRender:Boolean(showAnswer&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface),
+    legacyAnswerCardActuallyRendered,
+    legacyMoveImpactWouldRender:moveImpactPresentation.show,
+    legacyMoveImpactActuallyRendered,
+    legacyNextTextWouldRender:Boolean(patternCue.next),
+    legacyNextTextActuallyRendered,
+    moveImpactPresentation,
+    currentSelectedCandidateUci,
+    previousSelectedCandidateUci:candidateSyncDebugRef.current.previousSelectedCandidateUci,
+    staleSelectedCandidateDetected:candidateSyncDebugRef.current.staleSelectedCandidateDetected,
+    staleSelectedCandidateCleared:candidateSyncDebugRef.current.staleSelectedCandidateCleared,
+    autoContinuationReason:userExplicitlyEnteredContinuation?"user_explicit":"none",
+    userExplicitlyEnteredContinuation,
+    prematureContinuationBlocked:trainingMode!=="continuation"&&!guidedCoveragePolicy.guidedCompleteAllowed,
+    transitionToContinuationAllowed:userExplicitlyEnteredContinuation||guidedCoveragePolicy.guidedCompleteAllowed,
+    transitionToContinuationReason:userExplicitlyEnteredContinuation?"user_explicit":guidedCoveragePolicy.guidedCompleteAllowed?guidedCoveragePolicy.guidedCoverageState:"not_allowed",
+  }):null;
   return <main className="min-h-screen bg-[#f7f7f4] text-stone-950"><div className="mx-auto flex min-h-screen max-w-md flex-col px-4 pb-24 pt-5">
     {activeTab==="home"&&<section className="space-y-6"><header className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-green-700 text-white shadow-sm"><Beaker size={20}/></div><div><h1 className="text-2xl font-bold tracking-tight">Blundr</h1><p className="text-sm text-stone-500">Visual opening training with a controlled trainer.</p></div></div><button onClick={()=>setShowSettings(true)} className="rounded-2xl bg-white p-3 shadow-sm"><Settings className="text-stone-500" size={20}/></button></header><div className="grid grid-cols-2 gap-3"><MetricCard label="Accuracy" value={`${accuracy}%`} sub="all time" icon={<Trophy size={19}/>}/><MetricCard label="Streak" value={String(progress.streak)} sub="correct" icon={<Flame size={19}/>}/><MetricCard label="Review" value={String(mistakes.length)} sub="mistakes" icon={<XCircle size={19}/>} warning/><MetricCard label="Openings" value={String(repertoires.length)} sub="available" icon={<BookOpen size={19}/>}/></div><div className="rounded-3xl bg-stone-900 p-4 text-white shadow-sm"><div className="flex items-center gap-2 text-sm font-bold text-green-300"><Cloud size={17}/> v2.7.33</div><p className="mt-2 text-sm leading-6 text-stone-300">Training now uses rule-only visual cues by default. Blundr Brain is reserved for manual reveal/debug, so normal practice stays fast, deterministic, and inexpensive.</p></div><div className="space-y-3">{repertoires.slice(0,5).map(r=><button key={r.id} onClick={()=>selectRepertoire(r.id)} className="flex w-full items-center gap-3 rounded-3xl border border-stone-200 bg-white p-3 text-left shadow-sm"><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {countPositions(r)} positions</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>)}</div></section>}
     {activeTab==="repertoire"&&<section className="space-y-5"><header className="flex items-start justify-between gap-3"><div><h1 className="text-2xl font-bold tracking-tight">Repertoires</h1><p className="text-sm text-stone-500">Reliable openings included in the app.</p></div><button onClick={()=>setShowAddLine(true)} className="rounded-2xl bg-green-700 px-4 py-2 text-sm font-black text-white">Add</button></header><div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-sm"><Search size={18} className="text-stone-400"/><span className="text-sm text-stone-400">Search repertoires</span></div><div className="space-y-3">{repertoires.map(r=><button key={r.id} onClick={()=>selectRepertoire(r.id)} className={classNames("flex w-full items-center gap-3 rounded-3xl border bg-white p-3 text-left shadow-sm",r.id===selectedRepertoireId?"border-green-700":"border-stone-200")}><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {countPositions(r)} positions • {r.color}</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>)}</div></section>}
@@ -1309,24 +3083,26 @@ export default function App(){
           <p className="mt-2 text-[11px] font-semibold text-stone-500">{trainerView==="assisted"?"Shows the visual pattern cue before the move.":"Hides pre-move hints for independent recall."}</p>
         </div>
         {activeBoard&&enabledViews.length>0&&<div className="mb-3 grid gap-2" style={{gridTemplateColumns:`repeat(${enabledViews.length}, minmax(0,1fr))`}}>{enabledViews.map(v=><button key={v} onClick={()=>setActiveBoardView(v)} className={classNames("rounded-full px-4 py-2 text-sm font-black capitalize",safeBoardView===v?"bg-green-700 text-white shadow-sm":"bg-white text-stone-500 ring-1 ring-stone-200")}>{v}</button>)}</div>}
-        <TapChessboard game={game} orientation={repertoire.color} selectedSquare={selectedSquare} squareStyles={squareStyles} lines={activeBoard&&(visualReady||visualModelOutput)?visualLines:[]} transientLines={activeBoard&&opponentCue&&boardSettings.showOpponentCue&&shouldRenderOpponentLastMoveHighlight({committed:opponentCue.committed,cueFen:opponentCue.fen,boardFen:normalizeFen(fen)})?opponentCue.lines:[]} onSquareTap={handleSquareTap} whitePct={whitePct} evalText={evalText} settings={boardSettings} captured={captured} userColor={userColor} animationName={visualAnimationName}/>
+        <TapChessboard game={game} orientation={repertoire.color} selectedSquare={selectedSquare} squareStyles={squareStyles} lines={boardLinesToRender} transientLines={transientLinesToRender} onSquareTap={handleSquareTap} whitePct={whitePct} evalText={evalText} settings={boardSettings} captured={captured} userColor={userColor} animationName={visualAnimationName}/>
         <HistoryControls index={historyIndex} total={positionHistory.length} onBack={()=>jumpHistory(-1)} onForward={()=>jumpHistory(1)}/>
       </div>
+      {showDetails&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Coach Debug</div><div className="mt-2">coachMode: {coachDecision.mode}</div><div>coachAction: {coachDecision.action}</div><div>coachUtteranceId: {coachDecision.utteranceId??"none"}</div><div>coachUtteranceFamily: {coachDecision.utteranceFamily??"none"}</div><div>coachVariationReason: {String((coachDecision.debug as any)?.coachVariationReason??"n/a")}</div><div>coachHintStrength: {String((coachDecision.debug as any)?.coachHintStrength??"none")}</div><div>coachRevealRisk: {coachDecision.revealRisk}</div><div>coachGivesAnswer: {coachDecision.givesAnswer?"true":"false"}</div><div>coachButtons: {displayedCoachDecision.buttons.join(", ")||"none"}</div><div>coachShouldMarkReviewWorthy: {coachDecision.shouldMarkReviewWorthy?"true":"false"}</div><div>coachSuppressedReason: {coachDecision.suppressedReason??"none"}</div><div>coachFrameMatchesBoard: {coachContextResult.context?.recipeFrameMatchesBoard?"true":"false"}</div><div>coachFenMatchesBoard: {coachContextResult.context?.recipeFenMatchesBoard?"true":"false"}</div><div>recentCoachUtteranceIds: {coachUtteranceMemory.slice(-5).map((entry:any)=>entry.utteranceId).join(", ")||"none"}</div><div>coachSafetyWarnings: {JSON.stringify((coachDecision.debug as any)?.coachSafetyWarnings??[])}</div><div>coachReviewMarked: {coachReviewMarked?"true":"false"}</div><div>selectedOpportunity: {String((coachDecision.debug as any)?.selectedOpportunity??liveCoachState?.selected?.opportunity??"none")}</div><div>selectedIntent: {String((coachDecision.debug as any)?.selectedIntent??liveCoachState?.selected?.intent??"none")}</div><div>exactMoveAllowed: {coachContextResult.context?.exactMoveAllowed?"true":"false"}</div><div>claimTypes: {coachDecision.claimTypes.join(", ")||"none"}</div><div>blockedClaims: {String((coachDecision.debug as any)?.blockedClaims??"none")}</div><div>silenceReason: {String((coachDecision.debug as any)?.silenceReason??liveCoachState?.debug?.silenceReason??"none")}</div><div>branchTransitionSurfaceRendered: {branchTransitionSurface?.render?"true":"false"}</div><div>branchTransitionReason: {branchTransitionSurface?.reason??"none"}</div><div>continueFromHereAvailable: {branchTransitionSurface?.render?"true":"false"}</div><div>continueFromHereClicked: {continueFromHereClicked?"true":"false"}</div><div>coachSurfaceOwner: {coachSurfacePolicy.owner}</div><div>allowLegacyTrainingCard: {coachSurfacePolicy.allowLegacyTrainingCard?"true":"false"}</div><div>allowMoveImpactCard: {coachSurfacePolicy.allowMoveImpactCard?"true":"false"}</div><div>allowNextMoveText: {coachSurfacePolicy.allowNextMoveText?"true":"false"}</div><div>legacyCueSuppressedReason: {coachSurfacePolicy.reason}</div><div>moveImpactPresenterReason: {moveImpactPresentation.reason}</div></div>}
       {bookComplete&&<div className="rounded-3xl border border-green-200 bg-green-50 p-4 shadow-sm"><h2 className="text-lg font-black text-green-900">Book complete</h2><p className="mt-2 text-sm leading-6 text-green-800">You finished this opening branch. Train it again, or continue against the bot from this position.</p><div className="mt-4 grid grid-cols-2 gap-3"><button onClick={resetBoard} className="rounded-2xl bg-white px-4 py-3 font-black text-green-800 shadow-sm">Train Again</button><button onClick={continueVsBot} className="rounded-2xl bg-green-700 px-4 py-3 font-black text-white shadow-sm">Continue vs Bot</button></div></div>}
       {endingInfo&&<GameEndCard title={endingInfo.title} message={endingInfo.message} onRestart={resetBoard}/>} 
-      <button onClick={handleReveal} className="w-full rounded-3xl bg-stone-950 px-4 py-4 text-center font-black text-white shadow-lg"><span className="flex items-center justify-center gap-2"><Eye size={18}/> Reveal Next Move</span></button>
-      {showAnswer&&<div className="rounded-3xl bg-stone-900 p-4 text-white"><div className="text-sm text-stone-300">{isMoveQualityVerified(moveQuality)?"Verified move":"Saved line move"}</div><div className="mt-2 text-2xl font-black">{expectedUserOptions.length?expectedUserOptions.map(m=>m.san).join(" / "):engineLines[0]?.san??"Analysis pending"}</div><p className="mt-2 text-xs leading-5 text-stone-400">Source: {trainingMode==="restricted"?(isMoveQualityVerified(moveQuality)?"Blundr Brain Validated":"Saved repertoire line"):trainingMode==="continuation"&&engineLines[0]?"Manual analysis move":trainingMode==="continuation"?"Manual analysis pending":"Saved line move"}</p></div>}
-      {activeBoard&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 shadow-sm"><div className="mb-2 flex items-center justify-between gap-3"><div><div className="text-xs font-black uppercase tracking-wide text-green-700">{patternCueBadgeLabel}</div><h2 className="text-lg font-black">{patternCue.title}</h2></div><button onClick={()=>setShowDetails(!showDetails)} className="rounded-full bg-stone-100 px-3 py-2 text-xs font-black text-stone-600">{showDetails?"Hide":"Show more"}</button></div><p className="text-sm leading-6 text-stone-700">{patternCue.snippet}</p>{showValidatedBadge&&<p className="mt-2 inline-flex rounded-full bg-green-50 px-3 py-1 text-[11px] font-black text-green-700">Blundr Brain Validated</p>}{opponentCue&&boardSettings.showOpponentCue&&shouldRenderOpponentLastMoveHighlight({committed:opponentCue.committed,cueFen:opponentCue.fen,boardFen:normalizeFen(fen)})&&<p className="mt-2 rounded-2xl bg-purple-50 p-3 text-sm leading-6 text-purple-800"><span className="font-black">Opponent cue: </span>{opponentCue.message}</p>}{patternCue.next&&(trainerView==="assisted"||showAnswer)&&<p className="mt-2 rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600"><span className="font-black text-stone-900">Next: </span>{patternCue.next}</p>}{visualModelError&&<p className="mt-2 rounded-2xl bg-amber-50 p-2 text-[11px] font-bold leading-5 text-amber-700">Visual cue unavailable: {visualModelError}</p>}<MoveImpact impact={moveImpact}/>{showDetails&&<div className="mt-3 space-y-2"><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Headline: {patternCue.title}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual: {activeVisualModelOutput?.animationPackage?.name??annotation.visualExplanation}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Pipeline: rule-only visual → GPT manual/debug only</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Move Quality Gate</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Version: {MOVE_QUALITY_GATE_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Required: {shouldValidateTrainingMove?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Status: {moveQualityPending?"pending":moveQuality?.status??"idle"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected UCI: {moveQuality?.expectedMovesUci?.join(", ")||expectedUserUcis.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected SAN: {expectedUserSans.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Stockfish top two: {moveQuality?.topMoves?.map((line)=>line.uci).join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Reason: {moveQuality?.reason??"No validation result."}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Checked: {moveQuality?.checkedAt?new Date(moveQuality.checkedAt).toLocaleTimeString():"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Hints hidden: {hideUnverifiedTrainingHints?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Teaching Cue Compiler</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler version: {TEACHING_CUE_COMPILER_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler concept: {teachingOrchestration?.cue.conceptId??"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler confidence: {teachingOrchestration?Number((teachingOrchestration.cue.debug.confidence??0).toFixed(3)):"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler reason: {teachingOrchestration?.cue.debug.selectedReason??"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler delta: {teachingOrchestration?.cue.debug.deltaSummary?.join(" | ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler scores: {teachingOrchestration?.cue.debug.detectorScores?.map((s)=>`${s.conceptId}:${s.finalScore.toFixed(2)}`).slice(0,6).join(", ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Orchestrator tier: {teachingOrchestration?.classification.tier??"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Selected story: {teachingOrchestration?.selectedStory?.kind??"n/a"} ({teachingOrchestration?.selectedStory?.score.total?.toFixed?.(2)??"n/a"})</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Rejected stories: {teachingOrchestration?.debug.rejectedStories?.map((r)=>`${r.kind}:${r.total.toFixed(2)}`).join(", ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual budget: {teachingOrchestration?JSON.stringify(teachingOrchestration.debug.visualBudget):"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Suppressed visuals: {teachingOrchestration?.debug.suppressionReasons?.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Learning events are being stored locally for future progress and Review features.</div>{annotation.reason&&<div className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">Fallback reason: {annotation.reason}</div>}</div>}</div>}
+      {phaseActionGate.revealButtonVisible&&!branchTransitionSurface&&<button onClick={handleReveal} className="w-full rounded-3xl bg-stone-950 px-4 py-4 text-center font-black text-white shadow-lg"><span className="flex items-center justify-center gap-2"><Eye size={18}/> Reveal Next Move</span></button>}
+      {showAnswer&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface&&coachSurfacePolicy.allowLegacyAnswerCard&&<div className="rounded-3xl bg-stone-900 p-4 text-white"><div className="text-sm text-stone-300">Study-line move</div><div className="mt-2 text-2xl font-black">{expectedUserOptions.length?expectedUserOptions.map(m=>m.san).join(" / "):engineLines[0]?.san??"Analysis pending"}</div><p className="mt-2 text-xs leading-5 text-stone-400">Source: {trainingMode==="restricted"?"Saved repertoire line":"Continuation analysis"}</p></div>}
+      {activeBoard&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface&&coachSurfacePolicy.allowLegacyTrainingCard&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 shadow-sm"><div className="mb-2 flex items-center justify-between gap-3"><div><div className="text-xs font-black uppercase tracking-wide text-green-700">{patternCueBadgeLabel.replace("Cue ready","Plan mode")}</div><h2 className="text-lg font-black">{patternCue.title}</h2></div><button onClick={()=>setShowDetails(!showDetails)} className="rounded-full bg-stone-100 px-3 py-2 text-xs font-black text-stone-600">{showDetails?"Hide":"Show more"}</button></div><p className="text-sm leading-6 text-stone-700">{patternCue.snippet}</p>{opponentCue&&boardSettings.showOpponentCue&&shouldRenderOpponentLastMoveHighlight({committed:opponentCue.committed,cueFen:opponentCue.fen,boardFen:normalizeFen(fen)})&&<p className="mt-2 rounded-2xl bg-purple-50 p-3 text-sm leading-6 text-purple-800"><span className="font-black">Opponent cue: </span>{opponentCue.message}</p>}{coachSurfacePolicy.allowNextMoveText&&patternCue.next&&(trainerView==="assisted"||showAnswer)&&<p className="mt-2 rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600"><span className="font-black text-stone-900">Next: </span>{patternCue.next}</p>}{visualModelError&&<p className="mt-2 rounded-2xl bg-amber-50 p-2 text-[11px] font-bold leading-5 text-amber-700">Visual cue unavailable: {visualModelError}</p>}{coachSurfacePolicy.allowMoveImpactCard&&moveImpactPresentation.show&&<MoveImpact impact={{label:moveImpactPresentation.label,pct:moveImpact.pct,tone:moveImpact.tone,note:moveImpactPresentation.note}}/>}{showDetails&&<div className="mt-3 space-y-2"><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Headline: {patternCue.title}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual: {activeVisualModelOutput?.animationPackage?.name??annotation.visualExplanation}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Move Quality Gate</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Version: {MOVE_QUALITY_GATE_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Required: {shouldValidateTrainingMove?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Status: {moveQualityPending?"pending":moveQuality?.status??"idle"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected UCI: {moveQuality?.expectedMovesUci?.join(", ")||expectedUserUcis.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected SAN: {expectedUserSans.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Stockfish top two: {moveQuality?.topMoves?.map((line)=>line.uci).join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Reason: {moveQuality?.reason??"No validation result."}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Checked: {moveQuality?.checkedAt?new Date(moveQuality.checkedAt).toLocaleTimeString():"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Hints hidden: {hideUnverifiedTrainingHints?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Teaching Cue Compiler</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler version: {TEACHING_CUE_COMPILER_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler concept: {teachingOrchestration?.cue.conceptId??"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler confidence: {teachingOrchestration?Number((teachingOrchestration.cue.debug.confidence??0).toFixed(3)):"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler reason: {teachingOrchestration?.cue.debug.selectedReason??"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler delta: {teachingOrchestration?.cue.debug.deltaSummary?.join(" | ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler scores: {teachingOrchestration?.cue.debug.detectorScores?.map((s)=>`${s.conceptId}:${s.finalScore.toFixed(2)}`).slice(0,6).join(", ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Orchestrator tier: {teachingOrchestration?.classification.tier??"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Selected story: {teachingOrchestration?.selectedStory?.kind??"n/a"} ({teachingOrchestration?.selectedStory?.score.total?.toFixed?.(2)??"n/a"})</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Rejected stories: {teachingOrchestration?.debug.rejectedStories?.map((r)=>`${r.kind}:${r.total.toFixed(2)}`).join(", ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual budget: {teachingOrchestration?JSON.stringify(teachingOrchestration.debug.visualBudget):"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Suppressed visuals: {teachingOrchestration?.debug.suppressionReasons?.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Learning events are being stored locally for future progress and Review features.</div>{annotation.reason&&<div className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">Fallback reason: {annotation.reason}</div>}</div>}</div>}
       {showDetails&&teachingOrchestration&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Training Context Engine</div><div className="mt-2">Mode: {teachingOrchestration.mode}</div><div>Move trust / context trust: {teachingOrchestration.moveTrust} / {teachingOrchestration.contextTrust}</div><div>Saved move not validated: {teachingOrchestration.debug.savedMoveNotValidated?"yes":"no"}</div><div>Next suppressed: {teachingOrchestration.debug.nextPlaySuppressionReason??"no"}</div><div>Move semantic effects: {teachingOrchestration.debug.moveSemanticSummary.join(" | ")||"n/a"}</div><div>Top move comparisons: {teachingOrchestration.debug.topMoveComparisons.map((c)=>`${c.relationship}:${c.alternativeTheme}`).join(", ")||"n/a"}</div><div>Selected grounding: {teachingOrchestration.debug.selectedStoryGrounding?JSON.stringify(teachingOrchestration.debug.selectedStoryGrounding):"n/a"}</div><div>Visual alignment: {teachingOrchestration.debug.visualConceptAlignment}</div></div>}
+      {displayedCoachDecision?.shouldShowCoachCard&&<CoachCard key={`${trainerFrameId}:${displayedCoachDecision.utteranceId??displayedCoachDecision.title??presentationFrame.coach.owner}`} decision={displayedCoachDecision as any} onAction={handleCoachAction} replayEnabled={visualRecipePlayback.replayAvailable&&trainerView!=="plain"}/>}
       {showDetails&&visualRecipe&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Visual Recipe</div><div className="mt-2">visualRecipeId: {visualRecipe.visualRecipeId}</div><div>recipeSchemaVersion: {visualRecipe.recipeSchemaVersion}</div><div>patternId: {visualRecipe.patternId}</div><div>recipeMode: {visualRecipe.mode}</div><div>recipeConceptId: {visualRecipe.conceptId}</div><div>recipeFrameId: {visualRecipe.frameId??"n/a"}</div><div>recipeFen: {visualRecipe.fen}</div><div>recipeBeatCount: {visualRecipe.beats.length}</div><div>recipePrimitiveCount: {visualRecipe.beats.reduce((sum,beat)=>sum+beat.primitives.length,0)}</div><div>recipePrimitives: {visualRecipe.beats.flatMap((beat)=>beat.primitives.map((primitive)=>`${primitive.type}:${primitive.id}`)).join(", ")||"none"}</div><div>recipePermissions: {JSON.stringify(visualRecipe.permissions)}</div><div>recipeLearningAnchor: {JSON.stringify(visualRecipe.learningAnchor)}</div><div>recipeSuppressedReason: {visualRecipe.debug?.recipeSuppressedReason??"none"}</div><div>recipeLanes: {visualRecipe.debug?.recipeLanes?.join(", ")||"none"}</div><div>recipeEffectFamilies: {visualRecipe.debug?.recipeEffectFamilies?.join(", ")||"none"}</div><div>recipePrioritySummary: {visualRecipe.debug?.recipePrioritySummary??"none"}</div><div>recipeTimingProfile: {visualRecipe.debug?.recipeTimingProfile?JSON.stringify(visualRecipe.debug.recipeTimingProfile):"n/a"}</div><div>recipeOpacityPolicy: {visualRecipe.debug?.recipeOpacityPolicy?JSON.stringify(visualRecipe.debug.recipeOpacityPolicy):"n/a"}</div><div>suppressedByPriority: {visualRecipe.debug?.suppressedByPriority?.join(", ")||"none"}</div><div>suppressedByBudget: {visualRecipe.debug?.suppressedByBudget?.join(", ")||"none"}</div><div>tacticalPrimitivesPresent: {visualRecipe.debug?.tacticalPrimitivesPresent?"true":"false"}</div><div>tacticalPrimitivesRendered: {visualRecipeOverlay.tacticalPrimitivesRendered?"true":"false"}</div><div>schemaSerializable: {visualRecipe.debug?.schemaSerializable?"true":"false"}</div><div>adapterAllowed: {visualRecipeOverlay.adapterAllowed?"true":"false"}</div><div>adapterSuppressedReason: {visualRecipeOverlay.adapterSuppressedReason??"none"}</div><div>recipeFenRaw: {visualRecipeOverlay.recipeFenRaw??"n/a"}</div><div>boardFenRaw: {visualRecipeOverlay.boardFenRaw}</div><div>recipeFenNormalized: {visualRecipeOverlay.recipeFenNormalized??"n/a"}</div><div>boardFenNormalized: {visualRecipeOverlay.boardFenNormalized??"n/a"}</div><div>recipeFrameIdRaw: {String(visualRecipeOverlay.recipeFrameIdRaw??"n/a")}</div><div>boardFrameIdRaw: {String(visualRecipeOverlay.boardFrameIdRaw)}</div><div>recipeFrameMatchesBoard: {visualRecipeOverlay.recipeFrameMatchesBoard?"true":"false"}</div><div>recipeFenMatchesBoard: {visualRecipeOverlay.recipeFenMatchesBoard?"true":"false"}</div></div>}
       {showDetails&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Overlay Lifecycle</div><div className="mt-2">trainerFrameId: {trainerFrameId}</div><div>overlayFrameId: {overlayFrameId}</div><div>overlayFen: {overlayFen??visualRecipe?.fen??"n/a"}</div><div>boardFen: {boardFen}</div><div>overlaySuppressedReason: {overlaySuppressedReason??"none"}</div><div>overlaySource: {overlaySource}</div><div>opponentCandidateRenderedInMainUi: {visualRecipeOverlay.opponentCandidateRenderedInMainUi?"true":"false"}</div><div>staleOverlayIgnored: {staleOverlayFlag?"true":"false"}</div><div>overlayClearedOnPhaseChange: {overlayClearedOnPhaseChange?"true":"false"}</div></div>}
       {showDetails&&visualRecipe&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="flex items-center justify-between gap-3"><div className="font-black text-stone-800">Animation Playback</div><div className="flex items-center gap-2"><button onClick={visualRecipePlayback.replay} disabled={!visualRecipePlayback.replayAvailable||trainerView==="plain"} className={classNames("rounded-full px-3 py-1 text-[11px] font-black",visualRecipePlayback.replayAvailable&&trainerView!=="plain"?"bg-stone-900 text-white":"bg-stone-100 text-stone-400")}>Replay</button><button onClick={visualRecipePlayback.skipToEnd} disabled={visualRecipePlayback.animationState!=="playing"} className={classNames("rounded-full px-3 py-1 text-[11px] font-black",visualRecipePlayback.animationState==="playing"?"bg-stone-900 text-white":"bg-stone-100 text-stone-400")}>Skip</button></div></div><div className="mt-2">animationState: {visualRecipePlayback.animationState}</div><div>activeVisualRecipeId: {visualRecipePlayback.activeVisualRecipeId??"none"}</div><div>activePatternId: {visualRecipePlayback.activePatternId??"none"}</div><div>activeBeatIndex: {visualRecipePlayback.activeBeatIndex??"n/a"}</div><div>activeBeatId: {visualRecipePlayback.activeBeatId??"n/a"}</div><div>activePrimitiveIds: {visualRecipePlayback.activePrimitiveIds.join(", ")||"none"}</div><div>animationReducedMotion: {visualRecipePlayback.animationReducedMotion?"true":"false"}</div><div>animationSkippedToEnd: {visualRecipePlayback.animationSkippedToEnd?"true":"false"}</div><div>animationClearedReason: {visualRecipePlayback.animationClearedReason??"none"}</div><div>animationSuppressedReason: {visualRecipePlayback.animationSuppressedReason??"none"}</div><div>recipeFrameMatchesBoard: {visualRecipePlayback.recipeFrameMatchesBoard?"true":"false"}</div><div>recipeFenMatchesBoard: {visualRecipePlayback.recipeFenMatchesBoard?"true":"false"}</div><div>replayAvailable: {visualRecipePlayback.replayAvailable?"true":"false"}</div><div>tacticalPrimitivesRendered: {visualRecipePlayback.tacticalPrimitivesRendered?"true":"false"}</div></div>}
-      {showDetails&&opponentVariationDebug&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Opponent Variation Guard</div><div className="mt-2">Variation applied: {opponentVariationDebug.opponentVariationApplied?"yes":"no"}</div><div>Reason: {opponentVariationDebug.opponentVariationReason||"n/a"}</div><div>Recent branch keys: {opponentVariationDebug.recentOpponentBranchKeys.join(", ")||"n/a"}</div><div>Selected branch key: {opponentVariationDebug.selectedOpponentBranchKey??"n/a"}</div><div>Candidates: {opponentVariationDebug.candidateOpponentBranches.map((c)=>`${c.san??c.uci}:${c.baseWeight.toFixed(2)}→${c.adjustedWeight.toFixed(2)}`).join(", ")||"n/a"}</div><div>Blocked third-repeat branches: {opponentVariationDebug.blockedThirdRepeatBranches.join(", ")||"none"}</div><div>Fallback used: {opponentVariationDebug.fallbackUsed?"yes":"no"}</div></div>}
+      {showDetails&&opponentVariationDebug&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Opponent Variation Guard</div><div className="mt-2">Variation applied: {opponentVariationDebug.opponentVariationApplied?"yes":"no"}</div><div>Reason: {opponentVariationDebug.opponentVariationReason||"n/a"}</div><div>Recent branch keys: {opponentVariationDebug.recentOpponentBranchKeys.join(", ")||"n/a"}</div><div>Selected branch key: {opponentVariationDebug.selectedOpponentBranchKey??"n/a"}</div><div>Candidates: {opponentVariationDebug.candidateOpponentBranches.map((c)=>`${c.san??c.uci}:${c.baseWeight.toFixed(2)}→${c.adjustedWeight.toFixed(2)}:${c.safetyStatus??"unknown"}:${c.selectionScore?.toFixed?.(2)??"n/a"}${c.blockedReason?`(${c.blockedReason})`:""}`).join(", ")||"n/a"}</div><div>Blocked third-repeat branches: {opponentVariationDebug.blockedThirdRepeatBranches.join(", ")||"none"}</div><div>Fallback used: {opponentVariationDebug.fallbackUsed?"yes":"no"}</div><div>continuedPlaySelectedMoveInCandidateList: {opponentVariationDebug.continuedPlaySelectedMoveInCandidateList?"true":"false"}</div><div>continuedPlaySelectionConsistency: {opponentVariationDebug.continuedPlaySelectionConsistency??"n/a"}</div><div>continuationMoveSafetySource: {opponentVariationDebug.continuationMoveSafetySource??"n/a"}</div></div>}
       <div className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm"><div className="flex items-start gap-3">{feedback.toLowerCase().includes("correct")?<CheckCircle2 className="mt-0.5 text-green-700" size={24}/>:feedback.toLowerCase().includes("not quite")||feedback.toLowerCase().includes("illegal")?<XCircle className="mt-0.5 text-red-600" size={24}/>:<Target className="mt-0.5 text-green-700" size={24}/>}<div><div className="font-bold">{endingInfo?endingInfo.title:isReviewingHistory?"Review mode":isUserTurn?"Your move":"Opponent thinking"}</div><p className="text-sm leading-6 text-stone-600">{feedback}</p></div></div></div>
     </section>}
     {activeTab==="review"&&<section className="space-y-5"><header><h1 className="text-2xl font-bold tracking-tight">Review Mistakes</h1><p className="text-sm text-stone-500">Wrong opening moves are saved here.</p></header>{mistakes.length===0?<div className="rounded-3xl bg-white p-6 text-center shadow-sm"><CheckCircle2 className="mx-auto mb-3 text-green-700" size={40}/><h2 className="text-lg font-bold">No mistakes due</h2><p className="mt-2 text-sm text-stone-500">Missed training positions will appear here.</p></div>:<div className="space-y-3">{mistakes.map(m=><button key={m.fen} onClick={()=>practiceMistake(m)} className="w-full rounded-3xl border border-stone-200 bg-white p-4 text-left shadow-sm"><div className="flex items-start justify-between gap-3"><div><div className="font-bold">{m.opening}</div><div className="mt-1 text-sm text-stone-500">Expected: <span className="font-bold text-green-700">{m.expectedMove}</span></div><div className="text-sm text-stone-500">You played: {m.playedMove}</div></div><span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">Missed {m.count}x</span></div></button>)}</div>}</section>}
     {activeTab==="progress"&&<section className="space-y-5"><header><h1 className="text-2xl font-bold tracking-tight">Progress</h1><p className="text-sm text-stone-500">Your training snapshot.</p></header><div className="grid grid-cols-3 gap-2"><MetricCard compact label="Accuracy" value={`${accuracy}%`} sub="overall" icon={<Target size={18}/>}/><MetricCard compact label="Trained" value={String(Object.keys(progress.trainedPositions).length)} sub="positions" icon={<BookOpen size={18}/>}/><MetricCard compact label="Review" value={String(mistakes.length)} sub="due" icon={<XCircle size={18}/>} warning/></div></section>}
-  </div>{showAddLine&&<div className="fixed inset-0 z-[60] flex items-end bg-black/35 p-4"><div className="mx-auto w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><h2 className="text-xl font-black">Add Custom Line</h2><button onClick={()=>setShowAddLine(false)} className="rounded-full bg-stone-100 p-2"><X size={18}/></button></div><label className="text-sm font-bold text-stone-700">Name</label><input value={newRepName} onChange={e=>setNewRepName(e.target.value)} className="mt-1 w-full rounded-2xl border border-stone-200 px-4 py-3 outline-none focus:border-green-700"/><label className="mt-4 block text-sm font-bold text-stone-700">Train as</label><div className="mt-1 grid grid-cols-2 rounded-2xl bg-stone-200 p-1 text-sm font-semibold"><button onClick={()=>setNewRepColor("white")} className={classNames("rounded-xl py-2",newRepColor==="white"?"bg-white text-green-700 shadow-sm":"text-stone-500")}>White</button><button onClick={()=>setNewRepColor("black")} className={classNames("rounded-xl py-2",newRepColor==="black"?"bg-white text-green-700 shadow-sm":"text-stone-500")}>Black</button></div><label className="mt-4 block text-sm font-bold text-stone-700">Line in SAN</label><textarea value={newLineText} onChange={e=>setNewLineText(e.target.value)} rows={5} className="mt-1 w-full rounded-2xl border border-stone-200 px-4 py-3 outline-none focus:border-green-700"/><button onClick={createCustomRepertoire} className="mt-4 w-full rounded-2xl bg-green-700 px-4 py-4 font-black text-white shadow-sm">Save and Train</button></div></div>}{showSettings&&<SettingsPanel settings={boardSettings} setSettings={setBoardSettings} onClose={()=>setShowSettings(false)}/>}<BottomNav activeTab={activeTab} setActiveTab={setActiveTab}/></main>
+  </div>{showAddLine&&<div className="fixed inset-0 z-[60] flex items-end bg-black/35 p-4"><div className="mx-auto w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><h2 className="text-xl font-black">Add Custom Line</h2><button onClick={()=>setShowAddLine(false)} className="rounded-full bg-stone-100 p-2"><X size={18}/></button></div><label className="text-sm font-bold text-stone-700">Name</label><input value={newRepName} onChange={e=>setNewRepName(e.target.value)} className="mt-1 w-full rounded-2xl border border-stone-200 px-4 py-3 outline-none focus:border-green-700"/><label className="mt-4 block text-sm font-bold text-stone-700">Train as</label><div className="mt-1 grid grid-cols-2 rounded-2xl bg-stone-200 p-1 text-sm font-semibold"><button onClick={()=>setNewRepColor("white")} className={classNames("rounded-xl py-2",newRepColor==="white"?"bg-white text-green-700 shadow-sm":"text-stone-500")}>White</button><button onClick={()=>setNewRepColor("black")} className={classNames("rounded-xl py-2",newRepColor==="black"?"bg-white text-green-700 shadow-sm":"text-stone-500")}>Black</button></div><label className="mt-4 block text-sm font-bold text-stone-700">Line in SAN</label><textarea value={newLineText} onChange={e=>setNewLineText(e.target.value)} rows={5} className="mt-1 w-full rounded-2xl border border-stone-200 px-4 py-3 outline-none focus:border-green-700"/><button onClick={createCustomRepertoire} className="mt-4 w-full rounded-2xl bg-green-700 px-4 py-4 font-black text-white shadow-sm">Save and Train</button></div></div>}{showSettings&&<SettingsPanel settings={boardSettings} setSettings={setBoardSettings} onClose={()=>setShowSettings(false)}/>}<BottomNav activeTab={activeTab} setActiveTab={setActiveTab}/><BlundrDiagnosticsPanel snapshot={diagnosticsSnapshot} enabled={blundrDebugEnabled} onEnabledChange={setBlundrDebugEnabled} onClearEvents={()=>setDebugEventLog([])}/></main>
 }
 
 function boardThemeClasses(theme:BoardTheme,isDark:boolean){
