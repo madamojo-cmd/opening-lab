@@ -1,6 +1,7 @@
 import { Chess } from "chess.js";
 
 import type { CurrentInstructionTarget } from "../runtime/currentInstructionFrame";
+import type { BlundrBrainAnalysis } from "../brain/types";  // v2.7.39.3 integration start
 import { getAttackedSquares, getPieceAttacksFrom } from "./attackMap";
 
 export type CoachInputContext = {
@@ -15,6 +16,7 @@ export type CoachInputContext = {
   recentCoachBodies?: string[];
   recentCoachThemes?: string[];
   legalMoveCountBefore?: number;
+  brainAnalysis?: BlundrBrainAnalysis | null;  // v2.7.39.3: optional Brain input for migration
 };
 
 export type PositionDeltaPacket = {
@@ -561,12 +563,37 @@ export function buildCoachExplanationPipeline(context: CoachInputContext): {
   coachExplanation: CoachExplanation;
   safetyResult: CoachSafetyResult;
   coachQuality: CoachQuality;
+  brainAnalysis?: BlundrBrainAnalysis | null;  // v2.7.39.3 exposure
 } {
   const moveFactPacket = buildMoveFactPacket(context);
   const positionDeltaPacket = buildPositionDelta(context, moveFactPacket);
-  const featurePacket = detectCoachFeatures(moveFactPacket, positionDeltaPacket);
-  const planPacket = recognizeCoachPlans(moveFactPacket, featurePacket);
-  const opportunityPacket = rankCoachOpportunities(context, moveFactPacket, featurePacket, planPacket);
+  let featurePacket = detectCoachFeatures(moveFactPacket, positionDeltaPacket);
+  let planPacket = recognizeCoachPlans(moveFactPacket, featurePacket);
+  let opportunityPacket = rankCoachOpportunities(context, moveFactPacket, featurePacket, planPacket);
+  // v2.7.39.3+: Enrich with Brain data if provided (migration scaffolding - will be replaced by full new pipeline)
+  if (context.brainAnalysis) {
+    const b: any = context.brainAnalysis;
+    if (b.features) {
+      if (b.features.kingSafety) featurePacket.kingSafetyFeatures = [...featurePacket.kingSafetyFeatures, "brain:king_safety"];
+      if (b.features.pawnStructure) featurePacket.centerFeatures = [...featurePacket.centerFeatures, "brain:pawn_structure"];
+      featurePacket.status = "ran";
+    }
+    if (b.plans?.recognized?.length) {
+      planPacket.plans = [
+        ...planPacket.plans,
+        ...b.plans.recognized.slice(0, 2).map((p: any, i: number) => ({
+          planId: `brain:${p.type || i}`,
+          planType: (p.type || "stable_continuation") as any,
+          confidence: 0.9,
+          moveUci: context.target.uci,
+          evidenceTags: ["brain"],
+          userFacingSummary: p.summary || "Brain-derived plan",
+          status: "candidate" as const,
+        })),
+      ];
+      planPacket.status = "ran";
+    }
+  }
   let coachExplanation = renderCoachExplanation(moveFactPacket, opportunityPacket.selected);
   let safetyResult = lintCoachExplanation(coachExplanation, moveFactPacket);
   if (!safetyResult.safe) {
@@ -599,6 +626,7 @@ export function buildCoachExplanationPipeline(context: CoachInputContext): {
     coachExplanation,
     safetyResult,
     coachQuality,
+    brainAnalysis: context.brainAnalysis ?? null,  // v2.7.39.3: pass through for migration
   };
 }
 

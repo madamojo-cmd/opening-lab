@@ -56,6 +56,8 @@ import { shouldFlagStaleOpponentReplyCommit } from "@/lib/blundr/runtime/opponen
 import { classifyContinuationRuntimeState, type ContinuationRuntimeStatus } from "@/lib/blundr/runtime/continuationRuntimeState";
 import { BlundrDiagnosticsPanel } from "@/components/debug/BlundrDiagnosticsPanel";
 import { collectTrainerDebugSnapshot } from "@/lib/blundr/debug/trainerDebugCollector";
+import { computeInstructionFrameKey } from "@/lib/blundr/runtime/currentInstructionFrame";  // v2.7.39.1 Target Locking (Coach Perfection Gate)
+import { analyzeBlundrPosition } from "@/lib/blundr/brain/analyzeBlundrPosition";  // v2.7.39.2+ Brain facade for 2.7.39.3 coach migration
 import { appendDebugEvent } from "@/lib/blundr/debug/trainerDebugEventLog";
 import { isBlundrDebugEnabled } from "@/lib/blundr/debug/trainerDebugGuards";
 import type { DebugEvent } from "@/lib/blundr/debug/trainerDebugTypes";
@@ -397,6 +399,7 @@ function buildUserFacingTargetFallback(input:{
     activeLineName:input.activeLineName,
     recentCoachBodies:input.recentCoachBodies,
     recentCoachThemes:input.recentCoachThemes,
+    brainAnalysis: null,  // v2.7.39.3 ready; wired in main live coach path
   });
   const fallback=buildVerifiedUserFacingFallback(pipeline.moveFactPacket);
   return {
@@ -808,6 +811,9 @@ export default function App(){
   const coachTimelineSeqRef=useRef(0);
   const previousSelectedCandidateUciRef=useRef<string|null>(null);
   const candidateSyncDebugRef=useRef<Record<string,unknown>>({});
+  // v2.7.39.1 Target Locking (Coach Perfection Gate) - official instructional target lock per stable frame key
+  // Prevents enginePreview / explorer arrivals from mutating the committed continuation_candidate for the current frame.
+  const lockedContinuationRef=useRef<Record<string, {uci:string; san?:string; source?:string} | null>>({});
   const fenRef=useRef(fen);
   const lastRecordedCoachUtteranceKeyRef=useRef<string>("");
   const continuationAnalysisDebounceRef=useRef<number|null>(null);
@@ -906,35 +912,73 @@ export default function App(){
       }:policy.debug,
     };
   },[trainingMode,isUserTurn,fen,game,explorerMoves,engineLines]);
-  const currentInstructionFrame=useMemo(()=>buildCurrentInstructionFrame({
-    frameId:trainerFrameId,
-    fen,
-    trainingMode,
-    trainerPhase,
-    trainerView,
-    isUserTurn,
-    guidedMove:expectedMoveResolution.expectedMoveUci&&expectedMoveResolution.source!=="continuation_candidate"?{
-      uci:expectedMoveResolution.expectedMoveUci,
-      san:expectedMoveResolution.expectedMoveSan,
-      source:expectedMoveResolution.source,
-      kind:expectedMoveResolution.source==="opening_branch"?"lichess_branch_move":expectedMoveResolution.source==="opening_family_plan"?"adaptive_branch_move":"guided_move",
-      trust:"book_verified",
-    }:null,
-    continuationCandidate:trainingMode==="continuation"&&isUserTurn?{
-      uci:expectedMoveResolution.source==="continuation_candidate"
-        ? expectedMoveResolution.expectedMoveUci
-        : (continuationPolicyCandidate?.uci??engineLines[0]?.uci??null),
-      san:expectedMoveResolution.source==="continuation_candidate"
-        ? expectedMoveResolution.expectedMoveSan
-        : (continuationPolicyCandidate?.san??engineLines[0]?.san??null),
-      source:expectedMoveResolution.source==="continuation_candidate"
-        ? "continuation_candidate"
-        : continuationPolicyCandidate?.source??(engineLines[0]?.uci?"engine_preview":"continued_play_policy"),
-      trust:"continuation_verified",
-    }:null,
-    preferredTargetKind:trainingMode==="continuation"?"continuation_candidate":"guided_move",
-  }),[trainerFrameId,fen,trainingMode,trainerPhase,trainerView,isUserTurn,expectedMoveResolution,engineLines,continuationPolicyCandidate]);
+  const currentInstructionFrame=useMemo(()=>{
+    const thisFrameKey = computeInstructionFrameKey({
+      fen,
+      trainingMode,
+      isUserTurn,
+      trainerPhase,
+      source: trainingMode==="continuation" ? "continuation_candidate" : "guided",
+    });
+
+    // v2.7.39.1 locking: if we have a locked continuation for this exact frameKey, prefer it over fresh engineLines
+    // This is the core "prevent replacement" guard (Coach Perfection Gate 3A).
+    const lockedForThisFrame = lockedContinuationRef.current[thisFrameKey];
+    const useLocked = !!(trainingMode==="continuation" && isUserTurn && lockedForThisFrame?.uci);
+
+    return buildCurrentInstructionFrame({
+      frameId:trainerFrameId,
+      fen,
+      trainingMode,
+      trainerPhase,
+      trainerView,
+      isUserTurn,
+      guidedMove:expectedMoveResolution.expectedMoveUci&&expectedMoveResolution.source!=="continuation_candidate"?{
+        uci:expectedMoveResolution.expectedMoveUci,
+        san:expectedMoveResolution.expectedMoveSan,
+        source:expectedMoveResolution.source,
+        kind:expectedMoveResolution.source==="opening_branch"?"lichess_branch_move":expectedMoveResolution.source==="opening_family_plan"?"adaptive_branch_move":"guided_move",
+        trust:"book_verified",
+      }:null,
+      continuationCandidate:trainingMode==="continuation"&&isUserTurn?{
+        uci: useLocked && lockedForThisFrame
+          ? lockedForThisFrame.uci
+          : (expectedMoveResolution.source==="continuation_candidate" ? expectedMoveResolution.expectedMoveUci : (continuationPolicyCandidate?.uci??engineLines[0]?.uci??null)),
+        san: useLocked && lockedForThisFrame
+          ? lockedForThisFrame.san
+          : (expectedMoveResolution.source==="continuation_candidate" ? expectedMoveResolution.expectedMoveSan : (continuationPolicyCandidate?.san??engineLines[0]?.san??null)),
+        source: useLocked && lockedForThisFrame
+          ? (lockedForThisFrame.source ?? "locked_continuation_candidate")
+          : (expectedMoveResolution.source==="continuation_candidate" ? "continuation_candidate" : continuationPolicyCandidate?.source??(engineLines[0]?.uci?"engine_preview":"continued_play_policy")),
+        trust:"continuation_verified",
+      }:null,
+      preferredTargetKind:trainingMode==="continuation"?"continuation_candidate":"guided_move",
+    });
+  },[trainerFrameId,fen,trainingMode,trainerPhase,trainerView,isUserTurn,expectedMoveResolution,engineLines,continuationPolicyCandidate]);
   const instructionTarget=currentInstructionFrame.target;
+
+  // v2.7.39.1 Target Locking: record the official continuation candidate under its stable frame key
+  // so future enginePreview/explorer updates cannot mutate it for this frame (unless explicit unlock).
+  if (instructionTarget?.kind === "continuation_candidate" && instructionTarget.uci) {
+    const lockKey = currentInstructionFrame.instructionFrameKey || computeInstructionFrameKey({
+      fen,
+      trainingMode,
+      isUserTurn,
+      trainerPhase,
+      source: "continuation_candidate",
+    });
+    if (!lockedContinuationRef.current[lockKey]) {
+      lockedContinuationRef.current[lockKey] = {
+        uci: instructionTarget.uci,
+        san: instructionTarget.san,
+        source: instructionTarget.source,
+      };
+    }
+  } else if (trainingMode !== "continuation") {
+    // Clear locks when leaving continuation mode (simple policy for now)
+    lockedContinuationRef.current = {};
+  }
+
   const continuationRuntimeState=useMemo(()=>classifyContinuationRuntimeState({
     fen,
     trainingMode,
@@ -1218,6 +1262,17 @@ export default function App(){
       const opportunities=rankPedagogicalOpportunities(evidence,candidates);
       const selected=selectBestLiveComment(opportunities);
       const recentInstructional=getRecentInstructionalCoachRecords(lastCoachRecordsRef.current,5);
+      // Production requirement (Brain V2 spec 1.5): Brain must always run on teaching frames.
+      // Only debug *rendering* / snapshot collection is gated by blundrDebugEnabled.
+      const brainFrameKey = computeInstructionFrameKey({ fen, trainingMode, isUserTurn, trainerPhase, source: instructionTarget?.kind || trainingMode });
+      const brainAnalysisForCoach = instructionTarget ? analyzeBlundrPosition({
+        fen,
+        currentInstructionFrame: currentInstructionFrame, // production shape
+        frameKey: brainFrameKey,
+        trainingMode: trainingMode === "restricted" ? "guided" : trainingMode,
+        isUserTurn,
+        debugEnabled: blundrDebugEnabled,
+      } as any) : null; // temporary 'as any' during full type migration
       const coachPipeline=buildCoachExplanationPipeline({
         fenBefore:fen,
         target:instructionTarget,
@@ -1229,6 +1284,7 @@ export default function App(){
         activeLineName:repertoire.name,
         recentCoachBodies:recentInstructional.map((entry)=>entry.body),
         recentCoachThemes:recentInstructional.map((entry)=>String(entry.selectedOpportunityId??"")),
+        brainAnalysis: brainAnalysisForCoach,
       });
       const silence=shouldLiveCoachStaySilent({
         evidence,
@@ -2933,6 +2989,14 @@ export default function App(){
     instructionTargetTo:instructionTarget?.to??null,
     instructionTargetPieceType:instructionTarget?.pieceType??null,
     instructionTargetKind:instructionTarget?.kind??null,
+    // v2.7.39.1 Target Locking - stable frame identity for preventing official target drift
+    instructionFrameKey: computeInstructionFrameKey({
+      fen,
+      trainingMode,
+      isUserTurn,
+      trainerPhase,
+      source: instructionTarget?.kind || (trainingMode==="continuation" ? "continuation_candidate" : "guided"),
+    }),
     expectedMoveSan:expectedUserOptions[0]?.san,
     expectedMoveUci:expectedUserOptions[0]?.uci,
     expectedMoveResolution,

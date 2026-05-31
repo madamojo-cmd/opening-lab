@@ -1,7 +1,8 @@
 import type { VisualPrimitive, VisualRecipe } from "../visualRecipe/visualRecipeTypes";
 import { buildAnimationTimeline, getActiveBeatEntry, getLastBeatEntry, type BeatTimelineEntry } from "./animationTimeline";
 import { reduceAnimationPlayback } from "./animationStateMachine";
-import { normalizeFenForVisualFrame, visualFrameMatches } from "../teaching/overlayLifecycle";
+import { visualFrameMatches } from "../teaching/overlayLifecycle";
+import { normalizeVisualFen } from "../visual/normalizeVisualFen";
 import type {
   ActiveVisualRecipePlayback,
   AnimationClearReason,
@@ -19,11 +20,21 @@ function stripUnsupportedPrimitives(primitives: VisualPrimitive[]): VisualPrimit
 }
 
 function endStatePrimitives(recipe: VisualRecipe): VisualPrimitive[] {
-  const lastBeat = recipe.beats.slice().sort((a, b) => a.order - b.order).at(-1);
+  const orderedBeats = recipe.beats.slice().sort((a, b) => a.order - b.order);
+  const lastBeat = orderedBeats.at(-1);
   if (!lastBeat) return [];
   const persistSet = new Set(recipe.endState.persistPrimitives);
   if (!persistSet.size) return stripUnsupportedPrimitives(lastBeat.primitives);
-  return stripUnsupportedPrimitives(lastBeat.primitives.filter((primitive) => persistSet.has(primitive.id)));
+  const seen = new Set<string>();
+  const persisted: VisualPrimitive[] = [];
+  for (const beat of orderedBeats) {
+    for (const primitive of beat.primitives) {
+      if (!persistSet.has(primitive.id) || seen.has(primitive.id)) continue;
+      seen.add(primitive.id);
+      persisted.push(primitive);
+    }
+  }
+  return stripUnsupportedPrimitives(persisted);
 }
 
 function isLifecycleValid(context: AnimationConductorContext): { valid: boolean; suppress?: AnimationSuppressionReason; clear?: AnimationClearReason } {
@@ -144,8 +155,8 @@ export class AnimationConductor {
 
   private validateRecipeFrameFen(recipe: VisualRecipe, context: AnimationConductorContext): { frameOk: boolean; fenOk: boolean } {
     const frameOk = visualFrameMatches(recipe.frameId, context.trainerFrameId);
-    const recipeFen = normalizeFenForVisualFrame(recipe.fen);
-    const boardFen = normalizeFenForVisualFrame(context.boardFen);
+    const recipeFen = normalizeVisualFen(recipe.fen);
+    const boardFen = normalizeVisualFen(context.boardFen);
     const fenOk = Boolean(recipeFen && boardFen && recipeFen === boardFen);
     return { frameOk, fenOk };
   }

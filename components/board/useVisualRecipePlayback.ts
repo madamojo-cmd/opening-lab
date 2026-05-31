@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimationConductor } from "@/lib/blundr/animation/animationConductor";
 import { buildVisualPlaybackKey } from "@/lib/blundr/animation/playbackKey";
+import { snapshotsEqual } from "@/lib/blundr/animation/playbackSnapshot";
 import type { ActiveVisualRecipePlayback, AnimationConductorContext, ReducedMotionMode } from "@/lib/blundr/animation/animationTypes";
 import type { VisualRecipe } from "@/lib/blundr/visualRecipe/visualRecipeTypes";
 import { primitivesToTeachingOverlay } from "./visualPrimitiveRenderers";
@@ -20,35 +21,6 @@ function detectReducedMotion(mode: ReducedMotionMode): boolean {
   } catch {
     return false;
   }
-}
-
-function equalStringArray(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i += 1) {
-    if (a[i] !== b[i]) return false;
-  }
-  return true;
-}
-
-function snapshotsEqual(a: ActiveVisualRecipePlayback, b: ActiveVisualRecipePlayback): boolean {
-  if (a.playbackState !== b.playbackState) return false;
-  if (a.recipeId !== b.recipeId) return false;
-  if (a.patternId !== b.patternId) return false;
-  if (a.activeBeatIndex !== b.activeBeatIndex) return false;
-  if (a.activeBeatId !== b.activeBeatId) return false;
-  if (a.reducedMotion !== b.reducedMotion) return false;
-  if (a.skippedToEnd !== b.skippedToEnd) return false;
-  if (a.clearedReason !== b.clearedReason) return false;
-  if (a.suppressedReason !== b.suppressedReason) return false;
-  if (a.replayAvailable !== b.replayAvailable) return false;
-  if (a.recipeFrameMatchesBoard !== b.recipeFrameMatchesBoard) return false;
-  if (a.recipeFenMatchesBoard !== b.recipeFenMatchesBoard) return false;
-  if (!equalStringArray(a.activePrimitiveIds, b.activePrimitiveIds)) return false;
-  if (a.visiblePrimitives.length !== b.visiblePrimitives.length) return false;
-  for (let i = 0; i < a.visiblePrimitives.length; i += 1) {
-    if (a.visiblePrimitives[i]?.id !== b.visiblePrimitives[i]?.id) return false;
-  }
-  return true;
 }
 
 export type PlaybackInput = {
@@ -83,6 +55,7 @@ export type VisualRecipePlaybackResult = {
   recipeFenMatchesBoard: boolean;
   replayAvailable: boolean;
   tacticalPrimitivesRendered: false;
+  playbackKey: string;
   replay: () => void;
   skipToEnd: () => void;
   clear: () => void;
@@ -96,6 +69,7 @@ export function useVisualRecipePlayback(input: PlaybackInput): VisualRecipePlayb
   const [snapshot, setSnapshot] = useState<ActiveVisualRecipePlayback>(conductorRef.current.snapshot());
   const snapshotRef = useRef<ActiveVisualRecipePlayback>(snapshot);
   const rafRef = useRef<number | null>(null);
+  const lastSyncedPlaybackKeyRef = useRef<string>("");
 
   const reduced = detectReducedMotion(input.reducedMotionMode ?? "system");
   const enabled = input.enabled !== false;
@@ -104,12 +78,11 @@ export function useVisualRecipePlayback(input: PlaybackInput): VisualRecipePlayb
   latestRef.current = { ...input, reduced, enabled };
 
   const updateSnapshot = useCallback((next: ActiveVisualRecipePlayback) => {
-    setSnapshot((prev) => {
-      if (snapshotsEqual(prev, next)) return prev;
-      const cloned = { ...next };
-      snapshotRef.current = cloned;
-      return cloned;
-    });
+    // Avoid scheduling a React state update when nothing user-visible changed.
+    if (snapshotsEqual(snapshotRef.current, next)) return;
+    const cloned = { ...next };
+    snapshotRef.current = cloned;
+    setSnapshot((prev) => (snapshotsEqual(prev, cloned) ? prev : cloned));
   }, []);
 
   useEffect(() => {
@@ -163,16 +136,38 @@ export function useVisualRecipePlayback(input: PlaybackInput): VisualRecipePlayb
   };
 
   const playbackKey = useMemo(
-    () => buildVisualPlaybackKey({ recipe: input.recipe, enabled, reduced, trainerFrameId: input.trainerFrameId, boardFen: input.boardFen }),
+    () => buildVisualPlaybackKey({
+      recipe: input.recipe,
+      enabled,
+      reduced,
+      trainerPhase: input.phase,
+      trainerView: input.viewMode,
+      isUserTurn: input.userToMove,
+      adapterAllowed: input.adapterAllowed,
+      adapterSuppressedReason: input.adapterSuppressedReason,
+      trainerFrameId: input.trainerFrameId,
+      overlayFrameId: input.overlayFrameId,
+      boardFen: input.boardFen,
+      overlayFen: input.recipe?.fen,
+    }),
     [
       input.recipe?.visualRecipeId,
       input.recipe?.frameId,
       input.recipe?.fen,
       input.recipe?.mode,
       input.recipe?.patternId,
+      input.recipe?.beats?.map((beat) => beat.id).join(","),
+      input.recipe?.beats?.flatMap((beat) => beat.primitives.map((primitive) => primitive.id)).join(","),
+      input.recipe?.endState.persistPrimitives.join(","),
       enabled,
       reduced,
+      input.phase,
+      input.viewMode,
+      input.userToMove,
+      input.adapterAllowed,
+      input.adapterSuppressedReason,
       input.trainerFrameId,
+      input.overlayFrameId,
       input.boardFen,
     ],
   );
@@ -180,6 +175,12 @@ export function useVisualRecipePlayback(input: PlaybackInput): VisualRecipePlayb
   useEffect(() => {
     cancelRaf();
     const latest = latestRef.current;
+    if (lastSyncedPlaybackKeyRef.current === playbackKey) {
+      return () => {
+        cancelRaf();
+      };
+    }
+    lastSyncedPlaybackKeyRef.current = playbackKey;
 
     if (latest.reduced) {
       syncOnce();
@@ -269,6 +270,7 @@ export function useVisualRecipePlayback(input: PlaybackInput): VisualRecipePlayb
     recipeFenMatchesBoard: snapshot.recipeFenMatchesBoard,
     replayAvailable: snapshot.replayAvailable,
     tacticalPrimitivesRendered: false,
+    playbackKey,
     replay,
     skipToEnd,
     clear,

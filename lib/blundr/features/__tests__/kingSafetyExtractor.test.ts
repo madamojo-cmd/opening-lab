@@ -1,0 +1,12 @@
+import assert from "node:assert/strict";
+
+import { parseFenBoard } from "../../geometry/fenBoardParser";
+import { extractKingSafety } from "../kingSafetyExtractor";
+
+export function testKingSafetyExtractor(): void {
+  const safety = extractKingSafety(parseFenBoard("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1"));
+  assert.equal(safety.uncastledKings.includes("white"), true);
+  assert.equal(safety.castlingRights.white.kingside, true);
+  const castled = extractKingSafety(parseFenBoard("6k1/8/8/8/8/8/6PP/6K1 w - - 0 1"));
+  assert.equal(castled.castledKingside.includes("white"), true);
+}

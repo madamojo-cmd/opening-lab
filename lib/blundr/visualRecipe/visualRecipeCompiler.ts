@@ -1,4 +1,5 @@
 import type { TrainingContextResult } from "../teaching/trainingContextTypes";
+import { getCastlingVisualSquares } from "./castlingVisualUtils";
 import { DEFAULT_VISUAL_OPACITY_POLICY } from "./visualOpacityPolicy";
 import { DEFAULT_VISUAL_RECIPE_BUDGET, enforceVisualRecipeBudget } from "./visualRecipeBudget";
 import {
@@ -251,6 +252,7 @@ function compileBeats(input: {
   mode: VisualRecipeMode;
   conceptId: string;
   moveUci?: string;
+  moveSan?: string;
   trainingContext?: TrainingContextResult | null;
 }): BeatDraft[] {
   const beats: BeatDraft[] = [];
@@ -297,12 +299,15 @@ function compileBeats(input: {
     return beats;
   }
 
-  if ((lowerMove === "e1g1" || lowerMove === "e8g8" || lowerMove === "e1c1" || lowerMove === "e8c8") && conceptMatches(concept, ["castle_for_safety", "king_safety"])) {
+  const castling = getCastlingVisualSquares({ uci: lowerMove, san: input.moveSan });
+  if (castling && conceptMatches(concept, ["castle_for_safety", "king_safety", "castle"])) {
     const beat1: BeatDraft = { order: 1, durationMs: 860, tag: "castle_move", narrationKey: "find_move", primitives: [] };
-    addMoveArrow(beat1, from, to, "primary", "answer_move");
+    addMoveArrow(beat1, castling.kingFrom, castling.kingTo, "primary", "answer_move");
+    addMoveArrow(beat1, castling.rookFrom, castling.rookTo, "supporting", "rook_coordination");
     const beat2: BeatDraft = { order: 2, durationMs: 720, delayMs: 100, tag: "castle_safety", narrationKey: "king_safety", primitives: [] };
-    addKingSafetyAura(beat2, to);
-    addSquareHighlight(beat2, to, "safe", "supporting", "safe_king_square");
+    addKingSafetyAura(beat2, castling.kingTo);
+    addSquareHighlight(beat2, castling.kingTo, "safe", "supporting", "safe_king_square");
+    addSquareHighlight(beat2, castling.rookTo, "support", "supporting", "rook_destination");
     beats.push(beat1, beat2);
     return beats;
   }
@@ -400,6 +405,7 @@ export function compileVisualRecipe(input: VisualRecipeCompileInput): VisualReci
     mode: permissionDecision.mode,
     conceptId,
     moveUci: move.uci,
+    moveSan: move.san,
     trainingContext: input.trainingContext,
   });
 

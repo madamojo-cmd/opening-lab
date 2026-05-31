@@ -1,4 +1,13 @@
-export type OverlayPhase = "ready_for_user" | "opponent_selecting" | "opponent_animating" | "transitioning";
+export type OverlayPhase =
+  | "ready_for_user"
+  | "opponent_selecting"
+  | "opponent_replying"
+  | "opponent_animating"
+  | "transitioning"
+  | "line_complete"
+  | "continuation_ready"
+  | "terminal"
+  | "error";
 export type OverlayTrust = "engine_verified" | "book_supported" | "repertoire_supported" | "engine_close" | string;
 
 export function isTrustedOverlayMoveTrust(trust?: string): trust is OverlayTrust {
