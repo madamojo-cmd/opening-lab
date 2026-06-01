@@ -901,16 +901,56 @@ export default function App(){
     return lichessStatsStatus === "resolved" && lichessTotalGames !== null && lichessTotalGames < 500;
   }, [lichessStatsStatus, lichessTotalGames]);
 
+  // Base hard EoB (without loading self-ref) for safe ordering (Step 10).
+  const baseHardEndOfBookGate = useMemo(() => {
+    if (!isUserTurn) return false;
+    if (trainingMode !== "restricted") return false;
+    if (userExplicitlyEnteredContinuation) return false;
+    return selectedLineCompleteConfirmed || lichessEndConfirmed;
+  }, [
+    isUserTurn,
+    trainingMode,
+    userExplicitlyEnteredContinuation,
+    selectedLineCompleteConfirmed,
+    lichessEndConfirmed,
+  ]);
+
+  // Step 3/4/10 (exact order): trusted curated target exists for restricted user turn (from opening tree / resolver).
+  // This must take precedence over secondary async (brain/visual/lichess/pending) so the lesson is playable from move 1.
+  const trustedInstructionTargetExists = useMemo(() => {
+    const hasCurated = Boolean(expectedMoveResolution?.expectedMoveUci) &&
+      (expectedMoveResolution?.source === "lesson_line" ||
+       expectedMoveResolution?.source === "opening_branch" ||
+       (expectedMoveResolution?.lineLength ?? 0) > 0);
+    return isUserTurn &&
+      trainingMode === "restricted" &&
+      !userExplicitlyEnteredContinuation &&
+      !baseHardEndOfBookGate &&
+      hasCurated;
+  }, [
+    isUserTurn,
+    trainingMode,
+    userExplicitlyEnteredContinuation,
+    baseHardEndOfBookGate,
+    expectedMoveResolution?.expectedMoveUci,
+    expectedMoveResolution?.source,
+    expectedMoveResolution?.lineLength,
+  ]);
+
   // Loading detection for instruction frames (prevents flashing Continue during transient states)
+  // Step 4 correction: secondary async (visual/brain/lichess/pending) and broad trainerPhase must NOT suppress a valid curated target for restricted user turn.
+  // Only treat as loading when there is genuinely no trusted instruction target yet.
   const isInstructionLoading = useMemo(() => {
+    if (trustedInstructionTargetExists) return false; // curated target wins; secondary loading may still refine explanation later
     if (trainerPhase !== "ready_for_user") return true;
     if (moveQualityPending || visualModelPending) return true;
     if (continuationAnalysisStatus === "analyzing") return true;
     if (brain.lichess === "loading") return true;
-    // Transient resolver with no trusted guidance yet (between frames / pending data)
-    if ((expectedMoveResolution?.source ?? "") === "none" && !bookComplete && trainingMode === "restricted") return true;
+    // Transient resolver with no trusted guidance yet (between frames / pending data) — only when we don't already have a good curated one
+    if ((expectedMoveResolution?.source ?? "") === "none" && !bookComplete && trainingMode === "restricted" && !trustedInstructionTargetExists) return true;
     return false;
   }, [
+    trustedInstructionTargetExists,
     trainerPhase,
     moveQualityPending,
     visualModelPending,
@@ -921,20 +961,11 @@ export default function App(){
     trainingMode,
   ]);
 
+  // Final hardEndOfBookGate incorporates loading (per original) but declared after its inputs (Step 10 ordering).
   const hardEndOfBookGate = useMemo(() => {
     if (isInstructionLoading) return false;
-    if (!isUserTurn) return false;
-    if (trainingMode !== "restricted") return false;
-    if (userExplicitlyEnteredContinuation) return false;
-    return selectedLineCompleteConfirmed || lichessEndConfirmed;
-  }, [
-    isInstructionLoading,
-    isUserTurn,
-    trainingMode,
-    userExplicitlyEnteredContinuation,
-    selectedLineCompleteConfirmed,
-    lichessEndConfirmed,
-  ]);
+    return baseHardEndOfBookGate;
+  }, [isInstructionLoading, baseHardEndOfBookGate]);
 
   const opponentBookOptions=exactOpeningNodes.flatMap((node)=>node.continuations).filter((move,index,all)=>move.color===opponentColor&&all.findIndex((candidate)=>candidate.uci===move.uci)===index).map((move)=>({
     san:move.san,
@@ -1028,29 +1059,11 @@ export default function App(){
     userExplicitlyEnteredContinuation,
   ]);
   const currentInstructionFrame=useMemo(()=>{
-    // HOTFIX: Loading takes absolute precedence — show Thinking..., never Continue or candidates
-    if (isInstructionLoading) {
-      return {
-        frameKey: "thinking",
-        kind: "thinking",
-        target: null,
-        instructionTarget: null,
-        expectedMoveUci: null,
-        expectedMoveSan: null,
-        selectedContinuationCandidate: null,
-        currentSelectedCandidateUci: null,
-        continuationCandidateReady: false,
-        continueFromHereAvailable: false,
-        continueFromHereButtonRendered: false,
-        branchTransitionSurfaceRendered: false,
-        branchTransitionPayloadValid: false,
-        coachTitle: "Thinking...",
-        coachBody: "Finding the next teaching moment.",
-        actions: [],
-      } as any;
-    }
-
-    // Only confirmed End-of-Book (cursor >= lineLength or resolved Lichess <500) may produce the branch transition
+    // Step 4/5 exact priority (transcript as source of truth):
+    // 1. hardEndOfBookGate (confirmed curated or Lichess<500) → branch transition (Continue)
+    // 2. trusted curated target exists → normal guided instruction (playable from move 1)
+    // 3. isInstructionLoading (no trusted target yet + actually resolving) → Thinking...
+    // 4. safe neutral
     if (hardEndOfBookGate && !userExplicitlyEnteredContinuation) {
       return {
         frameKey: "end-of-book-transition",
@@ -1071,6 +1084,32 @@ export default function App(){
           : "You are leaving common opening territory.",
         coachBody: "Continue from here?",
         actions: ["continue_from_here"],
+      } as any;
+    }
+
+    if (trustedInstructionTargetExists) {
+      // Fall through to the normal buildCurrentInstructionFrame path below with a good guidedMove.
+      // This ensures the first curated move (e.g. e4) produces a real target on initial Italian load.
+    }
+
+    if (isInstructionLoading) {
+      return {
+        frameKey: "thinking",
+        kind: "thinking",
+        target: null,
+        instructionTarget: null,
+        expectedMoveUci: null,
+        expectedMoveSan: null,
+        selectedContinuationCandidate: null,
+        currentSelectedCandidateUci: null,
+        continuationCandidateReady: false,
+        continueFromHereAvailable: false,
+        continueFromHereButtonRendered: false,
+        branchTransitionSurfaceRendered: false,
+        branchTransitionPayloadValid: false,
+        coachTitle: "Thinking...",
+        coachBody: "Finding the next teaching moment.",
+        actions: [],
       } as any;
     }
 
