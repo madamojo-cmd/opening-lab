@@ -3389,22 +3389,30 @@ export default function App(){
           <button onClick={resetBoard} className="rounded-2xl bg-white p-3 shadow-sm"><RotateCcw size={20}/></button>
         </div>
       </header>
-      <LiveBrain brain={brain}/>
-      <GptDebugPanel open={showGptDebug} setOpen={setShowGptDebug} text={gptDebugText}/>
-      <VisualDebugPanel
-        open={showVisualDebug}
-        setOpen={setShowVisualDebug}
-        visualText={visualDebugText}
-        telemetryText={telemetryDebugText}
-        telemetryEnabled={telemetryEnabled}
-        setTelemetryEnabled={setTelemetryEnabled}
-        telemetryCount={telemetryEvents.length}
-        onClearTelemetry={()=>setTelemetryEvents([])}
-      />
+      {blundrDebugEnabled && (
+        <>
+          <LiveBrain brain={brain}/>
+          <GptDebugPanel open={showGptDebug} setOpen={setShowGptDebug} text={gptDebugText}/>
+          <VisualDebugPanel
+            open={showVisualDebug}
+            setOpen={setShowVisualDebug}
+            visualText={visualDebugText}
+            telemetryText={telemetryDebugText}
+            telemetryEnabled={telemetryEnabled}
+            setTelemetryEnabled={setTelemetryEnabled}
+            telemetryCount={telemetryEvents.length}
+            onClearTelemetry={()=>setTelemetryEvents([])}
+          />
+        </>
+      )}
       <div className="rounded-3xl bg-white p-3 shadow-sm">
-        <div className="mb-3 grid grid-cols-4 gap-2">{RATING_PRESETS.map(p=><button key={p.value} onClick={()=>setRatingFilter(p.value)} className={classNames("rounded-full px-2 py-2 text-[11px] font-black",ratingFilter===p.value?"bg-green-700 text-white":"bg-stone-100 text-stone-600")}>{p.label}</button>)}</div>
+        {blundrDebugEnabled && (
+          <div className="mb-3 grid grid-cols-4 gap-2">{RATING_PRESETS.map(p=><button key={p.value} onClick={()=>setRatingFilter(p.value)} className={classNames("rounded-full px-2 py-2 text-[11px] font-black",ratingFilter===p.value?"bg-green-700 text-white":"bg-stone-100 text-stone-600")}>{p.label}</button>)}</div>
+        )}
         <div className="mb-3 flex items-center justify-between gap-3">
-          <button onClick={()=>setActiveBoard(!activeBoard)} className={classNames("rounded-full px-4 py-2 text-sm font-black",activeBoard?"bg-stone-950 text-white":"bg-stone-100 text-stone-600")}>Active Board {activeBoard?"ON":"OFF"}</button>
+          {blundrDebugEnabled && (
+            <button onClick={()=>setActiveBoard(!activeBoard)} className={classNames("rounded-full px-4 py-2 text-sm font-black",activeBoard?"bg-stone-950 text-white":"bg-stone-100 text-stone-600")}>Active Board {activeBoard?"ON":"OFF"}</button>
+          )}
           <PipelineStatus step={thinkingStep} note={pipelineNote}/>
         </div>
         <div className="mb-3 rounded-2xl bg-stone-50 p-2">
@@ -3414,7 +3422,7 @@ export default function App(){
           </div>
           <p className="mt-2 text-[11px] font-semibold text-stone-500">{trainerView==="assisted"?"Shows the visual pattern cue before the move.":"Hides pre-move hints for independent recall."}</p>
         </div>
-        {activeBoard&&enabledViews.length>0&&<div className="mb-3 grid gap-2" style={{gridTemplateColumns:`repeat(${enabledViews.length}, minmax(0,1fr))`}}>{enabledViews.map(v=><button key={v} onClick={()=>setActiveBoardView(v)} className={classNames("rounded-full px-4 py-2 text-sm font-black capitalize",safeBoardView===v?"bg-green-700 text-white shadow-sm":"bg-white text-stone-500 ring-1 ring-stone-200")}>{v}</button>)}</div>}
+        {blundrDebugEnabled && activeBoard && enabledViews.length>0 && <div className="mb-3 grid gap-2" style={{gridTemplateColumns:`repeat(${enabledViews.length}, minmax(0,1fr))`}}>{enabledViews.map(v=><button key={v} onClick={()=>setActiveBoardView(v)} className={classNames("rounded-full px-4 py-2 text-sm font-black capitalize",safeBoardView===v?"bg-green-700 text-white shadow-sm":"bg-white text-stone-500 ring-1 ring-stone-200")}>{v}</button>)}</div>}
         <TapChessboard game={game} orientation={repertoire.color} selectedSquare={selectedSquare} squareStyles={squareStyles} lines={boardLinesToRender} transientLines={transientLinesToRender} onSquareTap={handleSquareTap} whitePct={whitePct} evalText={evalText} settings={boardSettings} captured={captured} userColor={userColor} animationName={visualAnimationName}/>
         <HistoryControls index={historyIndex} total={positionHistory.length} onBack={()=>jumpHistory(-1)} onForward={()=>jumpHistory(1)}/>
       </div>
@@ -3543,7 +3551,7 @@ function SettingsPanel({settings,setSettings,onClose}:{settings:BoardSettings;se
   const toggle=(key:keyof Pick<BoardSettings,"showAttack"|"showDefense"|"showPlan"|"showMoveDots"|"showEvalBar"|"showCaptured"|"showLabels"|"showOpponentCue">)=>setSettings({...settings,[key]:!settings[key]});
   const OptionButton=({active,label,onClick}:{active:boolean;label:string;onClick:()=>void})=><button onClick={onClick} className={classNames("rounded-2xl px-3 py-2 text-xs font-black",active?"bg-green-700 text-white":"bg-stone-100 text-stone-600")}>{label}</button>;
   const Toggle=({id,label}:{id:keyof Pick<BoardSettings,"showAttack"|"showDefense"|"showPlan"|"showMoveDots"|"showEvalBar"|"showCaptured"|"showLabels"|"showOpponentCue">;label:string})=><button onClick={()=>toggle(id)} className={classNames("flex items-center justify-between rounded-2xl px-3 py-3 text-sm font-black",settings[id]?"bg-green-50 text-green-800":"bg-stone-100 text-stone-500")}><span>{label}</span><span>{settings[id]?"ON":"OFF"}</span></button>;
-  return <div className="fixed inset-0 z-[70] flex items-end bg-black/35 p-4"><div className="mx-auto max-h-[86vh] w-full max-w-md overflow-auto rounded-3xl bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><div><h2 className="text-xl font-black">Board Settings</h2><p className="text-xs font-semibold text-stone-500">Customize board, pieces, and active displays.</p></div><button onClick={onClose} className="rounded-full bg-stone-100 p-2"><X size={18}/></button></div><div className="space-y-5"><div><div className="mb-2 text-sm font-black">Board</div><div className="grid grid-cols-4 gap-2"><OptionButton active={settings.boardTheme==="classic"} label="Classic" onClick={()=>update("boardTheme","classic")}/><OptionButton active={settings.boardTheme==="slate"} label="Slate" onClick={()=>update("boardTheme","slate")}/><OptionButton active={settings.boardTheme==="blue"} label="Blue" onClick={()=>update("boardTheme","blue")}/><OptionButton active={settings.boardTheme==="walnut"} label="Walnut" onClick={()=>update("boardTheme","walnut")}/></div></div><div><div className="mb-2 text-sm font-black">Pieces</div><div className="grid grid-cols-3 gap-2"><OptionButton active={settings.pieceStyle==="unicode"} label="Classic" onClick={()=>update("pieceStyle","unicode")}/><OptionButton active={settings.pieceStyle==="neo"} label="Neo" onClick={()=>update("pieceStyle","neo")}/><OptionButton active={settings.pieceStyle==="letters"} label="Letters" onClick={()=>update("pieceStyle","letters")}/></div></div><div><div className="mb-2 text-sm font-black">Active displays</div><div className="grid grid-cols-2 gap-2"><Toggle id="showAttack" label="Attack view"/><Toggle id="showDefense" label="Defense view"/><Toggle id="showPlan" label="Plan view"/><Toggle id="showMoveDots" label="Legal move dots"/><Toggle id="showEvalBar" label="Advantage bar"/><Toggle id="showCaptured" label="Captured pieces"/><Toggle id="showLabels" label="Move labels"/><Toggle id="showOpponentCue" label="Opponent cue"/></div></div><button onClick={onClose} className="w-full rounded-2xl bg-stone-950 px-4 py-4 font-black text-white">Done</button></div></div></div>
+  return <div className="fixed inset-0 z-[70] flex items-end bg-black/35 p-4"><div className="mx-auto max-h-[86vh] w-full max-w-md overflow-auto rounded-3xl bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><div><h2 className="text-xl font-black">Board Settings</h2><p className="text-xs font-semibold text-stone-500">Customize board, pieces, and active displays.</p></div><button onClick={onClose} className="rounded-full bg-stone-100 p-2"><X size={18}/></button></div><div className="space-y-5"><div><div className="mb-2 text-sm font-black">Board</div><div className="grid grid-cols-4 gap-2"><OptionButton active={settings.boardTheme==="classic"} label="Classic" onClick={()=>update("boardTheme","classic")}/><OptionButton active={settings.boardTheme==="slate"} label="Slate" onClick={()=>update("boardTheme","slate")}/><OptionButton active={settings.boardTheme==="blue"} label="Blue" onClick={()=>update("boardTheme","blue")}/><OptionButton active={settings.boardTheme==="walnut"} label="Walnut" onClick={()=>update("boardTheme","walnut")}/></div></div><div><div className="mb-2 text-sm font-black">Pieces</div><div className="grid grid-cols-3 gap-2"><OptionButton active={settings.pieceStyle==="unicode"} label="Classic" onClick={()=>update("pieceStyle","unicode")}/><OptionButton active={settings.pieceStyle==="neo"} label="Neo" onClick={()=>update("pieceStyle","neo")}/><OptionButton active={settings.pieceStyle==="letters"} label="Letters" onClick={()=>update("pieceStyle","letters")}/></div></div><div><div className="mb-2 text-sm font-black">Active displays</div><div className="grid grid-cols-2 gap-2"><Toggle id="showMoveDots" label="Legal move dots"/><Toggle id="showEvalBar" label="Advantage bar"/><Toggle id="showCaptured" label="Captured pieces"/><Toggle id="showLabels" label="Move labels"/><Toggle id="showOpponentCue" label="Opponent cue"/></div></div><button onClick={onClose} className="w-full rounded-2xl bg-stone-950 px-4 py-4 font-black text-white">Done</button></div></div></div>
 }
 
 function PipelineStatus({step,note}:{step:ThinkingStep;note:string}){const labels:Record<ThinkingStep,string>={idle:"Ready",facts:"Analyzing",engine:"Engine",brain:"Blundr Brain","gpt-receive":"Receiving","visual-update":"Updating",ready:"Ready",error:"Error"};const tone=step==="error"?"bg-red-50 text-red-700 ring-red-100":step==="ready"||step==="idle"?"bg-green-50 text-green-700 ring-green-100":"bg-blue-50 text-blue-700 ring-blue-100";return <div className={classNames("max-w-[190px] rounded-2xl px-3 py-2 text-right text-[11px] font-black leading-4 ring-1",tone)} title={note}><div>{labels[step]}</div><div className="truncate text-[10px] font-semibold opacity-75">{note}</div></div>}
