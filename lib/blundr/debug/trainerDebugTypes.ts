@@ -67,6 +67,10 @@ export interface TrainerDebugSnapshot {
     totalFrames: number;
     instructionalFrames: number;
     fallbackCount: number;
+    // v2.7.39.1 per Coach Perfection Gate: split fallbacks for clarity
+    instructionalFallbackCount: number;
+    opponentStatusFallbackCount: number;
+    terminalFallbackCount: number;
     lowQualityCount: number;
     debugLeakCount: number;
     repeatedGenericCount: number;

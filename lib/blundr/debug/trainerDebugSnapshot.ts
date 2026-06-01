@@ -2,6 +2,8 @@ import { normalizeVisualFen } from "../visual/normalizeVisualFen";
 import { buildCoachCacheDebug } from "../cache/cacheDebug";
 import type { DebugEvent, TrainerDebugSnapshot } from "./trainerDebugTypes";
 import { sanitizeForDebugJson } from "./trainerDebugSanitizer";
+import { computeInstructionFrameKey } from "../runtime/currentInstructionFrame";  // v2.7.39.1 target locking
+import { analyzeBlundrPosition } from "../brain/analyzeBlundrPosition";  // v2.7.39.2+ Brain facade exposure (debug only for now)
 
 function len(value: unknown): number {
   return Array.isArray(value) ? value.length : value && typeof value === "object" ? Object.keys(value as Record<string, unknown>).length : 0;
@@ -134,7 +136,16 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   if (String(input.trainerPhase) === "line_complete" && !input.continueFromHereAvailable) {
     criticalIssues.push("line_complete_surface_missing");
   }
-  if (String(input.trainerPhase) === "terminal" && !String(input.feedback ?? "").toLowerCase().includes("game over") && !String(input.feedback ?? "").toLowerCase().includes("line complete")) {
+  // v2.7.39.1 Target Stability fix: only report terminal_surface_missing when we are in terminal phase
+  // AND there is no evidence of a terminal surface (presentation coach owner, explicit feedback, or continuation terminal detection).
+  // This eliminates the false critical that was firing on valid game-over / line-complete terminal states (Coach Perfection Gate).
+  const hasTerminalSurfaceEvidence =
+    /game over|line complete|terminal|checkmate|stalemate|draw/i.test(String(input.feedback ?? "")) ||
+    presentationCoach.owner === "continuation_terminal_surface" ||
+    presentationCoach.owner === "intent_first_coach" ||
+    (typeof presentationCoach.shouldRender === "boolean" && presentationCoach.shouldRender) ||
+    input.coachDecision?.shouldShowCoachCard;
+  if (String(input.trainerPhase) === "terminal" && !hasTerminalSurfaceEvidence) {
     criticalIssues.push("terminal_surface_missing");
   }
   if (
@@ -189,6 +200,13 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   if (instructionTargetUci && coachMoveUci && instructionTargetUci !== coachMoveUci) {
     criticalIssues.push("coach_move_mismatch");
     criticalIssues.push("instruction_target_coach_mismatch");
+  }
+  // Agent 6: surface guard criticals
+  if (input.visibleTeachingSurface?.safety?.blocked && isTeachingFrame(input)) {
+    if (input.visibleTeachingSurface.safety.targetMismatch || input.visibleTeachingSurface.debug?.fourTargetMismatch) criticalIssues.push("surface_target_mismatch_blocked");
+    if (input.visibleTeachingSurface.safety.pieceMismatch || input.visibleTeachingSurface.debug?.twoPieceTypeMismatch) criticalIssues.push("surface_piece_mismatch_blocked");
+    if (input.visibleTeachingSurface.safety.plainLeakDetected) criticalIssues.push("plain_leak_detected_and_blocked");
+    if (input.visibleTeachingSurface.safety.legacyBypassDetected) criticalIssues.push("surface_legacy_bypass_flagged");
   }
   if (instructionTargetUci && visualMoveUci && instructionTargetUci !== visualMoveUci) {
     criticalIssues.push("visual_target_mismatch");
@@ -350,9 +368,20 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   if (visualFailureKind !== "none") warnings.push(`visualFailureKind:${visualFailureKind}`);
   if (coachFailureKind !== "none") warnings.push(`coachFailureKind:${coachFailureKind}`);
   if (input.memoryMigratedOrCleared) warnings.push("memory_migrated_or_cleared");
-  if (!coachDebug.advancedFeatureClaimTypes && !instructionTargetUci) warnings.push("feature_pipeline_not_exposed");
-  if (!coachDebug.recognizedPlanTypes && !instructionTargetUci) warnings.push("plan_pipeline_not_exposed");
+  // v2.7.39.1: only warn about missing deep pipelines on actual teaching frames that have (or expect) an instruction target.
+  // Suppress on terminal, opponent-reply, no-target, and non-teaching frames (per Coach Perfection Gate).
+  // 2.7.39.4: Suppress legacy not_exposed when Brain active (debug behind Brain)
+  const brainActive = !!input.brainAnalysis;
+  if (!brainActive && isTeachingFrame(input) && !coachDebug.advancedFeatureClaimTypes && !instructionTargetUci) warnings.push("feature_pipeline_not_exposed");
+  if (!brainActive && isTeachingFrame(input) && !coachDebug.recognizedPlanTypes && !instructionTargetUci) warnings.push("plan_pipeline_not_exposed");
   if (coachDebug.candidateCoachFallbackUsed) warnings.push("candidate_fallback_used");
+  // v2.7.39.4 start: Prefer Brain data for debug packets when present (debug behind Brain migration)
+  if (input.brainAnalysis) {
+    const b = input.brainAnalysis;
+    if (b.features) (coachDebug as any).brainFeatures = b.features;
+    if (b.plans) (coachDebug as any).brainPlans = b.plans;
+    if (b.opportunities) (coachDebug as any).brainOpportunities = b.opportunities;
+  }
   const uniqueCriticalIssues = Array.from(new Set(criticalIssues));
   const uniqueWarnings = Array.from(new Set(warnings));
   const runtimeSafeFallbackUsed = Boolean(
@@ -377,10 +406,19 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   const averageInstructionalQualityScore = instructionalScores.length
     ? Number((instructionalScores.reduce((sum, score) => sum + score, 0) / instructionalScores.length).toFixed(1))
     : null;
+  // v2.7.39.1 Coach Perfection Gate: split fallback counts for clarity (instructional vs opponent status vs terminal)
+  const fallbackEntries = coachTimeline.filter((entry: any) => Boolean(entry?.runtimeSafeFallbackUsed));
+  const instructionalFallbackCount = fallbackEntries.filter((e: any) => e?.trainerPhase === "ready_for_user" || e?.entryKind === "instructional").length;
+  const terminalFallbackCount = fallbackEntries.filter((e: any) => String(e?.trainerPhase || "").includes("terminal")).length;
+  const opponentStatusFallbackCount = fallbackEntries.length - instructionalFallbackCount - terminalFallbackCount;
+
   const coachTimelineSummary = {
     totalFrames: coachTimeline.length,
     instructionalFrames: instructionalTimelineEntries.length,
-    fallbackCount: coachTimeline.filter((entry: any) => Boolean(entry?.runtimeSafeFallbackUsed)).length,
+    fallbackCount: fallbackEntries.length,
+    instructionalFallbackCount,
+    opponentStatusFallbackCount: Math.max(0, opponentStatusFallbackCount),
+    terminalFallbackCount,
     lowQualityCount: coachTimeline.filter((entry: any) => Number(entry?.qualityScore ?? 0) > 0 && Number(entry?.qualityScore ?? 0) < 80).length,
     debugLeakCount: coachTimeline.filter((entry: any) => Boolean(entry?.containsDebugLeak)).length,
     repeatedGenericCount: coachTimeline.filter((entry: any) => Boolean(entry?.repeatedGeneric)).length,
@@ -393,7 +431,7 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   const snapshot: TrainerDebugSnapshot = {
     generatedAt: Date.now(),
     build: {
-      version: "v2.7.39-debug0",
+      version: "v2.7.40-debug-agent6",
       environment: (process.env.NODE_ENV as any) ?? "development",
       debugEnabled: Boolean(input.debugEnabled),
     },
@@ -416,6 +454,23 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       instructionTargetFrom: input.instructionTargetFrom ?? (instructionTargetUci ? String(instructionTargetUci).slice(0, 2) : null),
       instructionTargetTo: input.instructionTargetTo ?? (instructionTargetUci ? String(instructionTargetUci).slice(2, 4) : null),
       instructionTargetPieceType,
+      // v2.7.39.1 Target Locking (Coach Perfection Gate) — stable key used to lock official instructional target
+      instructionFrameKey: input.instructionFrameKey ?? computeInstructionFrameKey({
+        fen: input.fen,
+        trainingMode: input.trainingMode,
+        isUserTurn: !!input.isUserTurn,
+        trainerPhase: input.trainerPhase,
+        source: input.instructionTargetKind || (input.trainingMode === "continuation" ? "continuation_candidate" : "guided"),
+      }),
+      // v2.7.39.2+ Brain facade (debug exposure only at this phase per roadmap)
+      brainAnalysis: input.debugEnabled ? analyzeBlundrPosition({
+        fen: input.fen,
+        currentInstructionFrame: null, // snapshot context - full frame not always available
+        frameKey: input.instructionFrameKey,
+        trainingMode: input.trainingMode,
+        isUserTurn: !!input.isUserTurn,
+        debugEnabled: true,
+      } as any) : null,
       expectedMoveSource: expectedMoveResolution.source ?? null,
       expectedMoveCoverageTier: expectedMoveResolution.coverageTier ?? null,
       expectedMoveResolutionReason: expectedMoveResolution.reason ?? null,
@@ -595,42 +650,45 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       revealTargetMatchesInstructionTarget: instructionTargetUci ? revealTargetUci === instructionTargetUci : "unknown",
     },
     features: {
-      advancedFeaturePacketExists: coachDebug.advancedFeaturePacketExists ?? Array.isArray(coachDebug.advancedFeatureClaimTypes),
+      // 2.7.39.4: Brain primary when available (debug behind Brain)
+      advancedFeaturePacketExists: !!input.brainAnalysis?.features || coachDebug.advancedFeaturePacketExists || Array.isArray(coachDebug.advancedFeatureClaimTypes),
       featureFen4: boardFen4,
       featureFenMatchesBoard: true,
-      featureClaimCount: len(coachDebug.advancedFeatureClaimTypes),
-      userFacingFeatureClaimCount: len(coachDebug.advancedFeatureClaimTypes),
+      featureClaimCount: input.brainAnalysis?.features ? Object.keys(input.brainAnalysis.features).length : len(coachDebug.advancedFeatureClaimTypes),
+      userFacingFeatureClaimCount: input.brainAnalysis?.features ? Object.keys(input.brainAnalysis.features).length : len(coachDebug.advancedFeatureClaimTypes),
       blockedFeatureClaimCount: len(coachDebug.coachBlockedClaims),
-      topFeatureClaims: coachDebug.advancedFeatureClaimTypes ?? [],
+      topFeatureClaims: input.brainAnalysis?.features ? Object.keys(input.brainAnalysis.features).filter(k => input.brainAnalysis.features[k]) : (coachDebug.advancedFeatureClaimTypes ?? []),
       blockedFeatureClaims: coachDebug.coachBlockedClaims ?? [],
-      pawnStructureSummary: coachDebug.coachBoardFactsSummary?.plausiblePawnBreaks ?? [],
-      kingSafetySummary: coachDebug.coachBoardFactsSummary?.kingSafetyFacts ?? [],
-      pieceQualitySummary: coachDebug.advancedFeatureClaimTypes?.filter((type: string) => type.includes("piece") || type.includes("bishop") || type.includes("rook")) ?? [],
+      pawnStructureSummary: input.brainAnalysis?.features?.pawnStructure ? [input.brainAnalysis.features.pawnStructure] : (coachDebug.coachBoardFactsSummary?.plausiblePawnBreaks ?? []),
+      kingSafetySummary: input.brainAnalysis?.features?.kingSafety ? [input.brainAnalysis.features.kingSafety] : (coachDebug.coachBoardFactsSummary?.kingSafetyFacts ?? []),
+      pieceQualitySummary: input.brainAnalysis?.features?.pieceQuality ? [input.brainAnalysis.features.pieceQuality] : (coachDebug.advancedFeatureClaimTypes?.filter((type: string) => type.includes("piece") || type.includes("bishop") || type.includes("rook")) ?? []),
       imbalanceSummary: coachDebug.advancedFeatureClaimTypes?.filter((type: string) => type.includes("lead") || type.includes("imbalance")) ?? [],
-      tacticalMotifSummary: "blocked_debug_only",
+      tacticalMotifSummary: input.brainAnalysis?.features?.tacticalMotifs ? JSON.stringify(input.brainAnalysis.features.tacticalMotifs).slice(0,100) : "blocked_debug_only",
       featureExtractionMs: coachDebug.featureExtractionMs ?? null,
-      featureCacheHit: coachDebug.featureCacheHit ?? (instructionTargetUci ? "unknown" : "not_exposed_from_module"),
+      featureCacheHit: input.brainAnalysis ? "brain_hit" : (coachDebug.featureCacheHit ?? (instructionTargetUci ? "unknown" : "not_exposed_from_module")),
     },
     plans: {
-      strategicPlanPacketExists: coachDebug.strategicPlanPacketExists ?? Array.isArray(coachDebug.recognizedPlanTypes),
+      // 2.7.39.4: Brain primary
+      strategicPlanPacketExists: !!input.brainAnalysis?.plans || coachDebug.strategicPlanPacketExists || Array.isArray(coachDebug.recognizedPlanTypes),
       planFen4: boardFen4,
       planFenMatchesBoard: true,
-      recognizedPlanCount: len(coachDebug.recognizedPlanTypes),
-      topPlans: coachDebug.recognizedPlanTypes ?? [],
-      blockedPlans: coachDebug.blockedPlans ?? [],
-      selectedPlanId: coachDebug.mappingPlanIds?.[0] ?? null,
-      selectedPlanType: coachDebug.recognizedPlanTypes?.[0] ?? null,
+      recognizedPlanCount: input.brainAnalysis?.plans?.recognized?.length || len(coachDebug.recognizedPlanTypes),
+      topPlans: input.brainAnalysis?.plans?.recognized ?? (coachDebug.recognizedPlanTypes ?? []),
+      blockedPlans: input.brainAnalysis?.plans?.blocked ?? (coachDebug.blockedPlans ?? []),
+      selectedPlanId: input.brainAnalysis?.plans?.primary?.id ?? (coachDebug.mappingPlanIds?.[0] ?? null),
+      selectedPlanType: input.brainAnalysis?.plans?.primary?.type ?? (coachDebug.recognizedPlanTypes?.[0] ?? null),
       planRecognitionMs: coachDebug.planRecognitionMs ?? null,
-      planCacheHit: coachDebug.planCacheHit ?? (instructionTargetUci ? "unknown" : "not_exposed_from_module"),
-      openingRegistryHit: len(coachDebug.recognizedPlanTypes) > 0,
-      openingRegistryEntryId: coachDebug.mappingPlanIds?.[0] ?? null,
+      planCacheHit: input.brainAnalysis ? "brain_hit" : (coachDebug.planCacheHit ?? (instructionTargetUci ? "unknown" : "not_exposed_from_module")),
+      openingRegistryHit: input.brainAnalysis?.plans?.recognized?.length > 0 || len(coachDebug.recognizedPlanTypes) > 0,
+      openingRegistryEntryId: input.brainAnalysis?.plans?.primary?.id ?? (coachDebug.mappingPlanIds?.[0] ?? null),
       planMatchFailures: coachDebug.mappingBlockedReasons ?? [],
     },
     opportunities: {
-      opportunityCount: input.opportunityCount ?? coachDebug.opportunityCount ?? (instructionTargetUci ? 0 : "not_exposed_from_module"),
-      renderableOpportunityCount: input.renderableOpportunityCount ?? coachDebug.renderableOpportunityCount ?? (instructionTargetUci ? 0 : "not_exposed_from_module"),
-      selectedOpportunityId,
-      selectedOpportunityLayer,
+      // 2.7.39.4: Brain primary
+      opportunityCount: input.brainAnalysis?.opportunities?.ranked?.length ?? (input.opportunityCount ?? coachDebug.opportunityCount ?? (instructionTargetUci ? 0 : "not_exposed_from_module")),
+      renderableOpportunityCount: input.brainAnalysis?.opportunities?.ranked?.length ?? (input.renderableOpportunityCount ?? coachDebug.renderableOpportunityCount ?? (instructionTargetUci ? 0 : "not_exposed_from_module")),
+      selectedOpportunityId: input.brainAnalysis?.opportunities?.selectedId ?? selectedOpportunityId,
+      selectedOpportunityLayer: input.brainAnalysis?.opportunities?.selected ? "brain" : selectedOpportunityLayer,
       selectedOpportunityIntent: coachDebug.selectedIntent ?? null,
       selectedOpportunityScore,
       selectedOpportunityMoveSan: input.coachDecision?.debug?.coachSelectedCandidateMove ?? null,
@@ -656,7 +714,11 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       blockedTemplatesTop10: (coachDebug.mappingBlockedReasons ?? []).slice(0, 10).map((reason: string) => ({ id: reason.split(":")[0], category: "unknown", blockedReason: reason })),
       safetyLinterStatus: coachDebug.coachSafetyWarnings?.length ? "blocked_or_warned" : "passed",
       safetyLinterBlockedTerms: coachDebug.coachSafetyWarnings ?? [],
-      plainLeakDetected: input.trainerView === "plain" && input.expectedMoveSan ? String(input.coachDecision?.body ?? "").includes(input.expectedMoveSan) : false,
+      plainLeakDetected: Boolean(
+        input.plainLeakDetected ||
+        input.visibleTeachingSurface?.safety?.plainLeakDetected ||
+        (input.trainerView === "plain" && input.expectedMoveSan ? String(input.coachDecision?.body ?? "").includes(input.expectedMoveSan) : false)
+      ),
       renderedTitle: visibleTitle,
       renderedBody: visibleBody,
       explanationCacheHit: coachDebug.explanationCacheHit ?? (instructionTargetUci ? "unknown" : "not_exposed_from_module"),
@@ -689,6 +751,15 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       visualFrameStale: Boolean(input.visualFrameStale),
       revealTargetStale: Boolean(input.revealTargetStale),
       overlayFrameLagDetected: Boolean(input.overlayFrameLagDetected),
+      // Agent 6: surface owner + 4-target/2-piece + leak/bypass from VisibleTeachingSurface guard
+      visibleSurfaceOwner: input.visibleSurfaceOwner ?? input.visibleTeachingSurface?.owner ?? null,
+      visibleCoachOwner: input.visibleCoachOwner ?? input.visibleTeachingSurface?.debug?.visibleCoachOwner ?? (presentation?.coach?.owner ?? "none"),
+      visibleVisualOwner: input.visibleVisualOwner ?? input.visibleTeachingSurface?.debug?.visibleVisualOwner ?? "none",
+      visibleActionOwner: input.visibleActionOwner ?? input.visibleTeachingSurface?.debug?.visibleActionOwner ?? "visibleActionPolicy",
+      showMoreTargetUci: input.showMoreTargetUci ?? input.visibleTeachingSurface?.targetUci ?? null,
+      surfaceSafety: input.surfaceSafety ?? input.visibleTeachingSurface?.safety ?? null,
+      fourTargetMismatchFromSurface: input.surfaceFourTargetMismatch ?? input.visibleTeachingSurface?.debug?.fourTargetMismatch ?? false,
+      twoPieceMismatchFromSurface: input.surfaceTwoPieceMismatch ?? input.visibleTeachingSurface?.debug?.twoPieceTypeMismatch ?? false,
     },
     legacy: {
       legacyTrainingCardWouldRender: input.legacyTrainingCardWouldRender ?? false,
@@ -703,7 +774,7 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       liveCoachWouldRender: Boolean(input.liveCoachState && !input.liveCoachState.silent),
       liveCoachActuallyRendered: input.coachDecision?.debug?.coachCopySource === "live_coach",
       legacySuppressionReasons: [input.coachSurfacePolicy?.reason, presentation.legacy?.legacySuppressedReason].filter(Boolean),
-      legacyBypassDetected: Boolean(input.legacyBypassDetected),
+      legacyBypassDetected: Boolean(input.legacyBypassDetected || input.legacyBypassDetectedFromSurface || input.visibleTeachingSurface?.safety?.legacyBypassDetected),
       memoryMigratedOrCleared: Boolean(input.memoryMigratedOrCleared),
       coachMemoryLegacyDetected: Boolean(input.coachMemoryLegacyDetected),
       coachMemoryClearedLegacyCount: Number(input.coachMemoryClearedLegacyCount ?? 0) || 0,
@@ -760,10 +831,15 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
             ? coachMoveUci === instructionTargetUci && visualMoveUci === instructionTargetUci && revealTargetUci === instructionTargetUci
             : "unknown",
         continuationLinesAvailable: input.trainingMode === "continuation" ? continuationLinesPassedToBoard > 0 || !input.selectedCandidateUci : "unknown",
-        noLegacyBypass: !input.legacyBypassDetected,
+        noLegacyBypass: !input.legacyBypassDetected && !(input.visibleTeachingSurface?.safety?.legacyBypassDetected),
         noGenericFallbackWhenSpecificExists: !(expectedMoveExists && coachDebug.selectedOpportunityLayer === "fallback"),
-        noPlainLeak: !(input.trainerView === "plain" && input.expectedMoveSan && String(input.coachDecision?.body ?? "").includes(input.expectedMoveSan)),
+        noPlainLeak: !(input.trainerView === "plain" && input.expectedMoveSan && String(input.coachDecision?.body ?? "").includes(input.expectedMoveSan)) && !Boolean(input.plainLeakDetected || input.visibleTeachingSurface?.safety?.plainLeakDetected),
         noStaleFen: boardFen4 === overlayFen4 && (!recipeFen4 || boardFen4 === recipeFen4),
+        // Agent 6 surface invariant pass/fail
+        surfaceNotBlockedOnTeaching: isTeachingFrame(input) ? !Boolean(input.visibleTeachingSurface?.safety?.blocked) : "unknown",
+        surfaceTargetsAligned: instructionTargetUci ? !(input.surfaceFourTargetMismatch || input.visibleTeachingSurface?.debug?.fourTargetMismatch) : "unknown",
+        surfacePiecesAligned: (instructionTargetPieceType || input.instructionTargetPieceType) ? !(input.surfaceTwoPieceMismatch || input.visibleTeachingSurface?.debug?.twoPieceTypeMismatch) : "unknown",
+        noPlainLeakFromSurface: !Boolean(input.visibleTeachingSurface?.safety?.plainLeakDetected),
       },
     },
     eventLog: (input.eventLog ?? []) as DebugEvent[],

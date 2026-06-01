@@ -18,3 +18,20 @@ generated_training_data/
 REVIEW_*.txt
 REVIEW_*.patch
 blundr-deploy-v*/
+
+# Blundr local artifacts / generated bundles
+.tmp/
+checkpoint_artifacts/
+*.tgz
+*.zip
+*.tsbuildinfo
+blundr_takeover_*/
+blundr_*_bundle/
+
+# Local/generated artifacts
+.tmp/
+checkpoint_artifacts/
+*.tgz
+*.zip
+*.tsbuildinfo
+blundr_takeover_*/

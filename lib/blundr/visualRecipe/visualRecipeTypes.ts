@@ -243,7 +243,16 @@ export type VisualRecipeCompileInput = {
   frameId?: number;
   viewMode: "assisted" | "plain";
   revealState: "hidden" | "revealed";
-  trainerPhase?: "ready_for_user" | "opponent_selecting" | "opponent_animating" | "transitioning";
+  trainerPhase?:
+    | "ready_for_user"
+    | "opponent_selecting"
+    | "opponent_replying"
+    | "opponent_animating"
+    | "transitioning"
+    | "line_complete"
+    | "continuation_ready"
+    | "terminal"
+    | "error";
   userToMove?: boolean;
   visualBudgetOverride?: Partial<VisualRecipeBudget>;
 };

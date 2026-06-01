@@ -60,7 +60,16 @@ export type ActiveVisualRecipePlayback = {
 };
 
 export type AnimationConductorContext = {
-  phase: "ready_for_user" | "opponent_selecting" | "opponent_animating" | "transitioning";
+  phase:
+    | "ready_for_user"
+    | "opponent_selecting"
+    | "opponent_replying"
+    | "opponent_animating"
+    | "transitioning"
+    | "line_complete"
+    | "continuation_ready"
+    | "terminal"
+    | "error";
   viewMode: "assisted" | "plain";
   boardFen: string;
   trainerFrameId: number;

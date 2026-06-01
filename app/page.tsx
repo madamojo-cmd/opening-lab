@@ -45,6 +45,7 @@ import { decideCoachSurfacePolicy } from "@/lib/blundr/coachSurface/coachSurface
 import { presentMoveImpact } from "@/lib/blundr/coachSurface/moveImpactPresenter";
 import { computeTrainerPresentationFrame } from "@/lib/blundr/presentation/trainerPresentationFrame";
 import { attributeLastMove, decideTrainerPhaseActionGate } from "@/lib/blundr/presentation/phaseActionGating";
+import { buildVisibleTeachingSurface } from "@/lib/blundr/presentation/buildVisibleTeachingSurface"; // v2.7.40 Agent 3: single visible owner surface
 import { buildContinuationCandidateVisual } from "@/lib/blundr/visual/continuationCandidateVisual";
 import { buildOpeningTree } from "@/lib/blundr/openings/openingTree";
 import { resolveExpectedMoveForFrame } from "@/lib/blundr/openings/expectedMoveResolver";
@@ -56,6 +57,8 @@ import { shouldFlagStaleOpponentReplyCommit } from "@/lib/blundr/runtime/opponen
 import { classifyContinuationRuntimeState, type ContinuationRuntimeStatus } from "@/lib/blundr/runtime/continuationRuntimeState";
 import { BlundrDiagnosticsPanel } from "@/components/debug/BlundrDiagnosticsPanel";
 import { collectTrainerDebugSnapshot } from "@/lib/blundr/debug/trainerDebugCollector";
+import { computeInstructionFrameKey } from "@/lib/blundr/runtime/currentInstructionFrame";  // v2.7.39.1 Target Locking (Coach Perfection Gate)
+import { analyzeBlundrPosition } from "@/lib/blundr/brain/analyzeBlundrPosition";  // v2.7.39.2+ Brain facade for 2.7.39.3 coach migration
 import { appendDebugEvent } from "@/lib/blundr/debug/trainerDebugEventLog";
 import { isBlundrDebugEnabled } from "@/lib/blundr/debug/trainerDebugGuards";
 import type { DebugEvent } from "@/lib/blundr/debug/trainerDebugTypes";
@@ -397,6 +400,7 @@ function buildUserFacingTargetFallback(input:{
     activeLineName:input.activeLineName,
     recentCoachBodies:input.recentCoachBodies,
     recentCoachThemes:input.recentCoachThemes,
+    brainAnalysis: null,  // v2.7.39.3 ready; wired in main live coach path
   });
   const fallback=buildVerifiedUserFacingFallback(pipeline.moveFactPacket);
   return {
@@ -743,6 +747,8 @@ export default function App(){
   const [showGptDebug,setShowGptDebug]=useState(false);
   const [showVisualDebug,setShowVisualDebug]=useState(false);
   const [showDetails,setShowDetails]=useState(false);
+  // v2.7.40 Agent 4: dedicated showMoreShown for Plain View Hint+Show More escalation (resets on new frame; distinct from showDetails debug toggle)
+  const [showMoreShown,setShowMoreShown]=useState(false);
   const [showSettings,setShowSettings]=useState(false);
   const [boardSettings,setBoardSettings]=useState<BoardSettings>(DEFAULT_BOARD_SETTINGS);
   const [ratingFilter,setRatingFilter]=useState("1200,1400,1600");
@@ -808,6 +814,9 @@ export default function App(){
   const coachTimelineSeqRef=useRef(0);
   const previousSelectedCandidateUciRef=useRef<string|null>(null);
   const candidateSyncDebugRef=useRef<Record<string,unknown>>({});
+  // v2.7.39.1 Target Locking (Coach Perfection Gate) - official instructional target lock per stable frame key
+  // Prevents enginePreview / explorer arrivals from mutating the committed continuation_candidate for the current frame.
+  const lockedContinuationRef=useRef<Record<string, {uci:string; san?:string; source?:string} | null>>({});
   const fenRef=useRef(fen);
   const lastRecordedCoachUtteranceKeyRef=useRef<string>("");
   const continuationAnalysisDebounceRef=useRef<number|null>(null);
@@ -906,35 +915,73 @@ export default function App(){
       }:policy.debug,
     };
   },[trainingMode,isUserTurn,fen,game,explorerMoves,engineLines]);
-  const currentInstructionFrame=useMemo(()=>buildCurrentInstructionFrame({
-    frameId:trainerFrameId,
-    fen,
-    trainingMode,
-    trainerPhase,
-    trainerView,
-    isUserTurn,
-    guidedMove:expectedMoveResolution.expectedMoveUci&&expectedMoveResolution.source!=="continuation_candidate"?{
-      uci:expectedMoveResolution.expectedMoveUci,
-      san:expectedMoveResolution.expectedMoveSan,
-      source:expectedMoveResolution.source,
-      kind:expectedMoveResolution.source==="opening_branch"?"lichess_branch_move":expectedMoveResolution.source==="opening_family_plan"?"adaptive_branch_move":"guided_move",
-      trust:"book_verified",
-    }:null,
-    continuationCandidate:trainingMode==="continuation"&&isUserTurn?{
-      uci:expectedMoveResolution.source==="continuation_candidate"
-        ? expectedMoveResolution.expectedMoveUci
-        : (continuationPolicyCandidate?.uci??engineLines[0]?.uci??null),
-      san:expectedMoveResolution.source==="continuation_candidate"
-        ? expectedMoveResolution.expectedMoveSan
-        : (continuationPolicyCandidate?.san??engineLines[0]?.san??null),
-      source:expectedMoveResolution.source==="continuation_candidate"
-        ? "continuation_candidate"
-        : continuationPolicyCandidate?.source??(engineLines[0]?.uci?"engine_preview":"continued_play_policy"),
-      trust:"continuation_verified",
-    }:null,
-    preferredTargetKind:trainingMode==="continuation"?"continuation_candidate":"guided_move",
-  }),[trainerFrameId,fen,trainingMode,trainerPhase,trainerView,isUserTurn,expectedMoveResolution,engineLines,continuationPolicyCandidate]);
+  const currentInstructionFrame=useMemo(()=>{
+    const thisFrameKey = computeInstructionFrameKey({
+      fen,
+      trainingMode,
+      isUserTurn,
+      trainerPhase,
+      source: trainingMode==="continuation" ? "continuation_candidate" : "guided",
+    });
+
+    // v2.7.39.1 locking: if we have a locked continuation for this exact frameKey, prefer it over fresh engineLines
+    // This is the core "prevent replacement" guard (Coach Perfection Gate 3A).
+    const lockedForThisFrame = lockedContinuationRef.current[thisFrameKey];
+    const useLocked = !!(trainingMode==="continuation" && isUserTurn && lockedForThisFrame?.uci);
+
+    return buildCurrentInstructionFrame({
+      frameId:trainerFrameId,
+      fen,
+      trainingMode,
+      trainerPhase,
+      trainerView,
+      isUserTurn,
+      guidedMove:expectedMoveResolution.expectedMoveUci&&expectedMoveResolution.source!=="continuation_candidate"?{
+        uci:expectedMoveResolution.expectedMoveUci,
+        san:expectedMoveResolution.expectedMoveSan,
+        source:expectedMoveResolution.source,
+        kind:expectedMoveResolution.source==="opening_branch"?"lichess_branch_move":expectedMoveResolution.source==="opening_family_plan"?"adaptive_branch_move":"guided_move",
+        trust:"book_verified",
+      }:null,
+      continuationCandidate:trainingMode==="continuation"&&isUserTurn?{
+        uci: useLocked && lockedForThisFrame
+          ? lockedForThisFrame.uci
+          : (expectedMoveResolution.source==="continuation_candidate" ? expectedMoveResolution.expectedMoveUci : (continuationPolicyCandidate?.uci??engineLines[0]?.uci??null)),
+        san: useLocked && lockedForThisFrame
+          ? lockedForThisFrame.san
+          : (expectedMoveResolution.source==="continuation_candidate" ? expectedMoveResolution.expectedMoveSan : (continuationPolicyCandidate?.san??engineLines[0]?.san??null)),
+        source: useLocked && lockedForThisFrame
+          ? (lockedForThisFrame.source ?? "locked_continuation_candidate")
+          : (expectedMoveResolution.source==="continuation_candidate" ? "continuation_candidate" : continuationPolicyCandidate?.source??(engineLines[0]?.uci?"engine_preview":"continued_play_policy")),
+        trust:"continuation_verified",
+      }:null,
+      preferredTargetKind:trainingMode==="continuation"?"continuation_candidate":"guided_move",
+    });
+  },[trainerFrameId,fen,trainingMode,trainerPhase,trainerView,isUserTurn,expectedMoveResolution,engineLines,continuationPolicyCandidate]);
   const instructionTarget=currentInstructionFrame.target;
+
+  // v2.7.39.1 Target Locking: record the official continuation candidate under its stable frame key
+  // so future enginePreview/explorer updates cannot mutate it for this frame (unless explicit unlock).
+  if (instructionTarget?.kind === "continuation_candidate" && instructionTarget.uci) {
+    const lockKey = currentInstructionFrame.instructionFrameKey || computeInstructionFrameKey({
+      fen,
+      trainingMode,
+      isUserTurn,
+      trainerPhase,
+      source: "continuation_candidate",
+    });
+    if (!lockedContinuationRef.current[lockKey]) {
+      lockedContinuationRef.current[lockKey] = {
+        uci: instructionTarget.uci,
+        san: instructionTarget.san,
+        source: instructionTarget.source,
+      };
+    }
+  } else if (trainingMode !== "continuation") {
+    // Clear locks when leaving continuation mode (simple policy for now)
+    lockedContinuationRef.current = {};
+  }
+
   const continuationRuntimeState=useMemo(()=>classifyContinuationRuntimeState({
     fen,
     trainingMode,
@@ -1218,6 +1265,17 @@ export default function App(){
       const opportunities=rankPedagogicalOpportunities(evidence,candidates);
       const selected=selectBestLiveComment(opportunities);
       const recentInstructional=getRecentInstructionalCoachRecords(lastCoachRecordsRef.current,5);
+      // Production requirement (Brain V2 spec 1.5): Brain must always run on teaching frames.
+      // Only debug *rendering* / snapshot collection is gated by blundrDebugEnabled.
+      const brainFrameKey = computeInstructionFrameKey({ fen, trainingMode, isUserTurn, trainerPhase, source: instructionTarget?.kind || trainingMode });
+      const brainAnalysisForCoach = instructionTarget ? analyzeBlundrPosition({
+        fen,
+        currentInstructionFrame: currentInstructionFrame, // production shape
+        frameKey: brainFrameKey,
+        trainingMode: trainingMode === "restricted" ? "guided" : trainingMode,
+        isUserTurn,
+        debugEnabled: blundrDebugEnabled,
+      } as any) : null; // temporary 'as any' during full type migration
       const coachPipeline=buildCoachExplanationPipeline({
         fenBefore:fen,
         target:instructionTarget,
@@ -1229,6 +1287,7 @@ export default function App(){
         activeLineName:repertoire.name,
         recentCoachBodies:recentInstructional.map((entry)=>entry.body),
         recentCoachThemes:recentInstructional.map((entry)=>String(entry.selectedOpportunityId??"")),
+        brainAnalysis: brainAnalysisForCoach,
       });
       const silence=shouldLiveCoachStaySilent({
         evidence,
@@ -1603,6 +1662,18 @@ export default function App(){
     candidateUci:trainingMode==="continuation"&&instructionTarget?.kind==="continuation_candidate"?instructionTarget.uci:null,
     candidateSan:trainingMode==="continuation"&&instructionTarget?.kind==="continuation_candidate"?instructionTarget.san:null,
   }),[fen,trainingMode,instructionTarget]);
+
+  // v2.7.40 Agent 5: early brain analysis passed to TrainerPresentationFrame so coach copy comes from BlundrBrain (target->brain->pres->surface chain)
+  // (duplicate lightweight call is acceptable for this checkpoint; brain is pure sync facade)
+  const brainAnalysisForPresentation = (instructionTarget && currentInstructionFrame) ? analyzeBlundrPosition({
+    fen,
+    currentInstructionFrame: currentInstructionFrame,
+    frameKey: computeInstructionFrameKey({ fen, trainingMode, isUserTurn, trainerPhase, source: instructionTarget?.kind || trainingMode }),
+    trainingMode: trainingMode === "restricted" ? "guided" : trainingMode,
+    isUserTurn,
+    debugEnabled: blundrDebugEnabled,
+  } as any) : null;
+
   const presentationFrame=useMemo(()=>computeTrainerPresentationFrame({
     frameId:trainerFrameId,
     fen,
@@ -1645,7 +1716,9 @@ export default function App(){
     branchTransitionBody:branchTransitionSurface?.body,
     branchTransitionButtons:branchTransitionSurface?.buttons as any,
     coachSurfacePolicy,
-  }),[trainerFrameId,fen,activeBoard,trainerView,trainerPhase,trainingMode,isUserTurn,visualRecipeForRender,visualRecipeMainLines,safeMoveArrowVisual.lines,continuationCandidateVisual.lines,legacyVisualLines,visualRecipePlayback.activePrimitiveIds,visualRecipePlayback.animationState,visualRecipeOverlay,overlayFrameId,coachDecision,coachHiddenForFrame,coachSurfacePolicy,branchTransitionSurface]);
+    // Agent 5: brain for canonical coach copy (quarantines legacy liveCoach/coachDecision text from pres coach on teaching frames)
+    brainAnalysis: brainAnalysisForPresentation as any,
+  }),[trainerFrameId,fen,activeBoard,trainerView,trainerPhase,trainingMode,isUserTurn,visualRecipeForRender,visualRecipeMainLines,safeMoveArrowVisual.lines,continuationCandidateVisual.lines,legacyVisualLines,visualRecipePlayback.activePrimitiveIds,visualRecipePlayback.animationState,visualRecipeOverlay,overlayFrameId,coachDecision,coachHiddenForFrame,coachSurfacePolicy,branchTransitionSurface,brainAnalysisForPresentation]);
   const displayedCoachDecision=useMemo(()=>{
     const normalizedCurrentFen=normalizeFen(fen);
     const decisionFrameId=String((coachDecision as any)?.frameId??"");
@@ -1909,6 +1982,7 @@ export default function App(){
     if(button==="replay"){visualRecipePlayback.replay();recordDebugAction({action:button,normalizedAction:"replay",before,after:before,result:"handled",reason:"playback_replay_requested"});return;}
     if(button==="hide"){const after={...before,coachInteraction:"hide"};setCoachHiddenFrameId(String(trainerFrameId));setCoachInteraction("hide");recordDebugAction({action:button,normalizedAction:"hide",before,after,result:"handled"});return;}
     if(button==="hint"){const after={...before,hintShown:true,coachInteraction:"hint"};setCoachHintRequestCount((count)=>count+1);setCoachInteraction("hint");recordDebugAction({action:button,normalizedAction:"hint",before,after,result:"handled"});return;}
+    if(button==="show_more" || (button as any)==="show_more"){const after={...before,showMoreShown:true,coachInteraction:"show_plan"};setShowMoreShown(true);setCoachInteraction("show_plan");recordDebugAction({action:button,normalizedAction:"show_more",before,after,result:"handled",reason:"plain_show_more_escalation_to_full_content"});return;}
     if(button==="answer"){const after={...before,answerShown:true,showAnswer:true,coachInteraction:"answer"};setCoachInteraction("answer");setCoachReviewMarked(true);recordDebugAction({action:button,normalizedAction:"answer",before,after,result:"handled"});handleReveal();return;}
     if(button==="why"){const after={...before,coachInteraction:"why"};setCoachInteraction("why");recordDebugAction({action:button,normalizedAction:"why",before,after,result:"handled"});return;}
     if(button==="show_plan"){const after={...before,coachInteraction:"show_plan"};setCoachInteraction("show_plan");recordDebugAction({action:button,normalizedAction:"show_plan",before,after,result:"handled"});return;}
@@ -1924,6 +1998,49 @@ export default function App(){
   const evalText=advantageLabel(cpWhite);
   const captured=capturedSummary(game);
   const endingInfo=gameEndingInfo(game);
+
+  // v2.7.40 Agent 3 (late placement after all frame deps): VisibleTeachingSurface — single owner.
+  // Legacy coach paths are inputs only for debug/safety. Surface now owns visible teaching output.
+  // v2.7.40 Agent 4: local brain analysis for surface/ladder (dupe of internal liveCoach but safe scope; analyze is lightweight facade)
+  const brainAnalysisForSurface = (instructionTarget && currentInstructionFrame) ? analyzeBlundrPosition({
+    fen,
+    currentInstructionFrame: currentInstructionFrame,
+    frameKey: computeInstructionFrameKey({ fen, trainingMode, isUserTurn, trainerPhase, source: instructionTarget?.kind || trainingMode }),
+    trainingMode: trainingMode === "restricted" ? "guided" : trainingMode,
+    isUserTurn,
+    debugEnabled: blundrDebugEnabled,
+  } as any) : null;
+
+  // Agent 6: compute explicit 4-target + 2-piece sources (from display + pres + instruction) to pass to surface guard for invariant checks
+  const intendedCoachMoveUci = (displayedCoachDecision?.debug as any)?.coachMoveUci ?? (rawCoachDecision?.debug as any)?.coachMoveUci ?? instructionTarget?.uci ?? null;
+  const intendedVisualMoveUci = presentationFrame?.visual?.shouldRender && Array.isArray(presentationFrame.visual.lines) && presentationFrame.visual.lines[0]
+    ? `${(presentationFrame.visual.lines[0] as any).from}${(presentationFrame.visual.lines[0] as any).to}` : null;
+  const intendedShowMoreTargetUci = showMoreShown ? instructionTarget?.uci ?? null : null;
+  const intendedCoachPieceType = (displayedCoachDecision?.debug as any)?.coachPieceType ?? instructionTarget?.pieceType ?? null;
+
+  const visibleTeachingSurface = buildVisibleTeachingSurface({
+    currentInstructionFrame,
+    trainerPresentationFrame: presentationFrame as any, // v2.7.40: compute shape vs interface drift (pre-existing); surface tolerates
+    legacyCoachDecision: coachDecision ?? rawCoachDecision ?? (liveCoachState as any)?.coach ?? null,
+    showMoreShown, // v2.7.40 Agent 4: dedicated state (not showDetails)
+    trainerView,
+    trainingMode,
+    isUserTurn,
+    trainerPhase,
+    bookStatus: bookComplete ? "book_complete" : "in_book",
+    isBranchTransition: !!branchTransitionSurface?.render,
+    isTerminal: !!endingInfo,
+    // Agent 4: pass for ladder (progressive hints + evidence)
+    hintCount: coachHintRequestCount,
+    brainAnalysis: brainAnalysisForSurface as any,
+    selectedTeachingConcept: (brainAnalysisForSurface as any)?.pedagogicalFocus?.focus ?? null,
+    // Agent 6: pass targets/pieces for 4-target/2-piece invariant runtime guard
+    coachMoveUci: intendedCoachMoveUci,
+    visualMoveUci: intendedVisualMoveUci,
+    showMoreTargetUci: intendedShowMoreTargetUci,
+    coachPieceType: intendedCoachPieceType,
+  });
+
   const isReviewingHistory=historyIndex<positionHistory.length-1;
   const selectedLegalMoves=selectedSquare&&!isReviewingHistory&&!game.isGameOver()?(game.moves({square:selectedSquare as any,verbose:true}) as any[]):[];
   const gptDebugText=JSON.stringify({pipeline:brainResponse?.pipeline??null,engine:enginePreview??null,moveQuality,moveQualityPending,shouldValidateTrainingMove,debug:brainResponse?.debug??null},null,2);
@@ -2182,7 +2299,7 @@ export default function App(){
     });
   },[activeTab,trainingMode,trainerPhase,isUserTurn,instructionTarget?.kind,fen,game]);
   useEffect(()=>{if(activeTab==="train")positionStartedAtRef.current=Date.now()},[fen,activeTab]);
-  useEffect(()=>{setCoachInteraction("none");setCoachHintRequestCount(0);setCoachReviewMarked(false);setCoachHiddenFrameId(null);},[fen,trainerFrameId,trainerView,trainerPhase]);
+  useEffect(()=>{setCoachInteraction("none");setCoachHintRequestCount(0);setCoachReviewMarked(false);setCoachHiddenFrameId(null);setShowMoreShown(false);},[fen,trainerFrameId,trainerView,trainerPhase]);
   useEffect(()=>{if(!enabledViews.includes(activeBoardView)&&enabledViews.length)setActiveBoardView(enabledViews[0])},[activeBoardView,enabledViews.join("|")]);
   useEffect(()=>{
     if(!shouldValidateTrainingMove){
@@ -2467,8 +2584,8 @@ export default function App(){
     }
   }
   function resetHistory(startFen:string){setPositionHistory([startFen]);setHistoryIndex(0)}
-  function selectRepertoire(id:string){const startFen=new Chess().fen();setSelectedRepertoireId(id);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setUserExplicitlyEnteredContinuation(false);setContinueFromHereClicked(false);setMoveHistory([]);setShowAnswer(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setRuntimeCriticalIssues([]);setOpponentCue(null);setOpponentVariationDebug(null);setAnnotation(blankAnnotation());setEnginePreview(null);setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
-  function resetBoard(){const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setUserExplicitlyEnteredContinuation(false);setContinueFromHereClicked(false);setMoveHistory([]);setShowAnswer(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setRuntimeCriticalIssues([]);setOpponentCue(null);setOpponentVariationDebug(null);setAnnotation(blankAnnotation());setEnginePreview(null);setActiveTab("train");bumpRuntimeFrame()}
+  function selectRepertoire(id:string){const startFen=new Chess().fen();setSelectedRepertoireId(id);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setUserExplicitlyEnteredContinuation(false);setContinueFromHereClicked(false);setMoveHistory([]);setShowAnswer(false);setShowMoreShown(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setRuntimeCriticalIssues([]);setOpponentCue(null);setOpponentVariationDebug(null);setAnnotation(blankAnnotation());setEnginePreview(null);setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
+  function resetBoard(){const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setUserExplicitlyEnteredContinuation(false);setContinueFromHereClicked(false);setMoveHistory([]);setShowAnswer(false);setShowMoreShown(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setRuntimeCriticalIssues([]);setOpponentCue(null);setOpponentVariationDebug(null);setAnnotation(blankAnnotation());setEnginePreview(null);setActiveTab("train");bumpRuntimeFrame()}
   function recordPosition(nextFen:string){const nextIndex=historyIndex+1;setPositionHistory(prev=>[...prev.slice(0,nextIndex),nextFen]);setHistoryIndex(nextIndex)}
   function jumpHistory(direction:-1|1){const next=Math.max(0,Math.min(positionHistory.length-1,historyIndex+direction));if(next===historyIndex)return;setHistoryIndex(next);setFen(positionHistory[next]);setSelectedSquare(null);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);clearPendingOpponentReplyRequest({clearStaleIssue:true});setOpponentCue(null);setOpponentVariationDebug(null);setBookComplete(false);setFeedback(next===positionHistory.length-1?"Returned to the live position.":`Reviewing previous position ${next} of ${positionHistory.length-1}. Use the arrows to return to live play.`);bumpRuntimeFrame()}
   async function playOpponentMove(request:PendingOpponentRequest){
@@ -2870,7 +2987,7 @@ export default function App(){
     });
     setReviewingFen(null);
   }
-  function practiceMistake(m:Mistake){const rep=repertoires.find(r=>r.id===m.repertoireId);if(rep)setSelectedRepertoireId(rep.id);setFen(m.fen);resetHistory(m.fen);setReviewingFen(normalizeFen(m.fen));setFeedback("Review this opening position. Play the expected move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setUserExplicitlyEnteredContinuation(false);setContinueFromHereClicked(false);setMoveHistory([]);setShowAnswer(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setOpponentVariationDebug(null);setActiveTab("train");bumpRuntimeFrame()}
+  function practiceMistake(m:Mistake){const rep=repertoires.find(r=>r.id===m.repertoireId);if(rep)setSelectedRepertoireId(rep.id);setFen(m.fen);resetHistory(m.fen);setReviewingFen(normalizeFen(m.fen));setFeedback("Review this opening position. Play the expected move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setUserExplicitlyEnteredContinuation(false);setContinueFromHereClicked(false);setMoveHistory([]);setShowAnswer(false);setShowMoreShown(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setOpponentVariationDebug(null);setActiveTab("train");bumpRuntimeFrame()}
   function createCustomRepertoire(){const moves=newLineText.replace(/\d+\./g," ").replace(/\s+/g," ").trim().split(" ").filter(Boolean);if(!moves.length)return;const test=new Chess();for(const move of moves){try{if(!test.move(move)){setFeedback(`Could not parse move: ${move}`);return}}catch{setFeedback(`Could not parse move: ${move}`);return}}const rep:Repertoire={id:`custom-${Date.now()}`,name:newRepName.trim()||"My Custom Repertoire",color:newRepColor,description:"Custom line saved on this device.",lines:[moves],custom:true};setCustomRepertoires(prev=>[...prev,rep]);setSelectedRepertoireId(rep.id);setShowAddLine(false);const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setTrainingMode("restricted");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setFeedback("Custom repertoire saved. Restricted training is active.");setActiveTab("train");bumpRuntimeFrame()}
   const squareStyles:Record<string,CSSProperties>={};
   if(lastMove&&lastMove.length>=4){
@@ -2903,7 +3020,9 @@ export default function App(){
   if(selectedSquare)squareStyles[selectedSquare]={...squareStyles[selectedSquare],boxShadow:"inset 0 0 0 3px rgba(22,101,52,.85), inset 0 0 24px rgba(22,101,52,.5)"};
   const visualSourceForRender=String(presentationFrame.visual.source??"none");
   const staleCanSuppressVisual=visualFrameStale&&visualSourceForRender==="visual_recipe";
-  const boardLinesToRender:ActiveLine[]=presentationFrame.visual.shouldRender&&!staleCanSuppressVisual?(presentationFrame.visual.lines as ActiveLine[]):[];
+  // v2.7.40 Agent 3: Visual overlays prefer VisibleTeachingSurface (enforces alignment + plain-pre + mismatch blocks)
+  const surfaceVisualLines = (visibleTeachingSurface?.visual?.shouldRender ? (visibleTeachingSurface.visual.lines as ActiveLine[]) : null);
+  const boardLinesToRender:ActiveLine[]= surfaceVisualLines ?? (presentationFrame.visual.shouldRender&&!staleCanSuppressVisual?(presentationFrame.visual.lines as ActiveLine[]):[]);
   const transientLinesToRender:ActiveLine[]=activeBoard&&opponentCue&&boardSettings.showOpponentCue&&shouldRenderOpponentLastMoveHighlight({committed:opponentCue.committed,cueFen:opponentCue.fen,boardFen:normalizeFen(fen)})?opponentCue.lines:[];
   const legalVerboseMoves=(game.moves({verbose:true}) as any[]);
   const expectedMoveLegal=expectedUserOptions[0]?legalVerboseMoves.some((move)=>moveToUci(move)===expectedUserOptions[0].uci):null;
@@ -2911,8 +3030,8 @@ export default function App(){
   const visualTargetMatchesInstructionTarget=instructionTarget?.uci?visualMoveUciForDebug===instructionTarget.uci:"unknown";
   const selectedContinuationCandidate=trainingMode==="continuation"&&currentSelectedCandidateUci?{uci:currentSelectedCandidateUci,san:currentSelectedCandidateSan??currentSelectedCandidateUci}:null;
   const lastMoveAttribution=attributeLastMove({lastMoveSan,lastMoveUci:lastMove,lastMoveColor,userColor});
-  const legacyTrainingCardActuallyRendered=Boolean(activeBoard&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface&&coachSurfacePolicy.allowLegacyTrainingCard);
-  const legacyAnswerCardActuallyRendered=Boolean(showAnswer&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface&&coachSurfacePolicy.allowLegacyAnswerCard);
+  const legacyTrainingCardActuallyRendered=Boolean(activeBoard&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface&&coachSurfacePolicy.allowLegacyTrainingCard && !visibleTeachingSurface?.coach?.shouldRender);
+  const legacyAnswerCardActuallyRendered=Boolean(showAnswer&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface&&coachSurfacePolicy.allowLegacyAnswerCard && !visibleTeachingSurface?.coach?.shouldRender);
   const legacyMoveImpactActuallyRendered=Boolean(legacyTrainingCardActuallyRendered&&coachSurfacePolicy.allowMoveImpactCard&&moveImpactPresentation.show);
   const legacyNextTextActuallyRendered=Boolean(legacyTrainingCardActuallyRendered&&coachSurfacePolicy.allowNextMoveText&&patternCue.next&&(trainerView==="assisted"||showAnswer));
   const diagnosticsSnapshot=blundrDebugEnabled?collectTrainerDebugSnapshot({
@@ -2933,6 +3052,14 @@ export default function App(){
     instructionTargetTo:instructionTarget?.to??null,
     instructionTargetPieceType:instructionTarget?.pieceType??null,
     instructionTargetKind:instructionTarget?.kind??null,
+    // v2.7.39.1 Target Locking - stable frame identity for preventing official target drift
+    instructionFrameKey: computeInstructionFrameKey({
+      fen,
+      trainingMode,
+      isUserTurn,
+      trainerPhase,
+      source: instructionTarget?.kind || (trainingMode==="continuation" ? "continuation_candidate" : "guided"),
+    }),
     expectedMoveSan:expectedUserOptions[0]?.san,
     expectedMoveUci:expectedUserOptions[0]?.uci,
     expectedMoveResolution,
@@ -3024,9 +3151,9 @@ export default function App(){
     lastCoachRecords,
     lastCoachBodies:getRecentInstructionalCoachRecords(lastCoachRecordsRef.current,5).map((entry)=>entry.body),
     coachTimeline,
-    legacyTrainingCardWouldRender:Boolean(activeBoard&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface),
+    legacyTrainingCardWouldRender:Boolean(activeBoard&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface && !visibleTeachingSurface?.coach?.shouldRender),
     legacyTrainingCardActuallyRendered,
-    legacyAnswerCardWouldRender:Boolean(showAnswer&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface),
+    legacyAnswerCardWouldRender:Boolean(showAnswer&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface && !visibleTeachingSurface?.coach?.shouldRender),
     legacyAnswerCardActuallyRendered,
     legacyMoveImpactWouldRender:moveImpactPresentation.show,
     legacyMoveImpactActuallyRendered,
@@ -3042,6 +3169,18 @@ export default function App(){
     prematureContinuationBlocked:trainingMode!=="continuation"&&!guidedCoveragePolicy.guidedCompleteAllowed,
     transitionToContinuationAllowed:userExplicitlyEnteredContinuation||guidedCoveragePolicy.guidedCompleteAllowed,
     transitionToContinuationReason:userExplicitlyEnteredContinuation?"user_explicit":guidedCoveragePolicy.guidedCompleteAllowed?guidedCoveragePolicy.guidedCoverageState:"not_allowed",
+    // Agent 6: surface + invariant fields for strengthened snapshot + debug panel
+    visibleTeachingSurface: visibleTeachingSurface as any,
+    visibleSurfaceOwner: visibleTeachingSurface?.owner ?? null,
+    visibleCoachOwner: visibleTeachingSurface?.debug?.visibleCoachOwner ?? presentationFrame?.coach?.owner ?? "none",
+    visibleVisualOwner: visibleTeachingSurface?.debug?.visibleVisualOwner ?? presentationFrame?.visual?.source ?? "none",
+    visibleActionOwner: visibleTeachingSurface?.debug?.visibleActionOwner ?? "visibleActionPolicy",
+    showMoreTargetUci: intendedShowMoreTargetUci,
+    plainLeakDetected: visibleTeachingSurface?.safety?.plainLeakDetected ?? false,
+    legacyBypassDetectedFromSurface: visibleTeachingSurface?.safety?.legacyBypassDetected ?? false,
+    surfaceSafetyBlocked: visibleTeachingSurface?.safety?.blocked ?? false,
+    surfaceFourTargetMismatch: visibleTeachingSurface?.debug?.fourTargetMismatch ?? false,
+    surfaceTwoPieceMismatch: visibleTeachingSurface?.debug?.twoPieceTypeMismatch ?? false,
   }):null;
   return <main className="min-h-screen bg-[#f7f7f4] text-stone-950"><div className="mx-auto flex min-h-screen max-w-md flex-col px-4 pb-24 pt-5">
     {activeTab==="home"&&<section className="space-y-6"><header className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-green-700 text-white shadow-sm"><Beaker size={20}/></div><div><h1 className="text-2xl font-bold tracking-tight">Blundr</h1><p className="text-sm text-stone-500">Visual opening training with a controlled trainer.</p></div></div><button onClick={()=>setShowSettings(true)} className="rounded-2xl bg-white p-3 shadow-sm"><Settings className="text-stone-500" size={20}/></button></header><div className="grid grid-cols-2 gap-3"><MetricCard label="Accuracy" value={`${accuracy}%`} sub="all time" icon={<Trophy size={19}/>}/><MetricCard label="Streak" value={String(progress.streak)} sub="correct" icon={<Flame size={19}/>}/><MetricCard label="Review" value={String(mistakes.length)} sub="mistakes" icon={<XCircle size={19}/>} warning/><MetricCard label="Openings" value={String(repertoires.length)} sub="available" icon={<BookOpen size={19}/>}/></div><div className="rounded-3xl bg-stone-900 p-4 text-white shadow-sm"><div className="flex items-center gap-2 text-sm font-bold text-green-300"><Cloud size={17}/> v2.7.33</div><p className="mt-2 text-sm leading-6 text-stone-300">Training now uses rule-only visual cues by default. Blundr Brain is reserved for manual reveal/debug, so normal practice stays fast, deterministic, and inexpensive.</p></div><div className="space-y-3">{repertoires.slice(0,5).map(r=><button key={r.id} onClick={()=>selectRepertoire(r.id)} className="flex w-full items-center gap-3 rounded-3xl border border-stone-200 bg-white p-3 text-left shadow-sm"><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {countPositions(r)} positions</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>)}</div></section>}
@@ -3089,11 +3228,39 @@ export default function App(){
       {showDetails&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Coach Debug</div><div className="mt-2">coachMode: {coachDecision.mode}</div><div>coachAction: {coachDecision.action}</div><div>coachUtteranceId: {coachDecision.utteranceId??"none"}</div><div>coachUtteranceFamily: {coachDecision.utteranceFamily??"none"}</div><div>coachVariationReason: {String((coachDecision.debug as any)?.coachVariationReason??"n/a")}</div><div>coachHintStrength: {String((coachDecision.debug as any)?.coachHintStrength??"none")}</div><div>coachRevealRisk: {coachDecision.revealRisk}</div><div>coachGivesAnswer: {coachDecision.givesAnswer?"true":"false"}</div><div>coachButtons: {displayedCoachDecision.buttons.join(", ")||"none"}</div><div>coachShouldMarkReviewWorthy: {coachDecision.shouldMarkReviewWorthy?"true":"false"}</div><div>coachSuppressedReason: {coachDecision.suppressedReason??"none"}</div><div>coachFrameMatchesBoard: {coachContextResult.context?.recipeFrameMatchesBoard?"true":"false"}</div><div>coachFenMatchesBoard: {coachContextResult.context?.recipeFenMatchesBoard?"true":"false"}</div><div>recentCoachUtteranceIds: {coachUtteranceMemory.slice(-5).map((entry:any)=>entry.utteranceId).join(", ")||"none"}</div><div>coachSafetyWarnings: {JSON.stringify((coachDecision.debug as any)?.coachSafetyWarnings??[])}</div><div>coachReviewMarked: {coachReviewMarked?"true":"false"}</div><div>selectedOpportunity: {String((coachDecision.debug as any)?.selectedOpportunity??liveCoachState?.selected?.opportunity??"none")}</div><div>selectedIntent: {String((coachDecision.debug as any)?.selectedIntent??liveCoachState?.selected?.intent??"none")}</div><div>exactMoveAllowed: {coachContextResult.context?.exactMoveAllowed?"true":"false"}</div><div>claimTypes: {coachDecision.claimTypes.join(", ")||"none"}</div><div>blockedClaims: {String((coachDecision.debug as any)?.blockedClaims??"none")}</div><div>silenceReason: {String((coachDecision.debug as any)?.silenceReason??liveCoachState?.debug?.silenceReason??"none")}</div><div>branchTransitionSurfaceRendered: {branchTransitionSurface?.render?"true":"false"}</div><div>branchTransitionReason: {branchTransitionSurface?.reason??"none"}</div><div>continueFromHereAvailable: {branchTransitionSurface?.render?"true":"false"}</div><div>continueFromHereClicked: {continueFromHereClicked?"true":"false"}</div><div>coachSurfaceOwner: {coachSurfacePolicy.owner}</div><div>allowLegacyTrainingCard: {coachSurfacePolicy.allowLegacyTrainingCard?"true":"false"}</div><div>allowMoveImpactCard: {coachSurfacePolicy.allowMoveImpactCard?"true":"false"}</div><div>allowNextMoveText: {coachSurfacePolicy.allowNextMoveText?"true":"false"}</div><div>legacyCueSuppressedReason: {coachSurfacePolicy.reason}</div><div>moveImpactPresenterReason: {moveImpactPresentation.reason}</div></div>}
       {bookComplete&&<div className="rounded-3xl border border-green-200 bg-green-50 p-4 shadow-sm"><h2 className="text-lg font-black text-green-900">Book complete</h2><p className="mt-2 text-sm leading-6 text-green-800">You finished this opening branch. Train it again, or continue against the bot from this position.</p><div className="mt-4 grid grid-cols-2 gap-3"><button onClick={resetBoard} className="rounded-2xl bg-white px-4 py-3 font-black text-green-800 shadow-sm">Train Again</button><button onClick={continueVsBot} className="rounded-2xl bg-green-700 px-4 py-3 font-black text-white shadow-sm">Continue vs Bot</button></div></div>}
       {endingInfo&&<GameEndCard title={endingInfo.title} message={endingInfo.message} onRestart={resetBoard}/>} 
-      {phaseActionGate.revealButtonVisible&&!branchTransitionSurface&&<button onClick={handleReveal} className="w-full rounded-3xl bg-stone-950 px-4 py-4 text-center font-black text-white shadow-lg"><span className="flex items-center justify-center gap-2"><Eye size={18}/> Reveal Next Move</span></button>}
-      {showAnswer&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface&&coachSurfacePolicy.allowLegacyAnswerCard&&<div className="rounded-3xl bg-stone-900 p-4 text-white"><div className="text-sm text-stone-300">Study-line move</div><div className="mt-2 text-2xl font-black">{expectedUserOptions.length?expectedUserOptions.map(m=>m.san).join(" / "):engineLines[0]?.san??"Analysis pending"}</div><p className="mt-2 text-xs leading-5 text-stone-400">Source: {trainingMode==="restricted"?"Saved repertoire line":"Continuation analysis"}</p></div>}
-      {activeBoard&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface&&coachSurfacePolicy.allowLegacyTrainingCard&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 shadow-sm"><div className="mb-2 flex items-center justify-between gap-3"><div><div className="text-xs font-black uppercase tracking-wide text-green-700">{patternCueBadgeLabel.replace("Cue ready","Plan mode")}</div><h2 className="text-lg font-black">{patternCue.title}</h2></div><button onClick={()=>setShowDetails(!showDetails)} className="rounded-full bg-stone-100 px-3 py-2 text-xs font-black text-stone-600">{showDetails?"Hide":"Show more"}</button></div><p className="text-sm leading-6 text-stone-700">{patternCue.snippet}</p>{opponentCue&&boardSettings.showOpponentCue&&shouldRenderOpponentLastMoveHighlight({committed:opponentCue.committed,cueFen:opponentCue.fen,boardFen:normalizeFen(fen)})&&<p className="mt-2 rounded-2xl bg-purple-50 p-3 text-sm leading-6 text-purple-800"><span className="font-black">Opponent cue: </span>{opponentCue.message}</p>}{coachSurfacePolicy.allowNextMoveText&&patternCue.next&&(trainerView==="assisted"||showAnswer)&&<p className="mt-2 rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600"><span className="font-black text-stone-900">Next: </span>{patternCue.next}</p>}{visualModelError&&<p className="mt-2 rounded-2xl bg-amber-50 p-2 text-[11px] font-bold leading-5 text-amber-700">Visual cue unavailable: {visualModelError}</p>}{coachSurfacePolicy.allowMoveImpactCard&&moveImpactPresentation.show&&<MoveImpact impact={{label:moveImpactPresentation.label,pct:moveImpact.pct,tone:moveImpact.tone,note:moveImpactPresentation.note}}/>}{showDetails&&<div className="mt-3 space-y-2"><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Headline: {patternCue.title}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual: {activeVisualModelOutput?.animationPackage?.name??annotation.visualExplanation}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Move Quality Gate</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Version: {MOVE_QUALITY_GATE_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Required: {shouldValidateTrainingMove?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Status: {moveQualityPending?"pending":moveQuality?.status??"idle"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected UCI: {moveQuality?.expectedMovesUci?.join(", ")||expectedUserUcis.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected SAN: {expectedUserSans.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Stockfish top two: {moveQuality?.topMoves?.map((line)=>line.uci).join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Reason: {moveQuality?.reason??"No validation result."}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Checked: {moveQuality?.checkedAt?new Date(moveQuality.checkedAt).toLocaleTimeString():"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Hints hidden: {hideUnverifiedTrainingHints?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Teaching Cue Compiler</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler version: {TEACHING_CUE_COMPILER_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler concept: {teachingOrchestration?.cue.conceptId??"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler confidence: {teachingOrchestration?Number((teachingOrchestration.cue.debug.confidence??0).toFixed(3)):"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler reason: {teachingOrchestration?.cue.debug.selectedReason??"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler delta: {teachingOrchestration?.cue.debug.deltaSummary?.join(" | ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler scores: {teachingOrchestration?.cue.debug.detectorScores?.map((s)=>`${s.conceptId}:${s.finalScore.toFixed(2)}`).slice(0,6).join(", ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Orchestrator tier: {teachingOrchestration?.classification.tier??"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Selected story: {teachingOrchestration?.selectedStory?.kind??"n/a"} ({teachingOrchestration?.selectedStory?.score.total?.toFixed?.(2)??"n/a"})</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Rejected stories: {teachingOrchestration?.debug.rejectedStories?.map((r)=>`${r.kind}:${r.total.toFixed(2)}`).join(", ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual budget: {teachingOrchestration?JSON.stringify(teachingOrchestration.debug.visualBudget):"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Suppressed visuals: {teachingOrchestration?.debug.suppressionReasons?.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Learning events are being stored locally for future progress and Review features.</div>{annotation.reason&&<div className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">Fallback reason: {annotation.reason}</div>}</div>}</div>}
+      {/* v2.7.40 Clean Intelligent Coach Checkpoint: "Reveal Next Move" button DELETED from all non-debug teaching paths.
+         Plain View must only ever show Hint + Show More. No Reveal/Show Answer/Show Move allowed.
+         handleReveal still exists for internal/debug paths only. */}
+      {/* v2.7.40 Agent 4: legacy answer card suppressed when surface owns (no Reveal/Show Answer/SAN leak possible in Plain before showMore) */}
+      {showAnswer&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface&&coachSurfacePolicy.allowLegacyAnswerCard&&!visibleTeachingSurface?.coach?.shouldRender&&<div className="rounded-3xl bg-stone-900 p-4 text-white"><div className="text-sm text-stone-300">Study-line move</div><div className="mt-2 text-2xl font-black">{expectedUserOptions.length?expectedUserOptions.map(m=>m.san).join(" / "):engineLines[0]?.san??"Analysis pending"}</div><p className="mt-2 text-xs leading-5 text-stone-400">Source: {trainingMode==="restricted"?"Saved repertoire line":"Continuation analysis"}</p></div>}
+      {/* v2.7.40 Agent 4: legacy training/pattern card suppressed when surface owns teaching (Plain View uses only surface prompt + Hint + Show More before escalation; no duplicate) */}
+      {activeBoard&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface&&coachSurfacePolicy.allowLegacyTrainingCard&&!visibleTeachingSurface?.coach?.shouldRender&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 shadow-sm"><div className="mb-2 flex items-center justify-between gap-3"><div><div className="text-xs font-black uppercase tracking-wide text-green-700">{patternCueBadgeLabel.replace("Cue ready","Plan mode")}</div><h2 className="text-lg font-black">{patternCue.title}</h2></div><button onClick={()=>setShowDetails(!showDetails)} className="rounded-full bg-stone-100 px-3 py-2 text-xs font-black text-stone-600">{showDetails?"Hide":"Show more"}</button></div><p className="text-sm leading-6 text-stone-700">{patternCue.snippet}</p>{opponentCue&&boardSettings.showOpponentCue&&shouldRenderOpponentLastMoveHighlight({committed:opponentCue.committed,cueFen:opponentCue.fen,boardFen:normalizeFen(fen)})&&<p className="mt-2 rounded-2xl bg-purple-50 p-3 text-sm leading-6 text-purple-800"><span className="font-black">Opponent cue: </span>{opponentCue.message}</p>}{coachSurfacePolicy.allowNextMoveText&&patternCue.next&&(trainerView==="assisted"||showAnswer)&&<p className="mt-2 rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600"><span className="font-black text-stone-900">Next: </span>{patternCue.next}</p>}{visualModelError&&<p className="mt-2 rounded-2xl bg-amber-50 p-2 text-[11px] font-bold leading-5 text-amber-700">Visual cue unavailable: {visualModelError}</p>}{coachSurfacePolicy.allowMoveImpactCard&&moveImpactPresentation.show&&<MoveImpact impact={{label:moveImpactPresentation.label,pct:moveImpact.pct,tone:moveImpact.tone,note:moveImpactPresentation.note}}/>}{showDetails&&<div className="mt-3 space-y-2"><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Headline: {patternCue.title}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual: {activeVisualModelOutput?.animationPackage?.name??annotation.visualExplanation}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Move Quality Gate</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Version: {MOVE_QUALITY_GATE_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Required: {shouldValidateTrainingMove?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Status: {moveQualityPending?"pending":moveQuality?.status??"idle"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected UCI: {moveQuality?.expectedMovesUci?.join(", ")||expectedUserUcis.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected SAN: {expectedUserSans.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Stockfish top two: {moveQuality?.topMoves?.map((line)=>line.uci).join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Reason: {moveQuality?.reason??"No validation result."}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Checked: {moveQuality?.checkedAt?new Date(moveQuality.checkedAt).toLocaleTimeString():"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Hints hidden: {hideUnverifiedTrainingHints?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Teaching Cue Compiler</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler version: {TEACHING_CUE_COMPILER_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler concept: {teachingOrchestration?.cue.conceptId??"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler confidence: {teachingOrchestration?Number((teachingOrchestration.cue.debug.confidence??0).toFixed(3)):"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler reason: {teachingOrchestration?.cue.debug.selectedReason??"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler delta: {teachingOrchestration?.cue.debug.deltaSummary?.join(" | ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler scores: {teachingOrchestration?.cue.debug.detectorScores?.map((s)=>`${s.conceptId}:${s.finalScore.toFixed(2)}`).slice(0,6).join(", ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Orchestrator tier: {teachingOrchestration?.classification.tier??"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Selected story: {teachingOrchestration?.selectedStory?.kind??"n/a"} ({teachingOrchestration?.selectedStory?.score.total?.toFixed?.(2)??"n/a"})</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Rejected stories: {teachingOrchestration?.debug.rejectedStories?.map((r)=>`${r.kind}:${r.total.toFixed(2)}`).join(", ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual budget: {teachingOrchestration?JSON.stringify(teachingOrchestration.debug.visualBudget):"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Suppressed visuals: {teachingOrchestration?.debug.suppressionReasons?.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Learning events are being stored locally for future progress and Review features.</div>{annotation.reason&&<div className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">Fallback reason: {annotation.reason}</div>}</div>}</div>}
       {showDetails&&teachingOrchestration&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Training Context Engine</div><div className="mt-2">Mode: {teachingOrchestration.mode}</div><div>Move trust / context trust: {teachingOrchestration.moveTrust} / {teachingOrchestration.contextTrust}</div><div>Saved move not validated: {teachingOrchestration.debug.savedMoveNotValidated?"yes":"no"}</div><div>Next suppressed: {teachingOrchestration.debug.nextPlaySuppressionReason??"no"}</div><div>Move semantic effects: {teachingOrchestration.debug.moveSemanticSummary.join(" | ")||"n/a"}</div><div>Top move comparisons: {teachingOrchestration.debug.topMoveComparisons.map((c)=>`${c.relationship}:${c.alternativeTheme}`).join(", ")||"n/a"}</div><div>Selected grounding: {teachingOrchestration.debug.selectedStoryGrounding?JSON.stringify(teachingOrchestration.debug.selectedStoryGrounding):"n/a"}</div><div>Visual alignment: {teachingOrchestration.debug.visualConceptAlignment}</div></div>}
-      {displayedCoachDecision?.shouldShowCoachCard&&<CoachCard key={`${trainerFrameId}:${displayedCoachDecision.utteranceId??displayedCoachDecision.title??presentationFrame.coach.owner}`} decision={displayedCoachDecision as any} onAction={handleCoachAction} replayEnabled={visualRecipePlayback.replayAvailable&&trainerView!=="plain"}/>}
+      {/* v2.7.40 Agent 3 wiring: CoachCard now driven exclusively by VisibleTeachingSurface (coach + hint + showMore + actions).
+         Direct displayedCoachDecision / liveCoachState / rawCoachDecision no longer control visible teaching output on active frames.
+         They remain in memo deps for legacy input to surface (bypass detection only). */}
+      {visibleTeachingSurface.coach.shouldRender && (
+        <CoachCard
+          key={`${trainerFrameId}:surface:${visibleTeachingSurface.targetUci ?? "no-target"}`}
+          decision={{
+            shouldShowCoachCard: true,
+            title: visibleTeachingSurface.coach.title ?? "Training move",
+            body: visibleTeachingSurface.coach.body ?? visibleTeachingSurface.hint.text ?? "",
+            buttons: visibleTeachingSurface.actions as any,
+            utteranceId: "surface",
+            mode: "supported_continuation",
+            action: "show_plan",
+            revealRisk: "none",
+            givesAnswer: false,
+            suppressedReason: visibleTeachingSurface.coach.suppressedReason,
+            // hint/showMore exposed via surface for future Agent 4
+            hint: visibleTeachingSurface.hint.text,
+            showMoreContent: visibleTeachingSurface.showMore.content,
+          } as any}
+          onAction={handleCoachAction}
+          replayEnabled={visualRecipePlayback.replayAvailable && trainerView !== "plain"}
+        />
+      )}
       {showDetails&&visualRecipe&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Visual Recipe</div><div className="mt-2">visualRecipeId: {visualRecipe.visualRecipeId}</div><div>recipeSchemaVersion: {visualRecipe.recipeSchemaVersion}</div><div>patternId: {visualRecipe.patternId}</div><div>recipeMode: {visualRecipe.mode}</div><div>recipeConceptId: {visualRecipe.conceptId}</div><div>recipeFrameId: {visualRecipe.frameId??"n/a"}</div><div>recipeFen: {visualRecipe.fen}</div><div>recipeBeatCount: {visualRecipe.beats.length}</div><div>recipePrimitiveCount: {visualRecipe.beats.reduce((sum,beat)=>sum+beat.primitives.length,0)}</div><div>recipePrimitives: {visualRecipe.beats.flatMap((beat)=>beat.primitives.map((primitive)=>`${primitive.type}:${primitive.id}`)).join(", ")||"none"}</div><div>recipePermissions: {JSON.stringify(visualRecipe.permissions)}</div><div>recipeLearningAnchor: {JSON.stringify(visualRecipe.learningAnchor)}</div><div>recipeSuppressedReason: {visualRecipe.debug?.recipeSuppressedReason??"none"}</div><div>recipeLanes: {visualRecipe.debug?.recipeLanes?.join(", ")||"none"}</div><div>recipeEffectFamilies: {visualRecipe.debug?.recipeEffectFamilies?.join(", ")||"none"}</div><div>recipePrioritySummary: {visualRecipe.debug?.recipePrioritySummary??"none"}</div><div>recipeTimingProfile: {visualRecipe.debug?.recipeTimingProfile?JSON.stringify(visualRecipe.debug.recipeTimingProfile):"n/a"}</div><div>recipeOpacityPolicy: {visualRecipe.debug?.recipeOpacityPolicy?JSON.stringify(visualRecipe.debug.recipeOpacityPolicy):"n/a"}</div><div>suppressedByPriority: {visualRecipe.debug?.suppressedByPriority?.join(", ")||"none"}</div><div>suppressedByBudget: {visualRecipe.debug?.suppressedByBudget?.join(", ")||"none"}</div><div>tacticalPrimitivesPresent: {visualRecipe.debug?.tacticalPrimitivesPresent?"true":"false"}</div><div>tacticalPrimitivesRendered: {visualRecipeOverlay.tacticalPrimitivesRendered?"true":"false"}</div><div>schemaSerializable: {visualRecipe.debug?.schemaSerializable?"true":"false"}</div><div>adapterAllowed: {visualRecipeOverlay.adapterAllowed?"true":"false"}</div><div>adapterSuppressedReason: {visualRecipeOverlay.adapterSuppressedReason??"none"}</div><div>recipeFenRaw: {visualRecipeOverlay.recipeFenRaw??"n/a"}</div><div>boardFenRaw: {visualRecipeOverlay.boardFenRaw}</div><div>recipeFenNormalized: {visualRecipeOverlay.recipeFenNormalized??"n/a"}</div><div>boardFenNormalized: {visualRecipeOverlay.boardFenNormalized??"n/a"}</div><div>recipeFrameIdRaw: {String(visualRecipeOverlay.recipeFrameIdRaw??"n/a")}</div><div>boardFrameIdRaw: {String(visualRecipeOverlay.boardFrameIdRaw)}</div><div>recipeFrameMatchesBoard: {visualRecipeOverlay.recipeFrameMatchesBoard?"true":"false"}</div><div>recipeFenMatchesBoard: {visualRecipeOverlay.recipeFenMatchesBoard?"true":"false"}</div></div>}
       {showDetails&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Overlay Lifecycle</div><div className="mt-2">trainerFrameId: {trainerFrameId}</div><div>overlayFrameId: {overlayFrameId}</div><div>overlayFen: {overlayFen??visualRecipe?.fen??"n/a"}</div><div>boardFen: {boardFen}</div><div>overlaySuppressedReason: {overlaySuppressedReason??"none"}</div><div>overlaySource: {overlaySource}</div><div>opponentCandidateRenderedInMainUi: {visualRecipeOverlay.opponentCandidateRenderedInMainUi?"true":"false"}</div><div>staleOverlayIgnored: {staleOverlayFlag?"true":"false"}</div><div>overlayClearedOnPhaseChange: {overlayClearedOnPhaseChange?"true":"false"}</div></div>}
       {showDetails&&visualRecipe&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="flex items-center justify-between gap-3"><div className="font-black text-stone-800">Animation Playback</div><div className="flex items-center gap-2"><button onClick={visualRecipePlayback.replay} disabled={!visualRecipePlayback.replayAvailable||trainerView==="plain"} className={classNames("rounded-full px-3 py-1 text-[11px] font-black",visualRecipePlayback.replayAvailable&&trainerView!=="plain"?"bg-stone-900 text-white":"bg-stone-100 text-stone-400")}>Replay</button><button onClick={visualRecipePlayback.skipToEnd} disabled={visualRecipePlayback.animationState!=="playing"} className={classNames("rounded-full px-3 py-1 text-[11px] font-black",visualRecipePlayback.animationState==="playing"?"bg-stone-900 text-white":"bg-stone-100 text-stone-400")}>Skip</button></div></div><div className="mt-2">animationState: {visualRecipePlayback.animationState}</div><div>activeVisualRecipeId: {visualRecipePlayback.activeVisualRecipeId??"none"}</div><div>activePatternId: {visualRecipePlayback.activePatternId??"none"}</div><div>activeBeatIndex: {visualRecipePlayback.activeBeatIndex??"n/a"}</div><div>activeBeatId: {visualRecipePlayback.activeBeatId??"n/a"}</div><div>activePrimitiveIds: {visualRecipePlayback.activePrimitiveIds.join(", ")||"none"}</div><div>animationReducedMotion: {visualRecipePlayback.animationReducedMotion?"true":"false"}</div><div>animationSkippedToEnd: {visualRecipePlayback.animationSkippedToEnd?"true":"false"}</div><div>animationClearedReason: {visualRecipePlayback.animationClearedReason??"none"}</div><div>animationSuppressedReason: {visualRecipePlayback.animationSuppressedReason??"none"}</div><div>recipeFrameMatchesBoard: {visualRecipePlayback.recipeFrameMatchesBoard?"true":"false"}</div><div>recipeFenMatchesBoard: {visualRecipePlayback.recipeFenMatchesBoard?"true":"false"}</div><div>replayAvailable: {visualRecipePlayback.replayAvailable?"true":"false"}</div><div>tacticalPrimitivesRendered: {visualRecipePlayback.tacticalPrimitivesRendered?"true":"false"}</div></div>}

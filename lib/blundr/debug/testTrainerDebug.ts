@@ -1,0 +1,34 @@
+import { testTrainerDebugEventLog } from "./__tests__/trainerDebugEventLog.test";
+import { testFallbackCopyGuard } from "./__tests__/fallbackCopyGuard.test";
+import { testTrainerDebugSanitizer } from "./__tests__/trainerDebugSanitizer.test";
+import { testTrainerDebugSnapshot } from "./__tests__/trainerDebugSnapshot.test";
+import { testMultiMoveTrainingQa } from "./testMultiMoveTrainingQa";
+import { testCurrentInstructionFrame } from "../runtime/__tests__/currentInstructionFrame.test";
+import { testOpponentReplyGuard } from "../runtime/__tests__/opponentReplyGuard.test";
+import { testContinuationCandidateVisual } from "../visual/__tests__/continuationCandidateVisual.test";
+
+export function testTrainerDebug(): void {
+  console.log("Running Blundr trainer debug QA...");
+  testTrainerDebugSnapshot();
+  console.log("✓ trainer debug snapshot passed");
+  testTrainerDebugSanitizer();
+  console.log("✓ trainer debug sanitizer passed");
+  testTrainerDebugEventLog();
+  console.log("✓ trainer debug event log passed");
+  testCurrentInstructionFrame();
+  console.log("✓ current instruction frame passed");
+  testOpponentReplyGuard();
+  console.log("✓ opponent reply guard passed");
+  testContinuationCandidateVisual();
+  console.log("✓ continuation candidate visual passed");
+  testFallbackCopyGuard();
+  console.log("✓ fallback copy guard passed");
+  if (process.env.RUN_MULTI_MOVE_QA === "1") {
+    testMultiMoveTrainingQa();
+  }
+  console.log("✓ Blundr trainer debug QA passed");
+}
+
+if (process.argv[1]?.endsWith("testTrainerDebug.ts")) {
+  testTrainerDebug();
+}
