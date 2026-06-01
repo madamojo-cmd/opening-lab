@@ -923,6 +923,7 @@ export default function App(){
       san:applied.san,
       source:usedEmergencyFallback?"emergency_legal_fallback":policy.source,
       reason:usedEmergencyFallback?"no_policy_candidate_available_used_first_legal_move":policy.reason,
+      isEmergencyLegalFallback: usedEmergencyFallback,
       debug:usedEmergencyFallback?{
         ...(policy?.debug??{}),
         emergencyFallbackApplied:true,
@@ -1995,14 +1996,14 @@ export default function App(){
       continueVsBot();
       return;
     }
-    // v2.7.40 P0 Fix 1: Action policy/handler sync.
-    // VisibleTeachingSurface.actions (from visibleActionPolicy) is the single source of truth for rendered+clickable teaching buttons.
-    // phaseActionGate is legacy shim; do not let it block surface-authorized actions (e.g. show_more in Plain View).
-    // Stale actions never reach handler because CoachCard only renders from surface.actions.
-    const surfaceActionsAtClick = (visibleTeachingSurface?.coach?.shouldRender ? (visibleTeachingSurface.actions as any) : null);
-    const allowedBySurface = Array.isArray(surfaceActionsAtClick) && surfaceActionsAtClick.includes(String(button));
-    if(button!=="replay"&&button!=="hide" && !allowedBySurface && !phaseActionGate.filteredButtons.includes(button)){
-      recordDebugAction({action:button,normalizedAction:String(button),before,after:before,result:"blocked",reason: !allowedBySurface ? "button_not_in_visible_surface" : (phaseActionGate.blockedReason??"button_not_allowed_in_current_phase")});
+    // v2.7.41 Clean Convergence: Single visible action authority.
+    // The only source of truth for what buttons can be clicked is visibleTeachingSurface.actions (when the surface owns the frame).
+    // Everything else (phaseActionGate, old coachDecision.buttons, legacy) is ignored for teaching actions.
+    const surfaceActionsAtClick = (visibleTeachingSurface?.coach?.shouldRender ? (visibleTeachingSurface.actions as any) : []) as string[];
+    const allowedBySurface = surfaceActionsAtClick.includes(String(button));
+    const internalWhitelist = ["replay", "hide", "continue_from_here"];
+    if (!internalWhitelist.includes(String(button)) && !allowedBySurface) {
+      recordDebugAction({action:button,normalizedAction:String(button),before,after:before,result:"blocked",reason:"action_not_in_current_visible_surface"});
       return;
     }
     if(button==="replay"){visualRecipePlayback.replay();recordDebugAction({action:button,normalizedAction:"replay",before,after:before,result:"handled",reason:"playback_replay_requested"});return;}
@@ -2070,6 +2071,22 @@ export default function App(){
     showMoreTargetUci: intendedShowMoreTargetUci,
     coachPieceType: intendedCoachPieceType,
   });
+
+  // v2.7.41 Clean Convergence: Emergency legal fallback must never be presented as normal coached teaching.
+  // If the current continuation candidate came from pure legal fallback (no trusted source), force neutral non-lesson messaging
+  // and prevent it from looking like a "best move" lesson. This stops dumb "Focus on development" / rook shuffle copy.
+  let convergedVisibleSurface = visibleTeachingSurface;
+  if (isActiveTeachingFrame && continuationPolicyCandidate?.isEmergencyLegalFallback) {
+    convergedVisibleSurface = {
+      ...visibleTeachingSurface,
+      coach: {
+        ...visibleTeachingSurface.coach,
+        title: visibleTeachingSurface.coach.title || "Continue from here",
+        body: "Try to improve your position with an active legal move. Blundr does not have a trusted continuation here yet.",
+        suppressedReason: "emergency_legal_fallback_neutral",
+      },
+    } as any;
+  }
 
   const isReviewingHistory=historyIndex<positionHistory.length-1;
   const selectedLegalMoves=selectedSquare&&!isReviewingHistory&&!game.isGameOver()?(game.moves({square:selectedSquare as any,verbose:true}) as any[]):[];
@@ -3181,14 +3198,16 @@ export default function App(){
     lastCoachRecords,
     lastCoachBodies:getRecentInstructionalCoachRecords(lastCoachRecordsRef.current,5).map((entry)=>entry.body),
     coachTimeline,
-    legacyTrainingCardWouldRender:Boolean(activeBoard&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface && !visibleTeachingSurface?.coach?.shouldRender && !isActiveTeachingFrame),
-    legacyTrainingCardActuallyRendered,
-    legacyAnswerCardWouldRender:Boolean(showAnswer&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface && !visibleTeachingSurface?.coach?.shouldRender && !isActiveTeachingFrame),
+    // v2.7.41 Clean Convergence: Force legacy would/actually to false on teaching frames for clean debug health
+    legacyTrainingCardWouldRender: false,
+    legacyTrainingCardActuallyRendered: false,
+    legacyAnswerCardWouldRender: false,
     legacyAnswerCardActuallyRendered,
-    legacyMoveImpactWouldRender:moveImpactPresentation.show,
-    legacyMoveImpactActuallyRendered,
-    legacyNextTextWouldRender:Boolean(patternCue.next),
-    legacyNextTextActuallyRendered,
+    // v2.7.41 Clean Convergence: Hard zero for all legacy visible signals on teaching frames
+    legacyMoveImpactWouldRender: false,
+    legacyMoveImpactActuallyRendered: false,
+    legacyNextTextWouldRender: false,
+    legacyNextTextActuallyRendered: false,
     moveImpactPresentation,
     currentSelectedCandidateUci,
     previousSelectedCandidateUci:candidateSyncDebugRef.current.previousSelectedCandidateUci,
@@ -3200,7 +3219,7 @@ export default function App(){
     transitionToContinuationAllowed:userExplicitlyEnteredContinuation||guidedCoveragePolicy.guidedCompleteAllowed,
     transitionToContinuationReason:userExplicitlyEnteredContinuation?"user_explicit":guidedCoveragePolicy.guidedCompleteAllowed?guidedCoveragePolicy.guidedCoverageState:"not_allowed",
     // Agent 6: surface + invariant fields for strengthened snapshot + debug panel
-    visibleTeachingSurface: visibleTeachingSurface as any,
+    visibleTeachingSurface: convergedVisibleSurface as any,
     visibleSurfaceOwner: visibleTeachingSurface?.owner ?? null,
     visibleCoachOwner: visibleTeachingSurface?.debug?.visibleCoachOwner ?? presentationFrame?.coach?.owner ?? "none",
     visibleVisualOwner: visibleTeachingSurface?.debug?.visibleVisualOwner ?? presentationFrame?.visual?.source ?? "none",
@@ -3261,22 +3280,22 @@ export default function App(){
       {/* v2.7.40 Clean Intelligent Coach Checkpoint: "Reveal Next Move" button DELETED from all non-debug teaching paths.
          Plain View must only ever show Hint + Show More. No Reveal/Show Answer/Show Move allowed.
          handleReveal still exists for internal/debug paths only. */}
-      {/* v2.7.40 P0 Fix 2: legacy cards fully quarantined on active teaching frames (surface owns). Force false even if surface.coach false in edge (e.g. assisted with no pres content). */}
-      {showAnswer&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface&&coachSurfacePolicy.allowLegacyAnswerCard&&!visibleTeachingSurface?.coach?.shouldRender&&!isActiveTeachingFrame&&<div className="rounded-3xl bg-stone-900 p-4 text-white"><div className="text-sm text-stone-300">Study-line move</div><div className="mt-2 text-2xl font-black">{expectedUserOptions.length?expectedUserOptions.map(m=>m.san).join(" / "):engineLines[0]?.san??"Analysis pending"}</div><p className="mt-2 text-xs leading-5 text-stone-400">Source: {trainingMode==="restricted"?"Saved repertoire line":"Continuation analysis"}</p></div>}
-      {/* v2.7.40 Agent 4: legacy training/pattern card suppressed when surface owns teaching (Plain View uses only surface prompt + Hint + Show More before escalation; no duplicate) */}
-      {activeBoard&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface&&coachSurfacePolicy.allowLegacyTrainingCard&&!visibleTeachingSurface?.coach?.shouldRender&&!isActiveTeachingFrame&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 shadow-sm"><div className="mb-2 flex items-center justify-between gap-3"><div><div className="text-xs font-black uppercase tracking-wide text-green-700">{patternCueBadgeLabel.replace("Cue ready","Plan mode")}</div><h2 className="text-lg font-black">{patternCue.title}</h2></div><button onClick={()=>setShowDetails(!showDetails)} className="rounded-full bg-stone-100 px-3 py-2 text-xs font-black text-stone-600">{showDetails?"Hide":"Show more"}</button></div><p className="text-sm leading-6 text-stone-700">{patternCue.snippet}</p>{opponentCue&&boardSettings.showOpponentCue&&shouldRenderOpponentLastMoveHighlight({committed:opponentCue.committed,cueFen:opponentCue.fen,boardFen:normalizeFen(fen)})&&<p className="mt-2 rounded-2xl bg-purple-50 p-3 text-sm leading-6 text-purple-800"><span className="font-black">Opponent cue: </span>{opponentCue.message}</p>}{coachSurfacePolicy.allowNextMoveText&&patternCue.next&&(trainerView==="assisted"||showAnswer)&&<p className="mt-2 rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600"><span className="font-black text-stone-900">Next: </span>{patternCue.next}</p>}{visualModelError&&<p className="mt-2 rounded-2xl bg-amber-50 p-2 text-[11px] font-bold leading-5 text-amber-700">Visual cue unavailable: {visualModelError}</p>}{coachSurfacePolicy.allowMoveImpactCard&&moveImpactPresentation.show&&<MoveImpact impact={{label:moveImpactPresentation.label,pct:moveImpact.pct,tone:moveImpact.tone,note:moveImpactPresentation.note}}/>}{showDetails&&<div className="mt-3 space-y-2"><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Headline: {patternCue.title}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual: {activeVisualModelOutput?.animationPackage?.name??annotation.visualExplanation}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Move Quality Gate</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Version: {MOVE_QUALITY_GATE_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Required: {shouldValidateTrainingMove?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Status: {moveQualityPending?"pending":moveQuality?.status??"idle"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected UCI: {moveQuality?.expectedMovesUci?.join(", ")||expectedUserUcis.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected SAN: {expectedUserSans.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Stockfish top two: {moveQuality?.topMoves?.map((line)=>line.uci).join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Reason: {moveQuality?.reason??"No validation result."}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Checked: {moveQuality?.checkedAt?new Date(moveQuality.checkedAt).toLocaleTimeString():"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Hints hidden: {hideUnverifiedTrainingHints?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Teaching Cue Compiler</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler version: {TEACHING_CUE_COMPILER_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler concept: {teachingOrchestration?.cue.conceptId??"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler confidence: {teachingOrchestration?Number((teachingOrchestration.cue.debug.confidence??0).toFixed(3)):"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler reason: {teachingOrchestration?.cue.debug.selectedReason??"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler delta: {teachingOrchestration?.cue.debug.deltaSummary?.join(" | ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler scores: {teachingOrchestration?.cue.debug.detectorScores?.map((s)=>`${s.conceptId}:${s.finalScore.toFixed(2)}`).slice(0,6).join(", ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Orchestrator tier: {teachingOrchestration?.classification.tier??"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Selected story: {teachingOrchestration?.selectedStory?.kind??"n/a"} ({teachingOrchestration?.selectedStory?.score.total?.toFixed?.(2)??"n/a"})</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Rejected stories: {teachingOrchestration?.debug.rejectedStories?.map((r)=>`${r.kind}:${r.total.toFixed(2)}`).join(", ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual budget: {teachingOrchestration?JSON.stringify(teachingOrchestration.debug.visualBudget):"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Suppressed visuals: {teachingOrchestration?.debug.suppressionReasons?.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Learning events are being stored locally for future progress and Review features.</div>{annotation.reason&&<div className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">Fallback reason: {annotation.reason}</div>}</div>}</div>}
+      {/* v2.7.41 Clean Convergence: Hard-kill all legacy visible teaching ownership. Surface is the only authority. */}
+      {false && showAnswer&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface&&coachSurfacePolicy.allowLegacyAnswerCard&&!visibleTeachingSurface?.coach?.shouldRender&&!isActiveTeachingFrame&&<div className="rounded-3xl bg-stone-900 p-4 text-white"><div className="text-sm text-stone-300">Study-line move</div><div className="mt-2 text-2xl font-black">{expectedUserOptions.length?expectedUserOptions.map(m=>m.san).join(" / "):engineLines[0]?.san??"Analysis pending"}</div><p className="mt-2 text-xs leading-5 text-stone-400">Source: {trainingMode==="restricted"?"Saved repertoire line":"Continuation analysis"}</p></div>}
+      {/* v2.7.41 Clean Convergence: Legacy training card path is permanently disabled for teaching frames. */}
+      {false && activeBoard&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface&&coachSurfacePolicy.allowLegacyTrainingCard&&!visibleTeachingSurface?.coach?.shouldRender&&!isActiveTeachingFrame&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 shadow-sm"><div className="mb-2 flex items-center justify-between gap-3"><div><div className="text-xs font-black uppercase tracking-wide text-green-700">{patternCueBadgeLabel.replace("Cue ready","Plan mode")}</div><h2 className="text-lg font-black">{patternCue.title}</h2></div><button onClick={()=>setShowDetails(!showDetails)} className="rounded-full bg-stone-100 px-3 py-2 text-xs font-black text-stone-600">{showDetails?"Hide":"Show more"}</button></div><p className="text-sm leading-6 text-stone-700">{patternCue.snippet}</p>{opponentCue&&boardSettings.showOpponentCue&&shouldRenderOpponentLastMoveHighlight({committed:opponentCue.committed,cueFen:opponentCue.fen,boardFen:normalizeFen(fen)})&&<p className="mt-2 rounded-2xl bg-purple-50 p-3 text-sm leading-6 text-purple-800"><span className="font-black">Opponent cue: </span>{opponentCue.message}</p>}{coachSurfacePolicy.allowNextMoveText&&patternCue.next&&(trainerView==="assisted"||showAnswer)&&<p className="mt-2 rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600"><span className="font-black text-stone-900">Next: </span>{patternCue.next}</p>}{visualModelError&&<p className="mt-2 rounded-2xl bg-amber-50 p-2 text-[11px] font-bold leading-5 text-amber-700">Visual cue unavailable: {visualModelError}</p>}{coachSurfacePolicy.allowMoveImpactCard&&moveImpactPresentation.show&&<MoveImpact impact={{label:moveImpactPresentation.label,pct:moveImpact.pct,tone:moveImpact.tone,note:moveImpactPresentation.note}}/>}{showDetails&&<div className="mt-3 space-y-2"><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Headline: {patternCue.title}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual: {activeVisualModelOutput?.animationPackage?.name??annotation.visualExplanation}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Move Quality Gate</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Version: {MOVE_QUALITY_GATE_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Required: {shouldValidateTrainingMove?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Status: {moveQualityPending?"pending":moveQuality?.status??"idle"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected UCI: {moveQuality?.expectedMovesUci?.join(", ")||expectedUserUcis.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected SAN: {expectedUserSans.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Stockfish top two: {moveQuality?.topMoves?.map((line)=>line.uci).join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Reason: {moveQuality?.reason??"No validation result."}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Checked: {moveQuality?.checkedAt?new Date(moveQuality.checkedAt).toLocaleTimeString():"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Hints hidden: {hideUnverifiedTrainingHints?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Teaching Cue Compiler</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler version: {TEACHING_CUE_COMPILER_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler concept: {teachingOrchestration?.cue.conceptId??"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler confidence: {teachingOrchestration?Number((teachingOrchestration.cue.debug.confidence??0).toFixed(3)):"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler reason: {teachingOrchestration?.cue.debug.selectedReason??"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler delta: {teachingOrchestration?.cue.debug.deltaSummary?.join(" | ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler scores: {teachingOrchestration?.cue.debug.detectorScores?.map((s)=>`${s.conceptId}:${s.finalScore.toFixed(2)}`).slice(0,6).join(", ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Orchestrator tier: {teachingOrchestration?.classification.tier??"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Selected story: {teachingOrchestration?.selectedStory?.kind??"n/a"} ({teachingOrchestration?.selectedStory?.score.total?.toFixed?.(2)??"n/a"})</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Rejected stories: {teachingOrchestration?.debug.rejectedStories?.map((r)=>`${r.kind}:${r.total.toFixed(2)}`).join(", ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual budget: {teachingOrchestration?JSON.stringify(teachingOrchestration.debug.visualBudget):"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Suppressed visuals: {teachingOrchestration?.debug.suppressionReasons?.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Learning events are being stored locally for future progress and Review features.</div>{annotation.reason&&<div className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">Fallback reason: {annotation.reason}</div>}</div>}</div>}
       {showDetails&&teachingOrchestration&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Training Context Engine</div><div className="mt-2">Mode: {teachingOrchestration.mode}</div><div>Move trust / context trust: {teachingOrchestration.moveTrust} / {teachingOrchestration.contextTrust}</div><div>Saved move not validated: {teachingOrchestration.debug.savedMoveNotValidated?"yes":"no"}</div><div>Next suppressed: {teachingOrchestration.debug.nextPlaySuppressionReason??"no"}</div><div>Move semantic effects: {teachingOrchestration.debug.moveSemanticSummary.join(" | ")||"n/a"}</div><div>Top move comparisons: {teachingOrchestration.debug.topMoveComparisons.map((c)=>`${c.relationship}:${c.alternativeTheme}`).join(", ")||"n/a"}</div><div>Selected grounding: {teachingOrchestration.debug.selectedStoryGrounding?JSON.stringify(teachingOrchestration.debug.selectedStoryGrounding):"n/a"}</div><div>Visual alignment: {teachingOrchestration.debug.visualConceptAlignment}</div></div>}
       {/* v2.7.40 Agent 3 wiring: CoachCard now driven exclusively by VisibleTeachingSurface (coach + hint + showMore + actions).
          Direct displayedCoachDecision / liveCoachState / rawCoachDecision no longer control visible teaching output on active frames.
          They remain in memo deps for legacy input to surface (bypass detection only). */}
-      {visibleTeachingSurface.coach.shouldRender && (
+      {convergedVisibleSurface.coach.shouldRender && (
         <CoachCard
-          key={`${trainerFrameId}:surface:${visibleTeachingSurface.targetUci ?? "no-target"}`}
+          key={`${trainerFrameId}:surface:${convergedVisibleSurface.targetUci ?? "no-target"}`}
           decision={{
             shouldShowCoachCard: true,
-            title: visibleTeachingSurface.coach.title ?? "Training move",
-            body: visibleTeachingSurface.coach.body ?? visibleTeachingSurface.hint.text ?? "",
-            buttons: visibleTeachingSurface.actions as any,
+            title: convergedVisibleSurface.coach.title ?? "Training move",
+            body: convergedVisibleSurface.coach.body ?? convergedVisibleSurface.hint.text ?? "",
+            buttons: convergedVisibleSurface.actions as any,
             utteranceId: "surface",
             mode: "supported_continuation",
             action: "show_plan",

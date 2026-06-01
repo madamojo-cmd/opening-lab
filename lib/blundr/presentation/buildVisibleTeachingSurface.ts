@@ -358,15 +358,13 @@ export function buildVisibleTeachingSurface(
   // Agent 4: for plain pre we still render a *prompt* coach card (title + progressive hint body + actions), but no full body/visuals
   const presentationProvidesContent = !safetyBlocked && !isPlainPreShowMore;
 
-  // Coach section:
-  // - normal: from presentation when aligned
-  // - plain pre (Agent 4): always render prompt coach for Hint/Show More buttons + progressive hint text
+  // v2.7.41 Clean Convergence: VisibleTeachingSurface is the SINGLE visible owner on teaching frames.
+  // Force coachShouldRender = true on any active brain teaching frame (after safety checks).
+  // This starves legacyTrainingCard, legacyAnswerCard, liveCoach visible, moveImpact, nextText etc.
+  // Old presentation coach content is used when available; otherwise safe neutral fallback is provided.
   const coachShouldRender =
     !safetyBlocked &&
-    ((presentationProvidesContent &&
-      (trainerPresentationFrame?.coach?.shouldRender ?? false) &&
-      presentationCoachOwner !== "none") ||
-      isPlainPreShowMore);
+    (isBrainTeachingFrame || isPlainPreShowMore || presentationProvidesContent && (trainerPresentationFrame?.coach?.shouldRender ?? false));
 
   let coachTitle: string | null = null;
   let coachBody: string | null = null;
@@ -376,8 +374,8 @@ export function buildVisibleTeachingSurface(
       coachTitle = "Find the next move";
       coachBody = progressiveHint || null; // shows only after first Hint click; null before = clean prompt
     } else {
-      coachTitle = trainerPresentationFrame.coach.title ?? null;
-      coachBody = trainerPresentationFrame.coach.body ?? null;
+      coachTitle = trainerPresentationFrame.coach.title ?? "Training position";
+      coachBody = trainerPresentationFrame.coach.body ?? "Focus on the key idea for this move.";
     }
   }
 
