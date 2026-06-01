@@ -35,3 +35,6 @@ checkpoint_artifacts/
 *.zip
 *.tsbuildinfo
 blundr_takeover_*/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
