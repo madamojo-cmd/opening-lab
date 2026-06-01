@@ -228,7 +228,9 @@ const OPENINGS: Repertoire[] = [
 ];
 
 function classNames(...classes:Array<string|false|null|undefined>){return classes.filter(Boolean).join(" ")}
-function normalizeFen(fen:string){return fen.split(" ").slice(0,4).join(" ")}
+function normalizeFen(fen?: string | null | undefined): string {
+  return (fen || "").split(" ").slice(0, 4).join(" ");
+}
 function buildRuntimeFrameKey(input:{fen:string;trainerPhase:string;trainerView:TrainerView;trainingMode:TrainingMode;isUserTurn:boolean;instructionTargetUci:string|null}){return `${normalizeFen(input.fen)}|${input.trainerPhase}|${input.trainerView}|${input.trainingMode}|${input.isUserTurn?"user":"opp"}|${input.instructionTargetUci??"none"}`}
 function moveToUci(move:{from:string;to:string;promotion?:string}){return `${move.from}${move.to}${move.promotion??""}`}
 function isValidSquare(square:string){return /^[a-h][1-8]$/.test(square)}
@@ -901,18 +903,43 @@ export default function App(){
     return lichessStatsStatus === "resolved" && lichessTotalGames !== null && lichessTotalGames < 500;
   }, [lichessStatsStatus, lichessTotalGames]);
 
+  // v2.8.0 stable coach final: Lichess 18% expected move share gate
+  const expectedMoveLichessGames = useMemo(() => {
+    if (!explorerMoves || explorerMoves.length === 0 || !expectedMoveResolution?.expectedMoveUci) return null;
+    const target = expectedMoveResolution.expectedMoveUci.toLowerCase();
+    const match = explorerMoves.find((m: any) => (m.uci || "").toLowerCase() === target);
+    return match ? (match.total ?? 0) : 0;
+  }, [explorerMoves, expectedMoveResolution?.expectedMoveUci]);
+
+  const expectedMoveLichessShare = useMemo(() => {
+    if (lichessTotalGames === null || lichessTotalGames <= 0 || expectedMoveLichessGames === null) return null;
+    return expectedMoveLichessGames / lichessTotalGames;
+  }, [lichessTotalGames, expectedMoveLichessGames]);
+
+  const lichessLowShareConfirmed = useMemo(() => {
+    return (
+      lichessStatsStatus === "resolved" &&
+      lichessTotalGames !== null &&
+      lichessTotalGames >= 500 &&
+      expectedMoveLichessShare !== null &&
+      expectedMoveLichessShare < 0.18
+    );
+  }, [lichessStatsStatus, lichessTotalGames, expectedMoveLichessShare]);
+
   // Base hard EoB (without loading self-ref) for safe ordering (Step 10).
+  // v2.8.0: now includes 18% move share gate
   const baseHardEndOfBookGate = useMemo(() => {
     if (!isUserTurn) return false;
     if (trainingMode !== "restricted") return false;
     if (userExplicitlyEnteredContinuation) return false;
-    return selectedLineCompleteConfirmed || lichessEndConfirmed;
+    return selectedLineCompleteConfirmed || lichessEndConfirmed || lichessLowShareConfirmed;
   }, [
     isUserTurn,
     trainingMode,
     userExplicitlyEnteredContinuation,
     selectedLineCompleteConfirmed,
     lichessEndConfirmed,
+    lichessLowShareConfirmed,
   ]);
 
   // Step 3/4/10 (exact order): trusted curated target exists for restricted user turn (from opening tree / resolver).
@@ -1838,17 +1865,44 @@ export default function App(){
       return null;
     }
     const isCurated = selectedLineCompleteConfirmed;
-    const reason = isCurated
-      ? "This branch is beyond the guided line. Continue from here to practice adapting."
-      : "You are leaving common opening territory. Continue from here.";
+
+    // Recompute flags locally to avoid declaration order issues
+    const total = (explorerMoves || []).reduce((sum: number, m: any) => sum + (m.total || 0), 0);
+    const lowVolume = total > 0 && total < 500;
+
+    const expUci = expectedMoveResolution?.expectedMoveUci?.toLowerCase();
+    let expGames = 0;
+    if (expUci) {
+      const m = (explorerMoves || []).find((x: any) => (x.uci || "").toLowerCase() === expUci);
+      expGames = m ? (m.total || 0) : 0;
+    }
+    const share = total > 0 ? expGames / total : null;
+    const lowShare = total >= 500 && share !== null && share < 0.18;
+
+    let title = "Leaving common opening territory";
+    let body = "You are leaving common opening territory. Continue from here.";
+    let reason = "lichess_below_500_games";
+
+    if (isCurated) {
+      title = "Opening line complete";
+      body = "This branch is beyond the guided line. Continue from here to practice adapting.";
+      reason = "curated_line_complete";
+    } else if (lowShare) {
+      body = "This move is rare in the opening database. Continue from here.";
+      reason = "lichess_low_move_share";
+    } else if (lowVolume) {
+      body = "You are leaving common opening territory. Continue from here.";
+      reason = "lichess_below_500_games";
+    }
+
     return {
       render: true,
-      title: isCurated ? "Opening line complete" : "Leaving common opening territory",
-      body: reason,
+      title,
+      body,
       buttons: ["continue_from_here"] as const,
-      reason: isCurated ? "curated_line_complete" : "lichess_below_500_games",
+      reason,
     } as const;
-  }, [hardEndOfBookGate, selectedLineCompleteConfirmed]);
+  }, [hardEndOfBookGate, selectedLineCompleteConfirmed, explorerMoves, expectedMoveResolution?.expectedMoveUci]);
   const moveImpactPresentation=useMemo(()=>presentMoveImpact({
     exactMoveAllowed:Boolean(coachDecision?.exactMoveAllowed),
     engineStatus:(coachDecision?.debug as any)?.coachEngineStatus??(enginePreview?.pvs?.length?"ready":"idle"),
@@ -2858,37 +2912,53 @@ export default function App(){
     let source="";
     let continuationPolicyDecision:ReturnType<typeof selectContinuedPlayMove>|null=null;
     if(mode==="restricted"){
-      if(!currentOpponentBookOptions.length){
-        setTrainingMode("continuation");
-        setUserExplicitlyEnteredContinuation(true);
-        setContinuationAnalysisStatus("opponent_replying");
-        setFeedback("Guided opponent branch ended. Continuing from here against the bot.");
-        setBrain(p=>({...p,book:"complete",source:"opponent branch exhausted",lichess:"ready"}));
-        scheduleOpponentReply({mode:"continuation",delayMs:0,baseFen:current.fen()});
-        return;
-      }
       const explorer=await loadExplorer(current.fen());
-      const valid=currentOpponentBookOptions.map(book=>{const match=explorer.find(m=>m.uci===book.uci);return{...book,weight:match?.total??1,pct:match?.pct??0,branchKey:`${positionKey}::${book.uci}`}});
-      const decision=selectOpponentCandidateWithVariation({
-        context:variationContext,
-        memory,
-        candidates:valid.map((candidate)=>({
-          uci:candidate.uci,
-          san:candidate.san,
-          branchKey:candidate.branchKey,
-          weight:candidate.weight,
-          legal:true,
-          supported:true,
-          engineSafe:true,
-          severeBlunder:false,
-          source:"opening_branch",
-          pct:candidate.pct,
-        })),
-      });
-      const weighted=decision?valid.find((candidate)=>candidate.branchKey===decision.selected.branchKey)??valid[0]:pickWeighted(valid);
-      variationDebug=decision?{...decision}:variationDebug;
-      chosen={san:weighted.san,uci:weighted.uci,fen:weighted.resultingFen};
-      source=weighted.pct?`Lichess-weighted opening branch (${weighted.pct}%)`:"Saved opening branch";
+      // Gate 3: Use real Lichess Opening Explorer moves for opponent opening replies (not limited to repertoire opponentBookOptions)
+      const playable = (explorer || []).map((m: any) => {
+        const a = applyUci(current.fen(), m.uci);
+        return a ? { ...a, weight: m.total || 1, pct: m.pct || 0, branchKey: `${positionKey}::${m.uci}` } : null;
+      }).filter(Boolean) as Array<{san:string;uci:string;fen:string;weight:number;pct:number;branchKey:string}>;
+
+      if(!playable.length){
+        // Fallback only if no Lichess data
+        if(!currentOpponentBookOptions.length){
+          setTrainingMode("continuation");
+          setUserExplicitlyEnteredContinuation(true);
+          setContinuationAnalysisStatus("opponent_replying");
+          setFeedback("Guided opponent branch ended. Continuing from here against the bot.");
+          setBrain(p=>({...p,book:"complete",source:"opponent branch exhausted",lichess:"ready"}));
+          scheduleOpponentReply({mode:"continuation",delayMs:0,baseFen:current.fen()});
+          return;
+        }
+        const valid=currentOpponentBookOptions.map(book=>{const match=explorer.find((m:any)=>m.uci===book.uci);return{...book,weight:match?.total??1,pct:match?.pct??0,branchKey:`${positionKey}::${book.uci}`}});
+        const weighted=valid[0] || pickWeighted(valid);
+        const resultingFenBook = (weighted as any).fen || (weighted as any).resultingFen;
+        chosen={san:weighted.san,uci:weighted.uci,fen:resultingFenBook};
+        source="Saved opening branch (no Lichess data)";
+        variationDebug = { ...variationDebug, fallbackUsed: true, opponentVariationReason: "no_lichess_data" };
+      } else {
+        const decision=selectOpponentCandidateWithVariation({
+          context:variationContext,
+          memory,
+          candidates:playable.map((candidate)=>({
+            uci:candidate.uci,
+            san:candidate.san,
+            branchKey:candidate.branchKey,
+            weight:candidate.weight,
+            legal:true,
+            supported:true,
+            engineSafe:true,
+            severeBlunder:false,
+            source:"lichess_opening_explorer",
+            pct:candidate.pct,
+          })),
+        });
+        const weighted = decision ? playable.find(c => c.branchKey === decision.selected.branchKey) ?? playable[0] : pickWeighted(playable);
+        variationDebug = decision ? {...decision, opponentVariationReason: "lichess_variation"} : {...variationDebug, opponentVariationReason: "lichess_weighted"};
+        const resultingFen = (weighted as any).fen || (weighted as any).resultingFen;
+        chosen={san:weighted.san,uci:weighted.uci,fen:resultingFen};
+        source=`Real Lichess Opening Explorer (${(weighted.pct ?? 0).toFixed(0)}% share)`;
+      }
     }else{
       const explorer=await loadExplorer(current.fen());
       const playable=explorer.map(m=>{const a=applyUci(current.fen(),m.uci);return a?{...a,weight:m.total,pct:m.pct,branchKey:`${positionKey}::${m.uci}`}:null}).filter(Boolean) as Array<{san:string;uci:string;fen:string;weight:number;pct:number;branchKey:string}>;
@@ -2997,6 +3067,13 @@ export default function App(){
         variationDebug.opponentVariationReason="no_supported_alternative";
       }
     }
+    // Post-selection normalization: ensure chosen always has a valid .fen (defensive for any shape or prior assignment bugs in Lichess/restricted paths)
+    if (chosen && !chosen.fen) {
+      const computed = applyUci(current.fen(), chosen.uci);
+      if (computed?.fen) {
+        chosen = { san: chosen.san, uci: chosen.uci, fen: computed.fen };
+      }
+    }
     const requestAfterCompute=pendingOpponentRequestRef.current;
     if(shouldFlagStaleOpponentReplyCommit({
       request:{requestId:request.requestId,baseFen:request.baseFen},
@@ -3053,6 +3130,24 @@ export default function App(){
       playedAt:Date.now(),
     });
     setOpponentVariationDebug(variationDebug);
+
+    if (!chosen || !chosen.fen) {
+      // Defensive: should not happen after selection + post-fixup, but recover with emergency legal to avoid stuck trainer
+      console.error("playOpponentMove: No valid chosen move after selection+fixup - forcing emergency legal");
+      const legal = current.moves({verbose:true}) as any[];
+      if (legal.length) {
+        const move = legal[0];
+        current.move({from:move.from,to:move.to,promotion:move.promotion??"q"});
+        chosen = {san:move.san,uci:moveToUci(move),fen:current.fen()};
+        source = (source || "") + " (forced emergency)";
+      } else {
+        clearPendingOpponentReplyRequest({clearStaleIssue:true});
+        setTrainerPhase("terminal");
+        setPendingOpponentRequest(null);
+        return;
+      }
+    }
+
     const next=new Chess(chosen.fen);
     const nextPhase:OverlayPhase=next.isGameOver()?"terminal":(next.turn()===userColor?"ready_for_user":"opponent_selecting");
     commitRuntimeFrame({nextFen:chosen.fen,nextPhase,recordHistory:true,clearPendingOpponentRequest:true});

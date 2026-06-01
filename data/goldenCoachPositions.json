@@ -1,0 +1,79 @@
+[
+  {
+    "id": "italian-e4",
+    "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    "trainingMode": "restricted",
+    "isUserTurn": true,
+    "expectedTargetUci": "e2e4",
+    "expectedTargetSan": "e4",
+    "expectedTargetPieceType": "p",
+    "displayMode": "assisted",
+    "showMoreClicked": false,
+    "expectedAssistedTitle": "Play e4.",
+    "expectedAssistedBody": "Claim space in the center and open lines for your bishop and queen.",
+    "notes": "First move of Italian Game"
+  },
+  {
+    "id": "italian-nf3",
+    "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+    "trainingMode": "restricted",
+    "isUserTurn": true,
+    "expectedTargetUci": "g1f3",
+    "expectedTargetSan": "Nf3",
+    "expectedTargetPieceType": "n",
+    "displayMode": "assisted",
+    "showMoreClicked": false,
+    "expectedAssistedTitle": "Play Nf3.",
+    "expectedAssistedBody": "Develop the knight toward the center and prepare safe king development."
+  },
+  {
+    "id": "italian-bc4",
+    "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2",
+    "trainingMode": "restricted",
+    "isUserTurn": true,
+    "expectedTargetUci": "f1c4",
+    "expectedTargetSan": "Bc4",
+    "expectedTargetPieceType": "b",
+    "displayMode": "assisted",
+    "showMoreClicked": false,
+    "expectedAssistedTitle": "Play Bc4.",
+    "expectedAssistedBody": "Move your bishop to c4, where it develops actively and pressures f7."
+  },
+  {
+    "id": "plain-no-leak",
+    "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2",
+    "trainingMode": "restricted",
+    "isUserTurn": true,
+    "expectedTargetUci": "f1c4",
+    "expectedTargetSan": "Bc4",
+    "expectedTargetPieceType": "b",
+    "displayMode": "plain",
+    "showMoreClicked": false,
+    "expectedPlainHint": "Develop the bishop actively.",
+    "notes": "Must not contain Bc4, c4, f1, or any UCI/SAN before Show More"
+  },
+  {
+    "id": "show-more-visual-reveal",
+    "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2",
+    "trainingMode": "restricted",
+    "isUserTurn": true,
+    "expectedTargetUci": "f1c4",
+    "expectedTargetSan": "Bc4",
+    "expectedTargetPieceType": "b",
+    "displayMode": "plain",
+    "showMoreClicked": true,
+    "expectedAssistedTitle": "Play Bc4.",
+    "expectedAssistedBody": "Move your bishop to c4, where it develops actively and pressures f7.",
+    "notes": "After Show More, visual recipe must exactly match what Assisted would render for f1c4"
+  },
+  {
+    "id": "branch-transition",
+    "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3",
+    "trainingMode": "restricted",
+    "isUserTurn": true,
+    "expectedTargetUci": null,
+    "displayMode": "assisted",
+    "showMoreClicked": false,
+    "notes": "End of a short line — must produce branch transition, no target coach or visual"
+  }
+]

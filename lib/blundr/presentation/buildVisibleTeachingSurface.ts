@@ -48,6 +48,11 @@ import {
 import { buildHintLadder } from "../brain/hints/buildHintLadder"; // v2.7.40 Agent 4: progressive non-leaking hints for Plain View
 import type { BlundrBrainAnalysis } from "../brain/types";
 
+// v2.7.42 Deterministic Coach Deployment Lock
+import { buildEvidenceGraph } from "../brain/buildEvidenceGraph";
+import { compileCoachFrame } from "../coachCompiler";
+import { applyCoachSafetyGate } from "../safety/CoachSafetyGate";
+
 /**
  * Agent 6 plain leak detector (runtime guard, pre-showMore Plain View).
  * Scans final visible strings (coach title/body/hint from ladder, actions) for forbidden:
@@ -368,7 +373,62 @@ export function buildVisibleTeachingSurface(
 
   let coachTitle: string | null = null;
   let coachBody: string | null = null;
-  if (coachShouldRender) {
+  let deterministicCompiled: any = null; // v2.7.42: capture for later hint/showMore use and debug observability (hoisted)
+
+  // === v2.7.42 Deterministic Coach Path (preferred for brain teaching frames with trusted target) ===
+  // Use EvidenceGraph + Compiler + SafetyGate as the authoritative source when we have a good instruction target.
+  if (isBrainTeachingFrame && instructionTarget && !safetyBlocked) {
+    try {
+      const evidence = buildEvidenceGraph(currentInstructionFrame);
+      const compiled = compileCoachFrame({
+        frame: currentInstructionFrame,
+        evidenceGraph: evidence,
+        displayMode: trainerView as "assisted" | "plain",
+        showMoreClicked: showMoreShown,
+      });
+      deterministicCompiled = compiled;
+
+      // Run the full safety gate again with compiled data (defense in depth)
+      const safetyCheck = applyCoachSafetyGate({
+        frameKind: (currentInstructionFrame as any).kind || "guided",
+        instructionTargetUci: targetUci,
+        instructionTargetPieceType: targetPieceType,
+        compiledCoach: {
+          targetUci: compiled.targetUci,
+          targetPieceType: compiled.targetPieceType,
+          coachMoveUci: compiled.targetUci,
+          coachPieceType: compiled.targetPieceType,
+          visualMoveUci: compiled.targetUci,
+          showMoreTargetUci: compiled.targetUci,
+          assisted: compiled.assisted,
+          plain: compiled.plain,
+          showMore: compiled.showMore,
+          visualIntents: compiled.visualIntents || [],
+        },
+        evidenceClaimIds: evidence.evidenceClaimIds,
+        displayMode: trainerView as "assisted" | "plain",
+        showMoreClicked: showMoreShown,
+      } as any);
+
+      if (safetyCheck.isSafe) {
+        if (isPlainPreShowMore) {
+          coachTitle = "Find the next move";
+          coachBody = compiled.plain?.hint || progressiveHint || null;
+        } else {
+          coachTitle = compiled.assisted?.title || compiled.showMore?.title || null;
+          coachBody = compiled.assisted?.body || compiled.showMore?.body || null;
+        }
+      } else {
+        // Safety blocked the deterministic output — fall back to safe neutral
+        coachTitle = "Training position";
+        coachBody = "Focus on the key idea for this move.";
+      }
+    } catch (e) {
+      // On any failure in new path, fall back gracefully to preserve trainer stability
+      coachTitle = trainerPresentationFrame.coach.title ?? "Training position";
+      coachBody = trainerPresentationFrame.coach.body ?? "Focus on the key idea for this move.";
+    }
+  } else if (coachShouldRender) {
     if (isPlainPreShowMore) {
       // Prompt + progressive non-leaking hint (no full assisted body yet)
       coachTitle = "Find the next move";
@@ -405,21 +465,35 @@ export function buildVisibleTeachingSurface(
     ? "plain_view_pre_showmore_prompt_only"
     : trainerPresentationFrame?.coach?.suppressedReason ?? null;
 
-  // Hint (Agent 4): now driven by ladder for Plain; suppressed on block. Current progressive only pre-showMore.
+  // Hint (Agent 4 + v2.7.42): prefer deterministicCompiled.plain.hint when deterministic path succeeded
   const hintSuppressed = safetyBlocked;
-  const hintText = !hintSuppressed ? (progressiveHint || (isPlainPreShowMore ? null : (trainerPresentationFrame?.coach?.title ? `Focus on the key idea.` : null))) : null;
+  let hintText = !hintSuppressed ? (progressiveHint || (isPlainPreShowMore ? null : (trainerPresentationFrame?.coach?.title ? `Focus on the key idea.` : null))) : null;
+  if (isBrainTeachingFrame && instructionTarget && !safetyBlocked && deterministicCompiled?.plain?.hint) {
+    hintText = deterministicCompiled.plain.hint;
+  }
 
-  // ShowMore
-  const showMoreContent = showMoreShown && !safetyBlocked ? (coachBody || trainerPresentationFrame?.coach?.body || null) : null;
+  // ShowMore (v2.7.42): when shown, prefer the compiled showMore body (which equals Assisted per contract)
+  let showMoreContent = showMoreShown && !safetyBlocked ? (coachBody || trainerPresentationFrame?.coach?.body || null) : null;
+  if (showMoreShown && isBrainTeachingFrame && instructionTarget && !safetyBlocked && deterministicCompiled?.showMore?.body) {
+    showMoreContent = deterministicCompiled.showMore.body;
+  }
   const showMoreActionAvailable = actions.includes("show_more");
 
-  // Visual from presentation ONLY when aligned + not plain-pre + not blocked
-  // v2.7.40 P0 Fix 2: block any legacy visual source ( "legacy" or "legacy_fallback" ) on teaching frames; surface owns.
-  const visualShouldRender =
+  // v2.7.42 Stockfish-gated stabilization: Show More assisted-highlight reveal
+  // In Plain View, the assisted target visual is only revealed after Show More for the current frameKey.
+  const showMoreRevealedForCurrentFrame = showMoreShown && isBrainTeachingFrame;
+
+  const shouldShowAssistedVisual =
     !safetyBlocked &&
     !isPlainPreShowMore &&
     (trainerPresentationFrame?.visual?.shouldRender ?? false) &&
-    !isLegacyVisualSource; // legacy visual suppressed on teaching per rules
+    !isLegacyVisualSource &&
+    // In plain mode, only show the target visual after explicit Show More for this exact frame
+    (trainerView !== "plain" || showMoreRevealedForCurrentFrame);
+
+  // Visual from presentation ONLY when aligned + not plain-pre + not blocked
+  // v2.7.40 P0 Fix 2: block any legacy visual source ( "legacy" or "legacy_fallback" ) on teaching frames; surface owns.
+  const visualShouldRender = shouldShowAssistedVisual;
 
   const visualLines = visualShouldRender ? (trainerPresentationFrame.visual.lines ?? []) : [];
   const visualHighlights = visualShouldRender ? (trainerPresentationFrame.visual.highlights ?? []) : [];
@@ -494,9 +568,11 @@ export function buildVisibleTeachingSurface(
       frameAligned: !anyMismatch && presentationProvidesContent,
       plainPreShowMore: isPlainPreShowMore,
       computedAt: new Date().toISOString(),
+      // v2.7.42: when the deterministic Evidence + Compiler + Safety path supplied the coach content
+      // (visible via visibleCoachOwner === "deterministic_v2_7_42_compiler")
       // Agent 6 visible owner + invariant details for debug snapshot consumption
       visibleSurfaceOwner: owner,
-      visibleCoachOwner: isPlainPreShowMore ? "plain_hint_ladder" : presentationCoachOwner,
+      visibleCoachOwner: isPlainPreShowMore ? "plain_hint_ladder" : (deterministicCompiled ? "deterministic_v2_7_42_compiler" : presentationCoachOwner),
       visibleVisualOwner: visualSource || presentationVisualSource || "none",
       visibleActionOwner: "visibleActionPolicy",
       plainLeakDetected,
