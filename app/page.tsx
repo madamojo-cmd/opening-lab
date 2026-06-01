@@ -861,6 +861,81 @@ export default function App(){
     allowEngineFallbackInRestricted:false,
   }),[openingTree,fen,trainerPhase,trainingMode,trainerView,isUserTurn,userColor,opponentColor,lastMoveColor,lastMove,lastMoveSan,enginePreview]);
   const expectedMoveResolverDebug=useMemo(()=>buildOpeningResolverDebug(expectedMoveResolution),[expectedMoveResolution]);
+
+  // v2.7.41 TDZ Fix: expectedMovesForValidation + curated / lichess end signals placed early
+  // (strict ordering: after expectedMoveResolution, before continuationPolicyCandidate and anything that consumes them)
+  const expectedMovesForValidation = useMemo(() => {
+    // Must be computed only from raw upstream state and/or expectedMoveResolution.
+    // Never from continuationPolicyCandidate, currentInstructionFrame, or instructionTarget.
+    const candidates = expectedMoveResolution?.candidateMoves ?? [];
+    return candidates
+      .filter((move) => move.color === userColor)
+      .map((move) => ({
+        uci: typeof move.uci === "string" ? move.uci.trim().toLowerCase() : "",
+        san: typeof move.san === "string" ? move.san : undefined,
+      }))
+      .filter((move) => move.uci);
+  }, [expectedMoveResolution?.candidateMoves, userColor]);
+
+  const expectedMovesForValidationKey = useMemo(
+    () => expectedMovesForValidation.map((move) => `${move.uci}:${move.san ?? ""}`).join("|"),
+    [expectedMovesForValidation]
+  );
+
+  // v2.7.41 HOTFIX: Strict confirmed End-of-Book using real lineCursor/lineLength from resolver
+  // Never infer from temporary expectedMovesForValidation.length === 0 or source includes("curated"/"terminal")
+  const selectedLineCompleteConfirmed = useMemo(() => {
+    const len = expectedMoveResolution?.lineLength ?? 0;
+    const cur = expectedMoveResolution?.lineCursor ?? 0;
+    return len > 0 && cur >= len;
+  }, [expectedMoveResolution?.lineCursor, expectedMoveResolution?.lineLength]);
+
+  const lichessTotalGames = useMemo(() => {
+    if (!explorerMoves || explorerMoves.length === 0) return null;
+    return explorerMoves.reduce((sum, m) => sum + (m.total || 0), 0);
+  }, [explorerMoves]);
+
+  const lichessStatsStatus = brain.lichess === "loading" ? "loading" : (explorerMoves.length > 0 ? "resolved" : "pending");
+
+  const lichessEndConfirmed = useMemo(() => {
+    return lichessStatsStatus === "resolved" && lichessTotalGames !== null && lichessTotalGames < 500;
+  }, [lichessStatsStatus, lichessTotalGames]);
+
+  // Loading detection for instruction frames (prevents flashing Continue during transient states)
+  const isInstructionLoading = useMemo(() => {
+    if (trainerPhase !== "ready_for_user") return true;
+    if (moveQualityPending || visualModelPending) return true;
+    if (continuationAnalysisStatus === "analyzing") return true;
+    if (brain.lichess === "loading") return true;
+    // Transient resolver with no trusted guidance yet (between frames / pending data)
+    if ((expectedMoveResolution?.source ?? "") === "none" && !bookComplete && trainingMode === "restricted") return true;
+    return false;
+  }, [
+    trainerPhase,
+    moveQualityPending,
+    visualModelPending,
+    continuationAnalysisStatus,
+    brain.lichess,
+    expectedMoveResolution?.source,
+    bookComplete,
+    trainingMode,
+  ]);
+
+  const hardEndOfBookGate = useMemo(() => {
+    if (isInstructionLoading) return false;
+    if (!isUserTurn) return false;
+    if (trainingMode !== "restricted") return false;
+    if (userExplicitlyEnteredContinuation) return false;
+    return selectedLineCompleteConfirmed || lichessEndConfirmed;
+  }, [
+    isInstructionLoading,
+    isUserTurn,
+    trainingMode,
+    userExplicitlyEnteredContinuation,
+    selectedLineCompleteConfirmed,
+    lichessEndConfirmed,
+  ]);
+
   const opponentBookOptions=exactOpeningNodes.flatMap((node)=>node.continuations).filter((move,index,all)=>move.color===opponentColor&&all.findIndex((candidate)=>candidate.uci===move.uci)===index).map((move)=>({
     san:move.san,
     uci:move.uci,
@@ -892,6 +967,15 @@ export default function App(){
   const currentView=annotation[safeBoardView]??annotation.plan;
   const engineLines=enginePreview&&normalizeFen(enginePreview.fen)===normalizeFen(fen)?enginePreview.pvs:[];
   const continuationPolicyCandidate=useMemo(()=>{
+    // Strict hotfix gate: only confirmed line complete (cursor >= length) or resolved Lichess <500
+    const isHardEndOfBookForCandidate =
+      (selectedLineCompleteConfirmed || lichessEndConfirmed) &&
+      !userExplicitlyEnteredContinuation;
+
+    if (isHardEndOfBookForCandidate) {
+      return null;
+    }
+
     if(trainingMode!=="continuation"||!isUserTurn)return null;
     const legalVerboseMoves=(game.moves({verbose:true}) as any[]);
     if(game.isGameOver()||legalVerboseMoves.length===0)return null;
@@ -931,8 +1015,65 @@ export default function App(){
         fallbackMoveUci:applied.uci,
       }:policy.debug,
     };
-  },[trainingMode,isUserTurn,fen,game,explorerMoves,engineLines,lastMove]);
+  },[
+    trainingMode,
+    isUserTurn,
+    fen,
+    game,
+    explorerMoves,
+    engineLines,
+    lastMove,
+    selectedLineCompleteConfirmed,
+    lichessEndConfirmed,
+    userExplicitlyEnteredContinuation,
+  ]);
   const currentInstructionFrame=useMemo(()=>{
+    // HOTFIX: Loading takes absolute precedence — show Thinking..., never Continue or candidates
+    if (isInstructionLoading) {
+      return {
+        frameKey: "thinking",
+        kind: "thinking",
+        target: null,
+        instructionTarget: null,
+        expectedMoveUci: null,
+        expectedMoveSan: null,
+        selectedContinuationCandidate: null,
+        currentSelectedCandidateUci: null,
+        continuationCandidateReady: false,
+        continueFromHereAvailable: false,
+        continueFromHereButtonRendered: false,
+        branchTransitionSurfaceRendered: false,
+        branchTransitionPayloadValid: false,
+        coachTitle: "Thinking...",
+        coachBody: "Finding the next teaching moment.",
+        actions: [],
+      } as any;
+    }
+
+    // Only confirmed End-of-Book (cursor >= lineLength or resolved Lichess <500) may produce the branch transition
+    if (hardEndOfBookGate && !userExplicitlyEnteredContinuation) {
+      return {
+        frameKey: "end-of-book-transition",
+        kind: "branch_transition",
+        target: null,
+        instructionTarget: null,
+        expectedMoveUci: null,
+        expectedMoveSan: null,
+        selectedContinuationCandidate: null,
+        currentSelectedCandidateUci: null,
+        continuationCandidateReady: false,
+        continueFromHereAvailable: true,
+        continueFromHereButtonRendered: true,
+        branchTransitionSurfaceRendered: true,
+        branchTransitionPayloadValid: true,
+        coachTitle: selectedLineCompleteConfirmed
+          ? "Opening line complete."
+          : "You are leaving common opening territory.",
+        coachBody: "Continue from here?",
+        actions: ["continue_from_here"],
+      } as any;
+    }
+
     const thisFrameKey = computeInstructionFrameKey({
       fen,
       trainingMode,
@@ -974,7 +1115,21 @@ export default function App(){
       }:null,
       preferredTargetKind:trainingMode==="continuation"?"continuation_candidate":"guided_move",
     });
-  },[trainerFrameId,fen,trainingMode,trainerPhase,trainerView,isUserTurn,expectedMoveResolution,engineLines,continuationPolicyCandidate]);
+  },[
+    trainerFrameId,
+    fen,
+    trainingMode,
+    trainerPhase,
+    trainerView,
+    isUserTurn,
+    expectedMoveResolution,
+    engineLines,
+    continuationPolicyCandidate,
+    isInstructionLoading,
+    hardEndOfBookGate,
+    userExplicitlyEnteredContinuation,
+    selectedLineCompleteConfirmed,
+  ]);
   const instructionTarget=currentInstructionFrame.target;
 
   // v2.7.39.1 Target Locking: record the official continuation candidate under its stable frame key
@@ -1018,11 +1173,8 @@ export default function App(){
   const currentSelectedCandidateSource=instructionTarget?.source??"none";
   const currentSelectedCandidateLegal=Boolean(currentSelectedCandidateUci&&(game.moves({verbose:true}) as any[]).some((move)=>moveToUci(move)===currentSelectedCandidateUci));
   const expectedUserOptionsSignature=expectedUserOptions.map((move)=>`${move.uci??""}:${move.san??""}`).join("|");
-  const expectedMovesForValidation=useMemo(()=>expectedUserOptions.map((move)=>({
-    uci:typeof move.uci==="string"?move.uci.trim().toLowerCase():"",
-    san:typeof move.san==="string"?move.san:undefined,
-  })).filter((move)=>move.uci),[expectedUserOptionsSignature]);
-  const expectedMovesForValidationKey=useMemo(()=>expectedMovesForValidation.map((move)=>`${move.uci}:${move.san??""}`).join("|"),[expectedMovesForValidation]);
+  // expectedMovesForValidation and expectedMovesForValidationKey are now declared early (from expectedMoveResolution only)
+  // to satisfy declaration ordering and eliminate TDZ in continuationPolicyCandidate + hardEndOfBookGate consumers.
   const expectedUserUcis=expectedMovesForValidation.map(move=>move.uci);
   const expectedUserSans=expectedMovesForValidation.map(move=>move.san).filter(Boolean) as string[];
   const frameKey=useMemo(()=>buildRuntimeFrameKey({
@@ -1641,31 +1793,23 @@ export default function App(){
     engineValidationStatus:(coachDecision?.debug as any)?.coachEngineStatus??(enginePreview?.pvs?.length?"ready":"idle"),
     visualRecipeValid:Boolean(visualRecipe&&visualRecipeOverlay.adapterAllowed&&trainerPhase==="ready_for_user"&&isUserTurn),
   }),[coachDecision,coachHiddenForFrame,trainingMode,trainerView,expectedUserOptions.length,moveQuality?.status,enginePreview,visualRecipe,visualRecipeOverlay.adapterAllowed,trainerPhase,isUserTurn]);
+  // v2.7.41 HOTFIX: branchTransitionSurface now strictly driven by hardEndOfBookGate (confirmed only)
   const branchTransitionSurface=useMemo(()=>{
-    const needsTransition=
-      activeTab==="train" &&
-      trainingMode==="restricted" &&
-      trainerPhase==="ready_for_user" &&
-      isUserTurn &&
-      !bookComplete &&
-      !coachHiddenForFrame &&
-      !coachDecision?.shouldShowCoachCard &&
-      !currentSelectedCandidateUci &&
-      (expectedMoveResolution.source==="guided_branch_needs_continuation" || expectedMoveResolution.source==="none");
-    if(!needsTransition){
+    if (!hardEndOfBookGate) {
       return null;
     }
-    const reason=expectedMoveResolution.reason==="repertoire_line_exhausted_needs_continuation"
+    const isCurated = selectedLineCompleteConfirmed;
+    const reason = isCurated
       ? "This branch is beyond the guided line. Continue from here to practice adapting."
-      : "This branch is not fully mapped yet. Continue from here to practice adapting.";
+      : "You are leaving common opening territory. Continue from here.";
     return {
-      render:true,
-      title:"Continue from here",
-      body:reason,
-      buttons:["continue_from_here"],
-      reason:expectedMoveResolution.reason,
+      render: true,
+      title: isCurated ? "Opening line complete" : "Leaving common opening territory",
+      body: reason,
+      buttons: ["continue_from_here"] as const,
+      reason: isCurated ? "curated_line_complete" : "lichess_below_500_games",
     } as const;
-  },[activeTab,trainingMode,trainerPhase,isUserTurn,bookComplete,coachHiddenForFrame,coachDecision?.shouldShowCoachCard,currentSelectedCandidateUci,expectedMoveResolution.source,expectedMoveResolution.reason]);
+  }, [hardEndOfBookGate, selectedLineCompleteConfirmed]);
   const moveImpactPresentation=useMemo(()=>presentMoveImpact({
     exactMoveAllowed:Boolean(coachDecision?.exactMoveAllowed),
     engineStatus:(coachDecision?.debug as any)?.coachEngineStatus??(enginePreview?.pvs?.length?"ready":"idle"),
