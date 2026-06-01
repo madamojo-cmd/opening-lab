@@ -46,7 +46,15 @@ function deterministicPick(candidates: ContinuedCandidate[]): ContinuedCandidate
   return sorted[0] ?? null;
 }
 
-function emergencyFallbackMove(fen: string): { uci: string; san: string } | null {
+function isImmediateReverse(prevUci: string | null | undefined, candidateUci: string): boolean {
+  // v2.7.40 guard: detect simple back-and-forth (Ra1<->Ra2 etc) that creates A-B-A-B loop in emergency
+  if (!prevUci || prevUci.length < 4 || candidateUci.length < 4) return false;
+  const pFrom = prevUci.slice(0, 2), pTo = prevUci.slice(2, 4);
+  const cFrom = candidateUci.slice(0, 2), cTo = candidateUci.slice(2, 4);
+  return cFrom === pTo && cTo === pFrom;
+}
+
+function emergencyFallbackMove(fen: string, lastMoveUci?: string | null): { uci: string; san: string } | null {
   try {
     const chess = new Chess(fen);
     const legal = chess.moves({ verbose: true }) as any[];
@@ -63,7 +71,14 @@ function emergencyFallbackMove(fen: string): { uci: string; san: string } | null
     });
 
     scored.sort((a, b) => b.score - a.score || a.mv.from.localeCompare(b.mv.from) || a.mv.to.localeCompare(b.mv.to));
-    const top = scored[0]?.mv;
+    let top = scored[0]?.mv;
+    if (top && lastMoveUci) {
+      const topUci = `${top.from}${top.to}${top.promotion ?? ""}`;
+      if (isImmediateReverse(lastMoveUci, topUci) && scored.length > 1) {
+        // Prefer non-reverse to break Ra1/Ra2 etc ping-pong; only if another exists
+        top = scored[1].mv;
+      }
+    }
     if (!top) return null;
     return { uci: `${top.from}${top.to}${top.promotion ?? ""}`, san: top.san };
   } catch {
@@ -77,6 +92,7 @@ export function selectContinuedPlayMove(input: {
   repertoireCandidates?: ContinuedCandidate[];
   lichessCandidates?: ContinuedCandidate[];
   engineTop?: ContinuedCandidate | null;
+  lastMoveUci?: string | null; // v2.7.40 P1: for emergency reverse-shuffle guard (prevent Ra1<->Ra2 A-B-A-B)
 }): ContinuedPlayPolicyDecision | null {
   const book = (input.bookCandidates ?? []).filter((c) => c.uci && c.supported !== false);
   const rep = (input.repertoireCandidates ?? []).filter((c) => c.uci && c.supported !== false);
@@ -148,7 +164,12 @@ export function selectContinuedPlayMove(input: {
     return finalize(unvalidated.uci, unvalidated.san, "human_continuation_unverified", "no_engine_or_supported_alternative", "human_unverified");
   }
 
-  const emergency = emergencyFallbackMove(input.fen);
+  const emergency = emergencyFallbackMove(input.fen, input.lastMoveUci);
   if (!emergency) return null;
+  // Post-guard: if even after avoid, it still reverses (only legal was reverse), prefer to return null so caller can terminal cleanly
+  if (input.lastMoveUci && isImmediateReverse(input.lastMoveUci, emergency.uci)) {
+    // No safe non-reverse emergency; let caller stop continuation instead of looping
+    return null;
+  }
   return finalize(emergency.uci, emergency.san, "emergency_legal_fallback", "no_supported_moves_available", "fallback");
 }

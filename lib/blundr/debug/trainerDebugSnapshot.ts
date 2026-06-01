@@ -772,7 +772,8 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       legacyNextTextActuallyRendered: input.legacyNextTextActuallyRendered ?? false,
       liveCoachStateExists: Boolean(input.liveCoachState),
       liveCoachWouldRender: Boolean(input.liveCoachState && !input.liveCoachState.silent),
-      liveCoachActuallyRendered: input.coachDecision?.debug?.coachCopySource === "live_coach",
+      // v2.7.40 P0 Fix 2: when VisibleTeachingSurface owns the coach render on teaching, live coach path is not "actually rendered" visibly (internal evidence only).
+      liveCoachActuallyRendered: input.visibleTeachingSurface?.coach?.shouldRender ? false : (input.coachDecision?.debug?.coachCopySource === "live_coach"),
       legacySuppressionReasons: [input.coachSurfacePolicy?.reason, presentation.legacy?.legacySuppressedReason].filter(Boolean),
       legacyBypassDetected: Boolean(input.legacyBypassDetected || input.legacyBypassDetectedFromSurface || input.visibleTeachingSurface?.safety?.legacyBypassDetected),
       memoryMigratedOrCleared: Boolean(input.memoryMigratedOrCleared),

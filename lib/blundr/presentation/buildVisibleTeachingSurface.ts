@@ -237,6 +237,8 @@ export function buildVisibleTeachingSurface(
   const presentationCoachUci = null; // presentation currently does not carry per-coach uci; rely on frame target
   const presentationVisualSource = trainerPresentationFrame?.visual?.source ?? "none";
   const presentationCoachOwner = trainerPresentationFrame?.coach?.owner ?? "none";
+  // Early for mismatch guard (defined before use)
+  const isLegacyVisualSource = presentationVisualSource === "legacy" || presentationVisualSource === "legacy_fallback";
 
   // Detect legacy bypass usage (for debug + safety flag only)
   const legacyBypassDetected = Boolean(
@@ -250,7 +252,8 @@ export function buildVisibleTeachingSurface(
     targetMismatch = legacyCoachDecision.targetUci !== targetUci;
   }
   // Also flag if presentation claims visual but we can detect divergence in future (for now use source)
-  if (presentationVisualSource === "legacy_fallback" && isBrainTeachingFrame) {
+  // v2.7.40: any legacy visual source on teaching is mismatch risk (quarantined)
+  if (isLegacyVisualSource && isBrainTeachingFrame) {
     // legacy visual on brain frame is a form of mismatch risk
     targetMismatch = targetMismatch || true;
   }
@@ -413,11 +416,12 @@ export function buildVisibleTeachingSurface(
   const showMoreActionAvailable = actions.includes("show_more");
 
   // Visual from presentation ONLY when aligned + not plain-pre + not blocked
+  // v2.7.40 P0 Fix 2: block any legacy visual source ( "legacy" or "legacy_fallback" ) on teaching frames; surface owns.
   const visualShouldRender =
     !safetyBlocked &&
     !isPlainPreShowMore &&
     (trainerPresentationFrame?.visual?.shouldRender ?? false) &&
-    presentationVisualSource !== "legacy_fallback"; // legacy visual suppressed on teaching per rules
+    !isLegacyVisualSource; // legacy visual suppressed on teaching per rules
 
   const visualLines = visualShouldRender ? (trainerPresentationFrame.visual.lines ?? []) : [];
   const visualHighlights = visualShouldRender ? (trainerPresentationFrame.visual.highlights ?? []) : [];

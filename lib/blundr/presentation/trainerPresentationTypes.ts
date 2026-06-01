@@ -5,7 +5,7 @@ export interface TrainerPresentationFrame {
   normalizedFen: string;
   visual: {
     shouldRender: boolean;
-    source: "visual_recipe" | "continuation_candidate" | "guided_target_fallback" | "legacy_fallback" | "none";
+    source: "visual_recipe" | "continuation_candidate" | "guided_target_fallback" | "legacy" | "legacy_fallback" | "none";
     lines: unknown[];
     squareStyles?: Record<string, unknown>;
     highlights?: unknown[];

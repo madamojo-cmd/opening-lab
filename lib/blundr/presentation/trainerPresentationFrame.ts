@@ -127,7 +127,9 @@ export function computeTrainerPresentationFrame(input: ComputeTrainerPresentatio
     } else if (safeMoveLines.length) {
       visual = { ...visual, owner: "instruction_target", source: "guided_target_fallback", shouldRender: true, lines: safeMoveLines, blockedReason: "none" };
     } else if (legacyLines.length) {
-      visual = { ...visual, owner: "legacy", source: "legacy", shouldRender: true, lines: legacyLines, blockedReason: "none" };
+      // v2.7.40 P0 Fix 2: do not promote legacy visual to visible on teaching frames; surface + recipe/brain own.
+      // Keep as evidence only (source=legacy still detectable in debug but shouldRender=false for UI).
+      visual = { ...visual, owner: "legacy", source: "legacy", shouldRender: false, lines: legacyLines, blockedReason: "legacy_visual_quarantined_on_teaching_frame" };
     }
   }
 
