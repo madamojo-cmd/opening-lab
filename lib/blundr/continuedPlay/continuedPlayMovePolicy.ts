@@ -6,23 +6,37 @@ export type ContinuedCandidate = {
   source: "book" | "repertoire" | "lichess" | "engine" | "fallback";
   weight?: number;
   pct?: number;
+  games?: number;
+  playRate?: number;
   engineSafe?: boolean;
   supported?: boolean;
+  stockfishLegal?: boolean;
+  stockfishInTop10?: boolean;
+  stockfishRank?: number;
 };
 
 export type ContinuedPlayPolicyDecision = {
   selectedUci: string;
   selectedSan?: string;
-  source: "book_supported" | "repertoire_supported" | "lichess_engine_validated" | "engine_top" | "human_continuation_unverified" | "emergency_legal_fallback";
+  source: "book_supported" | "repertoire_supported" | "lichess_engine_validated" | "engine_top" | "human_continuation_unverified" | "emergency_legal_fallback" | "no_reliable_continuation";
   reason: string;
   debug: {
     candidates: Array<{
       moveUci: string;
       moveSan?: string;
       source: ContinuedCandidate["source"];
-      safetyStatus: "safe" | "supported" | "unverified" | "engine_top" | "fallback";
+      safetyStatus: "safe" | "supported" | "unverified" | "engine_top" | "fallback" | "rejected";
       selectionScore: number;
       blockedReason?: string;
+      games?: number;
+      playRate?: number;
+      passes500?: boolean;
+      passes18?: boolean;
+      stockfishLegal?: boolean;
+      stockfishInTop10?: boolean;
+      stockfishRank?: number;
+      accepted?: boolean;
+      rejectionReason?: string;
     }>;
     selectedMoveInCandidateList: boolean;
     selectionConsistency: "consistent" | "inconsistent";
@@ -40,17 +54,56 @@ export type ContinuationPauseDecision = {
   currentPlyCount: number;
 };
 
-function deterministicPick(candidates: ContinuedCandidate[]): ContinuedCandidate | null {
+const MIN_CONTINUATION_GAMES = 500;
+const MIN_CONTINUATION_PLAY_RATE = 0.18;
+
+function candidateGames(candidate: ContinuedCandidate): number {
+  return Number(candidate.games ?? candidate.weight ?? 0) || 0;
+}
+
+function candidatePlayRate(candidate: ContinuedCandidate): number {
+  const raw = Number(candidate.playRate ?? candidate.pct ?? 0) || 0;
+  return raw > 1 ? raw / 100 : raw;
+}
+
+export function isSupportedContinuationCandidate(candidate: ContinuedCandidate): boolean {
+  return candidateGames(candidate) >= MIN_CONTINUATION_GAMES && candidatePlayRate(candidate) >= MIN_CONTINUATION_PLAY_RATE;
+}
+
+function stockfishValidated(candidate: ContinuedCandidate): boolean {
+  if (candidate.stockfishLegal === false) return false;
+  if (candidate.stockfishInTop10 === true) return true;
+  if (typeof candidate.stockfishRank === "number" && candidate.stockfishRank >= 1 && candidate.stockfishRank <= 10) return true;
+  return candidate.engineSafe === true;
+}
+
+function rejectionReason(candidate: ContinuedCandidate, requireDatabaseAndEngine: boolean): string | undefined {
+  const passes500 = candidateGames(candidate) >= MIN_CONTINUATION_GAMES;
+  const passes18 = candidatePlayRate(candidate) >= MIN_CONTINUATION_PLAY_RATE;
+  const inTop10 = stockfishValidated(candidate);
+  if (!passes500) return "below_500_games";
+  if (!passes18) return "below_18_percent";
+  if (requireDatabaseAndEngine && !inTop10) return "not_stockfish_top10";
+  if (!candidate.engineSafe && !candidate.supported && !inTop10) return "missing_engine_or_support";
+  return undefined;
+}
+
+function deterministicPick(candidates: ContinuedCandidate[], preferStockfishRank = false): ContinuedCandidate | null {
   if (!candidates.length) return null;
   const sorted = candidates
     .slice()
     .sort((a, b) => {
-      const aw = a.weight ?? 0;
-      const bw = b.weight ?? 0;
-      if (bw !== aw) return bw - aw;
-      const ap = a.pct ?? 0;
-      const bp = b.pct ?? 0;
+      if (preferStockfishRank) {
+        const ar = typeof a.stockfishRank === "number" ? a.stockfishRank : 999;
+        const br = typeof b.stockfishRank === "number" ? b.stockfishRank : 999;
+        if (ar !== br) return ar - br;
+      }
+      const ap = candidatePlayRate(a);
+      const bp = candidatePlayRate(b);
       if (bp !== ap) return bp - ap;
+      const aw = candidateGames(a);
+      const bw = candidateGames(b);
+      if (bw !== aw) return bw - aw;
       return a.uci.localeCompare(b.uci);
     });
   return sorted[0] ?? null;
@@ -96,32 +149,55 @@ function emergencyFallbackMove(fen: string, lastMoveUci?: string | null): { uci:
   }
 }
 
+function buildDebugCandidate(candidate: ContinuedCandidate, requireDatabaseAndEngine: boolean, acceptedOverride?: boolean): ContinuedPlayPolicyDecision["debug"]["candidates"][number] {
+  const games = candidateGames(candidate);
+  const playRate = candidatePlayRate(candidate);
+  const passes500 = games >= MIN_CONTINUATION_GAMES;
+  const passes18 = playRate >= MIN_CONTINUATION_PLAY_RATE;
+  const inTop10 = stockfishValidated(candidate);
+  const rejected = rejectionReason(candidate, requireDatabaseAndEngine);
+  const accepted = acceptedOverride ?? !rejected;
+  const rankScore = typeof candidate.stockfishRank === "number" ? 1000 - candidate.stockfishRank : 0;
+  return {
+    moveUci: candidate.uci,
+    moveSan: candidate.san,
+    source: candidate.source,
+    safetyStatus: accepted ? (inTop10 ? "safe" : candidate.supported ? "supported" : candidate.engineSafe ? "engine_top" : "unverified") : "rejected",
+    selectionScore: rankScore + games + Math.round(playRate * 1000),
+    blockedReason: rejected,
+    games,
+    playRate,
+    passes500,
+    passes18,
+    stockfishLegal: candidate.stockfishLegal !== false,
+    stockfishInTop10: inTop10,
+    stockfishRank: candidate.stockfishRank,
+    accepted,
+    rejectionReason: rejected,
+  };
+}
+
 export function selectContinuedPlayMove(input: {
   fen: string;
   bookCandidates?: ContinuedCandidate[];
   repertoireCandidates?: ContinuedCandidate[];
   lichessCandidates?: ContinuedCandidate[];
   engineTop?: ContinuedCandidate | null;
+  engineTopMoves?: ContinuedCandidate[];
   lastMoveUci?: string | null; // v2.7.40 P1: for emergency reverse-shuffle guard (prevent Ra1<->Ra2 A-B-A-B)
+  requireReliableDatabaseMove?: boolean;
 }): ContinuedPlayPolicyDecision | null {
+  const requireReliableDatabaseMove = input.requireReliableDatabaseMove === true;
   const book = (input.bookCandidates ?? []).filter((c) => c.uci && c.supported !== false);
   const rep = (input.repertoireCandidates ?? []).filter((c) => c.uci && c.supported !== false);
   const lichess = (input.lichessCandidates ?? []).filter((c) => c.uci);
+  const engineMoves = (input.engineTopMoves ?? (input.engineTop ? [input.engineTop] : [])).filter((c) => c.uci);
 
   const debugCandidates: ContinuedPlayPolicyDecision["debug"]["candidates"] = [
-    ...book.map((c) => ({ moveUci: c.uci, moveSan: c.san, source: c.source, safetyStatus: "supported" as const, selectionScore: (c.weight ?? 0) + 100 })),
-    ...rep.map((c) => ({ moveUci: c.uci, moveSan: c.san, source: c.source, safetyStatus: "supported" as const, selectionScore: (c.weight ?? 0) + 80 })),
-    ...lichess.map((c) => ({
-      moveUci: c.uci,
-      moveSan: c.san,
-      source: c.source,
-      safetyStatus: c.engineSafe || c.supported ? ("safe" as const) : ("unverified" as const),
-      selectionScore: (c.weight ?? 0) + (c.engineSafe || c.supported ? 40 : 0),
-      blockedReason: c.engineSafe || c.supported ? undefined : "missing_engine_or_support",
-    })),
-    ...(input.engineTop?.uci
-      ? [{ moveUci: input.engineTop.uci, moveSan: input.engineTop.san, source: "engine" as const, safetyStatus: "engine_top" as const, selectionScore: 120 }]
-      : []),
+    ...book.map((c) => buildDebugCandidate(c, false, true)),
+    ...rep.map((c) => buildDebugCandidate(c, false, true)),
+    ...lichess.map((c) => buildDebugCandidate(c, requireReliableDatabaseMove)),
+    ...engineMoves.map((c, idx) => buildDebugCandidate({ ...c, source: "engine", stockfishRank: c.stockfishRank ?? idx + 1, stockfishInTop10: true, engineSafe: true, supported: true }, false, true)),
   ];
 
   const finalize = (
@@ -131,7 +207,7 @@ export function selectContinuedPlayMove(input: {
     reason: string,
     safetySource: ContinuedPlayPolicyDecision["debug"]["continuationMoveSafetySource"],
   ): ContinuedPlayPolicyDecision => {
-    const selectedMoveInCandidateList = debugCandidates.some((c) => c.moveUci === selectedUci);
+    const selectedMoveInCandidateList = selectedUci ? debugCandidates.some((c) => c.moveUci === selectedUci) : false;
     const selectionConsistency = selectedMoveInCandidateList ? "consistent" : "inconsistent";
     return {
       selectedUci,
@@ -139,15 +215,24 @@ export function selectContinuedPlayMove(input: {
       source,
       reason,
       debug: {
-        candidates: selectedMoveInCandidateList
-          ? debugCandidates
-          : [...debugCandidates, { moveUci: selectedUci, moveSan: selectedSan, source: "fallback", safetyStatus: "fallback", selectionScore: -1, blockedReason: "selected_not_in_candidate_set" }],
+        candidates: selectedUci && !selectedMoveInCandidateList
+          ? [...debugCandidates, { moveUci: selectedUci, moveSan: selectedSan, source: "fallback", safetyStatus: "fallback", selectionScore: -1, blockedReason: "selected_not_in_candidate_set", accepted: false, rejectionReason: "selected_not_in_candidate_set" }]
+          : debugCandidates,
         selectedMoveInCandidateList,
         selectionConsistency,
         continuationMoveSafetySource: safetySource,
       },
     };
   };
+
+  if (requireReliableDatabaseMove) {
+    const reliable = lichess.filter((candidate) => isSupportedContinuationCandidate(candidate) && stockfishValidated(candidate));
+    const selected = deterministicPick(reliable, true);
+    if (selected) {
+      return finalize(selected.uci, selected.san, "lichess_engine_validated", "database_500_18_stockfish_top10", "engine_or_support");
+    }
+    return finalize("", undefined, "no_reliable_continuation", "no_database_candidate_passed_500_18_and_stockfish_top10", "fallback");
+  }
 
   const topBook = deterministicPick(book);
   if (topBook) {
@@ -185,17 +270,15 @@ export function selectContinuedPlayMove(input: {
 }
 
 /**
- * Centralized helper for continuation pause behavior.
- * - line_complete or branch_exhausted always pause until user clicks Continue.
- * - move 11 hard stop pauses at 22 plies and beyond until Continue is clicked for that boundary.
+ * Centralized hard-stop helper for mandatory continuation pause.
+ * Returns true (force pause) on line/branch exhaust OR when plyCount >= hardStopPlyLimit (22 = move 11 complete).
+ * Used to gate continuation candidate evaluation and target setting before explicit "Continue from here" click.
  */
 export function shouldForceContinuationPause(input: {
   plyCount: number;
   lineExhausted?: boolean;
   branchExhausted?: boolean;
   continuationPauseClicked?: boolean;
-  hardStopMoveNumber?: number;
-  hardStopPlyLimit?: number;
 }): ContinuationPauseDecision {
   const hardStopMoveNumber = 11 as const;
   const hardStopPlyLimit = 22 as const;

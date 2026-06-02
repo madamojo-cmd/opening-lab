@@ -679,7 +679,7 @@ async function runBrowserStockfish(fen:string,skill:number,movetime=750,multiPv=
       resolved=true;
       signal?.removeEventListener("abort",abortHandler);
       try{worker?.terminate()}catch{}
-      const pvs=Array.from(bestByPv.entries()).sort((a,b)=>a[0]-b[0]).map(([,v])=>v).filter(Boolean).slice(0,5);
+      const pvs=Array.from(bestByPv.entries()).sort((a,b)=>a[0]-b[0]).map(([,v])=>v).filter(Boolean).slice(0,Math.max(1,Math.min(10,multiPv)));
       if(!pvs.length){resolve(null);return}
       const maxDepth=Math.max(...pvs.map((pv)=>pv.depth??0));
       resolve({source:"stockfish-browser",pvs:pvs.map((pv)=>({san:pv.san,uci:pv.uci,cp:pv.cp,line:pv.line})),depth:maxDepth||undefined,timeMs:Math.round(performance.now()-started)});
@@ -715,7 +715,7 @@ async function runBrowserStockfish(fen:string,skill:number,movetime=750,multiPv=
       };
 
       send("uci");
-      send(`setoption name MultiPV value ${Math.max(1,Math.min(5,multiPv))}`);
+      send(`setoption name MultiPV value ${Math.max(1,Math.min(10,multiPv))}`);
       send("setoption name UCI_LimitStrength value true");
       send(`setoption name UCI_Elo value ${Math.max(1320,Math.min(3190,skill))}`);
       send("isready");
@@ -1025,40 +1025,46 @@ export default function App(){
     const legalVerboseMoves=(game.moves({verbose:true}) as any[]);
     if(game.isGameOver()||legalVerboseMoves.length===0)return null;
     const legalUcis=new Set(legalVerboseMoves.map((move)=>moveToUci(move)));
+    const engineRankByUci=new Map(engineLines.slice(0,10).map((line,index)=>[line.uci,index+1] as const));
     const legalExplorer=explorerMoves
       .filter((move)=>legalUcis.has(move.uci))
-      .map((move)=>({uci:move.uci,san:move.san,source:"lichess" as const,pct:move.pct,weight:move.total,supported:true,engineSafe:false}));
+      .map((move)=>{
+        const stockfishRank=engineRankByUci.get(move.uci);
+        const games=move.total??0;
+        const playRate=(move.pct??0)/100;
+        return {
+          uci:move.uci,
+          san:move.san,
+          source:"lichess" as const,
+          pct:move.pct,
+          weight:games,
+          games,
+          playRate,
+          supported:games>=500&&playRate>=0.18,
+          engineSafe:Boolean(stockfishRank),
+          stockfishLegal:legalUcis.has(move.uci),
+          stockfishInTop10:Boolean(stockfishRank),
+          stockfishRank,
+        };
+      });
     const policy=selectContinuedPlayMove({
       fen,
       lichessCandidates:legalExplorer,
-      engineTop:engineLines[0]?{uci:engineLines[0].uci,san:engineLines[0].san,source:"engine",engineSafe:true,supported:true}:null,
+      engineTopMoves:engineLines.slice(0,10).map((line,index)=>({uci:line.uci,san:line.san,source:"engine" as const,engineSafe:true,supported:true,stockfishInTop10:true,stockfishRank:index+1})),
       lastMoveUci: lastMove || null, // v2.7.40 P1: pass for emergency reverse guard
+      requireReliableDatabaseMove:true,
     });
-    const fallbackMove=legalVerboseMoves[0];
-    let selectedUci=policy?.selectedUci&&legalUcis.has(policy.selectedUci)?policy.selectedUci:moveToUci(fallbackMove);
-    // v2.7.40 P1 guard: if forced to first-legal emergency and it reverses last move, pick 2nd if exists (break shuffle loop)
-    if ((!policy?.selectedUci || !legalUcis.has(policy.selectedUci)) && lastMove && legalVerboseMoves.length > 1) {
-      const firstUci = moveToUci(fallbackMove);
-      if (isImmediateReverseOf(lastMove, firstUci)) {
-        const alt = legalVerboseMoves[1];
-        selectedUci = moveToUci(alt);
-      }
-    }
-    const applied=applyUci(fen,selectedUci);
+    if(!policy?.selectedUci||policy.source==="no_reliable_continuation")return policy?{uci:"",san:"",source:policy.source,reason:policy.reason,isEmergencyLegalFallback:false,debug:policy.debug}:null;
+    if(!legalUcis.has(policy.selectedUci))return null;
+    const applied=applyUci(fen,policy.selectedUci);
     if(!applied)return null;
-    const usedEmergencyFallback=!policy?.selectedUci||!legalUcis.has(policy.selectedUci);
     return {
       uci:applied.uci,
       san:applied.san,
-      source:usedEmergencyFallback?"emergency_legal_fallback":policy.source,
-      reason:usedEmergencyFallback?"no_policy_candidate_available_used_first_legal_move":policy.reason,
-      isEmergencyLegalFallback: usedEmergencyFallback,
-      debug:usedEmergencyFallback?{
-        ...(policy?.debug??{}),
-        emergencyFallbackApplied:true,
-        fallbackLegalMoveCount:legalVerboseMoves.length,
-        fallbackMoveUci:applied.uci,
-      }:policy.debug,
+      source:policy.source,
+      reason:policy.reason,
+      isEmergencyLegalFallback:false,
+      debug:policy.debug,
     };
   },[
     trainingMode,
@@ -1177,16 +1183,16 @@ export default function App(){
         kind:expectedMoveResolution.source==="opening_branch"?"lichess_branch_move":expectedMoveResolution.source==="opening_family_plan"?"adaptive_branch_move":"guided_move",
         trust:"book_verified",
       }:null,
-      continuationCandidate:trainingMode==="continuation"&&isUserTurn&&continuationPauseClicked&&!forceContinuationPause?{
+      continuationCandidate:trainingMode==="continuation"&&isUserTurn&&continuationPauseClicked&&!forceContinuationPause&&continuationPolicyCandidate?.uci&&continuationPolicyCandidate.source!=="no_reliable_continuation"?{
         uci: useLocked && lockedForThisFrame
           ? lockedForThisFrame.uci
-          : (expectedMoveResolution.source==="continuation_candidate" ? expectedMoveResolution.expectedMoveUci : (continuationPolicyCandidate?.uci??engineLines[0]?.uci??null)),
+          : continuationPolicyCandidate.uci,
         san: useLocked && lockedForThisFrame
           ? lockedForThisFrame.san
-          : (expectedMoveResolution.source==="continuation_candidate" ? expectedMoveResolution.expectedMoveSan : (continuationPolicyCandidate?.san??engineLines[0]?.san??null)),
+          : continuationPolicyCandidate.san,
         source: useLocked && lockedForThisFrame
           ? (lockedForThisFrame.source ?? "locked_continuation_candidate")
-          : (expectedMoveResolution.source==="continuation_candidate" ? "continuation_candidate" : continuationPolicyCandidate?.source??(engineLines[0]?.uci?"engine_preview":"continued_play_policy")),
+          : continuationPolicyCandidate.source,
         trust:"continuation_verified",
       }:null,
       preferredTargetKind:trainingMode==="continuation"?"continuation_candidate":"guided_move",
@@ -1662,6 +1668,31 @@ export default function App(){
         debug:{coachIntent:"analyzing_continuation",coachMoveUci:null,coachPieceType:null,coachVerifiedFactsUsed:false,advancedFeatureClaimTypes:[],recognizedPlanTypes:[],selectedOpportunityId:undefined},
       };
     }
+    if(
+      trainingMode==="continuation"&&
+      isUserTurn&&
+      continuationPauseClicked&&
+      !forceContinuationPause&&
+      continuationAnalysisStatus!=="analyzing"&&
+      continuationPolicyCandidate?.source==="no_reliable_continuation"
+    ){
+      return {
+        mode:"freeplay_principle",
+        action:"show_plan",
+        frameId:String(trainerFrameId),
+        normalizedFen:normalizeFen(fen),
+        title:"Continuation unavailable",
+        body:"This position does not have enough reliable continuation data to coach yet.",
+        buttons:["hide"],
+        shouldShowCoachCard:true,
+        shouldMarkReviewWorthy:false,
+        exactMoveAllowed:false,
+        revealRisk:"none" as const,
+        givesAnswer:false,
+        claimTypes:["plan_principle"],
+        debug:{coachIntent:"no_reliable_continuation",coachMoveUci:null,coachPieceType:null,coachVerifiedFactsUsed:false,verifiedFallbackUsed:true,fallbackReason:"no_reliable_continuation"},
+      };
+    }
     if(liveCoachState){
       return{
         mode:liveCoachState.mode as any,
@@ -1697,7 +1728,7 @@ export default function App(){
       };
     }
     return adaptiveCoachDecision;
-  },[adaptiveCoachDecision,liveCoachState,coachHiddenFrameId,trainerFrameId,coachReviewMarked,instructionTarget,trainingMode,trainerPhase,isUserTurn,continuationAnalysisStatus,continuationRuntimeState,fen]);
+  },[adaptiveCoachDecision,liveCoachState,coachHiddenFrameId,trainerFrameId,coachReviewMarked,instructionTarget,trainingMode,trainerPhase,isUserTurn,continuationAnalysisStatus,continuationRuntimeState,fen,continuationPauseClicked,forceContinuationPause,continuationPolicyCandidate?.source]);
   const phaseActionGate=useMemo(()=>decideTrainerPhaseActionGate({
     trainerPhase,
     isUserTurn,
@@ -2518,11 +2549,13 @@ export default function App(){
       setContinuationAnalysisStatus("idle");
       return;
     }
-    if(continuationPolicyCandidate){
+    if(continuationPolicyCandidate?.uci&&continuationPolicyCandidate.source!=="no_reliable_continuation"){
+      clearRuntimeCriticalIssue("continuation_no_reliable_candidate");
       setContinuationAnalysisStatus("ready");
+      return;
     }
     const normalized=normalizeFen(fen);
-    const cacheKey=`${normalized}|${userColor}|${rating.skill}|3`;
+    const cacheKey=`${normalized}|${userColor}|${rating.skill}|10`;
     const cached=continuationEngineCacheRef.current[cacheKey];
     if(cached){
       setContinuationAnalysisStatus("ready");
@@ -2548,7 +2581,7 @@ export default function App(){
       const controller=new AbortController();
       continuationAnalysisAbortRef.current=controller;
       const requestSeq=++continuationAnalysisSeqRef.current;
-      void runBrowserStockfish(fen,rating.skill,650,3,controller.signal).then((result)=>{
+      void runBrowserStockfish(fen,rating.skill,900,10,controller.signal).then((result)=>{
         if(controller.signal.aborted)return;
         if(requestSeq!==continuationAnalysisSeqRef.current)return;
         if(normalizeFen(fenRef.current)!==normalized)return;
@@ -2578,26 +2611,18 @@ export default function App(){
     if(forceContinuationPause||!continuationPauseClicked)return;
     if(instructionTarget?.kind==="continuation_candidate"){
       clearRuntimeCriticalIssue("continuation_ready_without_candidate");
+      clearRuntimeCriticalIssue("continuation_no_reliable_candidate");
       return;
     }
-    const legal=(game.moves({verbose:true}) as any[]);
-    if(!legal.length)return;
-    const fallback=legal[0];
-    const uci=moveToUci(fallback);
-    pushRuntimeCriticalIssue("continuation_ready_without_candidate");
-    setEnginePreview((prev)=>{
-      if(prev&&normalizeFen(prev.fen)===normalizeFen(fen)&&prev.pvs[0]?.uci===uci)return prev;
-      return {
-        fen,
-        source:"runtime_continuation_fallback",
-        pvs:[{
-          uci,
-          san:fallback.san,
-          line:fallback.san,
-        }],
-      };
-    });
-  },[activeTab,trainingMode,trainerPhase,isUserTurn,instructionTarget?.kind,fen,game,forceContinuationPause,continuationPauseClicked]);
+    if(engineLines.length>0 && (!continuationPolicyCandidate?.uci || continuationPolicyCandidate.source==="no_reliable_continuation")){
+      pushRuntimeCriticalIssue("continuation_no_reliable_candidate");
+      setContinuationAnalysisStatus("error");
+      return;
+    }
+    if(continuationAnalysisStatus==="ready"){
+      pushRuntimeCriticalIssue("continuation_ready_without_candidate");
+    }
+  },[activeTab,trainingMode,trainerPhase,isUserTurn,instructionTarget?.kind,fen,game,forceContinuationPause,continuationPauseClicked,engineLines.length,continuationPolicyCandidate?.uci,continuationPolicyCandidate?.source,continuationAnalysisStatus]);
   useEffect(()=>{if(activeTab==="train")positionStartedAtRef.current=Date.now()},[fen,activeTab]);
   useEffect(()=>{setCoachInteraction("none");setCoachHintRequestCount(0);setCoachReviewMarked(false);setCoachHiddenFrameId(null);setShowMoreShown(false);},[fen,trainerFrameId,trainerView,trainerPhase]);
   useEffect(()=>{if(!enabledViews.includes(activeBoardView)&&enabledViews.length)setActiveBoardView(enabledViews[0])},[activeBoardView,enabledViews.join("|")]);
@@ -3432,6 +3457,9 @@ export default function App(){
     continuationInstructionTargetBeforeClick:!continuationPauseClicked?instructionTarget?.uci??null:null,
     continuationVisualTargetBeforeClick:!continuationPauseClicked?visualMoveUciForDebug:null,
     continuationCoachTargetBeforeClick:!continuationPauseClicked?((displayedCoachDecision?.debug as any)?.coachMoveUci??instructionTarget?.uci??null):null,
+    continuationPolicyDebug:continuationPolicyCandidate?.debug??null,
+    continuationSelectionSource:continuationPolicyCandidate?.source??null,
+    continuationSelectionReason:continuationPolicyCandidate?.reason??null,
     continuationAnalysisRequestId:continuationAnalysisSeqRef.current,
     continuationAnalysisFen4:enginePreview?.fen?normalizeFen(enginePreview.fen):null,
     opponentVariationDebug,
