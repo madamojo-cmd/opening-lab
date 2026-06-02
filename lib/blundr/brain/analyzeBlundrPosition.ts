@@ -177,23 +177,30 @@ function buildSafeFallbackCopy(target: any) {
   const pieceName = pieceNameMap[target.pieceType] || "piece";
   const concept = classifyBasicConcept(target);
   const evClaims = buildEvidenceClaims(target);
+  const san = target.san || "move";
+  const dest = (target.to || "").toLowerCase();
 
-  let title = "Focus on development";
-  let body = `Consider repositioning your ${pieceName} to improve its activity and coordination.`;
+  // Step 3: use verified SAN/piece/dest, required format; no generic when data exists
+  let title = `${san} — Improve your position`;
+  let body = `Move the ${pieceName} to ${dest}. This improves your ${pieceName} and keeps your position flexible.`;
   let hint = `Think about how the ${pieceName} supports your overall plan.`;
 
   if (concept === "king_safety") {
-    title = "Prioritize king safety";
-    body = `A ${pieceName} move that improves king safety or completes development toward castling.`;
+    title = `${san} — Prioritize king safety`;
+    body = `Move the ${pieceName} to ${dest}. A ${pieceName} move that improves king safety or completes development toward castling.`;
     hint = "Look for safety improvements before opening the center.";
   } else if (concept === "central_control") {
-    title = "Fight for the center";
-    body = `The ${pieceName} move or advance strengthens central control and space.`;
+    title = `${san} — Challenge the center`;
+    body = `Move the ${pieceName} to ${dest}. This contests central space and opens lines for your pieces.`;
     hint = "Consider central influence and pawn structure.";
   } else if (concept === "material") {
-    title = "Evaluate the exchange";
-    body = `The ${pieceName} capture or recapture improves the material balance or position.`;
+    title = `${san} — Evaluate the exchange`;
+    body = `Move the ${pieceName} to ${dest}. The ${pieceName} capture or recapture improves the material balance or position.`;
     hint = "Weigh captures carefully against development.";
+  } else if (target.isDevelopment) {
+    const shortT = pieceName === "bishop" ? "Develop the bishop" : (pieceName === "knight" ? "Develop the knight" : "Develop the piece");
+    title = `${san} — ${shortT}`;
+    body = `Move the ${pieceName} to ${dest}. This develops your ${pieceName} toward active central squares.`;
   }
 
   // Safety layer: lint for banned/halluc (by construction none, but explicit)

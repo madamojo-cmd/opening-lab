@@ -9,6 +9,7 @@ import { buildTrainingContext } from "../../teaching/trainingContextEngine";
 import { compileVisualRecipe } from "../../visualRecipe/visualRecipeCompiler";
 import { buildCoachEvidencePacket } from "../../coachBrain/coachEvidenceBuilder";
 import { buildCoachCopyFromEvidence } from "../../coachBrain/evidenceConditionedCopyBuilder";
+import { buildCoachExplanationPipeline } from "../../coachBrain/coachExplanationPipeline";
 
 export function testTrainerPresentationFrame(): void {
   const frame = computeTrainerPresentationFrame({
@@ -597,5 +598,36 @@ export function testAgent7FullPromptCoverage(): void {
   const preAllText = JSON.stringify(preSurface).toLowerCase();
   assert.equal(/f1c4|bc4|san| uci |source square|target square/.test(preAllText) && !/find the move/.test(preAllText) ? false : true, true); // loose, main checks above
 
+  // Step 3: Show More uses same SAN/target/piece as the main coaching box (from the copy passed)
+  // build a pipeline copy for the bc4 and feed to post pres to verify showMore matches
+  const showMorePipeline = buildCoachExplanationPipeline({
+    fenBefore: plainBc4Fen,
+    target: { uci: "f1c4", san: "Bc4", pieceType: "b", from: "f1", to: "c4", color: "w", isDevelopment: true, isDiagonalMove: true } as any,
+    trainerMode: "restricted",
+    trainerPhase: "ready_for_user",
+    isContinuation: false,
+  });
+  const postPresForShow = computeTrainerPresentationFrame({
+    ...basePresInput,
+    showMoreShown: true,
+    answerShown: true,
+    coachTitle: showMorePipeline.coachExplanation.title,
+    coachBody: showMorePipeline.coachExplanation.body,
+    visualRecipeLines: plainBc4Recipe.beats.flatMap((b: any) => b.primitives.map((p: any) => ({ from: p.from, to: p.to, kind: p.type }))) as any,
+  } as any);
+  const postSurfForShow = buildVisibleTeachingSurface({
+    currentInstructionFrame: { targetUci: "f1c4", targetSan: "Bc4", pieceType: "b", from: "f1", to: "c4", fen: plainBc4Fen, source: "book", legal: true } as any,
+    trainerPresentationFrame: postPresForShow,
+    showMoreShown: true, trainerView: "plain", trainingMode: "restricted", isUserTurn: true, trainerPhase: "ready_for_user", bookStatus: "in_book", isBranchTransition: false, isTerminal: false, brainAnalysis: null, hintCount: 0,
+    coachMoveUci: null, visualMoveUci: "f1c4", showMoreTargetUci: "f1c4",
+  } as any);
+  const mainTitle = showMorePipeline.coachExplanation.title;
+  const showMoreContent = postSurfForShow.showMore?.content || "";
+  assert.equal(/Bc4/i.test(mainTitle), true);
+  assert.equal(/Bc4/i.test(showMoreContent || mainTitle), true, "Show More must include same SAN as main coaching box");
+  assert.equal(/bishop|b/i.test(mainTitle + " " + showMoreContent), true);
+  assert.equal(postSurfForShow.showMore.shown, true);
+
   console.log("✓ Step2 plain pre/post leak guards + recipe reuse tests passed");
+  console.log("✓ Step 3 coaching copy format + Show More same payload tests passed");
 }

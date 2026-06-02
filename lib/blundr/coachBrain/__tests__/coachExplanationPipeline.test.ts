@@ -93,6 +93,39 @@ export function testCoachExplanationPipeline(): void {
   assert.equal(bc4.coachExplanation.selectedTheme, "bishop_activation");
   assert.equal(/knight from|pawn from/i.test(bc4.coachExplanation.body), false);
 
+  // Step 3 required tests: Bc4 includes SAN and bishop (no generic)
+  assert.equal(/Bc4/i.test(bc4.coachExplanation.title), true);
+  assert.equal(/bishop/i.test(bc4.coachExplanation.title + " " + bc4.coachExplanation.body), true);
+  assert.equal(/Focus on development|repositioning your bishop|generic copy/i.test(bc4.coachExplanation.title + " " + bc4.coachExplanation.body), false);
+
+  // Nf3
+  const nf3Fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+  const nf3Target = makeTarget(nf3Fen, "g1f3");
+  const nf3 = buildCoachExplanationPipeline({
+    fenBefore: nf3Fen,
+    target: nf3Target,
+    trainerMode: "restricted",
+    trainerPhase: "ready_for_user",
+    isContinuation: false,
+  });
+  assert.equal(/Nf3/i.test(nf3.coachExplanation.title), true);
+  assert.equal(/knight/i.test(nf3.coachExplanation.title + " " + nf3.coachExplanation.body), true);
+  assert.equal(/Focus on development|repositioning|generic copy/i.test(nf3.coachExplanation.title + " " + nf3.coachExplanation.body), false);
+
+  // Pawn move (d4)
+  const d4StartFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+  const d4Target = makeTarget(d4StartFen, "d2d4");
+  const d4p = buildCoachExplanationPipeline({
+    fenBefore: d4StartFen,
+    target: d4Target,
+    trainerMode: "restricted",
+    trainerPhase: "ready_for_user",
+    isContinuation: false,
+  });
+  assert.equal(/d4/i.test(d4p.coachExplanation.title), true);
+  assert.equal(/pawn|advance|center/i.test(d4p.coachExplanation.body.toLowerCase()), true);
+  assert.equal(/Focus on development|repositioning|generic copy/i.test(d4p.coachExplanation.title + " " + d4p.coachExplanation.body), false);
+
   const mateFen = "7k/6Q1/6K1/8/8/8/8/8 w - - 0 1";
   const mateTarget = makeTarget(mateFen, "g7f8");
   const mate = buildCoachExplanationPipeline({
