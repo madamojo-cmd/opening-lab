@@ -500,6 +500,19 @@ export function testAgent7FullPromptCoverage(): void {
   assert.equal(sBranch.targetUci, "d2d4", "branch candidate target locked to instruction target");
   assert.equal(sBranch.targetSan, "d4");
 
+  const noTargetBranchFrame = { ...guidedFrame, target: null } as any;
+  const noTargetBranchSurface = buildVisibleTeachingSurface({
+    currentInstructionFrame: noTargetBranchFrame,
+    trainerPresentationFrame: pres,
+    trainingMode: "restricted",
+    isBranchTransition: true,
+    trainerPhase: "ready_for_user",
+    isUserTurn: true,
+  });
+  assert.equal(noTargetBranchSurface.visual.shouldRender, false, "branch transition with no target must suppress visuals");
+  assert.equal(noTargetBranchSurface.actions.includes("continue_from_here"), true);
+  assert.equal(noTargetBranchSurface.actions.includes("restart_line"), true);
+
   // No emergency legal fallback becomes visible teaching target (target always instruction; emergency is separate last-resort in continuedPlay policy for visuals only)
   const emergencyExampleUci = "g1f3";
   if ((sBranch.targetUci as string) === emergencyExampleUci) throw new Error("emergency legal fallback must never become visible teaching target");

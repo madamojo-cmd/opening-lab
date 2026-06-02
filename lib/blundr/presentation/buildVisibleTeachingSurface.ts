@@ -418,14 +418,38 @@ export function buildVisibleTeachingSurface(
   // v2.7.40 P0 Fix 2: block any legacy visual source ( "legacy" or "legacy_fallback" ) on teaching frames; surface owns.
   const visualShouldRender =
     !safetyBlocked &&
+    !isBranchTransitionFrame &&
+    Boolean(instructionTarget) &&
+    isBrainTeachingFrame &&
     !isPlainPreShowMore &&
     (trainerPresentationFrame?.visual?.shouldRender ?? false) &&
     !isLegacyVisualSource; // legacy visual suppressed on teaching per rules
 
-  const visualLines = visualShouldRender ? (trainerPresentationFrame.visual.lines ?? []) : [];
-  const visualHighlights = visualShouldRender ? (trainerPresentationFrame.visual.highlights ?? []) : [];
+  const targetFrom = instructionTarget?.from ?? null;
+  const targetTo = instructionTarget?.to ?? null;
+  const visualLinesRaw = visualShouldRender ? (trainerPresentationFrame.visual.lines ?? []) : [];
+  const matchedPrimary = targetFrom && targetTo
+    ? visualLinesRaw.find((line: any) => line?.from === targetFrom && line?.to === targetTo)
+    : null;
+  const visualLines = visualShouldRender && targetFrom && targetTo
+    ? [matchedPrimary ?? { from: targetFrom, to: targetTo, kind: "plan", label: targetSan ?? targetUci ?? undefined }]
+    : [];
+  const visualHighlightsRaw = visualShouldRender ? (trainerPresentationFrame.visual.highlights ?? []) : [];
+  const visualHighlights = visualShouldRender && targetTo
+    ? visualHighlightsRaw.filter((highlight: any) => highlight?.square === targetFrom || highlight?.square === targetTo).slice(0, 2)
+    : [];
   const visualSource = visualShouldRender ? presentationVisualSource : "none";
-  const visualBlockedReason = visualShouldRender ? null : (safetyBlocked ? blockedReason : isPlainPreShowMore ? "plain_pre_showmore_visuals_hidden" : "presentation_not_aligned_or_blocked");
+  const visualBlockedReason = visualShouldRender
+    ? null
+    : (safetyBlocked
+      ? blockedReason
+      : isBranchTransitionFrame
+        ? "branch_transition_visuals_hidden"
+        : !instructionTarget
+          ? "no_instruction_target"
+          : isPlainPreShowMore
+            ? "plain_pre_showmore_visuals_hidden"
+            : "presentation_not_aligned_or_blocked");
 
   // Step 2 hardening: hard debug/assertion guard for active teaching visuals (MVP primary_move_only)
   // Ensures no more than one primary move target, suppressed secondaries, no pressure when primary mode.

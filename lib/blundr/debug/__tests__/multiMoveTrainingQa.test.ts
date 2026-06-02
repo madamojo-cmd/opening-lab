@@ -962,6 +962,10 @@ export function testMultiMoveTrainingQa(): void {
   assert.equal(providedBranchRestricted.expectedMoveResolution.source === "none" || providedBranchRestricted.expectedMoveResolution.source === "opening_family_plan" || providedBranchRestricted.expectedMoveResolution.source === "guided_branch_needs_continuation", true);
   assert.equal(providedBranchRestricted.branchTransitionSurfaceRendered || Boolean(providedBranchRestricted.expectedMoveResolution.expectedMoveUci), true);
   assert.equal(providedBranchRestricted.debugSnapshot.health.criticalIssues.includes("restricted_user_turn_missing_expected_move"), false);
+  if (providedBranchRestricted.branchTransitionSurfaceRendered) {
+    assert.equal(providedBranchRestricted.presentationFrame.visual.shouldRender, false, "branch transition must not render teaching visuals");
+    assert.equal((providedBranchRestricted.debugSnapshot.visual as any).activeLineCountPassedToBoard, 0, "branch transition must have no active lines");
+  }
 
   const providedContinuation = buildFrame({
     openingTree: tree,
@@ -1020,4 +1024,34 @@ export function testMultiMoveTrainingQa(): void {
     true,
   );
   assertNoCriticalIssues(hiddenContinuation, ["visible_coach_with_silent_intent", "generic_context_rendered_with_candidate", "continuation_candidate_not_rendered"], "hidden continuation");
+
+  const postRestartInitial = buildFrame({
+    openingTree: tree,
+    fen: new Chess().fen(),
+    frameId: 18,
+    trainerView: "assisted",
+    trainingMode: "restricted",
+    userColor: "w",
+    visualMode: "safe_arrow",
+    continueFromHereClicked: false,
+    userExplicitlyEnteredContinuation: false,
+  });
+  assert.equal(postRestartInitial.branchTransitionSurfaceRendered, false, "restart must clear branch transition surface");
+  assert.equal(Boolean(postRestartInitial.expectedMoveResolution.expectedMoveUci), true, "restart first frame must restore guided target");
+  assert.equal(["e2e4", "d2d4"].includes(String(postRestartInitial.expectedMoveResolution.expectedMoveUci ?? "")), true, "restart first guided target should be line start move");
+
+  const continuationNoRepeatBreak = buildFrame({
+    openingTree: tree,
+    fen: continuationGame.fen(),
+    frameId: 19,
+    trainerView: "assisted",
+    trainingMode: "continuation",
+    userColor: "w",
+    visualMode: "continuation_candidate",
+    enginePreviewMove: pickLegalMove(continuationGame, undefined) ?? undefined,
+    candidatePreferredUci: pickLegalMove(continuationGame, undefined)?.uci,
+    continueFromHereClicked: true,
+    userExplicitlyEnteredContinuation: true,
+  });
+  assert.equal(continuationNoRepeatBreak.branchTransitionSurfaceRendered, false, "continuation should not re-open break buttons after Continue Line");
 }

@@ -920,15 +920,22 @@ export default function App(){
   }, [lichessStatsStatus, lichessTotalGames]);
 
   const currentPlyCount = moveHistory.length;
-  const lineExhaustedForPause = trainingMode === "continuation" && isUserTurn && !userExplicitlyEnteredContinuation && selectedLineCompleteConfirmed && currentPlyCount < 22;
-  const branchExhaustedForPause = trainingMode === "continuation" && isUserTurn && !userExplicitlyEnteredContinuation && lichessEndConfirmed && currentPlyCount < 22;
+  const hardStopApplies =
+    trainingMode === "restricted" &&
+    !userExplicitlyEnteredContinuation &&
+    !continueFromHereClicked &&
+    currentPlyCount >= 22 &&
+    currentPlyCount > 0 &&
+    !game.isGameOver();
+  const lineExhaustedForPause = trainingMode === "restricted" && isUserTurn && !userExplicitlyEnteredContinuation && selectedLineCompleteConfirmed;
+  const branchExhaustedForPause = trainingMode === "restricted" && isUserTurn && !userExplicitlyEnteredContinuation && lichessEndConfirmed;
   const continuationPauseDecision = shouldForceContinuationPause({
-    plyCount: currentPlyCount,
+    plyCount: hardStopApplies ? currentPlyCount : 0,
     lineExhausted: lineExhaustedForPause,
     branchExhausted: branchExhaustedForPause,
-    continuationPauseClicked: (currentPlyCount >= 22 && continuationHardStopAcknowledged),
+    continuationPauseClicked: continuationHardStopAcknowledged,
   });
-  const forceContinuationPause = trainingMode === "continuation" && isUserTurn && continuationPauseDecision.pauseRequired;
+  const forceContinuationPause = isUserTurn && continuationPauseDecision.pauseRequired && !userExplicitlyEnteredContinuation;
 
   // Base hard EoB (without loading self-ref) for safe ordering (Step 10).
   const baseHardEndOfBookGate = useMemo(() => {
@@ -1120,7 +1127,7 @@ export default function App(){
     // 2. trusted curated target exists → normal guided instruction (playable from move 1)
     // 3. isInstructionLoading (no trusted target yet + actually resolving) → Thinking...
     // 4. safe neutral
-    if (trainingMode==="continuation"&&isUserTurn&&forceContinuationPause) {
+    if (!game.isGameOver() && game.moves().length>0 && isUserTurn&&forceContinuationPause&&!userExplicitlyEnteredContinuation) {
       return {
         frameKey: "continuation-pause",
         kind: "branch_transition",
@@ -1141,7 +1148,7 @@ export default function App(){
       } as any;
     }
 
-    if (hardEndOfBookGate && !userExplicitlyEnteredContinuation) {
+    if (!game.isGameOver() && game.moves().length>0 && hardEndOfBookGate && !userExplicitlyEnteredContinuation) {
       return {
         frameKey: "end-of-book-transition",
         kind: "branch_transition",
@@ -1237,6 +1244,7 @@ export default function App(){
     trainerView,
     isUserTurn,
     expectedMoveResolution,
+    game,
     engineLines,
     continuationPolicyCandidate,
     isInstructionLoading,
@@ -1396,7 +1404,7 @@ export default function App(){
   const visualRecipeMoveUci=visualRecipe?.moveUci?.toLowerCase()??null;
   const visualRecipeTargetMatchesInstructionTarget=instructionTarget?.uci?(!visualRecipeMoveUci||visualRecipeMoveUci===instructionTarget.uci):"unknown";
   const visualRecipeBlockedByTargetMismatch=Boolean(instructionTarget?.uci&&visualRecipeMoveUci&&visualRecipeMoveUci!==instructionTarget.uci);
-  const visualRecipeForRender=visualRecipeBlockedByTargetMismatch?null:visualRecipe;
+  const visualRecipeForRender=!instructionTarget?.uci||visualRecipeBlockedByTargetMismatch?null:visualRecipe;
   const visualRecipeOverlay=useMemo(()=>adaptVisualRecipe({
     recipe:visualRecipeForRender,
     phase:trainerPhase,
@@ -1428,7 +1436,16 @@ export default function App(){
     !isUserTurn?"not_user_turn":
     undefined;
   const staleOverlayFlag=staleOverlayIgnored||visualRecipeOverlay.staleOverlayIgnored;
-  const visualRecipeMainLines:ActiveLine[]=overlaySuppressedReason?[]:visualRecipePlayback.lines.filter((line)=>isValidSquare(line.from)&&isValidSquare(line.to)).slice(0,4);
+  const visualRecipeMainLines:ActiveLine[]=useMemo(()=>{
+    if(overlaySuppressedReason||!instructionTarget?.uci)return[];
+    const legalLines=visualRecipePlayback.lines.filter((line)=>isValidSquare(line.from)&&isValidSquare(line.to));
+    if(!legalLines.length)return[];
+    const expectedFrom=instructionTarget.from;
+    const expectedTo=instructionTarget.to;
+    const matching=legalLines.find((line)=>line.from===expectedFrom&&line.to===expectedTo);
+    const primary=matching??{from:expectedFrom,to:expectedTo,kind:"plan" as const,label:instructionTarget.san};
+    return [primary];
+  },[overlaySuppressedReason,visualRecipePlayback.lines,instructionTarget?.uci,instructionTarget?.from,instructionTarget?.to,instructionTarget?.san]);
   const legacyVisualLines:ActiveLine[]=visualModelOutput?(activeVisualModelOutput&&trainerPhase==="ready_for_user"&&isUserTurn&&trainerView==="assisted"?filterLegacyMainUiLines((activeVisualModelOutput.arrows??[]).filter(a=>isValidSquare(a.from)&&isValidSquare(a.to)).slice(0,2).map(a=>({from:a.from,to:a.to,kind:visualLineKind(a.role,a.kind),label:a.label}))):[]):filterLegacyMainUiLines(currentView.lines);
   const visualContext=activeVisualModelOutput?.context;
   const visualAnimationName=activeVisualModelOutput?.animationPackage?.name??activeVisualModelOutput?.animation;
@@ -1957,10 +1974,11 @@ export default function App(){
   }),[coachDecision,coachHiddenForFrame,trainingMode,trainerView,expectedUserOptions.length,moveQuality?.status,enginePreview,visualRecipe,visualRecipeOverlay.adapterAllowed,trainerPhase,isUserTurn]);
   // branch transition surface supports both end-of-book and continuation pause checkpoints.
   const branchTransitionSurface=useMemo(()=>{
+    if(game.isGameOver()||game.moves().length===0)return null;
     const transitionTitle = "Line complete";
     const transitionBody = "You finished this training line. Continue from this position or train the line again.";
     const transitionButtons = ["continue_from_here","restart_line"] as const;
-    if (trainingMode==="continuation"&&isUserTurn&&forceContinuationPause) {
+    if (isUserTurn&&forceContinuationPause&&!userExplicitlyEnteredContinuation) {
       const reason = continuationPauseDecision.pauseReason ?? "line_complete";
       return {
         render: true,
@@ -1989,7 +2007,7 @@ export default function App(){
       buttons: transitionButtons,
       reason: selectedLineCompleteConfirmed ? "curated_line_complete" : "lichess_below_500_games",
     } as const;
-  }, [hardEndOfBookGate, selectedLineCompleteConfirmed, trainingMode, isUserTurn, forceContinuationPause, continuationPauseDecision.pauseReason, userExplicitlyEnteredContinuation]);
+  }, [hardEndOfBookGate, selectedLineCompleteConfirmed, trainingMode, isUserTurn, forceContinuationPause, continuationPauseDecision.pauseReason, userExplicitlyEnteredContinuation, game]);
   const moveImpactPresentation=useMemo(()=>presentMoveImpact({
     exactMoveAllowed:Boolean(coachDecision?.exactMoveAllowed),
     engineStatus:(coachDecision?.debug as any)?.coachEngineStatus??(enginePreview?.pvs?.length?"ready":"idle"),
@@ -2537,7 +2555,6 @@ export default function App(){
     setCoachUtteranceMemory(loaded);
     setCoachMemoryMigration(meta);
   },[]);
-  useEffect(()=>{setContinueFromHereClicked(false)},[trainerFrameId,fen]);
   useEffect(()=>{
     if(trainingMode!=="continuation"){
       setContinuationPauseClicked(false);
@@ -2974,8 +2991,36 @@ export default function App(){
     }
   }
   function resetHistory(startFen:string){setPositionHistory([startFen]);setHistoryIndex(0)}
-  function selectRepertoire(id:string){const startFen=new Chess().fen();setSelectedRepertoireId(id);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setUserExplicitlyEnteredContinuation(false);setContinueFromHereClicked(false);setContinuationPauseClicked(false);setContinuationHardStopAcknowledged(false);setMoveHistory([]);setShowAnswer(false);setShowMoreShown(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setRuntimeCriticalIssues([]);setOpponentCue(null);setOpponentVariationDebug(null);setAnnotation(blankAnnotation());setEnginePreview(null);setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
-  function resetBoard(){const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setUserExplicitlyEnteredContinuation(false);setContinueFromHereClicked(false);setContinuationPauseClicked(false);setContinuationHardStopAcknowledged(false);setMoveHistory([]);setShowAnswer(false);setShowMoreShown(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setRuntimeCriticalIssues([]);setOpponentCue(null);setOpponentVariationDebug(null);setAnnotation(blankAnnotation());setEnginePreview(null);setActiveTab("train");bumpRuntimeFrame()}
+  function resetBranchAndContinuationState(){
+    setUserExplicitlyEnteredContinuation(false);
+    setContinueFromHereClicked(false);
+    setContinuationPauseClicked(false);
+    setContinuationHardStopAcknowledged(false);
+    setContinuationAnalysisStatus("idle");
+    setShowAnswer(false);
+    setShowMoreShown(false);
+    setCoachInteraction("none");
+    setCoachHintRequestCount(0);
+    setCoachReviewMarked(false);
+    setCoachHiddenFrameId(null);
+    setLastActionDebug(null);
+    setExplorerMoves([]);
+    setRuntimeCriticalIssues([]);
+    setOpponentCue(null);
+    setOpponentVariationDebug(null);
+    setPendingOpponentRequest(null);
+    previousSelectedCandidateUciRef.current=null;
+    candidateSyncDebugRef.current={
+      currentSelectedCandidateUci:null,
+      previousSelectedCandidateUci:null,
+      staleSelectedCandidateDetected:false,
+      staleSelectedCandidateCleared:false,
+    };
+    lockedContinuationRef.current={};
+    continuationEngineCacheRef.current={};
+  }
+  function selectRepertoire(id:string){const startFen=new Chess().fen();setSelectedRepertoireId(id);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
+  function resetBoard(){const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveTab("train");bumpRuntimeFrame()}
   function recordPosition(nextFen:string){const nextIndex=historyIndex+1;setPositionHistory(prev=>[...prev.slice(0,nextIndex),nextFen]);setHistoryIndex(nextIndex)}
   function jumpHistory(direction:-1|1){const next=Math.max(0,Math.min(positionHistory.length-1,historyIndex+direction));if(next===historyIndex)return;setHistoryIndex(next);setFen(positionHistory[next]);setSelectedSquare(null);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);clearPendingOpponentReplyRequest({clearStaleIssue:true});setOpponentCue(null);setOpponentVariationDebug(null);setBookComplete(false);setFeedback(next===positionHistory.length-1?"Returned to the live position.":`Reviewing previous position ${next} of ${positionHistory.length-1}. Use the arrows to return to live play.`);bumpRuntimeFrame()}
   async function playOpponentMove(request:PendingOpponentRequest){
@@ -3381,7 +3426,7 @@ export default function App(){
     });
     setReviewingFen(null);
   }
-  function practiceMistake(m:Mistake){const rep=repertoires.find(r=>r.id===m.repertoireId);if(rep)setSelectedRepertoireId(rep.id);setFen(m.fen);resetHistory(m.fen);setReviewingFen(normalizeFen(m.fen));setFeedback("Review this opening position. Play the expected move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setUserExplicitlyEnteredContinuation(false);setContinueFromHereClicked(false);setContinuationPauseClicked(false);setContinuationHardStopAcknowledged(false);setMoveHistory([]);setShowAnswer(false);setShowMoreShown(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setOpponentVariationDebug(null);setActiveTab("train");bumpRuntimeFrame()}
+  function practiceMistake(m:Mistake){const rep=repertoires.find(r=>r.id===m.repertoireId);if(rep)setSelectedRepertoireId(rep.id);setFen(m.fen);resetHistory(m.fen);setReviewingFen(normalizeFen(m.fen));setFeedback("Review this opening position. Play the expected move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setActiveTab("train");bumpRuntimeFrame()}
   function createCustomRepertoire(){const moves=newLineText.replace(/\d+\./g," ").replace(/\s+/g," ").trim().split(" ").filter(Boolean);if(!moves.length)return;const test=new Chess();for(const move of moves){try{if(!test.move(move)){setFeedback(`Could not parse move: ${move}`);return}}catch{setFeedback(`Could not parse move: ${move}`);return}}const rep:Repertoire={id:`custom-${Date.now()}`,name:newRepName.trim()||"My Custom Repertoire",color:newRepColor,description:"Custom line saved on this device.",lines:[moves],custom:true};setCustomRepertoires(prev=>[...prev,rep]);setSelectedRepertoireId(rep.id);setShowAddLine(false);const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setTrainingMode("restricted");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setFeedback("Custom repertoire saved. Restricted training is active.");setActiveTab("train");bumpRuntimeFrame()}
   const squareStyles:Record<string,CSSProperties>={};
   if(lastMove&&lastMove.length>=4){
@@ -3422,7 +3467,23 @@ export default function App(){
   const staleCanSuppressVisual=visualFrameStale&&visualSourceForRender==="visual_recipe";
   // v2.7.40 Agent 3: Visual overlays prefer VisibleTeachingSurface (enforces alignment + plain-pre + mismatch blocks)
   const surfaceVisualLines = (visibleTeachingSurface?.visual?.shouldRender ? (visibleTeachingSurface.visual.lines as ActiveLine[]) : null);
-  const boardLinesToRender:ActiveLine[]= surfaceVisualLines ?? (presentationFrame.visual.shouldRender&&!staleCanSuppressVisual?(presentationFrame.visual.lines as ActiveLine[]):[]);
+  const rawBoardLines:ActiveLine[]= surfaceVisualLines ?? (presentationFrame.visual.shouldRender&&!staleCanSuppressVisual?(presentationFrame.visual.lines as ActiveLine[]):[]);
+  const boardLinesToRender:ActiveLine[]=useMemo(()=>{
+    if(!instructionTarget?.uci)return[];
+    const expectedFrom=instructionTarget.from;
+    const expectedTo=instructionTarget.to;
+    const matching=rawBoardLines.find((line)=>line.from===expectedFrom&&line.to===expectedTo);
+    const primary=matching??{from:expectedFrom,to:expectedTo,kind:"plan" as const,label:instructionTarget.san};
+    return [primary];
+  },[instructionTarget?.uci,instructionTarget?.from,instructionTarget?.to,instructionTarget?.san,rawBoardLines]);
+  if(!instructionTarget?.uci){
+    for(const square of Object.keys(squareStyles))delete squareStyles[square];
+  }else if(trainerPhase==="ready_for_user"&&isUserTurn){
+    const allowedSquares=new Set([instructionTarget.from,instructionTarget.to]);
+    for(const square of Object.keys(squareStyles)){
+      if(!allowedSquares.has(square))delete squareStyles[square];
+    }
+  }
   const transientLinesToRender:ActiveLine[]=activeBoard&&opponentCue&&boardSettings.showOpponentCue&&shouldRenderOpponentLastMoveHighlight({committed:opponentCue.committed,cueFen:opponentCue.fen,boardFen:normalizeFen(fen)})?opponentCue.lines:[];
   const legalVerboseMoves=(game.moves({verbose:true}) as any[]);
   const expectedMoveLegal=expectedUserOptions[0]?legalVerboseMoves.some((move)=>moveToUci(move)===expectedUserOptions[0].uci):null;
