@@ -920,13 +920,13 @@ export default function App(){
   }, [lichessStatsStatus, lichessTotalGames]);
 
   const currentPlyCount = moveHistory.length;
-  const lineExhaustedForPause = trainingMode === "continuation" && isUserTurn && !continuationPauseClicked && selectedLineCompleteConfirmed && currentPlyCount < 22;
-  const branchExhaustedForPause = trainingMode === "continuation" && isUserTurn && !continuationPauseClicked && lichessEndConfirmed && currentPlyCount < 22;
+  const lineExhaustedForPause = trainingMode === "continuation" && isUserTurn && !userExplicitlyEnteredContinuation && selectedLineCompleteConfirmed && currentPlyCount < 22;
+  const branchExhaustedForPause = trainingMode === "continuation" && isUserTurn && !userExplicitlyEnteredContinuation && lichessEndConfirmed && currentPlyCount < 22;
   const continuationPauseDecision = shouldForceContinuationPause({
     plyCount: currentPlyCount,
     lineExhausted: lineExhaustedForPause,
     branchExhausted: branchExhaustedForPause,
-    continuationPauseClicked: continuationPauseClicked || (currentPlyCount >= 22 && continuationHardStopAcknowledged),
+    continuationPauseClicked: (currentPlyCount >= 22 && continuationHardStopAcknowledged),
   });
   const forceContinuationPause = trainingMode === "continuation" && isUserTurn && continuationPauseDecision.pauseRequired;
 
@@ -1037,7 +1037,7 @@ export default function App(){
     }
 
     if(trainingMode!=="continuation"||!isUserTurn)return null;
-    if(forceContinuationPause||!continuationPauseClicked)return null;
+    if(forceContinuationPause||!userExplicitlyEnteredContinuation)return null;
     const legalVerboseMoves=(game.moves({verbose:true}) as any[]);
     if(game.isGameOver()||legalVerboseMoves.length===0)return null;
     const legalUcis=new Set(legalVerboseMoves.map((move)=>moveToUci(move)));
@@ -1112,6 +1112,7 @@ export default function App(){
     userExplicitlyEnteredContinuation,
     forceContinuationPause,
     continuationPauseClicked,
+    userExplicitlyEnteredContinuation,
   ]);
   const currentInstructionFrame=useMemo(()=>{
     // Step 4/5 exact priority (transcript as source of truth):
@@ -1134,9 +1135,9 @@ export default function App(){
         continueFromHereButtonRendered: true,
         branchTransitionSurfaceRendered: true,
         branchTransitionPayloadValid: true,
-        coachTitle: continuationPauseDecision.pauseReason==="move_11_hard_stop" ? "Move 11 checkpoint reached." : "Continuation paused.",
-        coachBody: "Continue from here.",
-        actions: ["continue_from_here"],
+        coachTitle: "Line complete",
+        coachBody: "You finished this training line. Continue from this position or train the line again.",
+        actions: ["continue_from_here","restart_line"],
       } as any;
     }
 
@@ -1155,11 +1156,9 @@ export default function App(){
         continueFromHereButtonRendered: true,
         branchTransitionSurfaceRendered: true,
         branchTransitionPayloadValid: true,
-        coachTitle: selectedLineCompleteConfirmed
-          ? "Opening line complete."
-          : "You are leaving common opening territory.",
-        coachBody: "Continue from here?",
-        actions: ["continue_from_here"],
+        coachTitle: "Line complete",
+        coachBody: "You finished this training line. Continue from this position or train the line again.",
+        actions: ["continue_from_here","restart_line"],
       } as any;
     }
 
@@ -1216,7 +1215,7 @@ export default function App(){
         kind:expectedMoveResolution.source==="opening_branch"?"lichess_branch_move":expectedMoveResolution.source==="opening_family_plan"?"adaptive_branch_move":"guided_move",
         trust:"book_verified",
       }:null,
-      continuationCandidate:trainingMode==="continuation"&&isUserTurn&&continuationPauseClicked&&!forceContinuationPause&&continuationPolicyCandidate?.uci&&continuationPolicyCandidate.source!=="no_reliable_continuation"?{
+      continuationCandidate:trainingMode==="continuation"&&isUserTurn&&userExplicitlyEnteredContinuation&&!forceContinuationPause&&continuationPolicyCandidate?.uci&&continuationPolicyCandidate.source!=="no_reliable_continuation"?{
         uci: useLocked && lockedForThisFrame
           ? lockedForThisFrame.uci
           : continuationPolicyCandidate.uci,
@@ -1245,6 +1244,7 @@ export default function App(){
     userExplicitlyEnteredContinuation,
     selectedLineCompleteConfirmed,
     continuationPauseClicked,
+    userExplicitlyEnteredContinuation,
     forceContinuationPause,
     continuationPauseDecision.pauseReason,
   ]);
@@ -1704,7 +1704,7 @@ export default function App(){
     if(
       trainingMode==="continuation"&&
       isUserTurn&&
-      continuationPauseClicked&&
+      userExplicitlyEnteredContinuation&&
       !forceContinuationPause&&
       continuationAnalysisStatus!=="analyzing"&&
       continuationPolicyCandidate?.source==="no_reliable_continuation"
@@ -1761,7 +1761,7 @@ export default function App(){
       };
     }
     return adaptiveCoachDecision;
-  },[adaptiveCoachDecision,liveCoachState,coachHiddenFrameId,trainerFrameId,coachReviewMarked,instructionTarget,trainingMode,trainerPhase,isUserTurn,continuationAnalysisStatus,continuationRuntimeState,fen,continuationPauseClicked,forceContinuationPause,continuationPolicyCandidate?.source]);
+  },[adaptiveCoachDecision,liveCoachState,coachHiddenFrameId,trainerFrameId,coachReviewMarked,instructionTarget,trainingMode,trainerPhase,isUserTurn,continuationAnalysisStatus,continuationRuntimeState,fen,userExplicitlyEnteredContinuation,forceContinuationPause,continuationPolicyCandidate?.source]);
   const phaseActionGate=useMemo(()=>decideTrainerPhaseActionGate({
     trainerPhase,
     isUserTurn,
@@ -1957,31 +1957,39 @@ export default function App(){
   }),[coachDecision,coachHiddenForFrame,trainingMode,trainerView,expectedUserOptions.length,moveQuality?.status,enginePreview,visualRecipe,visualRecipeOverlay.adapterAllowed,trainerPhase,isUserTurn]);
   // branch transition surface supports both end-of-book and continuation pause checkpoints.
   const branchTransitionSurface=useMemo(()=>{
+    const transitionTitle = "Line complete";
+    const transitionBody = "You finished this training line. Continue from this position or train the line again.";
+    const transitionButtons = ["continue_from_here","restart_line"] as const;
     if (trainingMode==="continuation"&&isUserTurn&&forceContinuationPause) {
       const reason = continuationPauseDecision.pauseReason ?? "line_complete";
       return {
         render: true,
-        title: reason==="move_11_hard_stop" ? "Move 11 checkpoint reached" : "Continuation paused",
-        body: "Continue from here.",
-        buttons: ["continue_from_here"] as const,
+        title: transitionTitle,
+        body: transitionBody,
+        buttons: transitionButtons,
         reason,
+      } as const;
+    }
+    if (trainingMode==="continuation"&&isUserTurn&&!forceContinuationPause&&!userExplicitlyEnteredContinuation) {
+      return {
+        render: true,
+        title: transitionTitle,
+        body: transitionBody,
+        buttons: transitionButtons,
+        reason: "continuation_break_requires_explicit_continue",
       } as const;
     }
     if (!hardEndOfBookGate) {
       return null;
     }
-    const isCurated = selectedLineCompleteConfirmed;
-    const reason = isCurated
-      ? "This branch is beyond the guided line. Continue from here to practice adapting."
-      : "You are leaving common opening territory. Continue from here.";
     return {
       render: true,
-      title: isCurated ? "Opening line complete" : "Leaving common opening territory",
-      body: reason,
-      buttons: ["continue_from_here"] as const,
-      reason: isCurated ? "curated_line_complete" : "lichess_below_500_games",
+      title: transitionTitle,
+      body: transitionBody,
+      buttons: transitionButtons,
+      reason: selectedLineCompleteConfirmed ? "curated_line_complete" : "lichess_below_500_games",
     } as const;
-  }, [hardEndOfBookGate, selectedLineCompleteConfirmed, trainingMode, isUserTurn, forceContinuationPause, continuationPauseDecision.pauseReason]);
+  }, [hardEndOfBookGate, selectedLineCompleteConfirmed, trainingMode, isUserTurn, forceContinuationPause, continuationPauseDecision.pauseReason, userExplicitlyEnteredContinuation]);
   const moveImpactPresentation=useMemo(()=>presentMoveImpact({
     exactMoveAllowed:Boolean(coachDecision?.exactMoveAllowed),
     engineStatus:(coachDecision?.debug as any)?.coachEngineStatus??(enginePreview?.pvs?.length?"ready":"idle"),
@@ -2073,9 +2081,9 @@ export default function App(){
     return {
       ...coachDecision,
       shouldShowCoachCard:true,
-      title:presentationFrame.coach.title??"Continue from here",
-      body:presentationFrame.coach.body??"This branch is beyond the guided line. Continue from here to practice adapting.",
-      buttons:["continue_from_here"] as CoachButton[],
+      title:presentationFrame.coach.title??"Line complete",
+      body:presentationFrame.coach.body??"You finished this training line. Continue from this position or train the line again.",
+      buttons:(presentationFrame.coach.buttons as CoachButton[])??(["continue_from_here","restart_line"] as CoachButton[]),
       mode:"supported_continuation" as const,
       action:"show_plan" as const,
       revealRisk:"none" as const,
@@ -2317,12 +2325,18 @@ export default function App(){
     // Everything else (phaseActionGate, old coachDecision.buttons, legacy) is ignored for teaching actions.
     const surfaceActionsAtClick = (visibleTeachingSurface?.coach?.shouldRender ? (visibleTeachingSurface.actions as any) : []) as string[];
     const allowedBySurface = surfaceActionsAtClick.includes(String(button));
-    const internalWhitelist = ["replay", "hide", "continue_from_here"];
+    const internalWhitelist = ["replay", "hide", "continue_from_here", "restart_line"];
     if (!internalWhitelist.includes(String(button)) && !allowedBySurface) {
       recordDebugAction({action:button,normalizedAction:String(button),before,after:before,result:"blocked",reason:"action_not_in_current_visible_surface"});
       return;
     }
     if(button==="replay"){visualRecipePlayback.replay();recordDebugAction({action:button,normalizedAction:"replay",before,after:before,result:"handled",reason:"playback_replay_requested"});return;}
+    if(button==="restart_line"){
+      const after={...before,coachInteraction:"replay",showAnswer:false,hintShown:false};
+      recordDebugAction({action:button,normalizedAction:"restart_line",before,after,result:"handled",reason:"user_restart_line"});
+      resetBoard();
+      return;
+    }
     if(button==="hide"){const after={...before,coachInteraction:"hide"};setCoachHiddenFrameId(String(trainerFrameId));setCoachInteraction("hide");recordDebugAction({action:button,normalizedAction:"hide",before,after,result:"handled"});return;}
     if(button==="hint"){const after={...before,hintShown:true,coachInteraction:"hint"};setCoachHintRequestCount((count)=>count+1);setCoachInteraction("hint");recordDebugAction({action:button,normalizedAction:"hint",before,after,result:"handled"});return;}
     if(button==="show_more" || (button as any)==="show_more"){const after={...before,showMoreShown:true,coachInteraction:"show_plan"};setShowMoreShown(true);setCoachInteraction("show_plan");recordDebugAction({action:button,normalizedAction:"show_more",before,after,result:"handled",reason:"plain_show_more_escalation_to_full_content"});return;}
@@ -2596,7 +2610,7 @@ export default function App(){
       setContinuationAnalysisStatus("idle");
       return;
     }
-    if(forceContinuationPause||!continuationPauseClicked){
+    if(forceContinuationPause||!userExplicitlyEnteredContinuation){
       setContinuationAnalysisStatus("idle");
       return;
     }
@@ -2655,11 +2669,11 @@ export default function App(){
         continuationAnalysisDebounceRef.current=null;
       }
     };
-  },[activeTab,trainingMode,isUserTurn,trainerPhase,fen,userColor,rating.skill,enginePreview,game,continuationPolicyCandidate,forceContinuationPause,continuationPauseClicked]);
+  },[activeTab,trainingMode,isUserTurn,trainerPhase,fen,userColor,rating.skill,enginePreview,game,continuationPolicyCandidate,forceContinuationPause,userExplicitlyEnteredContinuation]);
   useEffect(()=>{
     if(activeTab!=="train"||trainingMode!=="continuation"||trainerPhase!=="ready_for_user"||!isUserTurn)return;
     if(game.isGameOver()||game.moves().length===0)return;
-    if(forceContinuationPause||!continuationPauseClicked)return;
+    if(forceContinuationPause||!userExplicitlyEnteredContinuation)return;
     if(instructionTarget?.kind==="continuation_candidate"){
       clearRuntimeCriticalIssue("continuation_ready_without_candidate");
       clearRuntimeCriticalIssue("continuation_no_reliable_candidate");
@@ -2673,7 +2687,7 @@ export default function App(){
     if(continuationAnalysisStatus==="ready"&&continuationPolicyCandidate?.source!=="freeplay_continuation"){
       pushRuntimeCriticalIssue("continuation_ready_without_candidate");
     }
-  },[activeTab,trainingMode,trainerPhase,isUserTurn,instructionTarget?.kind,fen,game,forceContinuationPause,continuationPauseClicked,engineLines.length,continuationPolicyCandidate?.uci,continuationPolicyCandidate?.source,continuationAnalysisStatus]);
+  },[activeTab,trainingMode,trainerPhase,isUserTurn,instructionTarget?.kind,fen,game,forceContinuationPause,userExplicitlyEnteredContinuation,engineLines.length,continuationPolicyCandidate?.uci,continuationPolicyCandidate?.source,continuationAnalysisStatus]);
   useEffect(()=>{if(activeTab==="train")positionStartedAtRef.current=Date.now()},[fen,activeTab]);
   useEffect(()=>{setCoachInteraction("none");setCoachHintRequestCount(0);setCoachReviewMarked(false);setCoachHiddenFrameId(null);setShowMoreShown(false);},[fen,trainerFrameId,trainerView,trainerPhase]);
   useEffect(()=>{if(!enabledViews.includes(activeBoardView)&&enabledViews.length)setActiveBoardView(enabledViews[0])},[activeBoardView,enabledViews.join("|")]);
@@ -3641,7 +3655,7 @@ export default function App(){
         <HistoryControls index={historyIndex} total={positionHistory.length} onBack={()=>jumpHistory(-1)} onForward={()=>jumpHistory(1)}/>
       </div>
       {showDetails&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Coach Debug</div><div className="mt-2">coachMode: {coachDecision.mode}</div><div>coachAction: {coachDecision.action}</div><div>coachUtteranceId: {coachDecision.utteranceId??"none"}</div><div>coachUtteranceFamily: {coachDecision.utteranceFamily??"none"}</div><div>coachVariationReason: {String((coachDecision.debug as any)?.coachVariationReason??"n/a")}</div><div>coachHintStrength: {String((coachDecision.debug as any)?.coachHintStrength??"none")}</div><div>coachRevealRisk: {coachDecision.revealRisk}</div><div>coachGivesAnswer: {coachDecision.givesAnswer?"true":"false"}</div><div>coachButtons: {displayedCoachDecision.buttons.join(", ")||"none"}</div><div>coachShouldMarkReviewWorthy: {coachDecision.shouldMarkReviewWorthy?"true":"false"}</div><div>coachSuppressedReason: {coachDecision.suppressedReason??"none"}</div><div>coachFrameMatchesBoard: {coachContextResult.context?.recipeFrameMatchesBoard?"true":"false"}</div><div>coachFenMatchesBoard: {coachContextResult.context?.recipeFenMatchesBoard?"true":"false"}</div><div>recentCoachUtteranceIds: {coachUtteranceMemory.slice(-5).map((entry:any)=>entry.utteranceId).join(", ")||"none"}</div><div>coachSafetyWarnings: {JSON.stringify((coachDecision.debug as any)?.coachSafetyWarnings??[])}</div><div>coachReviewMarked: {coachReviewMarked?"true":"false"}</div><div>selectedOpportunity: {String((coachDecision.debug as any)?.selectedOpportunity??liveCoachState?.selected?.opportunity??"none")}</div><div>selectedIntent: {String((coachDecision.debug as any)?.selectedIntent??liveCoachState?.selected?.intent??"none")}</div><div>exactMoveAllowed: {coachContextResult.context?.exactMoveAllowed?"true":"false"}</div><div>claimTypes: {coachDecision.claimTypes.join(", ")||"none"}</div><div>blockedClaims: {String((coachDecision.debug as any)?.blockedClaims??"none")}</div><div>silenceReason: {String((coachDecision.debug as any)?.silenceReason??liveCoachState?.debug?.silenceReason??"none")}</div><div>branchTransitionSurfaceRendered: {branchTransitionSurface?.render?"true":"false"}</div><div>branchTransitionReason: {branchTransitionSurface?.reason??"none"}</div><div>continueFromHereAvailable: {branchTransitionSurface?.render?"true":"false"}</div><div>continueFromHereClicked: {continueFromHereClicked?"true":"false"}</div><div>coachSurfaceOwner: {coachSurfacePolicy.owner}</div><div>allowLegacyTrainingCard: {coachSurfacePolicy.allowLegacyTrainingCard?"true":"false"}</div><div>allowMoveImpactCard: {coachSurfacePolicy.allowMoveImpactCard?"true":"false"}</div><div>allowNextMoveText: {coachSurfacePolicy.allowNextMoveText?"true":"false"}</div><div>legacyCueSuppressedReason: {coachSurfacePolicy.reason}</div><div>moveImpactPresenterReason: {moveImpactPresentation.reason}</div></div>}
-      {bookComplete&&<div className="rounded-3xl border border-green-200 bg-green-50 p-4 shadow-sm"><h2 className="text-lg font-black text-green-900">Book complete</h2><p className="mt-2 text-sm leading-6 text-green-800">You finished this opening branch. Train it again, or continue against the bot from this position.</p><div className="mt-4 grid grid-cols-2 gap-3"><button onClick={resetBoard} className="rounded-2xl bg-white px-4 py-3 font-black text-green-800 shadow-sm">Train Again</button><button onClick={continueVsBot} className="rounded-2xl bg-green-700 px-4 py-3 font-black text-white shadow-sm">Continue vs Bot</button></div></div>}
+      {bookComplete&&<div className="rounded-3xl border border-green-200 bg-green-50 p-4 shadow-sm"><h2 className="text-lg font-black text-green-900">Line complete</h2><p className="mt-2 text-sm leading-6 text-green-800">You finished this training line. Continue from this position or train the line again.</p><div className="mt-4 grid grid-cols-2 gap-3"><button onClick={continueFromHere} className="rounded-2xl bg-green-700 px-4 py-3 font-black text-white shadow-sm">Continue Line</button><button onClick={resetBoard} className="rounded-2xl bg-white px-4 py-3 font-black text-green-800 shadow-sm">Train Again</button></div></div>}
       {endingInfo&&<GameEndCard title={endingInfo.title} message={endingInfo.message} onRestart={resetBoard}/>} 
       {/* v2.7.40 Clean Intelligent Coach Checkpoint: "Reveal Next Move" button DELETED from all non-debug teaching paths.
          Plain View must only ever show Hint + Show More. No Reveal/Show Answer/Show Move allowed.

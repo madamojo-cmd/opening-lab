@@ -487,7 +487,7 @@ export function testAgent7FullPromptCoverage(): void {
   if (sOpp.showMore.actionAvailable !== false) throw new Error("Show More must not be available on opponent");
   if (sOpp.actions.length !== 0) throw new Error("opponent frames must have no stale actions");
 
-  // Continuation: branch transition clean; candidate target locked from instruction; only Continue action
+  // Continuation: branch transition clean; candidate target locked from instruction; Continue + Train Again actions
   const sBranch = buildVisibleTeachingSurface({
     currentInstructionFrame: contFrame,
     trainerPresentationFrame: pres,
@@ -496,7 +496,7 @@ export function testAgent7FullPromptCoverage(): void {
     trainerPhase: "ready_for_user",
     isUserTurn: true,
   });
-  assert.deepEqual(sBranch.actions, ["continue_from_here"] as any, "branch must expose exactly Continue (stale cleared)");
+  assert.deepEqual(sBranch.actions, ["continue_from_here", "restart_line"] as any, "branch must expose Continue + Train Again (stale cleared)");
   assert.equal(sBranch.targetUci, "d2d4", "branch candidate target locked to instruction target");
   assert.equal(sBranch.targetSan, "d4");
 

@@ -237,6 +237,7 @@ export function buildVisibleTeachingSurface(
   const presentationCoachUci = null; // presentation currently does not carry per-coach uci; rely on frame target
   const presentationVisualSource = trainerPresentationFrame?.visual?.source ?? "none";
   const presentationCoachOwner = trainerPresentationFrame?.coach?.owner ?? "none";
+  const isBranchTransitionFrame = Boolean(isBranchTransition || presentationCoachOwner === "branch_transition_surface");
   // Early for mismatch guard (defined before use)
   const isLegacyVisualSource = presentationVisualSource === "legacy" || presentationVisualSource === "legacy_fallback";
 
@@ -291,8 +292,8 @@ export function buildVisibleTeachingSurface(
   const anyMismatch = targetMismatch || pieceMismatch;
 
   // Safety block decision
-  const blockedByMismatch = anyMismatch || !instructionTarget;
-  const blockedReason = !instructionTarget
+  const blockedByMismatch = anyMismatch || (!instructionTarget && !isBranchTransitionFrame);
+  const blockedReason = (!instructionTarget && !isBranchTransitionFrame)
     ? "no_instruction_target"
     : targetMismatch
     ? "target_mismatch_vs_current_instruction_frame"
@@ -406,7 +407,7 @@ export function buildVisibleTeachingSurface(
     : trainerPresentationFrame?.coach?.suppressedReason ?? null;
 
   // Hint (Agent 4): now driven by ladder for Plain; suppressed on block. Current progressive only pre-showMore.
-  const hintSuppressed = safetyBlocked;
+  const hintSuppressed = safetyBlocked || isBranchTransitionFrame;
   const hintText = !hintSuppressed ? (progressiveHint || (isPlainPreShowMore ? null : (trainerPresentationFrame?.coach?.title ? `Focus on the key idea.` : null))) : null;
 
   // ShowMore

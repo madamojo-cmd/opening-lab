@@ -35,6 +35,7 @@ export type CoachButton =
   | "analyze_idea"
   | "show_move"
   | "continue_from_here"
+  | "restart_line"
   | "show_more"; // v2.7.40 Agent 4: first-class Plain action (visible via policy, passed through CoachCard casts)
 
 export type CoachRevealRisk = "none" | "low" | "medium" | "full_answer";

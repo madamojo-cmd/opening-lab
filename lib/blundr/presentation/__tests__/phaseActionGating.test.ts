@@ -82,9 +82,9 @@ export function testPhaseActionGating(): void {
   assert.deepEqual(plainPre.actions, ["hint", "show_more"] as VisibleCoachAction[]);
   assert.equal(plainPre.frameKind, "plain_teaching");
 
-  // Branch transition produces exactly ["continue_from_here"]
+  // Branch transition produces exactly ["continue_from_here","restart_line"]
   const branch = getVisibleCoachActions({ trainerView: "assisted", trainerPhase: "ready_for_user", isUserTurn: true, trainingMode: "continuation", isBranchTransition: true, coachOwner: "branch_transition_surface" });
-  assert.deepEqual(branch.actions, ["continue_from_here"] as VisibleCoachAction[]);
+  assert.deepEqual(branch.actions, ["continue_from_here", "restart_line"] as VisibleCoachAction[]);
   assert.equal(branch.frameKind, "branch_transition");
 
   // Terminal / opponent frames produce [] for teaching actions
@@ -102,5 +102,5 @@ export function testPhaseActionGating(): void {
   const filteredLegacy = filterToVisibleCoachActions(["hint", "answer", "show_plan", "analyze_idea", "continue_from_here"]);
   assert.deepEqual(filteredLegacy, ["hint", "continue_from_here"] as VisibleCoachAction[]);
 
-  console.log("✓ v2.7.40 visibleActionPolicy regression tests passed (assisted=[], plain=[hint,show_more], branch=[continue], terminal=[], no forbidden)");
+  console.log("✓ v2.7.40 visibleActionPolicy regression tests passed (assisted=[], plain=[hint,show_more], branch=[continue,restart], terminal=[], no forbidden)");
 }

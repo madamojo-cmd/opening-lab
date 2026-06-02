@@ -85,13 +85,13 @@ export function testTrainerDebugSnapshot(): void {
     branchTransitionSurfaceRendered: true,
     continueFromHereAvailable: true,
     branchTransitionReason: "no_repertoire_node_or_plan_fallback",
-    presentationFrame: { visual: { shouldRender: false, source: "none" }, coach: { shouldRender: true, owner: "branch_transition_surface", intent: "branch_transition", title: "Continue from here", body: "This branch is not fully mapped yet. Continue from here to practice adapting.", buttons: ["continue_from_here"] }, legacy: {} },
+    presentationFrame: { visual: { shouldRender: false, source: "none" }, coach: { shouldRender: true, owner: "branch_transition_surface", intent: "branch_transition", title: "Line complete", body: "You finished this training line. Continue from this position or train the line again.", buttons: ["continue_from_here","restart_line"] }, legacy: {} },
     eventLog: [],
   });
   assert.equal(unresolvedWithTransition.health.criticalIssues.includes("restricted_user_turn_missing_expected_move"), false);
   assert.equal(unresolvedWithTransition.health.criticalIssues.includes("branch_transition_surface_missing_payload"), false);
-  assert.equal(unresolvedWithTransition.coach.visibleTitle, "Continue from here");
-  assert.deepEqual(unresolvedWithTransition.coach.visibleButtons, ["continue_from_here"]);
+  assert.equal(unresolvedWithTransition.coach.visibleTitle, "Line complete");
+  assert.deepEqual(unresolvedWithTransition.coach.visibleButtons, ["continue_from_here","restart_line"]);
 
   const continuationHealthy = buildTrainerDebugSnapshot({
     debugEnabled: true,

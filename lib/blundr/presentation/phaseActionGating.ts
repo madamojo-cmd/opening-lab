@@ -8,6 +8,7 @@ const EXPECTED_MOVE_ACTIONS = new Set<CoachButton>([
   "hint",
   "show_more",
   "continue_from_here",
+  "restart_line",
   // legacy (answer/show_*/etc) deleted from gate
 ]);
 
@@ -74,6 +75,7 @@ export function decideTrainerPhaseActionGate(input: TrainerPhaseActionGateInput)
       return activeUserMoveFrame && (input.trainingMode === "restricted" || input.trainingMode === "continuation");
     }
     if (button === "continue_from_here") return true; // branch allowed
+    if (button === "restart_line") return true; // branch allowed
     if (!activeUserMoveFrame && EXPECTED_MOVE_ACTIONS.has(button)) return false;
     // Drop any non-visible legacy at gate
     const vis = getVisibleCoachActions({

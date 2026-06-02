@@ -172,9 +172,9 @@ export function computeTrainerPresentationFrame(input: ComputeTrainerPresentatio
       ...coach,
       owner: "branch_transition_surface",
       shouldRender: true,
-      title: input.branchTransitionTitle ?? "Continue from here",
-      body: input.branchTransitionBody ?? "This branch is beyond the guided line. Continue from here to practice adapting.",
-      buttons: [...(input.branchTransitionButtons ?? ["continue_from_here"])],
+      title: input.branchTransitionTitle ?? "Line complete",
+      body: input.branchTransitionBody ?? "You finished this training line. Continue from this position or train the line again.",
+      buttons: [...(input.branchTransitionButtons ?? ["continue_from_here", "restart_line"])],
       suppressedReason: null,
     };
   }

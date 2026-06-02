@@ -126,7 +126,8 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
     branchTransitionSurfaceRendered &&
       String(visibleTitle ?? "").trim() &&
       String(visibleBody ?? "").trim() &&
-      visibleButtons.includes("continue_from_here"),
+      visibleButtons.includes("continue_from_here") &&
+      visibleButtons.includes("restart_line"),
   );
   if (input.trainerPhase === "transitioning") criticalIssues.push("illegal_transitioning_phase");
   if (input.trainerPhase === "opponent_animating") criticalIssues.push("illegal_transitioning_phase");
@@ -512,6 +513,7 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       branchTransitionSurfaceRendered,
       branchTransitionPayloadValid,
       continueFromHereButtonRendered: visibleButtons.includes("continue_from_here"),
+      trainAgainButtonRendered: visibleButtons.includes("restart_line"),
       branchTransitionReason: input.branchTransitionReason ?? null,
       continueFromHereAvailable: Boolean(input.continueFromHereAvailable),
       continueFromHereClicked: Boolean(input.continueFromHereClicked),

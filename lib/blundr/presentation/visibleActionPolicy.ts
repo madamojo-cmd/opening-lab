@@ -5,7 +5,7 @@
  * Strict rules enforced here:
  * - Plain View active teaching frame: ONLY ["hint", "show_more"]
  * - Assisted teaching frames: []
- * - Branch transition: ONLY ["continue_from_here"]
+ * - Branch transition: EXACTLY ["continue_from_here", "restart_line"]
  * - Terminal / opponent frames: []
  * - No forbidden labels ever emitted: "Reveal Next Move", "Reveal Move", "Show Answer", "Show Move", "Show Plan", "Analyze Idea", "Attack", "Defense", "Plan" etc.
  * - No raw UCI/SAN, "verified_top*", "Stockfish validated" in policy outputs for teaching frames.
@@ -79,9 +79,9 @@ export function getVisibleCoachActions(input: VisibleActionInput): VisibleAction
 
   if (isBranchSurface) {
     return {
-      actions: ["continue_from_here"],
+      actions: ["continue_from_here", "restart_line"],
       frameKind: "branch_transition",
-      reason: "branch_transition_only_continue",
+      reason: "branch_transition_continue_or_restart",
     };
   }
 
@@ -114,7 +114,7 @@ export function getVisibleCoachActions(input: VisibleActionInput): VisibleAction
   // Continuation out-of-book but not branch: treat as minimal or empty for teaching cleanliness (no legacy clutter)
   if (trainingMode === "continuation" && bookStatus === "out_of_book") {
     return {
-      actions: ["continue_from_here"], // or [] depending; branch policy covers
+      actions: ["continue_from_here", "restart_line"], // branch fallback
       frameKind: "branch_transition",
       reason: "out_of_book_continuation_fallback_to_branch",
     };
@@ -139,9 +139,9 @@ export function getVisibleActionLabel(action: VisibleCoachAction): string {
     case "show_more":
       return "Show More";
     case "continue_from_here":
-      return "Continue from here";
+      return "Continue Line";
     case "restart_line":
-      return "Restart line";
+      return "Train Again";
     case "review_pattern":
       return "Review pattern";
     default:

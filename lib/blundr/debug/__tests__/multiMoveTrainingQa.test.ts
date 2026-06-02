@@ -295,12 +295,9 @@ export function buildFrame(input: {
     !input.coachHiddenForFrame && (input.branchTransitionSurface || autoBranchTransition || expectedMoveResolution.source === "guided_branch_needs_continuation")
       ? {
           render: true,
-          title: "Continue from here",
-          body:
-            input.branchTransitionReason === "repertoire_line_exhausted_needs_continuation" || expectedMoveResolution.reason === "repertoire_line_exhausted_needs_continuation"
-              ? "This branch is beyond the guided line. Continue from here to practice adapting."
-              : "This branch is not fully mapped yet. Continue from here to practice adapting.",
-          buttons: ["continue_from_here"],
+          title: "Line complete",
+          body: "You finished this training line. Continue from this position or train the line again.",
+          buttons: ["continue_from_here", "restart_line"],
           reason: input.branchTransitionReason ?? expectedMoveResolution.reason ?? "guided_branch_needs_continuation",
         }
       : null;
