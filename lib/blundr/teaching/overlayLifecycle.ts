@@ -45,7 +45,7 @@ export function shouldRenderMoveTeachingOverlay(input: {
     input.phase === "ready_for_user" &&
     input.userToMove &&
     input.viewMode === "assisted" &&
-    input.mode === "move_teaching" &&
+    (input.mode === "move_teaching" || input.mode === "primary_move_only") &&
     Boolean(input.expectedUserMoveUci) &&
     isTrustedOverlayMoveTrust(input.moveTrust) &&
     Boolean(contextFen) &&

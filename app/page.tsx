@@ -1300,6 +1300,7 @@ export default function App(){
     }
   },[activeTab,trainingMode,isUserTurn,expectedMovesForValidationKey,fen,userColor,trainerView,showAnswer,shouldValidateTrainingMove,moveQualityUserStatus,moveQuality?.status,repertoire.name,historyIndex,positionHistory.length,lastMoveSan,explorerMoves,engineLines,progress.trainedPositions,progress.mistakes]);
   const boardFen=normalizeFen(fen);
+  const effectiveViewModeForVisual = (trainerView === "plain" && showMoreShown) ? "assisted" : trainerView;
   const visualRecipe=useMemo(()=>teachingOrchestration?compileVisualRecipe({
     trainingContext:teachingOrchestration,
     expectedMoveUci:teachingOrchestration.cue.metadata.moveUci,
@@ -1308,11 +1309,11 @@ export default function App(){
     lineId:selectedRepertoireId,
     fen,
     frameId:trainerFrameId,
-    viewMode:trainerView,
+    viewMode:effectiveViewModeForVisual,
     revealState:showAnswer?"revealed":"hidden",
     trainerPhase,
     userToMove:isUserTurn,
-  }):null,[teachingOrchestration,selectedRepertoireId,fen,trainerFrameId,trainerView,showAnswer,trainerPhase,isUserTurn]);
+  }):null,[teachingOrchestration,selectedRepertoireId,fen,trainerFrameId,trainerView,showAnswer,trainerPhase,isUserTurn,showMoreShown,effectiveViewModeForVisual]);
   const visualRecipeMoveUci=visualRecipe?.moveUci?.toLowerCase()??null;
   const visualRecipeTargetMatchesInstructionTarget=instructionTarget?.uci?(!visualRecipeMoveUci||visualRecipeMoveUci===instructionTarget.uci):"unknown";
   const visualRecipeBlockedByTargetMismatch=Boolean(instructionTarget?.uci&&visualRecipeMoveUci&&visualRecipeMoveUci!==instructionTarget.uci);
@@ -1321,16 +1322,16 @@ export default function App(){
     recipe:visualRecipeForRender,
     phase:trainerPhase,
     userToMove:isUserTurn,
-    viewMode:trainerView,
+    viewMode:effectiveViewModeForVisual,
     boardFen,
     trainerFrameId,
     overlayFrameId,
     opponentCandidateRenderedInMainUi:false,
-  }),[visualRecipeForRender,trainerPhase,isUserTurn,trainerView,boardFen,trainerFrameId,overlayFrameId]);
+  }),[visualRecipeForRender,trainerPhase,isUserTurn,trainerView,boardFen,trainerFrameId,overlayFrameId,showMoreShown,effectiveViewModeForVisual]);
   const visualRecipePlayback=useVisualRecipePlayback({
     recipe:visualRecipeForRender,
     phase:trainerPhase,
-    viewMode:trainerView,
+    viewMode:effectiveViewModeForVisual,
     boardFen,
     trainerFrameId,
     overlayFrameId,
@@ -1338,7 +1339,7 @@ export default function App(){
     adapterAllowed:visualRecipeOverlay.adapterAllowed,
     adapterSuppressedReason:visualRecipeOverlay.adapterSuppressedReason,
     opponentCandidateRenderedInMainUi:false,
-    enabled:trainerPhase==="ready_for_user"&&isUserTurn&&visualRecipeOverlay.adapterAllowed&&trainerView==="assisted",
+    enabled:trainerPhase==="ready_for_user"&&isUserTurn&&visualRecipeOverlay.adapterAllowed&&effectiveViewModeForVisual==="assisted",
   });
   const overlayFen=teachingOrchestration?normalizeFen(teachingOrchestration.cue.metadata.fenBefore):undefined;
   const overlaySource=teachingOrchestration?visualRecipeOverlay.overlaySource:activeVisualModelOutput?"visual_model":"annotation";
@@ -1882,7 +1883,7 @@ export default function App(){
     trainerPhase,
     trainingMode,
     isUserTurn,
-    answerShown:showAnswer,
+    answerShown:showAnswer || (trainerView === "plain" && showMoreShown),
     visualRecipeId:visualRecipeForRender?.visualRecipeId,
     visualRecipeLines:visualRecipeMainLines,
     continuationCandidateLines:continuationCandidateVisual.lines,
@@ -1918,7 +1919,7 @@ export default function App(){
     coachSurfacePolicy,
     // Agent 5: brain for canonical coach copy (quarantines legacy liveCoach/coachDecision text from pres coach on teaching frames)
     brainAnalysis: brainAnalysisForPresentation as any,
-  }),[trainerFrameId,fen,activeBoard,trainerView,trainerPhase,trainingMode,isUserTurn,visualRecipeForRender,visualRecipeMainLines,safeMoveArrowVisual.lines,continuationCandidateVisual.lines,legacyVisualLines,visualRecipePlayback.activePrimitiveIds,visualRecipePlayback.animationState,visualRecipeOverlay,overlayFrameId,coachDecision,coachHiddenForFrame,coachSurfacePolicy,branchTransitionSurface,brainAnalysisForPresentation]);
+  }),[trainerFrameId,fen,activeBoard,trainerView,trainerPhase,trainingMode,isUserTurn,visualRecipeForRender,visualRecipeMainLines,safeMoveArrowVisual.lines,continuationCandidateVisual.lines,legacyVisualLines,visualRecipePlayback.activePrimitiveIds,visualRecipePlayback.animationState,visualRecipeOverlay,overlayFrameId,coachDecision,coachHiddenForFrame,coachSurfacePolicy,branchTransitionSurface,brainAnalysisForPresentation,showMoreShown]);
   const displayedCoachDecision=useMemo(()=>{
     const normalizedCurrentFen=normalizeFen(fen);
     const decisionFrameId=String((coachDecision as any)?.frameId??"");
@@ -3244,8 +3245,14 @@ export default function App(){
       squareStyles[m.to]={...squareStyles[m.to],background:`radial-gradient(circle, ${dot} 0%, ${dot} 18%, transparent 23%)`,boxShadow:isCapture?"inset 0 0 0 3px rgba(239,68,68,.58)":"inset 0 0 0 2px rgba(22,163,74,.30)"};
     }
   }
-  if((presentationFrame.visual.source==="continuation_candidate"||presentationFrame.visual.source==="guided_target_fallback"))for(const highlight of [...continuationCandidateVisual.highlights,...safeMoveArrowVisual.highlights]){
-    squareStyles[highlight.square]={...squareStyles[highlight.square],background:"radial-gradient(circle, rgba(22,163,74,.24) 0%, rgba(22,163,74,.16) 38%, transparent 72%)",boxShadow:"inset 0 0 0 3px rgba(22,163,74,.45)"};
+  if(presentationFrame.visual.source==="continuation_candidate"){
+    for(const highlight of continuationCandidateVisual.highlights){
+      squareStyles[highlight.square]={...squareStyles[highlight.square],background:"radial-gradient(circle, rgba(22,163,74,.24) 0%, rgba(22,163,74,.16) 38%, transparent 72%)",boxShadow:"inset 0 0 0 3px rgba(22,163,74,.45)"};
+    }
+  } else if(presentationFrame.visual.source==="guided_target_fallback"){
+    for(const highlight of safeMoveArrowVisual.highlights){
+      squareStyles[highlight.square]={...squareStyles[highlight.square],background:"radial-gradient(circle, rgba(22,163,74,.24) 0%, rgba(22,163,74,.16) 38%, transparent 72%)",boxShadow:"inset 0 0 0 3px rgba(22,163,74,.45)"};
+    }
   }
   if(selectedSquare)squareStyles[selectedSquare]={...squareStyles[selectedSquare],boxShadow:"inset 0 0 0 3px rgba(22,101,52,.85), inset 0 0 24px rgba(22,101,52,.5)"};
   const visualSourceForRender=String(presentationFrame.visual.source??"none");

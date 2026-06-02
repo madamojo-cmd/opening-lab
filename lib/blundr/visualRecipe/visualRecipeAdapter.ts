@@ -204,12 +204,12 @@ export function adaptVisualRecipe(input: VisualRecipeAdapterInput): VisualRecipe
   }
 
   let allowed = false;
-  if (recipe.mode === "move_teaching") {
+  if (recipe.mode === "move_teaching" || recipe.mode === "primary_move_only") {
     allowed = shouldRenderMoveTeachingOverlay({
       phase: input.phase,
       userToMove: input.userToMove,
       viewMode: input.viewMode,
-      mode: "move_teaching",
+      mode: recipe.mode,
       expectedUserMoveUci: recipe.moveUci,
       moveTrust: recipe.debug?.sourceMoveTrust,
       contextFen: overlayFen,

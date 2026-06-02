@@ -65,14 +65,14 @@ export function deriveVisualRecipePermissions(input: VisualRecipePermissionInput
   if (trust === "reveal_only_unverified") {
     if (input.revealState === "revealed") {
       return {
-        mode: "reveal_answer",
+        mode: "primary_move_only",
         permissions: {
           ...basePermissions(),
           canShowAnswerMove: true,
-          canShowContext: true,
           canShowTargets: true,
           canPersistEndState: true,
           revealRequired: true,
+          // no context/pressure for primary-only indication
         },
         sourceMoveTrust: trust,
         sourceContextTrust: contextTrust,
@@ -104,14 +104,13 @@ export function deriveVisualRecipePermissions(input: VisualRecipePermissionInput
 
   if (trust && TRUSTED_TEACHING.includes(trust as MoveRecommendationTrust) && mode === "move_teaching" && !nextSuppressed) {
     return {
-      mode: "move_teaching",
+      mode: "primary_move_only",
       permissions: {
         ...basePermissions(),
         canShowAnswerMove: true,
-        canShowContext: true,
-        canShowPressure: true,
         canShowTargets: true,
         canPersistEndState: true,
+        // secondary/context/pressure disabled for clean primary-only MVP visuals
       },
       sourceMoveTrust: trust,
       sourceContextTrust: contextTrust,

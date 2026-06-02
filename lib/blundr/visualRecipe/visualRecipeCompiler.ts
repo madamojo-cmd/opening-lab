@@ -261,6 +261,14 @@ function compileBeats(input: {
 
   if (input.mode === "noop") return beats;
 
+  if (input.mode === "primary_move_only" || input.mode === "move_teaching" || input.mode === "reveal_answer") {
+    if (!validSquare(from) || !validSquare(to)) return beats;
+    const beat: BeatDraft = { order: 1, durationMs: 820, tag: "primary_move", narrationKey: "find_move", primitives: [] };
+    addMoveArrow(beat, from, to, "primary", "answer_move");
+    beats.push(beat);
+    return beats;
+  }
+
   if (input.mode === "assisted_context") {
     const storySquares = input.trainingContext?.selectedStory?.visualIntent.squares?.map((item) => item.square) ?? [];
     const groundedCenters = storySquares.filter((square) => CENTER_SQUARES.includes(square));
@@ -334,7 +342,7 @@ function compileBeats(input: {
   }
 
   const beat: BeatDraft = { order: 1, durationMs: 820, tag: "generic_move", narrationKey: "find_move", primitives: [] };
-  if (input.mode === "move_teaching" || input.mode === "reveal_answer") addMoveArrow(beat, from, to, "primary", "answer_move");
+  if ((input.mode as any) === "move_teaching" || (input.mode as any) === "reveal_answer" || (input.mode as any) === "primary_move_only") addMoveArrow(beat, from, to, "primary", "answer_move");
   if (safeCenterSquares.length) addSquareHighlight(beat, safeCenterSquares[0], "center", "supporting", "grounded_context");
   if (beat.primitives.length) beats.push(beat);
   return beats;
@@ -480,7 +488,7 @@ export function compileVisualRecipe(input: VisualRecipeCompileInput): VisualReci
   const reviewPromptKind =
     permissionDecision.mode === "assisted_context"
       ? "context_only"
-      : permissionDecision.mode === "reveal_answer"
+      : (permissionDecision.mode === "reveal_answer" || permissionDecision.mode === "primary_move_only" || permissionDecision.mode === "move_teaching")
         ? "assisted_replay"
         : "find_move";
 
@@ -514,6 +522,8 @@ export function compileVisualRecipe(input: VisualRecipeCompileInput): VisualReci
     tacticalPrimitivesPresent,
     tacticalPrimitivesRendered: false,
     schemaSerializable: true,
+    secondaryVisualsSuppressed: permissionDecision.mode === "primary_move_only",
+    primaryMoveUci: permissionDecision.mode === "primary_move_only" ? move.uci : undefined,
   };
 
   const recipe: VisualRecipe = {
@@ -548,6 +558,8 @@ export function compileVisualRecipe(input: VisualRecipeCompileInput): VisualReci
       explanationKey: conceptId,
     },
     debug,
+    secondaryVisualsSuppressed: permissionDecision.mode === "primary_move_only",
+    primaryMoveUci: permissionDecision.mode === "primary_move_only" ? move.uci : undefined,
   };
 
   recipe.debug = {

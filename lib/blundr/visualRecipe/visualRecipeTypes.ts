@@ -8,6 +8,7 @@ export type VisualRecipeSchemaVersion = typeof VISUAL_RECIPE_SCHEMA_VERSION;
 
 export type VisualRecipeMode =
   | "move_teaching"
+  | "primary_move_only"
   | "assisted_context"
   | "missed_pattern_replay"
   | "reveal_answer"
@@ -213,6 +214,8 @@ export type VisualRecipeDebug = {
   tacticalPrimitivesPresent: boolean;
   tacticalPrimitivesRendered: boolean;
   schemaSerializable: boolean;
+  secondaryVisualsSuppressed?: boolean;
+  primaryMoveUci?: string;
 };
 
 export type VisualRecipe = {
@@ -231,6 +234,9 @@ export type VisualRecipe = {
   permissions: VisualRecipePermissions;
   learningAnchor: VisualLearningAnchor;
   debug?: VisualRecipeDebug;
+  // For MVP: only primary move indication, no secondary/context/pressure
+  secondaryVisualsSuppressed?: boolean;
+  primaryMoveUci?: string;
 };
 
 export type VisualRecipeCompileInput = {
