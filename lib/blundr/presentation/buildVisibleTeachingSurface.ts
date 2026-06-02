@@ -426,6 +426,27 @@ export function buildVisibleTeachingSurface(
   const visualSource = visualShouldRender ? presentationVisualSource : "none";
   const visualBlockedReason = visualShouldRender ? null : (safetyBlocked ? blockedReason : isPlainPreShowMore ? "plain_pre_showmore_visuals_hidden" : "presentation_not_aligned_or_blocked");
 
+  // Step 2 hardening: hard debug/assertion guard for active teaching visuals (MVP primary_move_only)
+  // Ensures no more than one primary move target, suppressed secondaries, no pressure when primary mode.
+  if (isBrainTeachingFrame && visualShouldRender && !safetyBlocked) {
+    const numberOfRenderedMoveTargets = (visualLines || []).filter((ln: any) => ln && typeof ln.from === "string" && typeof ln.to === "string").length;
+    const vrDebug = (trainerPresentationFrame as any)?.visualRecipe || (trainerPresentationFrame as any)?.debug?.visualRecipe || (trainerPresentationFrame as any)?.debug || null;
+    const recipeMode = vrDebug?.mode || vrDebug?.visualRecipe?.mode;
+    const secSuppressed = !!(vrDebug?.secondaryVisualsSuppressed || vrDebug?.visualRecipe?.secondaryVisualsSuppressed);
+    const hasPressureLine = (visualLines || []).some((ln: any) => ln && (ln.kind === "pressure_line" || ln.effectFamily === "pressure" || (ln.color && String(ln.color).includes("orange"))));
+    if (recipeMode === "primary_move_only" || secSuppressed) {
+      if (numberOfRenderedMoveTargets > 1) {
+        console.error("[HARD GUARD primary_move_only] numberOfRenderedMoveTargets > 1:", numberOfRenderedMoveTargets);
+      }
+      if (secSuppressed !== true) {
+        console.error("[HARD GUARD primary_move_only] secondaryVisualsSuppressed !== true");
+      }
+      if (hasPressureLine) {
+        console.error("[HARD GUARD primary_move_only] pressure_line primitive present");
+      }
+    }
+  }
+
   // Final owner
   let owner: VisibleTeachingSurfaceOwner = "trainer_presentation_frame";
   if (!instructionTarget) owner = "no_instruction_target";

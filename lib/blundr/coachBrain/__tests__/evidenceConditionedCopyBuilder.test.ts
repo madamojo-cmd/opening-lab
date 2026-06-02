@@ -42,10 +42,7 @@ export function testEvidenceConditionedCopyBuilder(): void {
     packet: { ...bc4Packet, viewMode: "plain", exactMoveAllowed: false },
     interaction: "hint",
   });
-  // NOTE: pre-existing test expectation; currently .hint for plain+interaction=hint uses verifiedMoveFallback and includes the move name (see body override for none interaction).
-  // We do not broadly alter copy or plain-hint behavior in this narrow null-safety hotfix. Body for plain is still protected (tested above).
-  // assert.equal((hint.hint ?? "").toLowerCase().includes("bxf7"), false);
-  assert.equal((hint.body ?? "").toLowerCase().includes("find the move by plan"), true); // ensure plain protection still holds for this packet
+  assert.equal((hint.hint ?? "").toLowerCase().includes("bxf7"), false);
 
   const answer = buildCoachCopyFromEvidence({
     packet: { ...bc4Packet, viewMode: "plain", exactMoveAllowed: true },

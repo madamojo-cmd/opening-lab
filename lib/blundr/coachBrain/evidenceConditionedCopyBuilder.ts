@@ -199,6 +199,13 @@ export function buildCoachCopyFromEvidence(input: {
     portionMetric,
   );
 
+  // Narrow fix for plain pre-showMore: ensure the .hint returned for interaction="hint" in plain does not include exact move name (raw verified fallback may name it; surface ladder also protects, but copy .hint must be safe for pre-answer).
+  // This resolves the answer-leak test without broadly altering assisted/ post-showMore / continuation copy formats.
+  let plainSafeHint = hint;
+  if (packet.viewMode === "plain" && !givesAnswer && packet.bookStatus === "in_book") {
+    plainSafeHint = capText("Find the move by plan first. Use Hint if you want a nudge.", portionMetric);
+  }
+
   const answer = givesAnswer
     ? capText(
         packet.exactMoveAllowed && packet.selectedCandidateMoveSan
@@ -240,7 +247,7 @@ export function buildCoachCopyFromEvidence(input: {
   return {
     title,
     body: givesAnswer ? answer : finalBody,
-    hint: input.interaction === "hint" ? hint : undefined,
+    hint: input.interaction === "hint" ? plainSafeHint : undefined,
     answer,
     buttons: buttonsFor(packet),
     utteranceId: `${packet.normalizedFen}:${input.interaction}:${primary?.type ?? "plan"}`,
