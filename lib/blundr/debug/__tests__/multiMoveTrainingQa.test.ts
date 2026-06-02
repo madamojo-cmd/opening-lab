@@ -1054,4 +1054,21 @@ export function testMultiMoveTrainingQa(): void {
     userExplicitlyEnteredContinuation: true,
   });
   assert.equal(continuationNoRepeatBreak.branchTransitionSurfaceRendered, false, "continuation should not re-open break buttons after Continue Line");
+
+  const hardStopBackupPause = buildFrame({
+    openingTree: tree,
+    fen: providedBranchFEN,
+    frameId: 20,
+    trainerView: "assisted",
+    trainingMode: "restricted",
+    userColor: "w",
+    visualMode: "none",
+    branchTransitionSurface: true,
+    branchTransitionReason: "hard_stop_backup",
+    continueFromHereClicked: false,
+    userExplicitlyEnteredContinuation: false,
+  });
+  assert.equal(hardStopBackupPause.branchTransitionSurfaceRendered, true, "hard stop backup should produce pre-continuation pause");
+  assert.equal(hardStopBackupPause.trainingMode, "restricted", "hard stop backup must not auto-enter continuation");
+  assert.equal(Object.prototype.hasOwnProperty.call((hardStopBackupPause.debugSnapshot as any).continuation, "hardStopBackupEligible"), true);
 }

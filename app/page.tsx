@@ -134,6 +134,7 @@ type PendingOpponentRequest = {
   mode: TrainingMode;
   startedAt: number;
 };
+const HARD_CONTINUATION_BREAK_PLY = 22;
 type LiveBrain = { ratingLabel: string; ratingPool: string; book: SystemState; lichess: SystemState; engine: SystemState; gpt: SystemState; source: string; latency?: number; note?: string };
 type LastCoachRecord = {
   frameId: number;
@@ -924,7 +925,7 @@ export default function App(){
     trainingMode === "restricted" &&
     !userExplicitlyEnteredContinuation &&
     !continueFromHereClicked &&
-    currentPlyCount >= 22 &&
+    currentPlyCount >= HARD_CONTINUATION_BREAK_PLY &&
     currentPlyCount > 0 &&
     !game.isGameOver();
   const lineExhaustedForPause = trainingMode === "restricted" && isUserTurn && !userExplicitlyEnteredContinuation && selectedLineCompleteConfirmed;
@@ -936,6 +937,28 @@ export default function App(){
     continuationPauseClicked: continuationHardStopAcknowledged,
   });
   const forceContinuationPause = isUserTurn && continuationPauseDecision.pauseRequired && !userExplicitlyEnteredContinuation;
+  const continuationPauseAlreadyConsumed = Boolean(userExplicitlyEnteredContinuation || continueFromHereClicked);
+  const hardStopBackupEligible = Boolean(
+    trainingMode === "restricted" &&
+    !continuationPauseAlreadyConsumed &&
+    !game.isGameOver() &&
+    currentPlyCount >= HARD_CONTINUATION_BREAK_PLY &&
+    currentPlyCount > 0,
+  );
+  const hardStopBackupBlockedReason =
+    hardStopBackupEligible
+      ? null
+      : trainingMode !== "restricted"
+        ? "not_restricted_mode"
+        : continuationPauseAlreadyConsumed
+          ? "pause_already_consumed"
+          : game.isGameOver()
+            ? "terminal_position"
+            : currentPlyCount <= 0
+              ? "ply_not_started"
+              : currentPlyCount < HARD_CONTINUATION_BREAK_PLY
+                ? "below_hard_stop_threshold"
+                : "unknown";
 
   // Base hard EoB (without loading self-ref) for safe ordering (Step 10).
   const baseHardEndOfBookGate = useMemo(() => {
@@ -1979,7 +2002,7 @@ export default function App(){
     const transitionBody = "You finished this training line. Continue from this position or train the line again.";
     const transitionButtons = ["continue_from_here","restart_line"] as const;
     if (isUserTurn&&forceContinuationPause&&!userExplicitlyEnteredContinuation) {
-      const reason = continuationPauseDecision.pauseReason ?? "line_complete";
+      const reason = continuationPauseDecision.pauseReason==="move_11_hard_stop"?"hard_stop_backup":(continuationPauseDecision.pauseReason ?? "line_complete");
       return {
         render: true,
         title: transitionTitle,
@@ -3064,12 +3087,14 @@ export default function App(){
     let continuationPolicyDecision:ReturnType<typeof selectContinuedPlayMove>|null=null;
     if(mode==="restricted"){
       if(!currentOpponentBookOptions.length){
-        setTrainingMode("continuation");
-        setUserExplicitlyEnteredContinuation(true);
-        setContinuationAnalysisStatus("opponent_replying");
-        setFeedback("Guided opponent branch ended. Continuing from here against the bot.");
+        setTrainingMode("restricted");
+        setUserExplicitlyEnteredContinuation(false);
+        setContinueFromHereClicked(false);
+        setContinuationAnalysisStatus("idle");
+        setTrainerPhase("ready_for_user");
+        setBookComplete(true);
+        setFeedback("Line complete. Continue from this position or train the line again.");
         setBrain(p=>({...p,book:"complete",source:"opponent branch exhausted",lichess:"ready"}));
-        scheduleOpponentReply({mode:"continuation",delayMs:0,baseFen:current.fen()});
         return;
       }
       const explorer=await loadExplorer(current.fen());
@@ -3649,8 +3674,12 @@ export default function App(){
     autoContinuationReason:userExplicitlyEnteredContinuation?"user_explicit":"none",
     userExplicitlyEnteredContinuation,
     prematureContinuationBlocked:trainingMode!=="continuation"&&!guidedCoveragePolicy.guidedCompleteAllowed,
-    transitionToContinuationAllowed:userExplicitlyEnteredContinuation||guidedCoveragePolicy.guidedCompleteAllowed,
-    transitionToContinuationReason:userExplicitlyEnteredContinuation?"user_explicit":guidedCoveragePolicy.guidedCompleteAllowed?guidedCoveragePolicy.guidedCoverageState:"not_allowed",
+    transitionToContinuationAllowed:userExplicitlyEnteredContinuation,
+    transitionToContinuationReason:userExplicitlyEnteredContinuation?"user_explicit":"not_allowed_until_continue_line",
+    continuationPauseAlreadyConsumed,
+    hardStopBackupEligible,
+    hardStopBackupBlockedReason,
+    hardStopPlyLimit:HARD_CONTINUATION_BREAK_PLY,
     // Agent 6: surface + invariant fields for strengthened snapshot + debug panel
     visibleTeachingSurface: convergedVisibleSurface as any,
     visibleSurfaceOwner: visibleTeachingSurface?.owner ?? null,
