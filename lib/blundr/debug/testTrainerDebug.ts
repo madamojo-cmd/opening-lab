@@ -6,6 +6,7 @@ import { testMultiMoveTrainingQa } from "./testMultiMoveTrainingQa";
 import { testCurrentInstructionFrame } from "../runtime/__tests__/currentInstructionFrame.test";
 import { testOpponentReplyGuard } from "../runtime/__tests__/opponentReplyGuard.test";
 import { testContinuationCandidateVisual } from "../visual/__tests__/continuationCandidateVisual.test";
+import { testCoachActionStylePolicy } from "../presentation/__tests__/coachActionStylePolicy.test";
 
 export function testTrainerDebug(): void {
   console.log("Running Blundr trainer debug QA...");
@@ -21,6 +22,8 @@ export function testTrainerDebug(): void {
   console.log("✓ opponent reply guard passed");
   testContinuationCandidateVisual();
   console.log("✓ continuation candidate visual passed");
+  testCoachActionStylePolicy();
+  console.log("✓ coach action style policy passed");
   testFallbackCopyGuard();
   console.log("✓ fallback copy guard passed");
   if (process.env.RUN_MULTI_MOVE_QA === "1") {
