@@ -69,21 +69,71 @@ function pieceName(type: string): string {
   return type === "p" ? "pawn" : type === "n" ? "knight" : type === "b" ? "bishop" : type === "r" ? "rook" : type === "q" ? "queen" : "king";
 }
 
+function getSafeSan(move: any): string | null {
+  if (!move) return null;
+  const s = move.san;
+  return (typeof s === "string" && s.length > 0) ? s : null;
+}
+
+function getSafeUci(move: any): string | null {
+  if (!move) return null;
+  const u = move.uci;
+  return (typeof u === "string" && u.length > 0) ? u : null;
+}
+
 function verifiedMoveFallback(packet: CoachEvidencePacket): string {
-  const move = packet.moveFacts;
+  const move = packet?.moveFacts as any;
   if (!move?.legal) {
     return "A legal continuation is available.";
   }
-  if (move.san.includes("#")) return `${move.san} is checkmate.`;
-  if (move.isCapture && move.isCheck) return `${move.san} captures on ${move.movedPiece.to} with check.`;
-  if (move.isCapture) return `${move.san} captures on ${move.movedPiece.to}.`;
-  if (move.isCastle) return `${move.san} brings the king to safety and connects the rooks.`;
-  if (move.isPromotion) return `${move.san} promotes the pawn to ${move.uci.slice(-1).toUpperCase()}.`;
-  if (move.movedPiece.type === "p" && ["d4", "e4", "d5", "e5"].includes(move.movedPiece.to)) return `${move.san} advances the pawn into the center and changes the central structure.`;
-  if (move.movedPiece.type === "p") return `${move.san} advances the pawn and gains space.`;
-  if (move.movedPiece.type === "n" && (Number(move.movedPiece.to[1]) > 2 && move.movedPiece.color === "w" || Number(move.movedPiece.to[1]) < 7 && move.movedPiece.color === "b")) return `${move.san} develops the knight toward the center.`;
-  if (move.movedPiece.type === "b" && move.movedPieceAttacksAfter.length) return `${move.san} develops a bishop onto an active diagonal.`;
-  return `${move.san} is a legal continuation that improves the position without creating an immediate tactical problem.`;
+  const san = getSafeSan(move);
+  const uci = getSafeUci(move);
+  const isCapture = Boolean(move.isCapture);
+  const isCheck = Boolean(move.isCheck);
+  const isCastle = Boolean(move.isCastle);
+  const isPromotion = Boolean(move.isPromotion);
+  const movedPiece = (move.movedPiece && typeof move.movedPiece === "object") ? move.movedPiece : null;
+  const attacksAfter = Array.isArray(move.movedPieceAttacksAfter) ? move.movedPieceAttacksAfter : [];
+
+  // Specific copy only when we have a valid san string; never call .includes on non-string.
+  // Do not hallucinate SAN or piece details when data is missing.
+  if (san && san.includes("#")) return `${san} is checkmate.`;
+  if (san && isCapture && isCheck) {
+    const to = movedPiece?.to ?? move.to ?? "?";
+    return `${san} captures on ${to} with check.`;
+  }
+  if (san && isCapture) {
+    const to = movedPiece?.to ?? move.to ?? "?";
+    return `${san} captures on ${to}.`;
+  }
+  if (san && isCastle) return `${san} brings the king to safety and connects the rooks.`;
+  if (san && isPromotion) {
+    const promo = uci ? uci.slice(-1).toUpperCase() : "piece";
+    return `${san} promotes the pawn to ${promo}.`;
+  }
+  if (san && movedPiece) {
+    const to = movedPiece.to;
+    const type = movedPiece.type;
+    const color = movedPiece.color;
+    if (type === "p" && to && ["d4", "e4", "d5", "e5"].includes(to)) return `${san} advances the pawn into the center and changes the central structure.`;
+    if (type === "p") return `${san} advances the pawn and gains space.`;
+    if (type === "n" && to) {
+      const rank = Number(to[1]);
+      if (!isNaN(rank) && ((rank > 2 && color === "w") || (rank < 7 && color === "b"))) {
+        return `${san} develops the knight toward the center.`;
+      }
+    }
+    if (type === "b" && attacksAfter.length) return `${san} develops a bishop onto an active diagonal.`;
+  }
+
+  // Safe generic fallbacks (no invented SAN when missing)
+  if (san) {
+    return `${san} is a legal continuation that improves the position without creating an immediate tactical problem.`;
+  }
+  if (uci) {
+    return `This move (${uci}) is available from the current position.`;
+  }
+  return "A legal continuation is available.";
 }
 
 function buttonsFor(packet: CoachEvidencePacket): CoachButton[] {
