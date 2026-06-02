@@ -18,7 +18,16 @@ export type ContinuedCandidate = {
 export type ContinuedPlayPolicyDecision = {
   selectedUci: string;
   selectedSan?: string;
-  source: "book_supported" | "repertoire_supported" | "lichess_engine_validated" | "engine_top" | "human_continuation_unverified" | "emergency_legal_fallback" | "no_reliable_continuation";
+  source:
+    | "book_supported"
+    | "repertoire_supported"
+    | "lichess_engine_validated"
+    | "engine_top"
+    | "engine_best"
+    | "human_continuation_unverified"
+    | "emergency_legal_fallback"
+    | "no_reliable_continuation"
+    | "freeplay_continuation";
   reason: string;
   debug: {
     candidates: Array<{
@@ -41,6 +50,11 @@ export type ContinuedPlayPolicyDecision = {
     selectedMoveInCandidateList: boolean;
     selectionConsistency: "consistent" | "inconsistent";
     continuationMoveSafetySource: "engine_or_support" | "human_unverified" | "fallback";
+    selectedCandidateSource?: "book" | "repertoire" | "database" | "engine_best" | "engine_top" | "human_unverified" | "fallback" | "none";
+    engineFallbackUsed?: boolean;
+    engineFallbackReason?: string | null;
+    databaseCandidatesRejected?: boolean;
+    rejectionReasons?: string[];
   };
 };
 
@@ -206,9 +220,28 @@ export function selectContinuedPlayMove(input: {
     source: ContinuedPlayPolicyDecision["source"],
     reason: string,
     safetySource: ContinuedPlayPolicyDecision["debug"]["continuationMoveSafetySource"],
+    extraDebug?: Partial<ContinuedPlayPolicyDecision["debug"]>,
   ): ContinuedPlayPolicyDecision => {
     const selectedMoveInCandidateList = selectedUci ? debugCandidates.some((c) => c.moveUci === selectedUci) : false;
     const selectionConsistency = selectedMoveInCandidateList ? "consistent" : "inconsistent";
+    const rejectedDatabase = debugCandidates.filter((candidate) => candidate.source === "lichess" && !candidate.accepted);
+    const rejectionReasons = Array.from(new Set(rejectedDatabase.map((candidate) => candidate.rejectionReason).filter(Boolean) as string[]));
+    const selectedCandidateSource: NonNullable<ContinuedPlayPolicyDecision["debug"]["selectedCandidateSource"]> =
+      source === "book_supported"
+        ? "book"
+        : source === "repertoire_supported"
+          ? "repertoire"
+          : source === "lichess_engine_validated"
+            ? "database"
+            : source === "engine_best"
+              ? "engine_best"
+              : source === "engine_top"
+                ? "engine_top"
+                : source === "human_continuation_unverified"
+                  ? "human_unverified"
+                  : source === "no_reliable_continuation" || source === "freeplay_continuation"
+                    ? "none"
+                    : "fallback";
     return {
       selectedUci,
       selectedSan,
@@ -221,18 +254,15 @@ export function selectContinuedPlayMove(input: {
         selectedMoveInCandidateList,
         selectionConsistency,
         continuationMoveSafetySource: safetySource,
+        selectedCandidateSource,
+        engineFallbackUsed: source === "engine_best",
+        engineFallbackReason: source === "engine_best" ? "no_database_candidate_passed_reliability_gate" : null,
+        databaseCandidatesRejected: rejectedDatabase.length > 0,
+        rejectionReasons,
+        ...extraDebug,
       },
     };
   };
-
-  if (requireReliableDatabaseMove) {
-    const reliable = lichess.filter((candidate) => isSupportedContinuationCandidate(candidate) && stockfishValidated(candidate));
-    const selected = deterministicPick(reliable, true);
-    if (selected) {
-      return finalize(selected.uci, selected.san, "lichess_engine_validated", "database_500_18_stockfish_top10", "engine_or_support");
-    }
-    return finalize("", undefined, "no_reliable_continuation", "no_database_candidate_passed_500_18_and_stockfish_top10", "fallback");
-  }
 
   const topBook = deterministicPick(book);
   if (topBook) {
@@ -242,6 +272,32 @@ export function selectContinuedPlayMove(input: {
   const topRep = deterministicPick(rep);
   if (topRep) {
     return finalize(topRep.uci, topRep.san, "repertoire_supported", "repertoire_support", "engine_or_support");
+  }
+
+  if (requireReliableDatabaseMove) {
+    const reliable = lichess.filter((candidate) => isSupportedContinuationCandidate(candidate) && stockfishValidated(candidate));
+    const selected = deterministicPick(reliable, true);
+    if (selected) {
+      return finalize(selected.uci, selected.san, "lichess_engine_validated", "database_500_18_stockfish_top10", "engine_or_support");
+    }
+    const engineBest = deterministicPick(engineMoves, true) ?? input.engineTop ?? null;
+    if (engineBest?.uci) {
+      return finalize(
+        engineBest.uci,
+        engineBest.san,
+        "engine_best",
+        "no_database_candidate_passed_reliability_gate",
+        "engine_or_support",
+        {
+          engineFallbackUsed: true,
+          engineFallbackReason: "no_database_candidate_passed_reliability_gate",
+        },
+      );
+    }
+    return finalize("", undefined, "freeplay_continuation", "engine_unavailable_enter_freeplay", "fallback", {
+      engineFallbackUsed: false,
+      engineFallbackReason: "engine_unavailable_or_no_legal_engine_move",
+    });
   }
 
   const validatedLichess = lichess.filter((c) => c.engineSafe || c.supported);

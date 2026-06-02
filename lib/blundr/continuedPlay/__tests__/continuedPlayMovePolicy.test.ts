@@ -41,25 +41,33 @@ export function testContinuedPlayMovePolicy(): void {
     fen,
     requireReliableDatabaseMove: true,
     lichessCandidates: [{ uci: "e1g1", san: "O-O", source: "lichess", games: 499, playRate: 0.30, stockfishInTop10: true, stockfishRank: 1, engineSafe: true }],
+    engineTop: { uci: "c4f7", san: "Bxf7+", source: "engine", stockfishRank: 1, stockfishInTop10: true, engineSafe: true },
   });
-  assert.equal(strictBelowGames?.source, "no_reliable_continuation");
+  assert.equal(strictBelowGames?.source, "engine_best");
+  assert.equal(strictBelowGames?.selectedUci, "c4f7");
   assert.equal(strictBelowGames?.debug.candidates[0]?.rejectionReason, "below_500_games");
 
   const strictBelowShare = selectContinuedPlayMove({
     fen,
     requireReliableDatabaseMove: true,
     lichessCandidates: [{ uci: "e1g1", san: "O-O", source: "lichess", games: 600, playRate: 0.17, stockfishInTop10: true, stockfishRank: 1, engineSafe: true }],
+    engineTop: { uci: "c4f7", san: "Bxf7+", source: "engine", stockfishRank: 1, stockfishInTop10: true, engineSafe: true },
   });
-  assert.equal(strictBelowShare?.source, "no_reliable_continuation");
+  assert.equal(strictBelowShare?.source, "engine_best");
+  assert.equal(strictBelowShare?.selectedUci, "c4f7");
   assert.equal(strictBelowShare?.debug.candidates[0]?.rejectionReason, "below_18_percent");
 
   const strictNotTop10 = selectContinuedPlayMove({
     fen,
     requireReliableDatabaseMove: true,
     lichessCandidates: [{ uci: "e1g1", san: "O-O", source: "lichess", games: 600, playRate: 0.22, stockfishInTop10: false, engineSafe: false }],
+    engineTop: { uci: "c4f7", san: "Bxf7+", source: "engine", stockfishRank: 1, stockfishInTop10: true, engineSafe: true },
   });
-  assert.equal(strictNotTop10?.source, "no_reliable_continuation");
+  assert.equal(strictNotTop10?.source, "engine_best");
+  assert.equal(strictNotTop10?.selectedUci, "c4f7");
   assert.equal(strictNotTop10?.debug.candidates[0]?.rejectionReason, "not_stockfish_top10");
+  assert.equal(strictNotTop10?.debug.engineFallbackUsed, true);
+  assert.equal(strictNotTop10?.debug.engineFallbackReason, "no_database_candidate_passed_reliability_gate");
 
   const strictAccepted = selectContinuedPlayMove({
     fen,
@@ -71,6 +79,16 @@ export function testContinuedPlayMovePolicy(): void {
   });
   assert.equal(strictAccepted?.source, "lichess_engine_validated");
   assert.equal(strictAccepted?.selectedUci, "e1g1");
+
+  const strictFreeplay = selectContinuedPlayMove({
+    fen,
+    requireReliableDatabaseMove: true,
+    lichessCandidates: [{ uci: "e1g1", san: "O-O", source: "lichess", games: 499, playRate: 0.12, stockfishInTop10: false, engineSafe: false }],
+    engineTop: null,
+    engineTopMoves: [],
+  });
+  assert.equal(strictFreeplay?.source, "freeplay_continuation");
+  assert.equal(strictFreeplay?.selectedUci, "");
 
   const pause21 = shouldForceContinuationPause({ plyCount: 21, continuationPauseClicked: false });
   assert.equal(pause21.pauseRequired, false);

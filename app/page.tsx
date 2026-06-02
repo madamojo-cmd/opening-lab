@@ -419,6 +419,22 @@ function buildUserFacingTargetFallback(input:{
   };
 }
 
+function isEngineBestContinuationSource(source?:string|null){
+  const value=String(source??"").trim();
+  return value==="engine_best"||value==="stockfish_best_move_fallback"||value==="engine_best_move_fallback";
+}
+
+function buildEngineBestContinuationCopy(target:NonNullable<ReturnType<typeof buildCurrentInstructionFrame>["target"]>){
+  const pieceNameByCode:Record<string,string>={p:"pawn",n:"knight",b:"bishop",r:"rook",q:"queen",k:"king"};
+  const pieceName=pieceNameByCode[target.pieceType]??"piece";
+  const destinationSquare=String(target.to??"").toLowerCase();
+  const san=target.san||target.uci;
+  return{
+    title:`${san} — Continue with the best move.`,
+    body:`Move the ${pieceName} to ${destinationSquare}. This is the strongest verified continuation from this position.`,
+  };
+}
+
 function detectUnverifiedCoachClaims(input:{
   body:string;
   target:{pieceType:string;isDevelopment:boolean;isDiagonalMove:boolean;isCapture:boolean;isCheck:boolean;isMate:boolean;isPromotion:boolean;isKingSafetyMove:boolean;isCentralPawnAdvance:boolean}|null;
@@ -1054,7 +1070,19 @@ export default function App(){
       lastMoveUci: lastMove || null, // v2.7.40 P1: pass for emergency reverse guard
       requireReliableDatabaseMove:true,
     });
-    if(!policy?.selectedUci||policy.source==="no_reliable_continuation")return policy?{uci:"",san:"",source:policy.source,reason:policy.reason,isEmergencyLegalFallback:false,debug:policy.debug}:null;
+    if(!policy?.selectedUci)return policy?{
+      uci:"",
+      san:"",
+      source:policy.source,
+      reason:policy.reason,
+      isEmergencyLegalFallback:false,
+      isEngineBestFallback:policy.source==="engine_best",
+      engineFallbackUsed:Boolean(policy.debug?.engineFallbackUsed),
+      engineFallbackReason:policy.debug?.engineFallbackReason??null,
+      databaseCandidatesRejected:Boolean(policy.debug?.databaseCandidatesRejected),
+      rejectionReasons:Array.isArray(policy.debug?.rejectionReasons)?policy.debug.rejectionReasons:[],
+      debug:policy.debug,
+    }:null;
     if(!legalUcis.has(policy.selectedUci))return null;
     const applied=applyUci(fen,policy.selectedUci);
     if(!applied)return null;
@@ -1064,6 +1092,11 @@ export default function App(){
       source:policy.source,
       reason:policy.reason,
       isEmergencyLegalFallback:false,
+      isEngineBestFallback:policy.source==="engine_best",
+      engineFallbackUsed:Boolean(policy.debug?.engineFallbackUsed),
+      engineFallbackReason:policy.debug?.engineFallbackReason??null,
+      databaseCandidatesRejected:Boolean(policy.debug?.databaseCandidatesRejected),
+      rejectionReasons:Array.isArray(policy.debug?.rejectionReasons)?policy.debug.rejectionReasons:[],
       debug:policy.debug,
     };
   },[
@@ -1754,6 +1787,24 @@ export default function App(){
         buttons:[],
         suppressedReason:phaseActionGate.blockedReason??rawCoachDecision?.suppressedReason,
         debug:normalizeCoachDebugMetadata({...(rawCoachDecision?.debug??{}),...coachDebugBase,phaseActionGate}),
+      };
+    }
+    if(candidateCoachAllowed&&instructionTarget&&isEngineBestContinuationSource(instructionTarget.source)){
+      const engineCopy=buildEngineBestContinuationCopy(instructionTarget);
+      return{
+        ...rawCoachDecision,
+        mode:"supported_continuation",
+        action:"show_plan",
+        title:engineCopy.title,
+        body:engineCopy.body,
+        buttons:phaseActionGate.filteredButtons.length?phaseActionGate.filteredButtons:["show_plan","analyze_idea","show_move","hide"],
+        shouldShowCoachCard:true,
+        exactMoveAllowed:true,
+        givesAnswer:false,
+        revealRisk:"low",
+        utteranceId:`${normalizeFen(fen)}:engine_best_fallback:${currentSelectedCandidateUci}`,
+        utteranceFamily:"candidate_fallback",
+        debug:normalizeCoachDebugMetadata({...(rawCoachDecision?.debug??{}),...coachDebugBase,phaseActionGate,coachIntent:"show_continued_plan",coachDecisionSource:"verified_safe_fallback",candidateCoachFallbackUsed:true,candidateCoachFallbackReason:"engine_best_move_fallback",selectedCandidateSource:"engine_best",verifiedFallbackUsed:true,fallbackReason:"engine_best_move_fallback"}),
       };
     }
     if(candidateCoachAllowed&&genericCandidateCoach){
@@ -2619,7 +2670,7 @@ export default function App(){
       setContinuationAnalysisStatus("error");
       return;
     }
-    if(continuationAnalysisStatus==="ready"){
+    if(continuationAnalysisStatus==="ready"&&continuationPolicyCandidate?.source!=="freeplay_continuation"){
       pushRuntimeCriticalIssue("continuation_ready_without_candidate");
     }
   },[activeTab,trainingMode,trainerPhase,isUserTurn,instructionTarget?.kind,fen,game,forceContinuationPause,continuationPauseClicked,engineLines.length,continuationPolicyCandidate?.uci,continuationPolicyCandidate?.source,continuationAnalysisStatus]);
@@ -3460,6 +3511,12 @@ export default function App(){
     continuationPolicyDebug:continuationPolicyCandidate?.debug??null,
     continuationSelectionSource:continuationPolicyCandidate?.source??null,
     continuationSelectionReason:continuationPolicyCandidate?.reason??null,
+    continuationEngineFallbackUsed:Boolean(continuationPolicyCandidate?.engineFallbackUsed||continuationPolicyCandidate?.isEngineBestFallback),
+    continuationEngineFallbackReason:continuationPolicyCandidate?.engineFallbackReason??null,
+    continuationDatabaseCandidatesRejected:Boolean(continuationPolicyCandidate?.databaseCandidatesRejected),
+    continuationRejectionReasons:continuationPolicyCandidate?.rejectionReasons??[],
+    continuationSelectedCandidateSource:continuationPolicyCandidate?.isEngineBestFallback?"engine_best":(continuationPolicyCandidate?.source??null),
+    continuationAnalysisStatusLabel:continuationPolicyCandidate?.isEngineBestFallback?"complete":continuationAnalysisStatus,
     continuationAnalysisRequestId:continuationAnalysisSeqRef.current,
     continuationAnalysisFen4:enginePreview?.fen?normalizeFen(enginePreview.fen):null,
     opponentVariationDebug,
