@@ -91,7 +91,11 @@ export function computeTrainerPresentationFrame(input: ComputeTrainerPresentatio
     input.activeBoard &&
     input.trainerPhase === "ready_for_user" &&
     input.isUserTurn &&
-    input.trainerView === "assisted",
+    (input.trainerView === "assisted" || input.trainerView === "plain"),
+    // Step 4: allow plain so that when showMoreShown, the (effective-assisted) visualRecipeLines
+    // (primary f1-c4 only) can be adopted into presFrame.visual; surface will still suppress
+    // for plain pre-showMore via !isPlainPreShowMore. This enables plain post to reuse assisted
+    // primary move indication without touching primary_move_only renderer or board sizing.
   );
 
   const recipeLines = cleanLines(input.visualRecipeLines);

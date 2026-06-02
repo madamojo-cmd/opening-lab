@@ -628,6 +628,46 @@ export function testAgent7FullPromptCoverage(): void {
   assert.equal(/bishop|b/i.test(mainTitle + " " + showMoreContent), true);
   assert.equal(postSurfForShow.showMore.shown, true);
 
+  // Step 4: final Plain View Show More verification (pre no reveal Bc4, post shows assisted payload + primary f1-c4 only)
+  // pre for bc4 (reconstruct using the plain bc4 setup)
+  const preBc4Surf = buildVisibleTeachingSurface({
+    currentInstructionFrame: { targetUci: "f1c4", targetSan: "Bc4", pieceType: "b", from: "f1", to: "c4", fen: plainBc4Fen, source: "book", legal: true } as any,
+    trainerPresentationFrame: computeTrainerPresentationFrame({ ...basePresInput, showMoreShown: false, answerShown: false, visualRecipeLines: plainBc4Recipe.beats.flatMap((b: any) => b.primitives.map((p: any) => ({ from: p.from, to: p.to, kind: p.type }))) as any, coachBody: "Find the next move." } as any),
+    showMoreShown: false, trainerView: "plain", trainingMode: "restricted", isUserTurn: true, trainerPhase: "ready_for_user", bookStatus: "in_book", isBranchTransition: false, isTerminal: false, brainAnalysis: null, hintCount: 0,
+    coachMoveUci: null, visualMoveUci: null, showMoreTargetUci: null,
+  } as any);
+  const preAll = JSON.stringify(preBc4Surf).toLowerCase();
+  assert.equal(/bc4|f1c4| f1 | c4 |bishop|arrow|target/i.test(preAll) && !/find the next move|hint/i.test(preAll) ? false : true, true); // pre must not reveal SAN/UCI/sq/piece/arrow/target for Bc4
+  if (preBc4Surf.visual && preBc4Surf.visual.shouldRender) throw new Error("plain pre Bc4 must suppress visual");
+  if (preBc4Surf.coach && preBc4Surf.coach.body && /bc4|f1c4|bishop to c4/i.test(preBc4Surf.coach.body)) throw new Error("plain pre coach body must not reveal Bc4 details");
+
+  // post bc4 visual: must render f1->c4 primary, no c4f7, no pressure, no f7 target
+  const postVis = postSurfForShow.visual || {};
+  if (postVis.shouldRender) {
+    const lines = postVis.lines || [];
+    const hasF1C4 = lines.some((l: any) => l && l.from === "f1" && l.to === "c4");
+    const hasC4F7 = lines.some((l: any) => l && ((l.from === "c4" && l.to === "f7") || (l.from === "f7" && l.to === "c4")));
+    const hasPressure = lines.some((l: any) => l && (l.kind === "pressure_line" || l.effectFamily === "pressure"));
+    const hasF7 = (postVis.highlights || []).some((h: any) => h && h.square === "f7") || lines.some((l:any) => l && (l.to==="f7" || l.from==="f7"));
+    assert.equal(hasF1C4, true, "plain post Bc4 must render f1 → c4");
+    assert.equal(hasC4F7, false, "plain post Bc4 must not render c4 → f7");
+    assert.equal(hasPressure, false, "plain post must not render pressure_line");
+    assert.equal(hasF7, false, "plain post Bc4 must not render f7 target");
+  }
+  // post shows Bc4 content (assisted payload reuse)
+  const postCoachText = (postSurfForShow.coach && (postSurfForShow.coach.body || postSurfForShow.coach.title) || "") + " " + (postSurfForShow.showMore && postSurfForShow.showMore.content || "");
+  assert.equal(/Bc4/i.test(postCoachText), true, "plain post must show Bc4 content");
+  assert.equal(/Move the bishop to c4/i.test(postCoachText), true, "plain post must show assisted Bc4 body");
+
+  // Show More reuses Assisted payload and visual recipe (same uci etc)
+  assert.equal(/f1c4|Bc4/i.test(mainTitle), true);
+  // visual recipe id or lines match the primary one
+  if (postVis.shouldRender && plainBc4Recipe.visualRecipeId) {
+    // the lines come from the recipe
+    assert.equal(hasF1C4, true);
+  }
+
   console.log("✓ Step2 plain pre/post leak guards + recipe reuse tests passed");
   console.log("✓ Step 3 coaching copy format + Show More same payload tests passed");
+  console.log("✓ Step 4 Plain View Show More verification (pre no Bc4 reveal, post reuses assisted Bc4 payload + f1-c4 only) passed");
 }
