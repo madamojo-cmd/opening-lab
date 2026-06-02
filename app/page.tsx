@@ -40,7 +40,7 @@ import { validateLiveCoachCopy } from "@/lib/blundr/liveCoach/liveCoachSafety";
 import { buildLiveCoachDebug } from "@/lib/blundr/liveCoach/liveCoachDebug";
 import { buildCoachExplanationPipeline, buildVerifiedUserFacingFallback, isDebugLeakText } from "@/lib/blundr/coachBrain/coachExplanationPipeline";
 import { filterLegacyMainUiLines } from "@/lib/blundr/visualRecipe/legacyVisualSuppression";
-import { selectContinuedPlayMove } from "@/lib/blundr/continuedPlay/continuedPlayMovePolicy";
+import { selectContinuedPlayMove, shouldForceContinuationPause } from "@/lib/blundr/continuedPlay/continuedPlayMovePolicy";
 import { decideCoachSurfacePolicy } from "@/lib/blundr/coachSurface/coachSurfacePolicy";
 import { presentMoveImpact } from "@/lib/blundr/coachSurface/moveImpactPresenter";
 import { computeTrainerPresentationFrame } from "@/lib/blundr/presentation/trainerPresentationFrame";
@@ -745,6 +745,8 @@ export default function App(){
   const [lastMoveColor,setLastMoveColor]=useState<ChessColor|null>(null);
   const [userExplicitlyEnteredContinuation,setUserExplicitlyEnteredContinuation]=useState(false);
   const [continueFromHereClicked,setContinueFromHereClicked]=useState(false);
+  const [continuationPauseClicked,setContinuationPauseClicked]=useState(false);
+  const [continuationHardStopAcknowledged,setContinuationHardStopAcknowledged]=useState(false);
   const [moveHistory,setMoveHistory]=useState<string[]>([]);
   const [progress,setProgress]=useState<Progress>(DEFAULT_PROGRESS);
   const [showAnswer,setShowAnswer]=useState(false);
@@ -901,6 +903,17 @@ export default function App(){
     return lichessStatsStatus === "resolved" && lichessTotalGames !== null && lichessTotalGames < 500;
   }, [lichessStatsStatus, lichessTotalGames]);
 
+  const currentPlyCount = moveHistory.length;
+  const lineExhaustedForPause = trainingMode === "continuation" && isUserTurn && !continuationPauseClicked && selectedLineCompleteConfirmed && currentPlyCount < 22;
+  const branchExhaustedForPause = trainingMode === "continuation" && isUserTurn && !continuationPauseClicked && lichessEndConfirmed && currentPlyCount < 22;
+  const continuationPauseDecision = shouldForceContinuationPause({
+    plyCount: currentPlyCount,
+    lineExhausted: lineExhaustedForPause,
+    branchExhausted: branchExhaustedForPause,
+    continuationPauseClicked: continuationPauseClicked || (currentPlyCount >= 22 && continuationHardStopAcknowledged),
+  });
+  const forceContinuationPause = trainingMode === "continuation" && isUserTurn && continuationPauseDecision.pauseRequired;
+
   // Base hard EoB (without loading self-ref) for safe ordering (Step 10).
   const baseHardEndOfBookGate = useMemo(() => {
     if (!isUserTurn) return false;
@@ -1008,6 +1021,7 @@ export default function App(){
     }
 
     if(trainingMode!=="continuation"||!isUserTurn)return null;
+    if(forceContinuationPause||!continuationPauseClicked)return null;
     const legalVerboseMoves=(game.moves({verbose:true}) as any[]);
     if(game.isGameOver()||legalVerboseMoves.length===0)return null;
     const legalUcis=new Set(legalVerboseMoves.map((move)=>moveToUci(move)));
@@ -1057,6 +1071,8 @@ export default function App(){
     selectedLineCompleteConfirmed,
     lichessEndConfirmed,
     userExplicitlyEnteredContinuation,
+    forceContinuationPause,
+    continuationPauseClicked,
   ]);
   const currentInstructionFrame=useMemo(()=>{
     // Step 4/5 exact priority (transcript as source of truth):
@@ -1064,6 +1080,27 @@ export default function App(){
     // 2. trusted curated target exists → normal guided instruction (playable from move 1)
     // 3. isInstructionLoading (no trusted target yet + actually resolving) → Thinking...
     // 4. safe neutral
+    if (trainingMode==="continuation"&&isUserTurn&&forceContinuationPause) {
+      return {
+        frameKey: "continuation-pause",
+        kind: "branch_transition",
+        target: null,
+        instructionTarget: null,
+        expectedMoveUci: null,
+        expectedMoveSan: null,
+        selectedContinuationCandidate: null,
+        currentSelectedCandidateUci: null,
+        continuationCandidateReady: false,
+        continueFromHereAvailable: true,
+        continueFromHereButtonRendered: true,
+        branchTransitionSurfaceRendered: true,
+        branchTransitionPayloadValid: true,
+        coachTitle: continuationPauseDecision.pauseReason==="move_11_hard_stop" ? "Move 11 checkpoint reached." : "Continuation paused.",
+        coachBody: "Continue from here.",
+        actions: ["continue_from_here"],
+      } as any;
+    }
+
     if (hardEndOfBookGate && !userExplicitlyEnteredContinuation) {
       return {
         frameKey: "end-of-book-transition",
@@ -1140,7 +1177,7 @@ export default function App(){
         kind:expectedMoveResolution.source==="opening_branch"?"lichess_branch_move":expectedMoveResolution.source==="opening_family_plan"?"adaptive_branch_move":"guided_move",
         trust:"book_verified",
       }:null,
-      continuationCandidate:trainingMode==="continuation"&&isUserTurn?{
+      continuationCandidate:trainingMode==="continuation"&&isUserTurn&&continuationPauseClicked&&!forceContinuationPause?{
         uci: useLocked && lockedForThisFrame
           ? lockedForThisFrame.uci
           : (expectedMoveResolution.source==="continuation_candidate" ? expectedMoveResolution.expectedMoveUci : (continuationPolicyCandidate?.uci??engineLines[0]?.uci??null)),
@@ -1168,6 +1205,9 @@ export default function App(){
     hardEndOfBookGate,
     userExplicitlyEnteredContinuation,
     selectedLineCompleteConfirmed,
+    continuationPauseClicked,
+    forceContinuationPause,
+    continuationPauseDecision.pauseReason,
   ]);
   const instructionTarget=currentInstructionFrame.target;
 
@@ -1833,8 +1873,18 @@ export default function App(){
     engineValidationStatus:(coachDecision?.debug as any)?.coachEngineStatus??(enginePreview?.pvs?.length?"ready":"idle"),
     visualRecipeValid:Boolean(visualRecipe&&visualRecipeOverlay.adapterAllowed&&trainerPhase==="ready_for_user"&&isUserTurn),
   }),[coachDecision,coachHiddenForFrame,trainingMode,trainerView,expectedUserOptions.length,moveQuality?.status,enginePreview,visualRecipe,visualRecipeOverlay.adapterAllowed,trainerPhase,isUserTurn]);
-  // v2.7.41 HOTFIX: branchTransitionSurface now strictly driven by hardEndOfBookGate (confirmed only)
+  // branch transition surface supports both end-of-book and continuation pause checkpoints.
   const branchTransitionSurface=useMemo(()=>{
+    if (trainingMode==="continuation"&&isUserTurn&&forceContinuationPause) {
+      const reason = continuationPauseDecision.pauseReason ?? "line_complete";
+      return {
+        render: true,
+        title: reason==="move_11_hard_stop" ? "Move 11 checkpoint reached" : "Continuation paused",
+        body: "Continue from here.",
+        buttons: ["continue_from_here"] as const,
+        reason,
+      } as const;
+    }
     if (!hardEndOfBookGate) {
       return null;
     }
@@ -1849,7 +1899,7 @@ export default function App(){
       buttons: ["continue_from_here"] as const,
       reason: isCurated ? "curated_line_complete" : "lichess_below_500_games",
     } as const;
-  }, [hardEndOfBookGate, selectedLineCompleteConfirmed]);
+  }, [hardEndOfBookGate, selectedLineCompleteConfirmed, trainingMode, isUserTurn, forceContinuationPause, continuationPauseDecision.pauseReason]);
   const moveImpactPresentation=useMemo(()=>presentMoveImpact({
     exactMoveAllowed:Boolean(coachDecision?.exactMoveAllowed),
     engineStatus:(coachDecision?.debug as any)?.coachEngineStatus??(enginePreview?.pvs?.length?"ready":"idle"),
@@ -2392,6 +2442,20 @@ export default function App(){
     setCoachMemoryMigration(meta);
   },[]);
   useEffect(()=>{setContinueFromHereClicked(false)},[trainerFrameId,fen]);
+  useEffect(()=>{
+    if(trainingMode!=="continuation"){
+      setContinuationPauseClicked(false);
+      setContinuationHardStopAcknowledged(false);
+      return;
+    }
+    if(currentPlyCount<22){
+      setContinuationHardStopAcknowledged(false);
+      return;
+    }
+    if(!continuationHardStopAcknowledged){
+      setContinuationPauseClicked(false);
+    }
+  },[trainingMode,currentPlyCount,continuationHardStopAcknowledged]);
   useEffect(()=>localStorage.setItem("blundr-v22-progress",JSON.stringify(progress)),[progress]);
   useEffect(()=>localStorage.setItem("blundr-v22-custom",JSON.stringify(customRepertoires)),[customRepertoires]);
   useEffect(()=>localStorage.setItem("blundr-board-settings",JSON.stringify(boardSettings)),[boardSettings]);
@@ -2450,6 +2514,10 @@ export default function App(){
       setContinuationAnalysisStatus("idle");
       return;
     }
+    if(forceContinuationPause||!continuationPauseClicked){
+      setContinuationAnalysisStatus("idle");
+      return;
+    }
     if(continuationPolicyCandidate){
       setContinuationAnalysisStatus("ready");
     }
@@ -2503,10 +2571,11 @@ export default function App(){
         continuationAnalysisDebounceRef.current=null;
       }
     };
-  },[activeTab,trainingMode,isUserTurn,trainerPhase,fen,userColor,rating.skill,enginePreview,game,continuationPolicyCandidate]);
+  },[activeTab,trainingMode,isUserTurn,trainerPhase,fen,userColor,rating.skill,enginePreview,game,continuationPolicyCandidate,forceContinuationPause,continuationPauseClicked]);
   useEffect(()=>{
     if(activeTab!=="train"||trainingMode!=="continuation"||trainerPhase!=="ready_for_user"||!isUserTurn)return;
     if(game.isGameOver()||game.moves().length===0)return;
+    if(forceContinuationPause||!continuationPauseClicked)return;
     if(instructionTarget?.kind==="continuation_candidate"){
       clearRuntimeCriticalIssue("continuation_ready_without_candidate");
       return;
@@ -2528,7 +2597,7 @@ export default function App(){
         }],
       };
     });
-  },[activeTab,trainingMode,trainerPhase,isUserTurn,instructionTarget?.kind,fen,game]);
+  },[activeTab,trainingMode,trainerPhase,isUserTurn,instructionTarget?.kind,fen,game,forceContinuationPause,continuationPauseClicked]);
   useEffect(()=>{if(activeTab==="train")positionStartedAtRef.current=Date.now()},[fen,activeTab]);
   useEffect(()=>{setCoachInteraction("none");setCoachHintRequestCount(0);setCoachReviewMarked(false);setCoachHiddenFrameId(null);setShowMoreShown(false);},[fen,trainerFrameId,trainerView,trainerPhase]);
   useEffect(()=>{if(!enabledViews.includes(activeBoardView)&&enabledViews.length)setActiveBoardView(enabledViews[0])},[activeBoardView,enabledViews.join("|")]);
@@ -2815,8 +2884,8 @@ export default function App(){
     }
   }
   function resetHistory(startFen:string){setPositionHistory([startFen]);setHistoryIndex(0)}
-  function selectRepertoire(id:string){const startFen=new Chess().fen();setSelectedRepertoireId(id);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setUserExplicitlyEnteredContinuation(false);setContinueFromHereClicked(false);setMoveHistory([]);setShowAnswer(false);setShowMoreShown(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setRuntimeCriticalIssues([]);setOpponentCue(null);setOpponentVariationDebug(null);setAnnotation(blankAnnotation());setEnginePreview(null);setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
-  function resetBoard(){const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setUserExplicitlyEnteredContinuation(false);setContinueFromHereClicked(false);setMoveHistory([]);setShowAnswer(false);setShowMoreShown(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setRuntimeCriticalIssues([]);setOpponentCue(null);setOpponentVariationDebug(null);setAnnotation(blankAnnotation());setEnginePreview(null);setActiveTab("train");bumpRuntimeFrame()}
+  function selectRepertoire(id:string){const startFen=new Chess().fen();setSelectedRepertoireId(id);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setUserExplicitlyEnteredContinuation(false);setContinueFromHereClicked(false);setContinuationPauseClicked(false);setContinuationHardStopAcknowledged(false);setMoveHistory([]);setShowAnswer(false);setShowMoreShown(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setRuntimeCriticalIssues([]);setOpponentCue(null);setOpponentVariationDebug(null);setAnnotation(blankAnnotation());setEnginePreview(null);setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
+  function resetBoard(){const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setUserExplicitlyEnteredContinuation(false);setContinueFromHereClicked(false);setContinuationPauseClicked(false);setContinuationHardStopAcknowledged(false);setMoveHistory([]);setShowAnswer(false);setShowMoreShown(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setRuntimeCriticalIssues([]);setOpponentCue(null);setOpponentVariationDebug(null);setAnnotation(blankAnnotation());setEnginePreview(null);setActiveTab("train");bumpRuntimeFrame()}
   function recordPosition(nextFen:string){const nextIndex=historyIndex+1;setPositionHistory(prev=>[...prev.slice(0,nextIndex),nextFen]);setHistoryIndex(nextIndex)}
   function jumpHistory(direction:-1|1){const next=Math.max(0,Math.min(positionHistory.length-1,historyIndex+direction));if(next===historyIndex)return;setHistoryIndex(next);setFen(positionHistory[next]);setSelectedSquare(null);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);clearPendingOpponentReplyRequest({clearStaleIssue:true});setOpponentCue(null);setOpponentVariationDebug(null);setBookComplete(false);setFeedback(next===positionHistory.length-1?"Returned to the live position.":`Reviewing previous position ${next} of ${positionHistory.length-1}. Use the arrows to return to live play.`);bumpRuntimeFrame()}
   async function playOpponentMove(request:PendingOpponentRequest){
@@ -3097,6 +3166,10 @@ export default function App(){
     const terminal=current.isGameOver()||legal===0;
     setUserExplicitlyEnteredContinuation(true);
     setContinueFromHereClicked(true);
+    setContinuationPauseClicked(true);
+    if(currentPlyCount>=22){
+      setContinuationHardStopAcknowledged(true);
+    }
     setTrainingMode("continuation");
     setBookComplete(false);
     setEnginePreview(null);
@@ -3218,7 +3291,7 @@ export default function App(){
     });
     setReviewingFen(null);
   }
-  function practiceMistake(m:Mistake){const rep=repertoires.find(r=>r.id===m.repertoireId);if(rep)setSelectedRepertoireId(rep.id);setFen(m.fen);resetHistory(m.fen);setReviewingFen(normalizeFen(m.fen));setFeedback("Review this opening position. Play the expected move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setUserExplicitlyEnteredContinuation(false);setContinueFromHereClicked(false);setMoveHistory([]);setShowAnswer(false);setShowMoreShown(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setOpponentVariationDebug(null);setActiveTab("train");bumpRuntimeFrame()}
+  function practiceMistake(m:Mistake){const rep=repertoires.find(r=>r.id===m.repertoireId);if(rep)setSelectedRepertoireId(rep.id);setFen(m.fen);resetHistory(m.fen);setReviewingFen(normalizeFen(m.fen));setFeedback("Review this opening position. Play the expected move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setUserExplicitlyEnteredContinuation(false);setContinueFromHereClicked(false);setContinuationPauseClicked(false);setContinuationHardStopAcknowledged(false);setMoveHistory([]);setShowAnswer(false);setShowMoreShown(false);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setOpponentVariationDebug(null);setActiveTab("train");bumpRuntimeFrame()}
   function createCustomRepertoire(){const moves=newLineText.replace(/\d+\./g," ").replace(/\s+/g," ").trim().split(" ").filter(Boolean);if(!moves.length)return;const test=new Chess();for(const move of moves){try{if(!test.move(move)){setFeedback(`Could not parse move: ${move}`);return}}catch{setFeedback(`Could not parse move: ${move}`);return}}const rep:Repertoire={id:`custom-${Date.now()}`,name:newRepName.trim()||"My Custom Repertoire",color:newRepColor,description:"Custom line saved on this device.",lines:[moves],custom:true};setCustomRepertoires(prev=>[...prev,rep]);setSelectedRepertoireId(rep.id);setShowAddLine(false);const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setTrainingMode("restricted");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setFeedback("Custom repertoire saved. Restricted training is active.");setActiveTab("train");bumpRuntimeFrame()}
   const squareStyles:Record<string,CSSProperties>={};
   if(lastMove&&lastMove.length>=4){
@@ -3349,6 +3422,16 @@ export default function App(){
     continuationAnalysisStatus,
     continuationRuntimeStatus:continuationRuntimeState.status,
     continuationTerminalReason:continuationRuntimeState.reason??null,
+    continuationPauseRequired:forceContinuationPause,
+    continuationPauseClicked,
+    continuationPauseReason:continuationPauseDecision.pauseReason,
+    continuationHardStopMoveNumber:continuationPauseDecision.hardStopMoveNumber,
+    continuationHardStopPlyLimit:continuationPauseDecision.hardStopPlyLimit,
+    continuationCurrentPlyCount:continuationPauseDecision.currentPlyCount,
+    continuationCandidateEvaluationBlockedUntilClick:Boolean(forceContinuationPause&&!continuationPauseClicked),
+    continuationInstructionTargetBeforeClick:!continuationPauseClicked?instructionTarget?.uci??null:null,
+    continuationVisualTargetBeforeClick:!continuationPauseClicked?visualMoveUciForDebug:null,
+    continuationCoachTargetBeforeClick:!continuationPauseClicked?((displayedCoachDecision?.debug as any)?.coachMoveUci??instructionTarget?.uci??null):null,
     continuationAnalysisRequestId:continuationAnalysisSeqRef.current,
     continuationAnalysisFen4:enginePreview?.fen?normalizeFen(enginePreview.fen):null,
     opponentVariationDebug,

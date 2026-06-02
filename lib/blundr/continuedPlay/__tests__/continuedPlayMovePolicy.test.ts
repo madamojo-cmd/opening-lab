@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { selectContinuedPlayMove } from "../continuedPlayMovePolicy";
+import { selectContinuedPlayMove, shouldForceContinuationPause } from "../continuedPlayMovePolicy";
 
 export function testContinuedPlayMovePolicy(): void {
   const fen = "r1bqk2r/ppp2ppp/2np1n2/2b1p3/2B1P3/2PP1N2/PP3PPP/RNBQK2R w KQkq - 0 6";
@@ -31,4 +31,25 @@ export function testContinuedPlayMovePolicy(): void {
   });
   assert.equal(Boolean(emergency), true);
   assert.equal(emergency?.source, "emergency_legal_fallback");
+
+  const pause21 = shouldForceContinuationPause({ plyCount: 21, continuationPauseClicked: false });
+  assert.equal(pause21.pauseRequired, false);
+  assert.equal(pause21.pauseReason, null);
+  assert.equal(pause21.currentPlyCount, 21);
+
+  const pause22 = shouldForceContinuationPause({ plyCount: 22, continuationPauseClicked: false });
+  assert.equal(pause22.pauseRequired, true);
+  assert.equal(pause22.pauseReason, "move_11_hard_stop");
+
+  const pause23Clicked = shouldForceContinuationPause({ plyCount: 23, continuationPauseClicked: true });
+  assert.equal(pause23Clicked.pauseRequired, false);
+  assert.equal(pause23Clicked.pauseReason, "move_11_hard_stop");
+
+  const linePause = shouldForceContinuationPause({ plyCount: 12, lineExhausted: true, continuationPauseClicked: false });
+  assert.equal(linePause.pauseRequired, true);
+  assert.equal(linePause.pauseReason, "line_complete");
+
+  const branchPause = shouldForceContinuationPause({ plyCount: 12, branchExhausted: true, continuationPauseClicked: false });
+  assert.equal(branchPause.pauseRequired, true);
+  assert.equal(branchPause.pauseReason, "branch_exhausted");
 }

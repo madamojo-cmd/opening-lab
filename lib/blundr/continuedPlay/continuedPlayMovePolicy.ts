@@ -30,6 +30,16 @@ export type ContinuedPlayPolicyDecision = {
   };
 };
 
+export type ContinuationPauseReason = "line_complete" | "branch_exhausted" | "move_11_hard_stop" | null;
+
+export type ContinuationPauseDecision = {
+  pauseRequired: boolean;
+  pauseReason: ContinuationPauseReason;
+  hardStopMoveNumber: 11;
+  hardStopPlyLimit: 22;
+  currentPlyCount: number;
+};
+
 function deterministicPick(candidates: ContinuedCandidate[]): ContinuedCandidate | null {
   if (!candidates.length) return null;
   const sorted = candidates
@@ -172,4 +182,41 @@ export function selectContinuedPlayMove(input: {
     return null;
   }
   return finalize(emergency.uci, emergency.san, "emergency_legal_fallback", "no_supported_moves_available", "fallback");
+}
+
+/**
+ * Centralized helper for continuation pause behavior.
+ * - line_complete or branch_exhausted always pause until user clicks Continue.
+ * - move 11 hard stop pauses at 22 plies and beyond until Continue is clicked for that boundary.
+ */
+export function shouldForceContinuationPause(input: {
+  plyCount: number;
+  lineExhausted?: boolean;
+  branchExhausted?: boolean;
+  continuationPauseClicked?: boolean;
+  hardStopMoveNumber?: number;
+  hardStopPlyLimit?: number;
+}): ContinuationPauseDecision {
+  const hardStopMoveNumber = 11 as const;
+  const hardStopPlyLimit = 22 as const;
+  const currentPlyCount = Math.max(0, Number(input.plyCount) || 0);
+  const lineExhausted = Boolean(input.lineExhausted);
+  const branchExhausted = Boolean(input.branchExhausted);
+  const continuationPauseClicked = Boolean(input.continuationPauseClicked);
+  const hardStopReached = currentPlyCount >= hardStopPlyLimit;
+  const pauseReason: ContinuationPauseReason = lineExhausted
+    ? "line_complete"
+    : branchExhausted
+      ? "branch_exhausted"
+      : hardStopReached
+        ? "move_11_hard_stop"
+        : null;
+  const pauseRequired = pauseReason !== null && !continuationPauseClicked;
+  return {
+    pauseRequired,
+    pauseReason,
+    hardStopMoveNumber,
+    hardStopPlyLimit,
+    currentPlyCount,
+  };
 }
