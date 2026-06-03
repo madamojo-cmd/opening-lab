@@ -67,6 +67,8 @@ export interface CoachEvidenceClaim {
 export interface EvidenceGraph {
   frameKey: string;
   targetUci: string | null;
+  boardTruth: BoardTruth;
+  openingContext: OpeningContext;
   claims: CoachEvidenceClaim[];
   deterministicClaims: CoachEvidenceClaim[];
   tacticClaims: CoachEvidenceClaim[];
@@ -83,6 +85,67 @@ export interface EvidenceGraph {
   debug: Record<string, unknown>;
 }
 
+export interface BoardTruthLegalMove {
+  uci: string;
+  san?: string;
+  from: string;
+  to: string;
+  piece?: string;
+  color?: "w" | "b";
+  flags?: string;
+}
+
+export interface BoardTruth {
+  fenBefore: string;
+  sideToMove: "white" | "black";
+  legalMoves: BoardTruthLegalMove[];
+  targetLegal: boolean | "unknown" | "not_applicable";
+  sourcePiece: {
+    square: string;
+    type: string;
+    color: "w" | "b";
+  } | null;
+  destinationOccupancy: {
+    square: string;
+    occupied: boolean;
+    type?: string;
+    color?: "w" | "b";
+  } | null;
+  isCapture: boolean;
+  isCheck: boolean;
+  isCheckmate: boolean;
+  isCastle: boolean;
+  isPromotion: boolean;
+  isEnPassant: boolean;
+  kingSquares: {
+    white: string | null;
+    black: string | null;
+  };
+  attackedSquaresBefore?: string[];
+  attackedSquaresAfter?: string[];
+  pinnedPieces?: string[];
+  loosePieces?: string[];
+  targetSan?: string | null;
+  fenAfterTarget?: string | null;
+  debug?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface OpeningContext {
+  openingKey: string | null;
+  openingName: string | null;
+  lineKey: string | null;
+  lineName: string | null;
+  moveNumber: number;
+  expectedMoveReason: string | null;
+  themeTags: string[];
+  previousConcepts: string[];
+  branchComplete: boolean;
+  endOfBook: boolean;
+  continuationEligible: boolean;
+  moveSequence?: string[];
+}
+
 // Core contracts from production spec
 export type BlundrBrainInput = {
   fen: string;
@@ -96,7 +159,6 @@ export type BlundrBrainInput = {
   engineContext?: any | null;
 };
 
-export type BoardTruth = any; // Will be expanded in boardTruth/ submodules
 export type MoveDeltaAnalysis = any;
 export type TacticalMotif = any;
 export type StrategicFeature = any;

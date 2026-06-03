@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { buildEvidenceGraph } from "../../lib/blundr/brain/buildEvidenceGraph";
+import { buildCurrentInstructionFrame } from "../../lib/blundr/runtime/currentInstructionFrame";
+import { lockInstructionTarget } from "../../lib/blundr/runtime/instructionFrameLock";
 
 const STRONG_TERMS = [
   "best",
@@ -33,6 +36,29 @@ export function testAntiHallucination(): void {
 
   const safeFallback = "This move improves piece activity and keeps your position solid.";
   assert.equal(mayUseCopy(safeFallback, []), true);
+
+
+  const frame = buildCurrentInstructionFrame({
+    kind: "guided_move",
+    fenBefore: "r1bqk1nr/pppp1ppp/2n5/2b1p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 4 3",
+    ply: 6,
+    sideToMove: "white",
+    target: lockInstructionTarget({
+      uci: "f1c4",
+      san: "Bc4",
+      pieceType: "bishop",
+      color: "white",
+      source: "opening_tree",
+      reason: "test",
+    }),
+    mode: "guided",
+    source: "opening_tree",
+  });
+  const graph = buildEvidenceGraph({ frame });
+  const textBlob = graph.claims.map((c) => c.textSafeSummary).join(" ").toLowerCase();
+  assert.equal(textBlob.includes("wins material"), false);
+  assert.equal(textBlob.includes("only move"), false);
+  assert.equal(textBlob.includes("assisted"), false);
 }
 
 testAntiHallucination();

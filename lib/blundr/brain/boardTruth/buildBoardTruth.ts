@@ -18,9 +18,28 @@ export function buildBoardTruth(fen: string): BoardTruth {
     const attackedByBlack = getAttackedSquares(board, 'black' as any);
 
     return {
-      fen,
+      fenBefore: fen,
       sideToMove: board.sideToMove,
-      legalMoves: legalMoves.map((m: any) => `${m.from}${m.to}${m.promotion || ''}`),
+      legalMoves: legalMoves.map((m: any) => ({
+        uci: `${m.from}${m.to}${m.promotion || ''}`,
+        from: m.from,
+        to: m.to,
+        san: m.san,
+        piece: m.piece,
+        color: m.color,
+      })),
+      targetLegal: "unknown",
+      sourcePiece: null,
+      destinationOccupancy: null,
+      isCapture: false,
+      isCheck: false,
+      isCheckmate: false,
+      isCastle: false,
+      isPromotion: false,
+      isEnPassant: false,
+      kingSquares: { white: null, black: null },
+      pinnedPieces: [],
+      loosePieces: [],
       attackedSquaresWhite: attackedByWhite,
       attackedSquaresBlack: attackedByBlack,
       inCheck: false, // TODO: compute properly
@@ -29,9 +48,22 @@ export function buildBoardTruth(fen: string): BoardTruth {
     };
   } catch (e) {
     return {
-      fen,
-      error: "board_truth_parsing_failed",
+      fenBefore: fen,
       sideToMove: fen.split(' ')[1] === 'w' ? 'white' : 'black',
+      legalMoves: [],
+      targetLegal: "unknown",
+      sourcePiece: null,
+      destinationOccupancy: null,
+      isCapture: false,
+      isCheck: false,
+      isCheckmate: false,
+      isCastle: false,
+      isPromotion: false,
+      isEnPassant: false,
+      kingSquares: { white: null, black: null },
+      pinnedPieces: [],
+      loosePieces: [],
+      error: "board_truth_parsing_failed",
     };
   }
 }

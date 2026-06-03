@@ -1,0 +1,20 @@
+{
+  "release": "v2.8.0-intelligent-coach",
+  "branch": "v2.8.0-intelligent-coach-live",
+  "baseSha": "7cad573c0a15de413c143e6a505b4cec6fa90633",
+  "currentSha": "7cad573c0a15de413c143e6a505b4cec6fa90633",
+  "phase": "05_deterministic_evidence_graph",
+  "gates": {
+    "package1_authority_audit": "pass_with_unresolved_risks",
+    "package2_core_contracts": "pass",
+    "package3_ground_truth_test_harness": "pass",
+    "package4_current_instruction_frame": "pass",
+    "package5_deterministic_evidence_graph": "pass",
+    "productCodeChanged": false,
+    "deterministicEvidenceGraphAdded": true,
+    "brainProvidersAdded": true,
+    "evidenceGraphTestsAdded": true
+  },
+  "blocked": false,
+  "blockReason": null
+}

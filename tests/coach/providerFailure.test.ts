@@ -4,6 +4,8 @@ import fs from "node:fs";
 import { createMockStockfishTop10GateResult } from "../../lib/blundr/engine/mockEngineProvider";
 import { createMockMaiaContinuationContext } from "../../lib/blundr/maia/mockMaiaProvider";
 import type { OpeningKnowledgeContext } from "../../lib/blundr/knowledge/openingKnowledgeTypes";
+import { buildEvidenceGraph } from "../../lib/blundr/brain/buildEvidenceGraph";
+import { buildCurrentInstructionFrame } from "../../lib/blundr/runtime/currentInstructionFrame";
 
 function readJson(path: string): any {
   return JSON.parse(fs.readFileSync(new URL(path, import.meta.url), "utf8"));
@@ -38,6 +40,22 @@ export function testProviderFailure(): void {
   };
   assert.equal(openingContext.status, "not_found");
   assert.equal(Array.isArray(openingContext.items), true);
+
+
+  const nullFrame = buildCurrentInstructionFrame({
+    kind: "branch_complete",
+    fenBefore: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    ply: 0,
+    sideToMove: "white",
+    target: null,
+    mode: "blocked",
+    source: "none",
+    branchComplete: { isComplete: true, continueFromHereAvailable: true },
+  });
+  const nullGraph = buildEvidenceGraph({ frame: nullFrame });
+  assert.equal(nullGraph.providerStatus.stockfish, "not_applicable");
+  assert.equal(nullGraph.providerStatus.maia, "not_applicable");
+  assert.equal(nullGraph.providerStatus.opening_knowledge, "not_applicable");
 }
 
 testProviderFailure();

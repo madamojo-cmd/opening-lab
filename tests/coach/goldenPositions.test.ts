@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+
+import { buildEvidenceGraph } from "../../lib/blundr/brain/buildEvidenceGraph";
 import { buildCurrentInstructionFrame } from "../../lib/blundr/runtime/currentInstructionFrame";
 import { lockInstructionTarget } from "../../lib/blundr/runtime/instructionFrameLock";
 
@@ -116,6 +118,8 @@ export function testGoldenPositions(): void {
             : undefined,
       });
       assert.equal(guidedFrame.target?.uci, fixture.targetUci, `${fixture.id} guided fixture should be representable as frame input`);
+      const graph = buildEvidenceGraph({ frame: guidedFrame });
+      assert.equal(graph.targetUci, fixture.targetUci, `${fixture.id} guided fixture should build deterministic evidence graph`);
     }
   }
 }

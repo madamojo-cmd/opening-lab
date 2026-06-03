@@ -4,3 +4,4 @@
 export * from "./types";
 export { analyzeBlundrPosition, type AnalyzeBlundrPositionInput } from "./analyzeBlundrPosition";
 export { buildHintLadder, type HintLadderInput, type HintLadderOutput, type HintLevel } from "./hints/buildHintLadder"; // v2.7.40 Agent 4
+export { buildEvidenceGraph } from "./buildEvidenceGraph";
