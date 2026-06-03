@@ -1,0 +1,22 @@
+{
+  "release": "v2.8.0-intelligent-coach",
+  "branch": "v2.8.0-intelligent-coach-live",
+  "baseSha": "7cad573c0a15de413c143e6a505b4cec6fa90633",
+  "currentSha": "35a84d5dd718d8b66cb23b4e10bb993577d2b617",
+  "phase": "08_5_headless_live_chain",
+  "gates": {
+    "package1_authority_audit": "pass_with_unresolved_risks",
+    "package2_core_contracts": "pass",
+    "package3_ground_truth_test_harness": "pass",
+    "package4_current_instruction_frame": "pass",
+    "package5_deterministic_evidence_graph": "pass",
+    "package6_teaching_concept_registry": "pass",
+    "package7_coach_compiler": "pass",
+    "package8_coach_safety_gate": "pass",
+    "package8_5_headless_live_chain": "pass",
+    "productCodeChanged": false,
+    "headlessLiveChainSmokeAdded": true
+  },
+  "blocked": false,
+  "blockReason": null
+}
