@@ -1,0 +1,79 @@
+{
+  "version": "v2.8.0",
+  "provider": "opening_knowledge",
+  "fixtures": [
+    {
+      "id": "opening_italian_found_high_confidence",
+      "status": "found",
+      "matchedBy": ["openingKey", "moves"],
+      "items": [
+        {
+          "id": "italian_mainline_note",
+          "openingKey": "italian_game",
+          "lineKey": "giuoco_piano",
+          "moves": ["e4", "e5", "Nf3", "Nc6", "Bc4"],
+          "conceptTags": ["development", "center_control", "king_safety"],
+          "summary": "Develop quickly and prepare castling while preserving center pressure.",
+          "provenance": [
+            {
+              "sourceType": "curated_note",
+              "sourceLabel": "Blundr Italian curated line",
+              "confidence": "high"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "opening_low_confidence_found",
+      "status": "found",
+      "matchedBy": ["conceptTags"],
+      "items": [
+        {
+          "id": "sideline_low_confidence",
+          "openingKey": "english_sideline",
+          "conceptTags": ["space", "flexibility"],
+          "summary": "Playable setup, but plan confidence is limited.",
+          "provenance": [
+            {
+              "sourceType": "master_game",
+              "sourceLabel": "Sparse historical sample",
+              "confidence": "low"
+            }
+          ]
+        }
+      ],
+      "warnings": ["low_confidence_only"]
+    },
+    {
+      "id": "opening_not_found_supported_nonfatal",
+      "status": "not_found",
+      "matchedBy": [],
+      "items": [],
+      "warnings": ["no_opening_match_nonfatal"]
+    },
+    {
+      "id": "opening_stale_low_confidence_no_strong_claims",
+      "status": "found",
+      "matchedBy": ["fen"],
+      "items": [
+        {
+          "id": "stale_book_entry",
+          "openingKey": "unknown_legacy_bucket",
+          "fen": "rnbqkbnr/pppppppp/8/8/8/2N5/PPPPPPPP/R1BQKBNR b KQkq - 1 1",
+          "conceptTags": ["development"],
+          "summary": "Historical note only; not tactical authority.",
+          "tacticalMotifs": ["none"],
+          "provenance": [
+            {
+              "sourceType": "opening_book",
+              "sourceLabel": "Legacy import 2019",
+              "confidence": "low"
+            }
+          ]
+        }
+      ],
+      "warnings": ["stale_or_low_confidence", "do_not_emit_strong_tactical_claims"]
+    }
+  ]
+}

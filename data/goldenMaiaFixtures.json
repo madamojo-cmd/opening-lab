@@ -1,0 +1,62 @@
+{
+  "version": "v2.8.0",
+  "provider": "maia",
+  "fixtures": [
+    {
+      "id": "maia_not_applicable_outside_continuation",
+      "fen": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+      "forContinuation": false,
+      "expectedStatus": "not_applicable"
+    },
+    {
+      "id": "maia_unavailable",
+      "fen": "r1bqkbnr/pppp1ppp/2n5/4p3/3PP3/5N2/PPP2PPP/RNBQKB1R b KQkq - 2 3",
+      "forContinuation": true,
+      "status": "unavailable",
+      "expectedStatus": "unavailable",
+      "maiaOwnsTarget": false
+    },
+    {
+      "id": "maia_timeout",
+      "fen": "r1bqkbnr/pppp1ppp/2n5/4p3/3PP3/5N2/PPP2PPP/RNBQKB1R b KQkq - 2 3",
+      "forContinuation": true,
+      "status": "timeout",
+      "expectedStatus": "timeout"
+    },
+    {
+      "id": "maia_legal_predicted_move",
+      "fen": "r1bqkbnr/pppp1ppp/2n5/4p3/3PP3/5N2/PPP2PPP/RNBQKB1R b KQkq - 2 3",
+      "forContinuation": true,
+      "status": "available",
+      "predictedOpponentMove": {
+        "uci": "g8f6",
+        "san": "Nf6",
+        "confidence": 0.62
+      },
+      "predictedMoveLegalShape": true,
+      "maiaOwnsTarget": false
+    },
+    {
+      "id": "maia_illegal_predicted_move_rejected",
+      "fen": "r1bqkbnr/pppp1ppp/2n5/4p3/3PP3/5N2/PPP2PPP/RNBQKB1R b KQkq - 2 3",
+      "forContinuation": true,
+      "status": "available",
+      "predictedOpponentMove": {
+        "uci": "z9z1",
+        "confidence": 0.95
+      },
+      "predictedMoveLegalShape": false,
+      "mustRejectPrediction": true,
+      "maiaOwnsTarget": false
+    },
+    {
+      "id": "maia_context_does_not_own_target",
+      "fen": "r1bqkbnr/pppp1ppp/2n5/4p3/3PP3/5N2/PPP2PPP/RNBQKB1R b KQkq - 2 3",
+      "forContinuation": true,
+      "status": "available",
+      "expectedStatus": "available",
+      "maiaOwnsTarget": false,
+      "notes": "CurrentInstructionFrame.target remains sole visible teaching authority"
+    }
+  ]
+}
