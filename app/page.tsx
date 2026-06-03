@@ -56,6 +56,7 @@ import { buildOpeningResolverDebug } from "@/lib/blundr/openings/openingResolver
 import { decideGuidedCoveragePolicy } from "@/lib/blundr/openings/guidedCoveragePolicy";
 import type { RepertoireLineInput } from "@/lib/blundr/openings/openingTypes";
 import { buildCurrentInstructionFrame, isBookLikeInstructionTarget } from "@/lib/blundr/runtime/currentInstructionFrame";
+import { resolveBranchCompleteContract } from "@/lib/blundr/runtime/branchCompleteContract";
 import { shouldFlagStaleOpponentReplyCommit } from "@/lib/blundr/runtime/opponentReplyGuard";
 import { classifyContinuationRuntimeState, type ContinuationRuntimeStatus } from "@/lib/blundr/runtime/continuationRuntimeState";
 import { BlundrDiagnosticsPanel } from "@/components/debug/BlundrDiagnosticsPanel";
@@ -861,6 +862,14 @@ export default function App(){
   const [staleOverlayIgnored,setStaleOverlayIgnored]=useState(false);
   const [overlayClearedOnPhaseChange,setOverlayClearedOnPhaseChange]=useState(false);
   const [pendingOpponentRequest,setPendingOpponentRequest]=useState<PendingOpponentRequest|null>(null);
+  const [branchCompleteLatch,setBranchCompleteLatch]=useState<{
+    active:boolean;
+    reason:string|null;
+    fen4:string|null;
+    lineId:string|null;
+    ply:number|null;
+    latchedAtFrameId:number|null;
+  }>({active:false,reason:null,fen4:null,lineId:null,ply:null,latchedAtFrameId:null});
   const [runtimeCriticalIssues,setRuntimeCriticalIssues]=useState<string[]>([]);
   const [coachInteraction,setCoachInteraction]=useState<"none"|"hint"|"answer"|"why"|"hide"|"show_plan"|"analyze_idea"|"show_move">("none");
   const [coachHintRequestCount,setCoachHintRequestCount]=useState(0);
@@ -919,6 +928,7 @@ export default function App(){
   const continuationEngineCacheRef=useRef<Record<string,{fen:string;pvs:EngineLine[];source:string}>>({});
   const opponentRequestSeqRef=useRef(0);
   const pendingOpponentRequestRef=useRef<PendingOpponentRequest|null>(null);
+  const branchCompleteLatchRef=useRef(branchCompleteLatch);
   const opponentReplyTimeoutRef=useRef<number|null>(null);
   const brainAbortRef=useRef<AbortController|null>(null);
   const visualAbortRef=useRef<AbortController|null>(null);
@@ -1212,7 +1222,77 @@ export default function App(){
     continuationPauseClicked,
     userExplicitlyEnteredContinuation,
   ]);
+  const branchCompleteContract=useMemo(()=>resolveBranchCompleteContract({
+    trainingMode,
+    trainerPhase,
+    isUserTurn,
+    userExplicitlyEnteredContinuation,
+    isTerminal:game.isGameOver()||game.moves().length===0,
+    hasInstructionTarget:Boolean(expectedMoveResolution.expectedMoveUci),
+    hasContinuationCandidate:Boolean(continuationPolicyCandidate?.uci),
+    pendingOpponentRequestExists:Boolean(pendingOpponentRequest),
+    expectedMoveSource:expectedMoveResolution.source,
+    expectedMoveReason:expectedMoveResolution.reason,
+    expectedMoveUci:expectedMoveResolution.expectedMoveUci,
+    lineExhaustedByCursor:selectedLineCompleteConfirmed,
+    lineExhaustedByLichess:lichessEndConfirmed,
+    afterFinalUserMove:!isUserTurn&&lastMoveColor===userColor,
+  }),[
+    trainingMode,
+    trainerPhase,
+    isUserTurn,
+    userExplicitlyEnteredContinuation,
+    game,
+    expectedMoveResolution.source,
+    expectedMoveResolution.reason,
+    expectedMoveResolution.expectedMoveUci,
+    continuationPolicyCandidate?.uci,
+    pendingOpponentRequest,
+    selectedLineCompleteConfirmed,
+    lichessEndConfirmed,
+    lastMoveColor,
+    userColor,
+  ]);
+  const branchCompleteEligibleNow=branchCompleteContract.branchCompleteEligible||(
+    branchCompleteLatch.active&&
+    trainingMode==="restricted"&&
+    !userExplicitlyEnteredContinuation&&
+    !game.isGameOver()
+  );
+  const branchCompleteReasonNow=branchCompleteContract.reason??branchCompleteLatch.reason??"line_complete";
+  const branchCompleteShouldCancelPending=branchCompleteContract.shouldCancelPendingOpponent||(
+    branchCompleteEligibleNow&&Boolean(pendingOpponentRequest)
+  );
   const currentInstructionFrame=useMemo(()=>{
+    if(game.isGameOver()||game.moves().length===0){
+      return buildCurrentInstructionFrame({
+        kind: "terminal",
+        fenBefore: fen,
+        ply: game.history().length,
+        sideToMove: game.turn() === "w" ? "white" : "black",
+        target: null,
+        mode: "terminal",
+        source: "terminal",
+      });
+    }
+
+    if(branchCompleteEligibleNow){
+      return buildCurrentInstructionFrame({
+        kind: "branch_complete",
+        fenBefore: fen,
+        ply: game.history().length,
+        sideToMove: game.turn() === "w" ? "white" : "black",
+        target: null,
+        mode: "blocked",
+        source: "none",
+        branchComplete: {
+          isComplete: true,
+          reason: branchCompleteReasonNow,
+          continueFromHereAvailable: true,
+        },
+      });
+    }
+
     // Step 4/5 exact priority (transcript as source of truth):
     // 1. hardEndOfBookGate (confirmed curated or Lichess<500) → branch transition (Continue)
     // 2. trusted curated target exists → normal guided instruction (playable from move 1)
@@ -1329,6 +1409,8 @@ export default function App(){
     userExplicitlyEnteredContinuation,
     forceContinuationPause,
     continuationPauseDecision.pauseReason,
+    branchCompleteEligibleNow,
+    branchCompleteReasonNow,
   ]);
   const instructionTarget=currentInstructionFrame.target;
 
@@ -2585,6 +2667,7 @@ export default function App(){
     endOfBook: Boolean(bookComplete),
     continuationEligible: trainingMode === "continuation",
   }) : null;
+  const v28SurfaceActive = Boolean(v28VisibleSurfaceEnabled && v28VisibleSurface);
 
   const v28CoachUiModel = v28VisibleSurface ? adaptVisibleSurfaceToCoachUi(v28VisibleSurface) : null;
   const v28BoardVisualUiModel = v28VisibleSurface ? adaptVisibleSurfaceToBoardVisuals(v28VisibleSurface) : null;
@@ -2680,7 +2763,10 @@ export default function App(){
   const coachCardBodyFromSurface = plainBeforeShowMore
     ? (plainHintShown ? (v28CoachUiModel?.body ?? convergedVisibleSurface.hint.text ?? "") : "")
     : (v28CoachUiModel?.body ?? convergedVisibleSurface.coach.body ?? convergedVisibleSurface.hint.text ?? "");
-  const coachCardButtonsFromSurface = (v28CoachUiModel?.actions.map((action)=>action.kind) ?? convergedVisibleSurface.actions) as any;
+  const visibleSurfaceActionKinds = (v28CoachUiModel?.actions ?? [])
+    .filter((action) => action.visible)
+    .map((action) => action.kind);
+  const coachCardButtonsFromSurface = (visibleSurfaceActionKinds.length > 0 ? visibleSurfaceActionKinds : convergedVisibleSurface.actions) as any;
   const coachCardBulletsFromSurface = v28CoachUiModel?.bullets ?? [];
   const surfaceCoachCardDecision = convergedVisibleSurface.coach.shouldRender ? ({
     shouldShowCoachCard: true,
@@ -2784,6 +2870,9 @@ export default function App(){
     });
   }
   function scheduleOpponentReply(input:{mode:TrainingMode;delayMs?:number;baseFen?:string}){
+    if(branchCompleteEligibleNow&&input.mode==="restricted"){
+      return null;
+    }
     const baseFenNormalized=normalizeFen(input.baseFen??fenRef.current??fen);
     const currentPending=pendingOpponentRequestRef.current;
     if(currentPending&&currentPending.baseFen===baseFenNormalized&&currentPending.mode===input.mode){
@@ -2836,12 +2925,32 @@ export default function App(){
   useEffect(()=>localStorage.setItem("blundr-board-settings",JSON.stringify(boardSettings)),[boardSettings]);
   useEffect(()=>{telemetryEnabledRef.current=telemetryEnabled},[telemetryEnabled]);
   useEffect(()=>{telemetryEventsRef.current=telemetryEvents},[telemetryEvents]);
+  useEffect(()=>{branchCompleteLatchRef.current=branchCompleteLatch},[branchCompleteLatch]);
   useEffect(()=>{lastCoachRecordsRef.current=lastCoachRecords},[lastCoachRecords]);
   useEffect(()=>{coachTimelineRef.current=coachTimeline},[coachTimeline]);
   useEffect(()=>{
     pendingOpponentRequestRef.current=pendingOpponentRequest;
     if(!pendingOpponentRequest)clearOpponentReplyTimeout();
   },[pendingOpponentRequest]);
+  useEffect(()=>{
+    if(!branchCompleteContract.branchCompleteEligible)return;
+    if(branchCompleteLatchRef.current.active)return;
+    setBranchCompleteLatch({
+      active:true,
+      reason:branchCompleteContract.reason??"line_complete",
+      fen4:normalizeFen(fen),
+      lineId:selectedRepertoireId,
+      ply:moveHistory.length,
+      latchedAtFrameId:trainerFrameId,
+    });
+  },[branchCompleteContract.branchCompleteEligible,branchCompleteContract.reason,fen,selectedRepertoireId,moveHistory.length,trainerFrameId]);
+  useEffect(()=>{
+    if(!branchCompleteShouldCancelPending)return;
+    clearPendingOpponentReplyRequest({clearStaleIssue:true});
+    if(trainerPhase==="opponent_replying"||trainerPhase==="opponent_selecting"){
+      setTrainerPhase("ready_for_user");
+    }
+  },[branchCompleteShouldCancelPending,trainerPhase]);
   useEffect(()=>{
     if(!pendingOpponentRequest)return;
     const pendingMatchesBoard=normalizeFen(fen)===pendingOpponentRequest.baseFen;
@@ -2963,10 +3072,21 @@ export default function App(){
       setContinuationAnalysisStatus("error");
       return;
     }
-    if(continuationAnalysisStatus==="ready"&&continuationPolicyCandidate?.source!=="freeplay_continuation"){
+    const transitionalContinuationState =
+      continuationRuntimeState.status==="analyzing"||
+      continuationRuntimeState.status==="requested"||
+      continuationRuntimeState.status==="opponent_replying"||
+      continuationRuntimeState.status==="terminal";
+    if(
+      continuationAnalysisStatus==="ready"&&
+      continuationRuntimeState.status==="ready"&&
+      !transitionalContinuationState&&
+      !continuationPolicyCandidate?.uci&&
+      continuationPolicyCandidate?.source!=="freeplay_continuation"
+    ){
       pushRuntimeCriticalIssue("continuation_ready_without_candidate");
     }
-  },[activeTab,trainingMode,trainerPhase,isUserTurn,instructionTarget?.kind,fen,game,forceContinuationPause,userExplicitlyEnteredContinuation,engineLines.length,continuationPolicyCandidate?.uci,continuationPolicyCandidate?.source,continuationAnalysisStatus]);
+  },[activeTab,trainingMode,trainerPhase,isUserTurn,instructionTarget?.kind,fen,game,forceContinuationPause,userExplicitlyEnteredContinuation,engineLines.length,continuationPolicyCandidate?.uci,continuationPolicyCandidate?.source,continuationAnalysisStatus,continuationRuntimeState.status]);
   useEffect(()=>{if(activeTab==="train")positionStartedAtRef.current=Date.now()},[fen,activeTab]);
   useEffect(()=>{setCoachInteraction("none");setCoachHintRequestCount(0);setCoachReviewMarked(false);setCoachHiddenFrameId(null);setShowMoreShown(false);},[fen,trainerFrameId,trainerView,trainerPhase]);
   useEffect(()=>{if(!enabledViews.includes(activeBoardView)&&enabledViews.length)setActiveBoardView(enabledViews[0])},[activeBoardView,enabledViews.join("|")]);
@@ -3186,13 +3306,18 @@ export default function App(){
       setFeedback((endingInfo?.title??"Game over")+". Restart the opening to train again.");
       return;
     }
+    if(branchCompleteEligibleNow){
+      if(pendingOpponentRequest) return;
+      if(!isUserTurn) setTrainerPhase("ready_for_user");
+      return;
+    }
     if(!isUserTurn){
       if(pendingOpponentRequest)return;
       scheduleOpponentReply({mode:trainingMode,delayMs:900,baseFen:fen});
       return;
     }
     if(pendingOpponentRequest) clearPendingOpponentReplyRequest({clearStaleIssue:true});
-  },[activeTab,fen,bookComplete,isUserTurn,isReviewingHistory,selectedRepertoireId,trainingMode,ratingFilter,game,endingInfo?.title,trainerPhase,pendingOpponentRequest]);
+  },[activeTab,fen,bookComplete,isUserTurn,isReviewingHistory,selectedRepertoireId,trainingMode,ratingFilter,game,endingInfo?.title,trainerPhase,pendingOpponentRequest,branchCompleteEligibleNow]);
   async function loadExplorer(positionFen:string){const cacheKey=`${normalizeFen(positionFen)}|${ratingFilter}|${speedFilter}`;if(explorerCache.current[cacheKey]){const parsed=parseExplorerMoves(explorerCache.current[cacheKey]);setExplorerMoves(parsed);setBrain(p=>({...p,lichess:"cached"}));return parsed}setBrain(p=>({...p,lichess:"loading"}));const start=performance.now();try{const params=new URLSearchParams({fen:positionFen,source:"lichess",moves:"25",ratings:ratingFilter,speeds:speedFilter});const res=await fetch(`/api/explorer?${params.toString()}`);const payload=await res.json();explorerCache.current[cacheKey]=payload;const parsed=parseExplorerMoves(payload);setExplorerMoves(parsed);setBrain(p=>({...p,lichess:payload.fallback?"fallback":"active",latency:Math.round(performance.now()-start),note:payload.reason??`${parsed.length} Lichess moves`}));return parsed}catch(e){setBrain(p=>({...p,lichess:"error",note:e instanceof Error?e.message:"Explorer failed"}));return[]}}
   async function runBrain(eventType:string,extra:Record<string,any>={}){
     if(activeTab!=="train")return null;
@@ -3271,6 +3396,7 @@ export default function App(){
     setOpponentCue(null);
     setOpponentVariationDebug(null);
     setPendingOpponentRequest(null);
+    setBranchCompleteLatch({active:false,reason:null,fen4:null,lineId:null,ply:null,latchedAtFrameId:null});
     previousSelectedCandidateUciRef.current=null;
     candidateSyncDebugRef.current={
       currentSelectedCandidateUci:null,
@@ -3571,6 +3697,7 @@ export default function App(){
     }
     setTrainingMode("continuation");
     setBookComplete(false);
+    setBranchCompleteLatch({active:false,reason:null,fen4:null,lineId:null,ply:null,latchedAtFrameId:null});
     setEnginePreview(null);
     if(terminal){
       setContinuationAnalysisStatus("terminal");
@@ -3650,7 +3777,40 @@ export default function App(){
     }
     const nextFen=current.fen();
     const nextGame=new Chess(nextFen);
-    const needsOpponentReply=!nextGame.isGameOver()&&nextGame.turn()!==userColor;
+    const nextIsUserTurn=nextGame.turn()===userColor;
+    const nextExpectedMoveResolution=resolveExpectedMoveForFrame({
+      openingTree,
+      fen:nextFen,
+      trainerPhase:nextGame.isGameOver()?"terminal":(nextIsUserTurn?"ready_for_user":"opponent_replying"),
+      trainingMode,
+      trainerView,
+      isUserTurn:nextIsUserTurn,
+      userColor,
+      opponentColor,
+      lastOpponentMoveUci:lastMoveColor===opponentColor?lastMove:null,
+      lastOpponentMoveSan:lastMoveColor===opponentColor?lastMoveSan:null,
+      legacyExpectedMoveCandidate:null,
+      enginePreview:null,
+      allowEngineFallbackInRestricted:false,
+    });
+    const nextLineCompleteConfirmed=(nextExpectedMoveResolution.lineLength??0)>0&&(nextExpectedMoveResolution.lineCursor??0)>=(nextExpectedMoveResolution.lineLength??0);
+    const nextBranchCompleteContract=resolveBranchCompleteContract({
+      trainingMode,
+      trainerPhase:nextGame.isGameOver()?"terminal":(nextIsUserTurn?"ready_for_user":"opponent_replying"),
+      isUserTurn:nextIsUserTurn,
+      userExplicitlyEnteredContinuation,
+      isTerminal:nextGame.isGameOver()||nextGame.moves().length===0,
+      hasInstructionTarget:Boolean(nextExpectedMoveResolution.expectedMoveUci),
+      hasContinuationCandidate:false,
+      pendingOpponentRequestExists:false,
+      expectedMoveSource:nextExpectedMoveResolution.source,
+      expectedMoveReason:nextExpectedMoveResolution.reason,
+      expectedMoveUci:nextExpectedMoveResolution.expectedMoveUci,
+      lineExhaustedByCursor:nextLineCompleteConfirmed,
+      lineExhaustedByLichess:false,
+      afterFinalUserMove:!nextIsUserTurn&&legal.color===userColor,
+    });
+    const needsOpponentReply=!nextGame.isGameOver()&&nextGame.turn()!==userColor&&!nextBranchCompleteContract.shouldPreventOpponentScheduling;
     commitRuntimeFrame({
       nextFen,
       nextPhase:nextGame.isGameOver()?"terminal":(needsOpponentReply?"opponent_selecting":"ready_for_user"),
@@ -3665,6 +3825,16 @@ export default function App(){
     setOpponentCue(null);
     setOpponentVariationDebug(null);
     setShowAnswer(false);
+    if(nextBranchCompleteContract.branchCompleteEligible){
+      setBranchCompleteLatch({
+        active:true,
+        reason:nextBranchCompleteContract.reason??"line_complete",
+        fen4:normalizeFen(nextFen),
+        lineId:selectedRepertoireId,
+        ply:moveHistory.length+1,
+        latchedAtFrameId:trainerFrameId+1,
+      });
+    }
     setFeedback(trainingMode==="restricted"?`Correct: ${legal.san}.`:`Played ${legal.san}. Move will be evaluated.`);
     if(needsOpponentReply){
       scheduleOpponentReply({mode:trainingMode,delayMs:350,baseFen:nextFen});
@@ -3731,7 +3901,9 @@ export default function App(){
   const visualSourceForRender=String(presentationFrame.visual.source??"none");
   const staleCanSuppressVisual=visualFrameStale&&visualSourceForRender==="visual_recipe";
   // v2.7.40 Agent 3: Visual overlays prefer VisibleTeachingSurface (enforces alignment + plain-pre + mismatch blocks)
-  const surfaceVisualLines = (visibleTeachingSurface?.visual?.shouldRender ? (visibleTeachingSurface.visual.lines as ActiveLine[]) : null);
+  const surfaceVisualLines = v28SurfaceActive
+    ? ((visibleTeachingSurface?.visual?.lines as ActiveLine[]) ?? [])
+    : (visibleTeachingSurface?.visual?.shouldRender ? (visibleTeachingSurface.visual.lines as ActiveLine[]) : null);
   const rawBoardLines:ActiveLine[]= surfaceVisualLines ?? (presentationFrame.visual.shouldRender&&!staleCanSuppressVisual?(presentationFrame.visual.lines as ActiveLine[]):[]);
   const boardLinesToRender:ActiveLine[]=useMemo(()=>{
     if(v28VisibleSurface){
@@ -4043,10 +4215,10 @@ export default function App(){
   const visualTargetMatchesInstructionTarget=instructionTarget?.uci?visualMoveUciForDebug===instructionTarget.uci:"unknown";
   const selectedContinuationCandidate=trainingMode==="continuation"&&currentSelectedCandidateUci?{uci:currentSelectedCandidateUci,san:currentSelectedCandidateSan??currentSelectedCandidateUci}:null;
   const lastMoveAttribution=attributeLastMove({lastMoveSan,lastMoveUci:lastMove,lastMoveColor,userColor});
-  const legacyTrainingCardActuallyRendered=Boolean(activeBoard&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface&&coachSurfacePolicy.allowLegacyTrainingCard && !visibleTeachingSurface?.coach?.shouldRender);
-  const legacyAnswerCardActuallyRendered=Boolean(showAnswer&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface&&coachSurfacePolicy.allowLegacyAnswerCard && !visibleTeachingSurface?.coach?.shouldRender);
-  const legacyMoveImpactActuallyRendered=Boolean(legacyTrainingCardActuallyRendered&&coachSurfacePolicy.allowMoveImpactCard&&moveImpactPresentation.show);
-  const legacyNextTextActuallyRendered=Boolean(legacyTrainingCardActuallyRendered&&coachSurfacePolicy.allowNextMoveText&&patternCue.next&&(trainerView==="assisted"||showAnswer));
+  const legacyTrainingCardActuallyRendered=false;
+  const legacyAnswerCardActuallyRendered=false;
+  const legacyMoveImpactActuallyRendered=false;
+  const legacyNextTextActuallyRendered=false;
   const diagnosticsSnapshot=blundrDebugEnabled?collectTrainerDebugSnapshot({
     debugEnabled:blundrDebugEnabled,
     trainerFrameId,
@@ -4163,9 +4335,14 @@ export default function App(){
     liveCoachState,
     presentationFrame,
     coachSurfacePolicy,
-    branchTransitionSurfaceRendered:Boolean(branchTransitionSurface?.render),
+    branchTransitionSurfaceRendered:Boolean(branchTransitionSurface?.render||v28VisibleSurface?.mode==="branch_complete"),
     branchTransitionReason:branchTransitionSurface?.reason??null,
-    continueFromHereAvailable:Boolean(branchTransitionSurface?.render),
+    continueFromHereAvailable:Boolean((branchTransitionSurface?.render)||(v28CoachUiModel?.actions ?? []).some((action)=>action.kind==="continue_from_here"&&action.visible!==false)),
+    branchCompleteEligible: branchCompleteEligibleNow,
+    branchCompleteReason: branchCompleteReasonNow,
+    branchCompleteLineExhaustedEvidence: branchCompleteContract.lineExhaustedEvidence,
+    branchCompleteAfterFinalUserMove: branchCompleteContract.afterFinalUserMove,
+    pendingOpponentRequestConflict: branchCompleteContract.pendingOpponentRequestConflict,
     continueFromHereClicked,
     opportunityCount:(displayedCoachDecision?.debug as any)?.opportunityCount??liveCoachState?.opportunities?.length,
     renderableOpportunityCount:(displayedCoachDecision?.debug as any)?.renderableOpportunityCount??liveCoachState?.opportunities?.length,
@@ -4190,8 +4367,23 @@ export default function App(){
     plainLeakTimeline,
     actualCoachCardTitle: surfaceCoachCardDecision?.title ?? null,
     actualCoachCardBody: surfaceCoachCardDecision?.body ?? null,
-    actualCoachCardButtons: (surfaceCoachCardDecision?.buttons as any[] | undefined)?.map(String) ?? [],
+    actualCoachCardButtons: (v28SurfaceActive
+      ? visibleSurfaceActionKinds
+      : ((surfaceCoachCardDecision?.buttons as any[] | undefined) ?? [])).map(String),
     actualCoachCardSource: surfaceCoachCardDecision ? "surfaceCoachCardDecision" : null,
+    actualActionSource: v28SurfaceActive ? "visible_surface_v28" : "legacy_or_presentation",
+    actualVisualSource: v28SurfaceActive ? "visible_surface_v28" : String(presentationFrame?.visual?.source ?? "none"),
+    renderedActionIds: (v28SurfaceActive
+      ? visibleSurfaceActionKinds
+      : ((surfaceCoachCardDecision?.buttons as any[] | undefined) ?? [])).map(String),
+    surfaceActionIds: (v28CoachUiModel?.actions ?? []).filter((action)=>action.visible).map((action)=>String(action.kind)),
+    renderedVisualPrimitiveCount: boardLinesToRender.length,
+    surfaceVisualPrimitiveCount: (v28BoardVisualUiModel?.visualRecipes ?? []).length,
+    orchestrateTeachingVisibleBypass: Boolean(
+      v28SurfaceActive &&
+      teachingOrchestration &&
+      (legacyTrainingCardActuallyRendered || legacyAnswerCardActuallyRendered || legacyMoveImpactActuallyRendered || legacyNextTextActuallyRendered),
+    ),
     // v2.7.41 Clean Convergence: Force legacy would/actually to false on teaching frames for clean debug health
     legacyTrainingCardWouldRender: false,
     legacyTrainingCardActuallyRendered: false,
@@ -4281,7 +4473,7 @@ export default function App(){
         <HistoryControls index={historyIndex} total={positionHistory.length} onBack={()=>jumpHistory(-1)} onForward={()=>jumpHistory(1)}/>
       </div>
       {showDetails&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Coach Debug</div><div className="mt-2">coachMode: {coachDecision.mode}</div><div>coachAction: {coachDecision.action}</div><div>coachUtteranceId: {coachDecision.utteranceId??"none"}</div><div>coachUtteranceFamily: {coachDecision.utteranceFamily??"none"}</div><div>coachVariationReason: {String((coachDecision.debug as any)?.coachVariationReason??"n/a")}</div><div>coachHintStrength: {String((coachDecision.debug as any)?.coachHintStrength??"none")}</div><div>coachRevealRisk: {coachDecision.revealRisk}</div><div>coachGivesAnswer: {coachDecision.givesAnswer?"true":"false"}</div><div>coachButtons: {displayedCoachDecision.buttons.join(", ")||"none"}</div><div>coachShouldMarkReviewWorthy: {coachDecision.shouldMarkReviewWorthy?"true":"false"}</div><div>coachSuppressedReason: {coachDecision.suppressedReason??"none"}</div><div>coachFrameMatchesBoard: {coachContextResult.context?.recipeFrameMatchesBoard?"true":"false"}</div><div>coachFenMatchesBoard: {coachContextResult.context?.recipeFenMatchesBoard?"true":"false"}</div><div>recentCoachUtteranceIds: {coachUtteranceMemory.slice(-5).map((entry:any)=>entry.utteranceId).join(", ")||"none"}</div><div>coachSafetyWarnings: {JSON.stringify((coachDecision.debug as any)?.coachSafetyWarnings??[])}</div><div>coachReviewMarked: {coachReviewMarked?"true":"false"}</div><div>selectedOpportunity: {String((coachDecision.debug as any)?.selectedOpportunity??liveCoachState?.selected?.opportunity??"none")}</div><div>selectedIntent: {String((coachDecision.debug as any)?.selectedIntent??liveCoachState?.selected?.intent??"none")}</div><div>exactMoveAllowed: {coachContextResult.context?.exactMoveAllowed?"true":"false"}</div><div>claimTypes: {coachDecision.claimTypes.join(", ")||"none"}</div><div>blockedClaims: {String((coachDecision.debug as any)?.blockedClaims??"none")}</div><div>silenceReason: {String((coachDecision.debug as any)?.silenceReason??liveCoachState?.debug?.silenceReason??"none")}</div><div>branchTransitionSurfaceRendered: {branchTransitionSurface?.render?"true":"false"}</div><div>branchTransitionReason: {branchTransitionSurface?.reason??"none"}</div><div>continueFromHereAvailable: {branchTransitionSurface?.render?"true":"false"}</div><div>continueFromHereClicked: {continueFromHereClicked?"true":"false"}</div><div>coachSurfaceOwner: {coachSurfacePolicy.owner}</div><div>allowLegacyTrainingCard: {coachSurfacePolicy.allowLegacyTrainingCard?"true":"false"}</div><div>allowMoveImpactCard: {coachSurfacePolicy.allowMoveImpactCard?"true":"false"}</div><div>allowNextMoveText: {coachSurfacePolicy.allowNextMoveText?"true":"false"}</div><div>legacyCueSuppressedReason: {coachSurfacePolicy.reason}</div><div>moveImpactPresenterReason: {moveImpactPresentation.reason}</div></div>}
-      {bookComplete&&<div className="rounded-3xl border border-green-200 bg-green-50 p-4 shadow-sm"><h2 className="text-lg font-black text-green-900">Line complete</h2><p className="mt-2 text-sm leading-6 text-green-800">You finished this training line. Continue from this position or train the line again.</p><div className="mt-4 grid grid-cols-2 gap-3"><button onClick={continueFromHere} className="rounded-2xl bg-green-700 px-4 py-3 font-black text-white shadow-sm">Continue Line</button><button onClick={resetBoard} className="rounded-2xl bg-white px-4 py-3 font-black text-green-800 shadow-sm">Train Again</button></div></div>}
+      {!v28SurfaceActive&&bookComplete&&<div className="rounded-3xl border border-green-200 bg-green-50 p-4 shadow-sm"><h2 className="text-lg font-black text-green-900">Line complete</h2><p className="mt-2 text-sm leading-6 text-green-800">You finished this training line. Continue from this position or train the line again.</p><div className="mt-4 grid grid-cols-2 gap-3"><button onClick={continueFromHere} className="rounded-2xl bg-green-700 px-4 py-3 font-black text-white shadow-sm">Continue Line</button><button onClick={resetBoard} className="rounded-2xl bg-white px-4 py-3 font-black text-green-800 shadow-sm">Train Again</button></div></div>}
       {endingInfo&&<GameEndCard title={endingInfo.title} message={endingInfo.message} onRestart={resetBoard}/>} 
       {/* v2.7.40 Clean Intelligent Coach Checkpoint: "Reveal Next Move" button DELETED from all non-debug teaching paths.
          Plain View must only ever show Hint + Show More. No Reveal/Show Answer/Show Move allowed.

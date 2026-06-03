@@ -86,8 +86,10 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
   const statuses = useMemo(() => {
     const critical = (snapshot?.health.criticalIssues.length ?? 0) > 0;
     const warnings = (snapshot?.health.warnings.length ?? 0) > 0;
+    const visualFailureKind = String(snapshot?.visual.visualFailureKind ?? "none");
+    const visualFail = visualFailureKind !== "none" && visualFailureKind !== "not_applicable";
     return {
-      visual: status(snapshot?.visual.visualFailureKind !== "none", false),
+      visual: status(visualFail, false),
       coach: status(snapshot?.coach.coachFailureKind !== "none", false),
       actions: status(Boolean(snapshot?.health.criticalIssues.some((issue) => issue.includes("Action"))), false),
       continuation: status(Boolean(snapshot?.health.criticalIssues.some((issue) => issue.includes("Continuation"))), Boolean(snapshot?.continuation.isContinuationMode && snapshot?.continuation.continuationLinesPassedToBoard === 0)),

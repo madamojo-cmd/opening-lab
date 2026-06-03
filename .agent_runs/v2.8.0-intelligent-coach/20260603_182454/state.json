@@ -1,0 +1,5 @@
+{
+  "phase": "11_1c_branch_complete_continue_rendering_repair",
+  "package11_1c_branch_complete_continue_rendering_repair": "blocked",
+  "blockReason": "full_manual_interactive_italian_line_acceptance_and_export_not_executable_in_current_run_context"
+}

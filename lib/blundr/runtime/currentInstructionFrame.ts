@@ -542,6 +542,31 @@ export function buildCurrentInstructionFrame(input: BuildCurrentInstructionFrame
     instructionFrameKey,
   };
 
+  const trainerPhaseLower = String(legacyInput.trainerPhase ?? "").toLowerCase();
+  if (trainerPhaseLower === "terminal") {
+    const kind: CurrentInstructionFrameKind = "terminal";
+    const issues = buildIssues({ isUserTurn: legacyInput.isUserTurn, trainerPhase: legacyInput.trainerPhase, target: null, nullReason: "phase_terminal", kind });
+    return {
+      ...baseCompat,
+      frameKey: instructionFrameKey,
+      kind,
+      fenBefore: legacyInput.fen,
+      ply,
+      sideToMove,
+      target: null,
+      mode: "terminal",
+      source: "terminal",
+      targetSource: "none",
+      nullReason: "phase_terminal",
+      invariantKey: `${normalizedFen}|terminal|none`,
+      debug: {
+        issues,
+        targetSignature: null,
+        createdAt: new Date().toISOString(),
+      },
+    };
+  }
+
   if (!legacyInput.isUserTurn) {
     const kind: CurrentInstructionFrameKind = "opponent_replying";
     const issues = buildIssues({ isUserTurn: legacyInput.isUserTurn, trainerPhase: legacyInput.trainerPhase, target: null, nullReason: "opponent_turn", kind });

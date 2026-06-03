@@ -1,0 +1,5 @@
+{
+  "phase": "11_1b_acceptance_debug_cleanup",
+  "package11_1b_acceptance_debug_cleanup": "blocked",
+  "blockReason": "full_interactive_manual_acceptance_flow_not_executable_in_current_run_context"
+}

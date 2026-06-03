@@ -153,6 +153,7 @@ export function testCurrentInstructionFrameRuntimeAuthority(): void {
   });
   assert.equal(branchComplete.target, null);
   assert.equal(branchComplete.branchComplete?.continueFromHereAvailable, true);
+  assert.equal(branchComplete.kind, "branch_complete", "opponent_reply_resolution_to_exhausted_line_enters_branch_complete");
 
   const terminal = buildCurrentInstructionFrame({
     kind: "terminal",
@@ -176,6 +177,21 @@ export function testCurrentInstructionFrameRuntimeAuthority(): void {
   });
   assert.equal(terminalWithTarget.target, null);
   assert.equal(terminalWithTarget.debug.issues.some((issue) => issue.code === "terminal_frame_has_target"), true);
+
+  const terminalLegacyNoUserTurn = buildCurrentInstructionFrame({
+    frameId: "legacy-terminal-checkmate",
+    fen: "7k/6Q1/6K1/8/8/8/8/8 b - - 0 1",
+    trainingMode: "continuation",
+    trainerPhase: "terminal",
+    trainerView: "assisted",
+    isUserTurn: false,
+    guidedMove: null,
+    continuationCandidate: null,
+    preferredTargetKind: "continuation_candidate",
+  });
+  assert.equal(terminalLegacyNoUserTurn.kind, "terminal", "terminal_checkmate_does_not_render_opponent_replying_surface");
+  assert.equal(terminalLegacyNoUserTurn.mode, "terminal");
+  assert.equal(terminalLegacyNoUserTurn.target, null);
 
   assert.throws(() => assertLockedInstructionTarget(terminal));
 

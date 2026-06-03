@@ -17,6 +17,11 @@ function isAllowedNullTargetState(input: any): boolean {
   const phase = String(input?.trainerPhase ?? "");
   const visibleSurfaceMode = String(input?.visibleTeachingSurface?.mode ?? "");
   const visibleSurfaceOwner = String(input?.visibleSurfaceOwner ?? input?.visibleTeachingSurface?.owner ?? "");
+  const continuationRuntimeStatus = String(input?.continuationRuntimeStatus ?? input?.continuationAnalysisStatus ?? "");
+  const continuationNullTargetStatus =
+    String(input?.trainingMode ?? "") === "continuation" &&
+    !input?.instructionTargetUci &&
+    ["requested", "analyzing", "opponent_replying", "terminal", "transitioning"].includes(continuationRuntimeStatus);
 
   const phaseAllowed =
     phase === "branch_complete"
@@ -28,10 +33,12 @@ function isAllowedNullTargetState(input: any): boolean {
   const surfaceAllowed =
     visibleSurfaceMode === "branch_complete"
     || visibleSurfaceMode === "opponent_replying"
-    || visibleSurfaceMode === "terminal";
+    || visibleSurfaceMode === "terminal"
+    || visibleSurfaceMode === "transitioning"
+    || visibleSurfaceMode === "analyzing";
 
   const ownerAllowed = visibleSurfaceOwner === "v28_visible_surface" && surfaceAllowed;
-  return phaseAllowed || surfaceAllowed || ownerAllowed;
+  return phaseAllowed || surfaceAllowed || ownerAllowed || continuationNullTargetStatus;
 }
 
 function inferVisualFailure(input: any): string {
@@ -153,6 +160,12 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   const actualCoachCardBody = input.actualCoachCardBody == null ? null : String(input.actualCoachCardBody);
   const actualCoachCardButtons = Array.isArray(input.actualCoachCardButtons) ? input.actualCoachCardButtons.map(String) : [];
   const actualCoachCardSource = input.actualCoachCardSource == null ? null : String(input.actualCoachCardSource);
+  const actualActionSource = input.actualActionSource == null ? null : String(input.actualActionSource);
+  const actualVisualSource = input.actualVisualSource == null ? null : String(input.actualVisualSource);
+  const renderedActionIds = Array.isArray(input.renderedActionIds) ? input.renderedActionIds.map(String) : [];
+  const surfaceActionIds = Array.isArray(input.surfaceActionIds) ? input.surfaceActionIds.map(String) : [];
+  const renderedVisualPrimitiveCount = Number(input.renderedVisualPrimitiveCount ?? len(input.boardLines));
+  const surfaceVisualPrimitiveCount = Number(input.surfaceVisualPrimitiveCount ?? len(input.visibleTeachingSurface?.visual?.lines));
   const verifiedFallbackUsed = Boolean(coachDebug.verifiedFallbackUsed || coachDebug.candidateCoachFallbackUsed);
   const expectedMoveExists = Boolean(input.expectedMoveSan || input.expectedMoveUci);
   const selectedOpportunityMoveSan = String(input.coachDecision?.debug?.coachSelectedCandidateMove ?? input.coachDebug?.selectedOpportunityMoveSan ?? "").trim();
@@ -231,7 +244,24 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   if (input.lastActionDebug?.lastClickedAction && input.lastActionDebug?.stateChanged === false && !input.lastActionDebug?.revealIdempotentNoop) criticalIssues.push("Action click did not change state");
   if (input.trainingMode === "continuation" && input.selectedCandidateUci && input.coachDecision?.exactMoveAllowed && continuationLinesPassedToBoard === 0) criticalIssues.push("continuation_candidate_not_rendered");
   const continuationRuntimeStatus = input.continuationRuntimeStatus ?? input.continuationAnalysisStatus ?? null;
+  const continuationSurfaceMode = String(input.visibleTeachingSurface?.mode ?? "");
+  const continuationNullTargetStatusFrame =
+    String(input.trainingMode) === "continuation" &&
+    !instructionTargetUci &&
+    (
+      ["requested", "analyzing", "opponent_replying", "terminal", "transitioning"].includes(String(continuationRuntimeStatus)) ||
+      ["opponent_replying", "terminal", "branch_complete", "transitioning", "analyzing"].includes(continuationSurfaceMode) ||
+      String(input.trainerPhase) === "transitioning"
+    );
+  const terminalRuntimeLike =
+    String(input.trainerPhase) === "terminal" ||
+    String(continuationRuntimeStatus) === "terminal" ||
+    String(input.continuationTerminalReason ?? "") === "checkmate";
   const legalMoveCount = typeof input.legalMoveCount === "number" ? input.legalMoveCount : undefined;
+  const lineExhaustedEvidence =
+    Boolean(input.branchCompleteLineExhaustedEvidence) ||
+    String(expectedMoveResolution.source ?? "") === "guided_branch_needs_continuation" ||
+    /repertoire_line_exhausted_needs_continuation|line_exhausted|needs_continuation/i.test(String(expectedMoveResolution.reason ?? ""));
   const continuationTerminalDetected = input.trainingMode === "continuation" && (legalMoveCount === 0 || String(input.lastUserMoveSan ?? "").includes("#"));
   if (continuationTerminalDetected && continuationRuntimeStatus !== "terminal") criticalIssues.push("continuation_terminal_not_classified");
   if (continuationTerminalDetected && presentationCoach.owner !== "intent_first_coach" && presentationCoach.owner !== "continuation_terminal_surface" && presentationCoach.shouldRender !== true) criticalIssues.push("terminal_position_without_terminal_surface");
@@ -341,8 +371,15 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
     criticalIssues.push("assisted_view_target_without_visual");
   }
   if (input.trainingMode === "continuation" && input.trainerPhase === "ready_for_user" && input.isUserTurn && input.continuationAnalysisStatus === "ready" && !instructionTargetUci) {
-    criticalIssues.push("continuation_analysis_ready_without_target");
-    criticalIssues.push("continuation_user_turn_without_candidate");
+    if (continuationNullTargetStatusFrame) {
+      warnings.push("continuation_ready_without_candidate_transitioning");
+    } else {
+      criticalIssues.push("continuation_analysis_ready_without_target");
+      criticalIssues.push("continuation_user_turn_without_candidate");
+    }
+  }
+  if (input.trainingMode === "continuation" && String(continuationRuntimeStatus) === "ready" && !instructionTargetUci) {
+    criticalIssues.push("continuation_candidate_without_target");
   }
   if (instructionTargetUci && coachDebug.candidateCoachFallbackUsed && !coachDebug.coachVerifiedFactsUsed) criticalIssues.push("generic_fallback_without_verified_facts");
   if (instructionTargetUci && String(input.trainerView) === "assisted" && !visualMoveUci) criticalIssues.push("assisted_view_target_without_visual");
@@ -398,8 +435,25 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       patterns.set(normalized, (patterns.get(normalized) ?? 0) + 1);
     }
     if ([...patterns.values()].some((count) => count >= 3)) {
-      criticalIssues.push("recent_repeated_generic_coach_copy");
+      const timelineLowQualityCount = coachTimeline.filter((entry: any) => Number(entry?.qualityScore ?? 0) > 0 && Number(entry?.qualityScore ?? 0) < 80).length;
+      const timelineRepeatedGenericCount = coachTimeline.filter((entry: any) => Boolean(entry?.repeatedGeneric)).length;
+      const targetAlignedNow = instructionTargetUci ? (coachQuality.targetAligned ?? (coachMoveUci === instructionTargetUci)) === true : true;
+      const rawGenericFallbackVisible = /safety fallback|safety blocked|no move-specific coaching is available|safest improving move/i.test(`${String(visibleTitle ?? "")} ${String(visibleBody ?? "")}`.toLowerCase());
+      if (
+        timelineRepeatedGenericCount > 0 ||
+        timelineLowQualityCount > 0 ||
+        !targetAlignedNow ||
+        rawGenericFallbackVisible ||
+        coachFailureKind !== "none"
+      ) {
+        criticalIssues.push("recent_repeated_generic_coach_copy");
+      } else {
+        warnings.push("recent_repeated_generic_coach_copy_downgraded");
+      }
     }
+  }
+  if (terminalRuntimeLike && continuationSurfaceMode === "opponent_replying") {
+    criticalIssues.push("terminal_mode_downgraded_to_opponent_replying");
   }
   if ((presentationCoach.shouldRender || v28OwnerActive) && visibleCoachIntent === "silent" && !isAllowedNullTargetState(input)) {
     criticalIssues.push("visible_coach_with_silent_intent");
@@ -408,12 +462,43 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   if (input.trainingMode === "continuation" && input.selectedCandidateUci && presentationCoach.shouldRender && visibleCoachOwner !== "branch_transition_surface" && !coachDebug.selectedOpportunityId && !coachDebug.selectedTemplateId && !coachDebug.mappingTemplateId && !coachDebug.candidateCoachFallbackUsed) criticalIssues.push("visible_coach_missing_template_and_opportunity");
   if (input.staleSelectedCandidateDetected) criticalIssues.push("stale_selected_candidate");
   if (input.trainingMode === "continuation" && !input.userExplicitlyEnteredContinuation && !guidedCoveragePolicy.guidedCompleteAllowed && (input.moveHistory?.length ?? 0) < (guidedCoveragePolicy.minimumGuidedDepthPly ?? 8)) criticalIssues.push("premature_continuation_transition");
-  if (input.bookComplete && !guidedCoveragePolicy.guidedCompleteAllowed) criticalIssues.push("book_complete_without_policy");
+  const lineExhaustedOrNeedsContinuation =
+    String(expectedMoveResolution.source ?? "") === "guided_branch_needs_continuation" ||
+    /repertoire_line_exhausted_needs_continuation|line_exhausted|needs_continuation/i.test(String(expectedMoveResolution.reason ?? ""));
+  const branchCompleteVisible = String(input.visibleTeachingSurface?.mode ?? "") === "branch_complete";
+  const hasPendingOpponentReply = Boolean(input.pendingOpponentRequest);
+  const unresolvedCompletionStuck =
+    Boolean(input.bookComplete) &&
+    !guidedCoveragePolicy.guidedCompleteAllowed &&
+    !hasPendingOpponentReply &&
+    !instructionTargetUci &&
+    !branchCompleteVisible &&
+    lineExhaustedOrNeedsContinuation;
+  if (unresolvedCompletionStuck) criticalIssues.push("book_complete_without_policy");
+  const continueFromHereButtonRendered = visibleButtons.includes("continue_from_here");
+  const exhaustedWithoutBranchCompleteSurface =
+    String(input.trainingMode) === "restricted" &&
+    lineExhaustedEvidence &&
+    !instructionTargetUci &&
+    !continuationTerminalDetected &&
+    !input.selectedCandidateUci &&
+    !hasPendingOpponentReply &&
+    !branchCompleteVisible &&
+    !continueFromHereButtonRendered;
+  if (exhaustedWithoutBranchCompleteSurface) {
+    criticalIssues.push("exhausted_line_without_branch_complete_surface");
+  }
   if (input.visualRecipe && input.visualReady === false && !presentation.visual?.shouldRender && input.visualRecipeOverlay?.adapterAllowed) criticalIssues.push("VisualRecipe exists but visual did not render while legacy ready was false");
   if (input.coachSurfacePolicyAffectsVisualLayer) criticalIssues.push("Coach surface policy affected visual layer");
   if (input.coachMemoryLegacyDetected && !input.memoryMigratedOrCleared) criticalIssues.push("legacy_memory_not_migrated");
   if (Array.isArray(input.runtimeCriticalIssues)) {
-    for (const issue of input.runtimeCriticalIssues.map(String)) criticalIssues.push(issue);
+    for (const issue of input.runtimeCriticalIssues.map(String)) {
+      if (issue === "continuation_ready_without_candidate" && continuationNullTargetStatusFrame) {
+        warnings.push("continuation_ready_without_candidate_transitioning");
+        continue;
+      }
+      criticalIssues.push(issue);
+    }
   }
   if ((actualCoachCardTitle ?? null) !== (visibleTitle ?? null) || (actualCoachCardBody ?? null) !== (visibleBody ?? null)) {
     criticalIssues.push("coach_card_debug_parity_mismatch");
@@ -437,6 +522,31 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   if (plainLeakAtFrame) {
     criticalIssues.push("plain_pre_show_more_leak_at_frame");
     warnings.push(`plain_pre_show_more_leak_frame:${String((plainLeakAtFrame as any).frameId ?? "unknown")}`);
+  }
+  const v28VisibleEnabled = String(input.visibleSurfaceOwner ?? input.visibleTeachingSurface?.owner ?? "") === "v28_visible_surface";
+  if (v28VisibleEnabled && isTeachingFrame(input) && actualCoachCardSource !== "surfaceCoachCardDecision") {
+    criticalIssues.push("legacy_coach_visible_bypass");
+  }
+  if (v28VisibleEnabled && actualActionSource !== "visible_surface_v28") {
+    criticalIssues.push("legacy_action_visible_bypass");
+  }
+  if (v28VisibleEnabled && actualVisualSource !== "visible_surface_v28") {
+    criticalIssues.push("legacy_visual_visible_bypass");
+  }
+  if (v28VisibleEnabled && String(input.trainerPhase) === "branch_complete" && String(input.visibleTeachingSurface?.mode ?? "") !== "branch_complete") {
+    criticalIssues.push("legacy_branch_complete_visible_bypass");
+  }
+  if (String(input.trainerView) === "assisted" && renderedActionIds.includes("reveal_target")) {
+    criticalIssues.push("assisted_reveal_action_rendered");
+  }
+  if (v28VisibleEnabled && renderedActionIds.some((id) => !surfaceActionIds.includes(id))) {
+    criticalIssues.push("surface_action_missing_for_rendered_button");
+  }
+  if (v28VisibleEnabled && renderedVisualPrimitiveCount > 0 && surfaceVisualPrimitiveCount === 0) {
+    criticalIssues.push("rendered_visual_missing_surface_source");
+  }
+  if (v28VisibleEnabled && isTeachingFrame(input) && String(input.coachDecision?.debug?.coachCopySource ?? "") === "orchestrate_teaching") {
+    criticalIssues.push("legacy_orchestrate_teaching_visible_bypass");
   }
   if (visualFailureKind !== "none" && visualFailureKind !== "not_applicable") warnings.push(`visualFailureKind:${visualFailureKind}`);
   if (coachFailureKind !== "none") warnings.push(`coachFailureKind:${coachFailureKind}`);
@@ -647,6 +757,9 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       coachSurfacePolicyAffectsVisualLayer: Boolean(input.coachSurfacePolicyAffectsVisualLayer),
       visualFailureKind,
       visualTargetMatchesInstructionTarget: instructionTargetUci ? visualMoveUci === instructionTargetUci : "unknown",
+      actualVisualSource,
+      renderedVisualPrimitiveCount,
+      surfaceVisualPrimitiveCount,
     },
     continuation: {
       isContinuationMode: input.trainingMode === "continuation",
@@ -732,6 +845,9 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       revealTargetUci,
       revealTargetSource,
       revealTargetMatchesInstructionTarget: instructionTargetUci ? revealTargetUci === instructionTargetUci : "unknown",
+      actualActionSource,
+      renderedActionIds,
+      surfaceActionIds,
     },
     features: {
       // 2.7.39.4: Brain primary when available (debug behind Brain)
@@ -937,6 +1053,12 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       actualCoachCardBody,
       actualCoachCardButtons,
       actualCoachCardSource,
+      actualActionSource,
+      actualVisualSource,
+      renderedActionIds,
+      surfaceActionIds,
+      renderedVisualPrimitiveCount,
+      surfaceVisualPrimitiveCount,
       debugVisibleTitle: visibleTitle,
       debugVisibleBody: visibleBody,
       debugVisibleButtons: visibleButtons,

@@ -23,6 +23,9 @@ export const browserContract = {
     recoverableClaimValidationNotBlocked: "claim_validation_failed with aligned target/piece/visual state must recover to safe teaching copy, not blocked surface.",
     branchCompleteNoSafetyFallback: "Valid branch_complete must render line-complete copy and must not render Safety Fallback.",
     branchCompleteDiagnosticPass: "Valid branch_complete diagnostics treat no_recipe and expected_move_missing as pass/not_applicable.",
+    lineExhaustedRendersContinue: "When line is exhausted, branch_complete renders Continue from Here and restart actions.",
+    opponentPendingHoldsContinue: "While opponent reply is pending, Continue from Here does not render.",
+    opponentResolutionTransitionsToBranchComplete: "After opponent resolution on exhausted line, UI transitions to branch_complete instead of stuck ready_for_user opponent-turn.",
   },
 };
 

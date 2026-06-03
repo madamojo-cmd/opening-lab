@@ -155,10 +155,11 @@ export function testLiveChainSmoke(): void {
   assert.equal(branch.compiled.revealAction.kind, "continue_from_here");
   assert.equal(branch.compiled.visualIntents.some((v) => v.type === "move_arrow"), false);
   assert.equal(branch.gated.result.allowed, true);
-  assert.equal(branch.surface.mode, "branch_complete");
+  assert.equal(branch.surface.mode, "branch_complete", "v28_branch_complete_uses_surface_not_legacy_card");
   assert.equal(branch.surface.copy.title, "Line complete");
   assert.equal(branch.surface.copy.body, "You finished this training line. Continue from this position or train the line again.");
   assert.equal(branch.surface.actions.some((action) => action.kind === "continue_from_here"), true);
+  assert.equal(branch.surface.actions.some((action) => action.kind === "restart_line"), true, "line_exhausted_user_turn_renders_continue_from_here");
 
   // 6) Opponent replying
   const opponentFrame = buildCurrentInstructionFrame({
@@ -176,6 +177,7 @@ export function testLiveChainSmoke(): void {
   assert.equal(opponent.compiled.visualIntents.length, 0);
   assert.equal(opponent.gated.result.allowed, true);
   assert.equal(opponent.surface.mode, "opponent_replying");
+  assert.equal(opponent.surface.actions.some((action) => action.kind === "continue_from_here"), false, "opponent_pending_does_not_render_continue_from_here_yet");
   assert.equal(opponent.surface.actions.some((action) => action.kind === "reveal_target"), false);
 
   // 7) Mismatch trap

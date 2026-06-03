@@ -1,0 +1,5 @@
+{
+  "phase": "11_1_acceptance_sweep",
+  "package11_1_acceptance_sweep": "blocked",
+  "blockReason": "interactive_browser_manual_matrix_not_executable_in_current_run_context"
+}

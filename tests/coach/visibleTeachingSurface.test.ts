@@ -120,6 +120,7 @@ export function testVisibleTeachingSurface(): void {
   assert.equal(branch.surface.copy.title.includes("Safety Fallback"), false);
   assert.equal(branch.surface.copy.body.includes("Think about the safest improving move here."), false);
   assert.equal(branch.surface.actions.some((action) => action.kind === "continue_from_here"), true);
+  assert.equal(branch.surface.actions.some((action) => action.kind === "restart_line"), true, "branch_complete_surface_actions_include_continue_and_restart");
   assert.equal(branch.surface.actions.some((action) => action.kind === "reveal_target"), false);
   assert.equal(branch.surface.visuals.some((visual) => visual.type === "move_arrow"), false);
 

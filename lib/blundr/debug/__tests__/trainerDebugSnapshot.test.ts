@@ -600,5 +600,264 @@ export function testTrainerDebugSnapshot(): void {
   assert.equal((timelineSnapshot.debugParity as any)?.actualCoachCardTitle, "Safety Blocked");
   assert.equal(((timelineSnapshot.actionTimeline as any[])[1]?.clickedActionPayload as any)?.continueFromHereClicked, true);
 
+  const v28HealthySources = buildTrainerDebugSnapshot({
+    debugEnabled: true,
+    trainerFrameId: 201,
+    trainerPhase: "ready_for_user",
+    trainerView: "assisted",
+    trainingMode: "restricted",
+    isUserTurn: true,
+    fen: "8/8/8/8/8/8/8/4K3 w - - 0 1",
+    instructionTargetUci: "b1c3",
+    instructionTargetPieceType: "n",
+    coachMoveUci: "b1c3",
+    visualMoveUci: "b1c3",
+    revealTargetUci: "b1c3",
+    visibleSurfaceOwner: "v28_visible_surface",
+    visibleTeachingSurface: {
+      owner: "v28_visible_surface",
+      mode: "assisted",
+      coach: { shouldRender: true, title: "Nc3 - Develop the knight", body: "Move the knight to c3." },
+      visual: { lines: [{ from: "b1", to: "c3" }] },
+      actions: [{ kind: "hint" }, { kind: "show_more" }],
+    },
+    actualCoachCardSource: "surfaceCoachCardDecision",
+    actualActionSource: "visible_surface_v28",
+    actualVisualSource: "visible_surface_v28",
+    renderedActionIds: ["hint", "show_more"],
+    surfaceActionIds: ["hint", "show_more"],
+    renderedVisualPrimitiveCount: 1,
+    surfaceVisualPrimitiveCount: 1,
+    presentationFrame: { visual: { shouldRender: true, source: "visual_recipe", lines: [{ from: "b1", to: "c3" }] }, coach: { shouldRender: true, owner: "intent_first_coach" }, legacy: {} },
+    eventLog: [],
+  } as any);
+  assert.equal(v28HealthySources.health.criticalIssues.includes("legacy_coach_visible_bypass"), false);
+  assert.equal(v28HealthySources.health.criticalIssues.includes("legacy_action_visible_bypass"), false);
+  assert.equal(v28HealthySources.health.criticalIssues.includes("legacy_visual_visible_bypass"), false);
+  assert.equal((v28HealthySources.actions as any).actualActionSource, "visible_surface_v28");
+  assert.equal((v28HealthySources.visual as any).actualVisualSource, "visible_surface_v28");
+  assert.deepEqual((v28HealthySources.actions as any).renderedActionIds, ["hint", "show_more"]);
+
+  const v28BypassSources = buildTrainerDebugSnapshot({
+    debugEnabled: true,
+    trainerFrameId: 202,
+    trainerPhase: "ready_for_user",
+    trainerView: "assisted",
+    trainingMode: "restricted",
+    isUserTurn: true,
+    fen: "8/8/8/8/8/8/8/4K3 w - - 0 1",
+    visibleSurfaceOwner: "v28_visible_surface",
+    visibleTeachingSurface: {
+      owner: "v28_visible_surface",
+      mode: "assisted",
+      coach: { shouldRender: true, title: "Develop", body: "Play Nc3." },
+      visual: { lines: [] },
+      actions: [{ kind: "hint" }, { kind: "show_more" }],
+    },
+    actualCoachCardSource: "legacyDecision",
+    actualActionSource: "legacy_actions",
+    actualVisualSource: "legacy_visuals",
+    renderedActionIds: ["hint", "show_more", "reveal_target"],
+    surfaceActionIds: ["hint", "show_more"],
+    renderedVisualPrimitiveCount: 1,
+    surfaceVisualPrimitiveCount: 0,
+    legacyTrainingCardActuallyRendered: true,
+    orchestrateTeachingVisibleBypass: true,
+    presentationFrame: { visual: { shouldRender: true, source: "legacy_fallback", lines: [{ from: "b1", to: "c3" }] }, coach: { shouldRender: true, owner: "coach_decision" }, legacy: {} },
+    eventLog: [],
+  } as any);
+  assert.equal(v28BypassSources.health.criticalIssues.includes("legacy_coach_visible_bypass"), true);
+  assert.equal(v28BypassSources.health.criticalIssues.includes("legacy_action_visible_bypass"), true);
+  assert.equal(v28BypassSources.health.criticalIssues.includes("legacy_visual_visible_bypass"), true);
+  assert.equal(v28BypassSources.health.criticalIssues.includes("legacy_branch_complete_visible_bypass"), true);
+  assert.equal(v28BypassSources.health.criticalIssues.includes("assisted_reveal_action_rendered"), true);
+  assert.equal(v28BypassSources.health.criticalIssues.includes("surface_action_missing_for_rendered_button"), true);
+  assert.equal(v28BypassSources.health.criticalIssues.includes("rendered_visual_missing_surface_source"), true);
+  assert.equal(v28BypassSources.health.criticalIssues.includes("legacy_orchestrate_teaching_visible_bypass"), true);
+
+  const continuationAnalyzingNoCandidate = buildTrainerDebugSnapshot({
+    debugEnabled: true,
+    trainerFrameId: 203,
+    trainerPhase: "ready_for_user",
+    trainerView: "assisted",
+    trainingMode: "continuation",
+    isUserTurn: true,
+    fen: "8/8/8/8/8/8/8/4K3 w - - 0 1",
+    continuationAnalysisStatus: "ready",
+    continuationRuntimeStatus: "analyzing",
+    instructionTargetUci: null,
+    selectedCandidateUci: null,
+    runtimeCriticalIssues: ["continuation_ready_without_candidate"],
+    visibleTeachingSurface: {
+      owner: "v28_visible_surface",
+      mode: "opponent_replying",
+      coach: { shouldRender: true, title: "Analyzing continuation", body: "Looking for a reliable continuation candidate." },
+      visual: { lines: [] },
+      actions: [],
+    },
+    presentationFrame: { visual: { shouldRender: false, source: "none" }, coach: { shouldRender: true, owner: "intent_first_coach" }, legacy: {} },
+    eventLog: [],
+  } as any);
+  assert.equal(continuationAnalyzingNoCandidate.health.criticalIssues.includes("continuation_analysis_ready_without_target"), false, "continuation_analyzing_without_candidate_is_status_not_critical");
+  assert.equal(continuationAnalyzingNoCandidate.health.criticalIssues.includes("continuation_ready_without_candidate"), false, "continuation_analyzing_without_candidate_is_status_not_critical");
+  assert.equal(continuationAnalyzingNoCandidate.health.warnings.includes("continuation_ready_without_candidate_transitioning"), true);
+
+  const continuationReadyMissingTarget = buildTrainerDebugSnapshot({
+    debugEnabled: true,
+    trainerFrameId: 204,
+    trainerPhase: "ready_for_user",
+    trainerView: "assisted",
+    trainingMode: "continuation",
+    isUserTurn: true,
+    fen: "8/8/8/8/8/8/8/4K3 w - - 0 1",
+    continuationAnalysisStatus: "ready",
+    continuationRuntimeStatus: "ready",
+    instructionTargetUci: null,
+    selectedCandidateUci: "g1f3",
+    visibleTeachingSurface: {
+      owner: "v28_visible_surface",
+      mode: "assisted",
+      coach: { shouldRender: true, title: "Candidate ready", body: "Play Nf3." },
+      visual: { lines: [] },
+      actions: [{ kind: "hint" }],
+    },
+    presentationFrame: { visual: { shouldRender: false, source: "none" }, coach: { shouldRender: true, owner: "intent_first_coach" }, legacy: {} },
+    eventLog: [],
+  } as any);
+  assert.equal(continuationReadyMissingTarget.health.criticalIssues.includes("continuation_candidate_without_target"), true, "continuation_candidate_without_target_is_critical");
+
+  const alignedSafeRepeatedHistory = buildTrainerDebugSnapshot({
+    debugEnabled: true,
+    trainerFrameId: 205,
+    trainerPhase: "ready_for_user",
+    trainerView: "assisted",
+    trainingMode: "restricted",
+    isUserTurn: true,
+    fen: "8/8/8/8/8/8/8/4K3 w - - 0 1",
+    instructionTargetUci: "b1c3",
+    coachMoveUci: "b1c3",
+    coachQuality: { targetAligned: true, qualityScore: 96, source: "live_coach", usedFallback: false },
+    coachDecision: {
+      shouldShowCoachCard: true,
+      title: "Nc3 - Develop the knight",
+      body: "Move the knight to c3. This develops your knight toward active central squares.",
+      buttons: ["hint", "show_more"],
+      debug: { coachDecisionSource: "live_coach", selectedOpportunityScore: 320 },
+    },
+    lastCoachRecords: [
+      { trainerPhase: "ready_for_user", instructionTargetUci: "b1c3", instructionTargetPieceType: "n", body: "Move the knight to c3.", normalizedBody: "{MOVE} develops your knight." },
+      { trainerPhase: "ready_for_user", instructionTargetUci: "b1c3", instructionTargetPieceType: "n", body: "Move the knight to c3.", normalizedBody: "{MOVE} develops your knight." },
+      { trainerPhase: "ready_for_user", instructionTargetUci: "b1c3", instructionTargetPieceType: "n", body: "Move the knight to c3.", normalizedBody: "{MOVE} develops your knight." },
+      { trainerPhase: "ready_for_user", instructionTargetUci: "g1f3", instructionTargetPieceType: "n", body: "Move the knight to f3.", normalizedBody: "{MOVE} develops your knight." },
+      { trainerPhase: "ready_for_user", instructionTargetUci: "e2e4", instructionTargetPieceType: "p", body: "Play e4.", normalizedBody: "{MOVE} develops your knight." },
+    ],
+    coachTimeline: [
+      { id: 1, entryKind: "instructional", qualityScore: 96, repeatedGeneric: false, targetAligned: true, pieceAligned: true },
+      { id: 2, entryKind: "instructional", qualityScore: 94, repeatedGeneric: false, targetAligned: true, pieceAligned: true },
+    ],
+    presentationFrame: { visual: { shouldRender: true, source: "visual_recipe", lines: [{ from: "b1", to: "c3" }] }, coach: { shouldRender: true, owner: "intent_first_coach" }, legacy: {} },
+    eventLog: [],
+  } as any);
+  assert.equal(alignedSafeRepeatedHistory.health.criticalIssues.includes("recent_repeated_generic_coach_copy"), false, "target_aligned_safe_copy_does_not_trigger_recent_repeated_generic_critical");
+  assert.equal(alignedSafeRepeatedHistory.health.warnings.includes("recent_repeated_generic_coach_copy_downgraded"), true);
+
+  const terminalNullTargetNoVisual = buildTrainerDebugSnapshot({
+    debugEnabled: true,
+    trainerFrameId: 206,
+    trainerPhase: "terminal",
+    trainerView: "assisted",
+    trainingMode: "continuation",
+    isUserTurn: false,
+    fen: "7k/6Q1/6K1/8/8/8/8/8 b - - 0 1",
+    legalMoveCount: 0,
+    continuationRuntimeStatus: "terminal",
+    continuationTerminalReason: "checkmate",
+    instructionTargetUci: null,
+    visibleTeachingSurface: {
+      owner: "v28_visible_surface",
+      mode: "terminal",
+      coach: { shouldRender: true, title: "Checkmate", body: "This line has reached checkmate." },
+      visual: { lines: [] },
+      actions: [{ kind: "restart_line" }],
+    },
+    actualVisualSource: "visible_surface_v28",
+    renderedVisualPrimitiveCount: 0,
+    surfaceVisualPrimitiveCount: 0,
+    presentationFrame: { visual: { shouldRender: false, source: "none" }, coach: { shouldRender: true, owner: "continuation_terminal_surface" }, legacy: {} },
+    eventLog: [],
+  } as any);
+  assert.equal((terminalNullTargetNoVisual.visual as any).visualFailureKind, "not_applicable", "terminal_null_target_no_visual_is_not_visual_fail");
+  assert.equal(terminalNullTargetNoVisual.health.criticalIssues.includes("visual_debug_parity_mismatch"), false, "terminal_null_target_no_visual_is_not_visual_fail");
+
+  const pendingOpponentNoBookCompleteCritical = buildTrainerDebugSnapshot({
+    debugEnabled: true,
+    trainerFrameId: 207,
+    trainerPhase: "ready_for_user",
+    trainerView: "assisted",
+    trainingMode: "restricted",
+    isUserTurn: false,
+    fen: "rnbqkb1r/ppp2ppp/4pn2/3p4/3PP3/2N5/PPP2PPP/R1BQKBNR b KQkq - 2 4",
+    bookComplete: true,
+    expectedMoveResolution: {
+      source: "guided_branch_needs_continuation",
+      reason: "repertoire_line_exhausted_needs_continuation",
+    },
+    guidedCoveragePolicy: {
+      guidedCompleteAllowed: false,
+      bookCompleteAllowed: false,
+      bookCompleteBlockedReason: "side_to_move_is_opponent",
+    },
+    pendingOpponentRequest: { requestId: 2, baseFen: "rnbqkb1r/ppp2ppp/4pn2/3p4", startedAt: Date.now() },
+    instructionTargetUci: null,
+    visibleTeachingSurface: {
+      owner: "v28_visible_surface",
+      mode: "opponent_replying",
+      coach: { shouldRender: true, title: "Opponent is replying", body: "Wait for the opponent move before the next teaching target." },
+      visual: { lines: [] },
+      actions: [],
+    },
+    branchTransitionSurfaceRendered: false,
+    continueFromHereAvailable: false,
+    presentationFrame: { visual: { shouldRender: false, source: "none" }, coach: { shouldRender: true, owner: "intent_first_coach" }, legacy: {} },
+    eventLog: [],
+  } as any);
+  assert.equal(pendingOpponentNoBookCompleteCritical.health.criticalIssues.includes("book_complete_without_policy"), false, "book_complete_without_policy_only_when_true_unhandled_completion");
+  assert.equal(pendingOpponentNoBookCompleteCritical.health.criticalIssues.includes("exhausted_line_without_branch_complete_surface"), false);
+
+  const unresolvedCompletionStuck = buildTrainerDebugSnapshot({
+    debugEnabled: true,
+    trainerFrameId: 208,
+    trainerPhase: "ready_for_user",
+    trainerView: "assisted",
+    trainingMode: "restricted",
+    isUserTurn: false,
+    fen: "rnbqkb1r/ppp2ppp/4pn2/3p4/3PP3/2N5/PPP2PPP/R1BQKBNR b KQkq - 2 4",
+    bookComplete: true,
+    expectedMoveResolution: {
+      source: "guided_branch_needs_continuation",
+      reason: "repertoire_line_exhausted_needs_continuation",
+    },
+    guidedCoveragePolicy: {
+      guidedCompleteAllowed: false,
+      bookCompleteAllowed: false,
+      bookCompleteBlockedReason: "side_to_move_is_opponent",
+    },
+    pendingOpponentRequest: null,
+    instructionTargetUci: null,
+    visibleTeachingSurface: {
+      owner: "v28_visible_surface",
+      mode: "opponent_replying",
+      coach: { shouldRender: true, title: "Opponent is replying", body: "Wait for the opponent move before the next teaching target." },
+      visual: { lines: [] },
+      actions: [],
+    },
+    branchTransitionSurfaceRendered: false,
+    continueFromHereAvailable: false,
+    presentationFrame: { visual: { shouldRender: false, source: "none" }, coach: { shouldRender: true, owner: "intent_first_coach" }, legacy: {} },
+    eventLog: [],
+  } as any);
+  assert.equal(unresolvedCompletionStuck.health.criticalIssues.includes("book_complete_without_policy"), true, "no_stuck_ready_for_user_opponent_pending_after_line_end");
+  assert.equal(unresolvedCompletionStuck.health.criticalIssues.includes("exhausted_line_without_branch_complete_surface"), true, "exhausted_line_without_branch_complete_is_critical");
+
   // 1-6,17 Normal UI forbids legacy (enforced by {blundrDebugEnabled && ...} at the JSX sites identified in Step 3/4 grep: app/page.tsx:3392 (LiveBrain+panels), 3405 (rating grid), 3407 (Active Board), 3417 (view buttons), SettingsPanel Active displays (no Attack/Defense/Plan). Browser on port 3041 without ?debug=1 is the acceptance.
 }
