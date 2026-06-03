@@ -46,6 +46,13 @@ exactMoveAllowed: ${snapshot.continuation.exactMoveAllowed}
 linesPassedToBoard: ${snapshot.continuation.continuationLinesPassedToBoard}
 blockedReason: ${snapshot.continuation.continuationVisualBlockedReason ?? "none"}
 
+maia:
+providerStatus: ${(snapshot as any).maia?.maiaProviderStatus ?? "none"}
+allowedThisFrame: ${(snapshot as any).maia?.maiaAllowedThisFrame ?? false}
+blockedReason: ${(snapshot as any).maia?.maiaBlockedReason ?? "none"}
+fallbackUsed: ${(snapshot as any).maia?.maiaFallbackUsed ?? false}
+fallbackReason: ${(snapshot as any).maia?.maiaFallbackReason ?? "none"}
+
 coach:
 owner: ${snapshot.coach.visibleCoachOwner}
 intent: ${snapshot.coach.coachIntent ?? "none"}
@@ -90,12 +97,15 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
     const visualFail = visualFailureKind !== "none" && visualFailureKind !== "not_applicable";
     const continuationIssues = (snapshot?.health.criticalIssues ?? []).some((issue) => String(issue).toLowerCase().includes("continuation"));
     const continuationWarn = Boolean(snapshot?.continuation.isContinuationMode && snapshot?.continuation.continuationLinesPassedToBoard === 0 && !snapshot?.continuation.selectedCandidateUci);
+    const maiaIssues = (snapshot?.health.criticalIssues ?? []).some((issue) => String(issue).toLowerCase().includes("maia_"));
+    const maiaWarn = (snapshot?.health.warnings ?? []).some((issue) => String(issue).toLowerCase().includes("maia_"));
     const cacheClassification = String((snapshot?.cache as any)?.cacheClassification ?? "");
     return {
       visual: status(visualFail, false),
       coach: status(snapshot?.coach.coachFailureKind !== "none", false),
       actions: status(Boolean(snapshot?.health.criticalIssues.some((issue) => issue.includes("Action"))), false),
       continuation: status(continuationIssues, continuationWarn),
+      maia: status(maiaIssues, maiaWarn),
       legacy: status(Boolean(snapshot?.legacy.legacyBypassDetected), false),
       cache: cacheClassification === "warn" ? "warn" : cacheClassification === "fail" ? "fail" : status(false, warnings && !critical && cacheClassification !== "not_applicable"),
     };
@@ -143,6 +153,7 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
   const actionTimeline = useMemo(() => (Array.isArray(snapshot?.actionTimeline) ? snapshot.actionTimeline : []), [snapshot]);
   const visualRenderTimeline = useMemo(() => (Array.isArray(snapshot?.visualRenderTimeline) ? snapshot.visualRenderTimeline : []), [snapshot]);
   const plainLeakTimeline = useMemo(() => (Array.isArray(snapshot?.plainLeakTimeline) ? snapshot.plainLeakTimeline : []), [snapshot]);
+  const maiaTimeline = useMemo(() => (Array.isArray((snapshot as any)?.maiaTimeline) ? (snapshot as any).maiaTimeline : []), [snapshot]);
   const currentCoachCard = useMemo(() => ({
     title: snapshot?.coach?.visibleTitle ?? null,
     body: snapshot?.coach?.visibleBody ?? null,
@@ -162,10 +173,11 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
     actionTimeline,
     surfaceModeTransitionTimeline,
     plainLeakTimeline,
+    maiaTimeline,
     health: snapshot?.health ?? null,
     criticalIssues: snapshot?.health?.criticalIssues ?? [],
     warnings: snapshot?.health?.warnings ?? [],
-  }), [snapshot, currentCoachCard, coachCardRenderTimeline, coachTimeline, visualRenderTimeline, actionTimeline, surfaceModeTransitionTimeline, plainLeakTimeline]);
+  }), [snapshot, currentCoachCard, coachCardRenderTimeline, coachTimeline, visualRenderTimeline, actionTimeline, surfaceModeTransitionTimeline, plainLeakTimeline, maiaTimeline]);
 
   if (!enabled && !snapshot?.build.debugEnabled) return null;
   if (!snapshot) return null;
@@ -198,6 +210,7 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
             <DebugBadge label="Coach" status={statuses.coach as any} />
             <DebugBadge label="Actions" status={statuses.actions as any} />
             <DebugBadge label="Continuation" status={statuses.continuation as any} />
+            <DebugBadge label="Maia" status={statuses.maia as any} />
             <DebugBadge label="Legacy" status={statuses.legacy as any} />
             <DebugBadge label="Cache" status={statuses.cache as any} />
           </div>
@@ -212,6 +225,8 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
             <DebugCopyButton label="Copy Action Timeline JSON" getText={() => JSON.stringify(actionTimeline, null, 2)} />
             <DebugCopyButton label="Copy Visual Timeline JSON" getText={() => JSON.stringify(visualRenderTimeline, null, 2)} />
             <DebugCopyButton label="Copy Plain Leak Timeline JSON" getText={() => JSON.stringify(plainLeakTimeline, null, 2)} />
+            <DebugCopyButton label="Copy Maia Timeline JSON" getText={() => JSON.stringify(maiaTimeline, null, 2)} />
+            <DebugCopyButton label="Copy Maia Runtime Health JSON" getText={() => JSON.stringify((snapshot as any).maia ?? {}, null, 2)} />
             <DebugCopyButton label="Copy Full Debug Session JSON" getText={() => JSON.stringify(fullDebugSession, null, 2)} />
             <DebugCopyButton label="Copy Coach QA Summary" getText={() => JSON.stringify(coachQaSummary, null, 2)} />
             <button type="button" onClick={onClearEvents} className="rounded-full bg-stone-100 px-3 py-1 text-[11px] font-black text-stone-900">Clear Events</button>
@@ -222,6 +237,7 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
           <DebugSection title="Board/FEN"><DebugJsonViewer value={snapshot.board} /></DebugSection>
           <DebugSection title="Visuals"><DebugJsonViewer value={snapshot.visual} /></DebugSection>
           <DebugSection title="Continuation"><DebugJsonViewer value={snapshot.continuation} /></DebugSection>
+          <DebugSection title="Maia Opponent"><DebugJsonViewer value={(snapshot as any).maia ?? { summary: "not_available" }} /></DebugSection>
           <DebugSection title="Coach"><DebugJsonViewer value={snapshot.coach} /></DebugSection>
           <DebugSection title="Coach Pipeline"><DebugJsonViewer value={snapshot.coachPipeline} /></DebugSection>
           <DebugSection title="Actions"><DebugJsonViewer value={snapshot.actions} /></DebugSection>
@@ -258,6 +274,7 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
           <DebugSection title="Action Timeline"><DebugJsonViewer value={actionTimeline} /></DebugSection>
           <DebugSection title="Visual Timeline"><DebugJsonViewer value={visualRenderTimeline} /></DebugSection>
           <DebugSection title="Plain Leak Timeline"><DebugJsonViewer value={plainLeakTimeline} /></DebugSection>
+          <DebugSection title="Maia Timeline"><DebugJsonViewer value={maiaTimeline} /></DebugSection>
           <DebugSection title="Event Log"><DebugEventTimeline events={snapshot.eventLog} /></DebugSection>
           <DebugSection title="Raw JSON"><DebugJsonViewer value={snapshot} /></DebugSection>
         </div>

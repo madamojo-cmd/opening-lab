@@ -39,6 +39,7 @@ export interface TrainerDebugSnapshot {
   board: Record<string, unknown>;
   visual: Record<string, unknown>;
   continuation: Record<string, unknown>;
+  maia?: Record<string, unknown>;
   coach: Record<string, unknown>;
   actions: Record<string, unknown>;
   features: Record<string, unknown>;
@@ -85,6 +86,7 @@ export interface TrainerDebugSnapshot {
   actionTimeline?: Array<Record<string, unknown>>;
   visualRenderTimeline?: Array<Record<string, unknown>>;
   plainLeakTimeline?: Array<Record<string, unknown>>;
+  maiaTimeline?: Array<Record<string, unknown>>;
   debugParity?: Record<string, unknown>;
   health: {
     criticalIssues: string[];

@@ -156,6 +156,7 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   const actionTimeline = Array.isArray(input.actionTimeline) ? input.actionTimeline.slice(-100) : [];
   const visualRenderTimeline = Array.isArray(input.visualRenderTimeline) ? input.visualRenderTimeline.slice(-75) : [];
   const plainLeakTimeline = Array.isArray(input.plainLeakTimeline) ? input.plainLeakTimeline.slice(-75) : [];
+  const maiaTimeline = Array.isArray(input.maiaTimeline) ? input.maiaTimeline.slice(-75) : [];
   const actualCoachCardTitle = input.actualCoachCardTitle == null ? null : String(input.actualCoachCardTitle);
   const actualCoachCardBody = input.actualCoachCardBody == null ? null : String(input.actualCoachCardBody);
   const actualCoachCardButtons = Array.isArray(input.actualCoachCardButtons) ? input.actualCoachCardButtons.map(String) : [];
@@ -248,6 +249,21 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   const stockfishProviderStatus = String(input.stockfishProviderStatus ?? "unknown");
   const stockfishSuggestedTop10 = Boolean(input.stockfishSuggestedTop10);
   const suggestionAccepted = Boolean(input.suggestionAccepted);
+  const maiaProviderStatus = String(input.maiaProviderStatus ?? "disabled");
+  const maiaRuntimeStatus = String(input.maiaRuntimeStatus ?? maiaProviderStatus);
+  const maiaApiRouteStatus = String(input.maiaApiRouteStatus ?? "unknown");
+  const maiaRuntimeErrorReason = String(input.maiaRuntimeErrorReason ?? "");
+  const maiaRuntimeMs = Number(input.maiaRuntimeMs ?? Number.NaN);
+  const maiaAllowedThisFrame = Boolean(input.maiaAllowedThisFrame);
+  const maiaBlockedReason = String(input.maiaBlockedReason ?? "");
+  const maiaFallbackUsed = Boolean(input.maiaFallbackUsed);
+  const maiaFallbackReason = String(input.maiaFallbackReason ?? "");
+  const maiaStaleResultIgnored = Boolean(input.maiaStaleResultIgnored);
+  const maiaIllegalCandidateRejected = Boolean(input.maiaIllegalCandidateRejected);
+  const maiaSelectedUci = String(input.maiaSelectedUci ?? "").trim();
+  const maiaSelectedLegal = input.maiaSelectedLegal;
+  const maiaSanityGuardResult = String(input.maiaSanityGuardResult ?? "not_run");
+  const maiaSanityGuardBlockedReason = String(input.maiaSanityGuardBlockedReason ?? "");
   const badgeVisible = Boolean(input.badgeVisible);
   const renderedBadgeLabel = String(input.renderedBadgeLabel ?? "");
   const lastContinuationUserMoveRating = input.lastContinuationUserMoveRating ?? null;
@@ -312,6 +328,42 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
     criticalIssues.push("stockfish_badge_visible_outside_continuation");
   }
   if (input.trainingMode === "continuation" && input.trainerPhase === "transitioning" && !["analyzing", "opponent_replying", "terminal"].includes(String(continuationRuntimeStatus))) criticalIssues.push("transition_state_without_pending_work");
+  if (input.trainingMode === "restricted" && maiaAllowedThisFrame) criticalIssues.push("maia_used_in_restricted_mode");
+  if (input.trainingMode === "restricted" && maiaProviderStatus === "ready") criticalIssues.push("maia_used_in_restricted_mode");
+  if (input.trainingMode === "continuation" && !input.userExplicitlyEnteredContinuation && (maiaAllowedThisFrame || maiaProviderStatus === "ready")) criticalIssues.push("maia_used_before_continue_clicked");
+  if (Boolean(input.maiaTouchedInstructionTarget)) criticalIssues.push("maia_modified_instruction_target");
+  if (Boolean(input.maiaTouchedVisibleSurface)) criticalIssues.push("maia_modified_visible_surface");
+  if (Boolean(input.maiaTouchedCoachCopy)) criticalIssues.push("maia_modified_coach_copy");
+  if (Boolean(input.maiaTouchedRatingBadge)) criticalIssues.push("maia_modified_rating_badge");
+  if (Boolean(input.maiaTouchedBranchComplete)) criticalIssues.push("maia_modified_branch_complete");
+  if (maiaSelectedUci && maiaSelectedLegal === false) criticalIssues.push("maia_selected_illegal_move");
+  if (maiaStaleResultIgnored && String(input.maiaFallbackReason ?? "") !== "stale_request") {
+    criticalIssues.push("maia_stale_result_applied");
+  }
+  if (String(input.maiaFallbackReason ?? "") === "branch_complete_blocked") criticalIssues.push("maia_blocked_branch_complete");
+  if (String(input.maiaFallbackReason ?? "") === "triggered_branch_complete") criticalIssues.push("maia_triggered_branch_complete");
+  if (Boolean(input.maiaChangedUserTarget)) criticalIssues.push("maia_changed_user_target");
+  if (maiaProviderStatus === "disabled" || maiaRuntimeStatus === "disabled") warnings.push("maia_runtime_disabled");
+  if (maiaProviderStatus === "unavailable" || maiaRuntimeStatus === "unavailable") warnings.push("maia_runtime_unavailable");
+  if (maiaRuntimeStatus === "timeout") warnings.push("maia_runtime_timeout");
+  if (maiaRuntimeStatus === "missing_lc0_path" || maiaRuntimeErrorReason === "missing_lc0_path") warnings.push("maia_runtime_missing_lc0");
+  if (maiaRuntimeStatus === "missing_weights_path" || maiaRuntimeStatus === "weights_not_found" || maiaRuntimeErrorReason.includes("weights")) warnings.push("maia_runtime_missing_weights");
+  if (maiaFallbackUsed) warnings.push("maia_api_fallback_used");
+  if (maiaIllegalCandidateRejected) warnings.push("maia_runtime_illegal_bestmove");
+  if (Boolean(input.maiaRuntimeVisibleErrorLeak)) criticalIssues.push("maia_runtime_visible_error_leak");
+  if (maiaStaleResultIgnored && !maiaFallbackUsed) criticalIssues.push("maia_runtime_applied_stale_move");
+  if (maiaSelectedUci && maiaSelectedLegal === false) criticalIssues.push("maia_runtime_applied_illegal_move");
+  if (Boolean(input.maiaTouchedInstructionTarget)) criticalIssues.push("maia_runtime_modified_user_target");
+  if (Boolean(input.maiaTouchedBranchComplete)) criticalIssues.push("maia_runtime_modified_branch_complete");
+  if (Boolean(input.maiaTouchedRatingBadge)) criticalIssues.push("maia_runtime_modified_rating_badge");
+  if (input.trainingMode === "restricted" && maiaAllowedThisFrame) criticalIssues.push("maia_runtime_used_in_restricted_mode");
+  if (maiaFallbackUsed && maiaFallbackReason === "provider_timeout") warnings.push("maia_timeout_fallback_used");
+  if (maiaFallbackUsed && maiaFallbackReason === "no_legal_candidate") warnings.push("maia_no_legal_candidate_fallback_used");
+  if (maiaStaleResultIgnored) warnings.push("maia_stale_result_ignored");
+  if (maiaIllegalCandidateRejected) warnings.push("maia_illegal_candidate_rejected");
+  if (maiaSanityGuardResult === "blocked" || maiaSanityGuardBlockedReason === "maia_sanity_guard_rejected_candidate") {
+    warnings.push("maia_sanity_guard_rejected_candidate");
+  }
   if (isTeachingFrame(input) && instructionTargetUci == null && !branchTransitionSurfaceRendered && !continuationNullTargetStatusFrame) criticalIssues.push("instruction_target_missing_on_teaching_frame");
   if (input.isUserTurn && instructionTargetUci == null && String(input.trainerPhase) === "ready_for_user" && !branchTransitionSurfaceRendered && !continuationNullTargetStatusFrame) {
     criticalIssues.push("user_turn_missing_instruction_target");
@@ -919,6 +971,58 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       selectedMoveInCandidateList: input.opponentVariationDebug?.continuedPlaySelectedMoveInCandidateList ?? null,
       candidateDebugList: input.opponentVariationDebug?.candidateOpponentBranches ?? [],
     },
+    maia: {
+      maiaEnabled: Boolean(input.maiaEnabled),
+      maiaRuntimeEnabled: Boolean(input.maiaRuntimeEnabled),
+      maiaApiClientEnabled: Boolean(input.maiaApiClientEnabled),
+      maiaApiRouteStatus,
+      maiaRuntimeStatus,
+      maiaRuntimeReady: maiaRuntimeStatus === "ready",
+      maiaProviderName: input.maiaProviderName ?? "maia-unavailable",
+      maiaProviderVersion: input.maiaProviderVersion ?? "0.0.0",
+      maiaRuntimeProvider: input.maiaRuntimeProvider ?? input.maiaProviderName ?? "maia-unavailable",
+      maiaRuntimeProviderName: input.maiaRuntimeProviderName ?? input.maiaProviderName ?? "maia-unavailable",
+      maiaRuntimeProviderVersion: input.maiaRuntimeProviderVersion ?? input.maiaProviderVersion ?? "0.0.0",
+      maiaRuntimeHealthStatus: input.maiaRuntimeHealthStatus ?? maiaRuntimeStatus,
+      maiaProviderStatus,
+      maiaSkillLevel: input.maiaSkillLevel ?? null,
+      maiaRuntimeSkillLevel: input.maiaSkillLevel ?? null,
+      maiaRuntimeNodes: input.maiaRuntimeNodes ?? null,
+      maiaRuntimeTimeoutMs: input.maiaRuntimeTimeoutMs ?? null,
+      maiaRuntimeMs: Number.isFinite(maiaRuntimeMs) ? maiaRuntimeMs : null,
+      maiaRuntimeErrorReason: maiaRuntimeErrorReason || null,
+      maiaRequestId: input.maiaRequestId ?? null,
+      maiaRequestFen4: input.maiaRequestFen4 ?? null,
+      maiaHealthCheckedAt: input.maiaHealthCheckedAt ?? null,
+      maiaRequestFenMatchesBoard: input.maiaRequestFen4 ? String(input.maiaRequestFen4) === boardFen4 : "unknown",
+      maiaContinuationOnly: Boolean(input.maiaContinuationOnly ?? true),
+      maiaAllowedThisFrame,
+      maiaBlockedReason: maiaBlockedReason || null,
+      maiaCandidateCount: Number(input.maiaCandidateCount ?? 0),
+      maiaCandidatesTop5: Array.isArray(input.maiaCandidatesTop5) ? input.maiaCandidatesTop5.slice(0, 5) : [],
+      maiaSelectedUci: maiaSelectedUci || null,
+      maiaSelectedSan: input.maiaSelectedSan ?? null,
+      maiaSelectedLegal: input.maiaSelectedLegal ?? null,
+      maiaSelectedHumanLikelihood: input.maiaSelectedHumanLikelihood ?? null,
+      maiaSelectedRank: input.maiaSelectedRank ?? null,
+      maiaRuntimeCandidateUci: maiaSelectedUci || null,
+      maiaRuntimeCandidateLegal: input.maiaSelectedLegal ?? null,
+      maiaFallbackUsed,
+      maiaFallbackReason: maiaFallbackReason || null,
+      maiaRuntimeFallbackUsed: maiaFallbackUsed,
+      maiaRuntimeFallbackReason: maiaFallbackReason || null,
+      maiaStaleResultIgnored,
+      maiaIllegalCandidateRejected,
+      maiaTouchedInstructionTarget: Boolean(input.maiaTouchedInstructionTarget),
+      maiaTouchedVisibleSurface: Boolean(input.maiaTouchedVisibleSurface),
+      maiaTouchedCoachCopy: Boolean(input.maiaTouchedCoachCopy),
+      maiaTouchedRatingBadge: Boolean(input.maiaTouchedRatingBadge),
+      maiaTouchedBranchComplete: Boolean(input.maiaTouchedBranchComplete),
+      maiaSanityGuardEnabled: Boolean(input.maiaSanityGuardEnabled),
+      maiaSanityGuardResult: maiaSanityGuardResult || "not_run",
+      maiaSanityGuardBlockedReason: maiaSanityGuardBlockedReason || null,
+      summary: "Maia is evidence/opponent-context only.",
+    },
     coach: {
       visibleTitle,
       visibleBody,
@@ -1145,6 +1249,7 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
     actionTimeline,
     visualRenderTimeline,
     plainLeakTimeline,
+    maiaTimeline,
     health: {
       criticalIssues: uniqueCriticalIssues,
       warnings: uniqueWarnings,

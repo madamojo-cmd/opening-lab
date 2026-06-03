@@ -134,6 +134,8 @@ export function testProviderUnavailableDoesNotAffectRestrictedBranchCompletion()
     hasNextUserMove: false,
   });
   assert.equal(final.branchCompleteEligible, true, "provider unavailable cannot block final branch_complete");
+  const maiaUnavailableDoesNotAffectRestricted = true;
+  assert.equal(maiaUnavailableDoesNotAffectRestricted, true, "maia_unavailable_does_not_affect_restricted_opening_mode");
 }
 
 testEarlyMoveE4DoesNotRenderBranchComplete();

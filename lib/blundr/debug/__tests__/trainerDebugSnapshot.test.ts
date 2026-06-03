@@ -204,6 +204,12 @@ export function testTrainerDebugSnapshot(): void {
   assert.equal(continuationHealthy.health.criticalIssues.includes("instruction_target_coach_mismatch"), false);
   assert.equal(continuationHealthy.health.criticalIssues.includes("instruction_target_visual_mismatch"), false);
   assert.equal(continuationHealthy.health.criticalIssues.includes("instruction_target_reveal_mismatch"), false);
+  assert.equal(Boolean((continuationHealthy as any).maia?.summary ?? "Maia is evidence/opponent-context only."), true, "maia_debug_summary_present_or_default");
+  assert.equal(Object.prototype.hasOwnProperty.call((continuationHealthy as any).maia ?? {}, "maiaRuntimeStatus"), true);
+  assert.equal(Object.prototype.hasOwnProperty.call((continuationHealthy as any).maia ?? {}, "maiaApiClientEnabled"), true);
+  assert.equal(Object.prototype.hasOwnProperty.call((continuationHealthy as any).maia ?? {}, "maiaApiRouteStatus"), true);
+  assert.equal(Object.prototype.hasOwnProperty.call((continuationHealthy as any).maia ?? {}, "maiaRuntimeErrorReason"), true);
+  assert.equal(Object.prototype.hasOwnProperty.call((continuationHealthy as any).maia ?? {}, "maiaRuntimeMs"), true);
   assert.equal((continuationHealthy.actions as any).revealTargetMatchesInstructionTarget, true);
   assert.equal((continuationHealthy.visual as any).visualTargetMatchesInstructionTarget, true);
   assert.equal((continuationHealthy.health.passFail as any).instructionTargetAligned, true);

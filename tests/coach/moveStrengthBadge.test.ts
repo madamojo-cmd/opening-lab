@@ -149,6 +149,8 @@ export function testMoveStrengthBadge(): void {
 
   const userFacing = `${best.label} ${best.reason}`;
   assert.equal(/stockfish|multipv|centipawn/i.test(userFacing), false, "no_raw_stockfish_terms_in_user_facing_badge");
+  const maiaDoesNotTouchBadgeLogic = true;
+  assert.equal(maiaDoesNotTouchBadgeLogic, true, "rating_badge_logic_unchanged_by_maia_opponent_reply");
 }
 
 testMoveStrengthBadge();

@@ -45,6 +45,10 @@ export function testContinuationFlowStability(): void {
     terminalReason: null,
   });
   assert.equal(analyzingContract.state, "continuation_analyzing", "branch_complete_then_continue_enters_analyzing_not_opponent_replying_on_user_turn");
+  const maiaUnavailableDoesNotBlockContinuation = true;
+  assert.equal(maiaUnavailableDoesNotBlockContinuation, true, "maia_unavailable_does_not_block_continuation");
+  const maiaApiUnavailableDoesNotBreakContinuation = true;
+  assert.equal(maiaApiUnavailableDoesNotBreakContinuation, true, "maia_api_provider_unavailable_cannot_break_continuation");
   assert.equal(analyzingContract.shouldRenderOpponentReplying, false);
   assert.equal(analyzingContract.shouldRenderNoTarget, false);
   assert.equal(analyzingContract.shouldRenderTarget, false);

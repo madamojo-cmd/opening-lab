@@ -1,0 +1,15 @@
+{
+  "package": "14B",
+  "branch": "v2.8.0-intelligent-coach-live",
+  "baseline_commit": "2019a20",
+  "status": "architecture_complete_runtime_not_verified",
+  "build": "pass_with_escalated_run",
+  "tests": "pass",
+  "maia_check": {
+    "status": "disabled",
+    "verified": false
+  },
+  "maia_benchmark": "not_run_runtime_unavailable",
+  "manual_qa": "incomplete",
+  "gate_verdict": "ARCHITECTURE PASS / RUNTIME NOT VERIFIED"
+}

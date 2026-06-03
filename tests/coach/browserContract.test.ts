@@ -43,6 +43,7 @@ export function testBrowserContract(): void {
 
   const assertionTexts = Object.values(browserContract.assertions);
   assert.equal(assertionTexts.length >= 9, true);
+  assert.equal(Boolean(browserContract.assertions.providerFailureSafeFallback.includes("Maia")), true, "browser_contract_covers_maia_provider_failure_fallback");
   for (const text of assertionTexts) {
     assert.equal(typeof text, "string");
     assert.equal(text.trim().length > 0, true);

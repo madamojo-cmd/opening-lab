@@ -8,6 +8,9 @@
     "start": "next start",
     "copy-stockfish": "node scripts/copy-stockfish.js",
     "postinstall": "node scripts/copy-stockfish.js",
+    "maia:setup": "bash scripts/setup-maia.sh",
+    "maia:check": "node --import tsx scripts/check-maia-runtime.ts",
+    "maia:bench": "node --import tsx scripts/benchmark-maia-runtime.ts",
     "test:coach-quality": "node --import tsx lib/blundr/coachQuality/testCoachQuality.ts",
     "test:trainer-debug": "tsx lib/blundr/debug/testTrainerDebug.ts",
     "test:multi-move-qa": "RUN_MULTI_MOVE_QA=1 tsx lib/blundr/debug/testMultiMoveTrainingQa.ts"

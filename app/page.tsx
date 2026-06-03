@@ -62,6 +62,11 @@ import { resolveBranchCompleteContract } from "@/lib/blundr/runtime/branchComple
 import { resolveContinuationFlowContract } from "@/lib/blundr/runtime/continuationFlowContract";
 import { shouldFlagStaleOpponentReplyCommit } from "@/lib/blundr/runtime/opponentReplyGuard";
 import { classifyContinuationRuntimeState, type ContinuationRuntimeStatus } from "@/lib/blundr/runtime/continuationRuntimeState";
+import type { MaiaMoveCandidate, MaiaOpponentReplyResult, MaiaProviderStatus, MaiaSkillLevel } from "@/lib/blundr/maia/maiaTypes";
+import { unavailableMaiaProvider } from "@/lib/blundr/maia/maiaProvider";
+import { MaiaApiClientProvider } from "@/lib/blundr/maia/maiaApiClientProvider";
+import { buildMaiaOpponentReplyDecision, classifyMaiaProviderStatus, evaluateMaiaSanityGuard, resolveMaiaSkillLevel, selectMaiaOpponentReply, withMaiaTimeout } from "@/lib/blundr/maia/maiaOpponentProvider";
+import { appendMaiaTimeline, createMaiaTimelineEvent, type MaiaTimelineEvent } from "@/lib/blundr/debug/maiaTimeline";
 import { BlundrDiagnosticsPanel } from "@/components/debug/BlundrDiagnosticsPanel";
 import { collectTrainerDebugSnapshot } from "@/lib/blundr/debug/trainerDebugCollector";
 import { computeInstructionFrameKey } from "@/lib/blundr/runtime/currentInstructionFrame";  // v2.7.39.1 Target Locking (Coach Perfection Gate)
@@ -144,6 +149,11 @@ type PendingOpponentRequest = {
 const HARD_CONTINUATION_BREAK_PLY = 22;
 const SUGGESTION_VALIDATION_MULTIPV = 10;
 const USER_MOVE_RATING_MULTIPV = 32;
+const MAIA_OPPONENT_TIMEOUT_MS = 1500;
+const MAIA_MAX_ALLOWED_OPPONENT_CP_LOSS = 500;
+const MAIA_OPPONENT_REPLY_SANITY_GUARD_ENABLED = true;
+const maiaApiClientEnabled = process.env.NEXT_PUBLIC_MAIA_API_ENABLED === "true";
+const maiaOpponentProvider = maiaApiClientEnabled ? new MaiaApiClientProvider() : unavailableMaiaProvider;
 type LiveBrain = { ratingLabel: string; ratingPool: string; book: SystemState; lichess: SystemState; engine: SystemState; gpt: SystemState; source: string; latency?: number; note?: string };
 type LastCoachRecord = {
   frameId: number;
@@ -867,6 +877,24 @@ export default function App(){
   const [staleOverlayIgnored,setStaleOverlayIgnored]=useState(false);
   const [overlayClearedOnPhaseChange,setOverlayClearedOnPhaseChange]=useState(false);
   const [pendingOpponentRequest,setPendingOpponentRequest]=useState<PendingOpponentRequest|null>(null);
+  const [maiaOpponentProviderStatus,setMaiaOpponentProviderStatus]=useState<MaiaProviderStatus>("disabled");
+  const [maiaOpponentRequestId,setMaiaOpponentRequestId]=useState<number|null>(null);
+  const [maiaOpponentRequestFen4,setMaiaOpponentRequestFen4]=useState<string|null>(null);
+  const [maiaOpponentSkillLevel,setMaiaOpponentSkillLevel]=useState<MaiaSkillLevel|null>(null);
+  const [maiaOpponentCandidateCount,setMaiaOpponentCandidateCount]=useState(0);
+  const [maiaOpponentSelectedUci,setMaiaOpponentSelectedUci]=useState<string|null>(null);
+  const [maiaOpponentSelectedSan,setMaiaOpponentSelectedSan]=useState<string|null>(null);
+  const [maiaOpponentHumanLikelihood,setMaiaOpponentHumanLikelihood]=useState<number|null>(null);
+  const [maiaOpponentDecisionReason,setMaiaOpponentDecisionReason]=useState<string>("not_requested");
+  const [maiaOpponentFallbackUsed,setMaiaOpponentFallbackUsed]=useState(false);
+  const [maiaOpponentFallbackReason,setMaiaOpponentFallbackReason]=useState<string|null>(null);
+  const [maiaOpponentStaleResultIgnored,setMaiaOpponentStaleResultIgnored]=useState(false);
+  const [maiaOpponentIllegalCandidateRejected,setMaiaOpponentIllegalCandidateRejected]=useState(false);
+  const [maiaOpponentSanityGuardResult,setMaiaOpponentSanityGuardResult]=useState<string>("not_run");
+  const [maiaOpponentSanityGuardBlockedReason,setMaiaOpponentSanityGuardBlockedReason]=useState<string|null>(null);
+  const [maiaRuntimeMs,setMaiaRuntimeMs]=useState<number|null>(null);
+  const [maiaRuntimeErrorReason,setMaiaRuntimeErrorReason]=useState<string|null>(null);
+  const [maiaApiRouteStatus,setMaiaApiRouteStatus]=useState<string>("unknown");
   const [branchCompleteLatch,setBranchCompleteLatch]=useState<{
     active:boolean;
     reason:string|null;
@@ -910,6 +938,7 @@ export default function App(){
   const [actionTimeline,setActionTimeline]=useState<Record<string,unknown>[]>([]);
   const [visualRenderTimeline,setVisualRenderTimeline]=useState<Record<string,unknown>[]>([]);
   const [plainLeakTimeline,setPlainLeakTimeline]=useState<Record<string,unknown>[]>([]);
+  const [maiaTimeline,setMaiaTimeline]=useState<MaiaTimelineEvent[]>([]);
   const explorerCache=useRef<Record<string,any>>({});
   const brainSeq=useRef(0);
   const visualRequestSeq=useRef(0);
@@ -952,6 +981,8 @@ export default function App(){
   const continuationCandidateLockRef=useRef<typeof continuationCandidateLock>(null);
   const continuationEngineCacheRef=useRef<Record<string,{fen:string;pvs:EngineLine[];source:string}>>({});
   const opponentRequestSeqRef=useRef(0);
+  const maiaOpponentRequestSeqRef=useRef(0);
+  const maiaTimelineSeqRef=useRef(0);
   const pendingOpponentRequestRef=useRef<PendingOpponentRequest|null>(null);
   const branchCompleteBlockedOpponentRequestIdRef=useRef<number|null>(null);
   const branchCompleteLatchRef=useRef(branchCompleteLatch);
@@ -3062,6 +3093,36 @@ export default function App(){
       ...input,
     });
   }
+  function pushMaiaTimelineEvent(input:{
+    event:MaiaTimelineEvent["event"];
+    requestId:number|null;
+    fen4:string;
+    candidateCount:number;
+    selectedUci:string|null;
+    selectedSan:string|null;
+    reason:string|null;
+    fallbackReason:string|null;
+    skillLevel:MaiaSkillLevel|null;
+    sideToMove:ChessColor;
+  }){
+    const entry=createMaiaTimelineEvent({
+      id:++maiaTimelineSeqRef.current,
+      event:input.event,
+      frameId:Number(trainerFrameId),
+      requestId:input.requestId,
+      fen4:input.fen4,
+      trainingMode,
+      userExplicitlyEnteredContinuation:Boolean(userExplicitlyEnteredContinuation),
+      sideToMove:input.sideToMove,
+      skillLevel:input.skillLevel,
+      candidateCount:input.candidateCount,
+      selectedUci:input.selectedUci,
+      selectedSan:input.selectedSan,
+      reason:input.reason,
+      fallbackReason:input.fallbackReason,
+    });
+    setMaiaTimeline((prev)=>appendMaiaTimeline(prev,entry,75));
+  }
   function pushRuntimeCriticalIssue(issue:string){
     setRuntimeCriticalIssues((prev)=>prev.includes(issue)?prev:[...prev.slice(-19),issue]);
   }
@@ -3682,6 +3743,25 @@ export default function App(){
     setOpponentCue(null);
     setOpponentVariationDebug(null);
     setPendingOpponentRequest(null);
+    setMaiaOpponentProviderStatus("disabled");
+    setMaiaOpponentRequestId(null);
+    setMaiaOpponentRequestFen4(null);
+    setMaiaOpponentSkillLevel(null);
+    setMaiaOpponentCandidateCount(0);
+    setMaiaOpponentSelectedUci(null);
+    setMaiaOpponentSelectedSan(null);
+    setMaiaOpponentHumanLikelihood(null);
+    setMaiaOpponentDecisionReason("not_requested");
+    setMaiaOpponentFallbackUsed(false);
+    setMaiaOpponentFallbackReason(null);
+    setMaiaOpponentStaleResultIgnored(false);
+    setMaiaOpponentIllegalCandidateRejected(false);
+    setMaiaOpponentSanityGuardResult("not_run");
+    setMaiaOpponentSanityGuardBlockedReason(null);
+    setMaiaRuntimeMs(null);
+    setMaiaRuntimeErrorReason(null);
+    setMaiaApiRouteStatus("unknown");
+    setMaiaTimeline([]);
     setBranchCompleteLatch({active:false,reason:null,fen4:null,lineId:null,ply:null,latchedAtFrameId:null});
     previousSelectedCandidateUciRef.current=null;
     candidateSyncDebugRef.current={
@@ -3696,6 +3776,8 @@ export default function App(){
     continuationCandidateLockRef.current=null;
     setContinuationCandidateLock(null);
     continuationEngineCacheRef.current={};
+    maiaOpponentRequestSeqRef.current=0;
+    maiaTimelineSeqRef.current=0;
   }
   function selectRepertoire(id:string){const startFen=new Chess().fen();setSelectedRepertoireId(id);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
   function resetBoard(){const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveTab("train");bumpRuntimeFrame()}
@@ -3775,83 +3857,313 @@ export default function App(){
       chosen={san:weighted.san,uci:weighted.uci,fen:weighted.resultingFen};
       source=weighted.pct?`Lichess-weighted opening branch (${weighted.pct}%)`:"Saved opening branch";
     }else{
-      const explorer=await loadExplorer(current.fen());
-      const playable=explorer.map(m=>{const a=applyUci(current.fen(),m.uci);return a?{...a,weight:m.total,pct:m.pct,branchKey:`${positionKey}::${m.uci}`}:null}).filter(Boolean) as Array<{san:string;uci:string;fen:string;weight:number;pct:number;branchKey:string}>;
-      const policyEngine=(engineLines.length?{source:"engine_preview",pvs:engineLines}:await runBrowserStockfish(current.fen(),rating.skill,550,3));
-      const bestCp=typeof policyEngine?.pvs?.[0]?.cp==="number"?Number(policyEngine.pvs[0].cp):undefined;
-      const safeUcis=new Set<string>(
-        (policyEngine?.pvs??[])
-          .filter((line,index)=>{
-            if(index===0)return true;
-            if(bestCp===undefined||typeof line.cp!=="number")return false;
-            return Math.abs(bestCp-Number(line.cp))<=100;
-          })
-          .map((line)=>line.uci),
-      );
-      if(playable.length){
-        const decision=selectOpponentCandidateWithVariation({
-          context:variationContext,
-          memory,
-          candidates:playable.map((candidate)=>({
-            uci:candidate.uci,
-            san:candidate.san,
-            branchKey:candidate.branchKey,
-            weight:candidate.weight,
-            legal:true,
-            supported:true,
-            engineSafe:safeUcis.has(candidate.uci),
-            severeBlunder:false,
-            source:"lichess_continuation",
-            pct:candidate.pct,
-          })),
+      const legalMovesVerbose=current.moves({verbose:true}) as any[];
+      const legalMovesUci=legalMovesVerbose.map((move)=>moveToUci(move));
+      const currentFen4=normalizeFen(current.fen());
+      const maiaSkill=resolveMaiaSkillLevel({
+        appDifficultyLevel:rating.label,
+        continuationDifficulty:rating.target,
+      });
+      const defaultMaiaStatus=classifyMaiaProviderStatus({isAvailable:maiaOpponentProvider.isAvailable()});
+      const maiaGate=buildMaiaOpponentReplyDecision({
+        trainingMode:"continuation",
+        userExplicitlyEnteredContinuation:Boolean(userExplicitlyEnteredContinuation),
+        sideToMove:current.turn() as ChessColor,
+        opponentColor,
+        branchCompleteActive:Boolean(branchCompleteEligibleNow),
+        continuationAnalysisStatus,
+        continuationRuntimeStatus:continuationRuntimeState.status,
+        selectedLineExhausted:Boolean(branchCompleteContract.selectedLineExhausted),
+        hasUserContinuationMove:Boolean(lastContinuationUserMoveRating?.moveUci),
+        terminalPosition:current.isGameOver()||legalMovesUci.length===0,
+        legalMovesCount:legalMovesUci.length,
+        providerStatus:defaultMaiaStatus,
+        staleRequest:false,
+        fallbackRequested:true,
+        skillLevel:maiaSkill,
+      });
+      setMaiaOpponentProviderStatus(defaultMaiaStatus);
+      setMaiaOpponentSkillLevel(maiaSkill);
+      setMaiaOpponentDecisionReason(maiaGate.reason);
+      setMaiaOpponentRequestFen4(currentFen4);
+      setMaiaOpponentCandidateCount(0);
+      setMaiaOpponentSelectedUci(null);
+      setMaiaOpponentSelectedSan(null);
+      setMaiaOpponentHumanLikelihood(null);
+      setMaiaOpponentStaleResultIgnored(false);
+      setMaiaOpponentIllegalCandidateRejected(false);
+      setMaiaOpponentFallbackUsed(false);
+      setMaiaOpponentFallbackReason(null);
+      setMaiaOpponentSanityGuardResult("not_run");
+      setMaiaOpponentSanityGuardBlockedReason(null);
+      if(!maiaGate.allowed){
+        pushMaiaTimelineEvent({
+          event:"maia_request_blocked",
+          requestId:null,
+          fen4:currentFen4,
+          candidateCount:0,
+          selectedUci:null,
+          selectedSan:null,
+          reason:maiaGate.reason,
+          fallbackReason:null,
+          skillLevel:maiaSkill,
+          sideToMove:current.turn() as ChessColor,
         });
-        const policy=selectContinuedPlayMove({
-          fen:current.fen(),
-          lichessCandidates:playable.map((candidate)=>({
-            uci:candidate.uci,
-            san:candidate.san,
-            source:"lichess",
-            pct:candidate.pct,
-            weight:candidate.weight,
-            engineSafe:safeUcis.has(candidate.uci),
-            supported:true,
-          })),
-          engineTop:policyEngine?.pvs?.[0]?{uci:policyEngine.pvs[0].uci,san:policyEngine.pvs[0].san,source:"engine",engineSafe:true,supported:true}:null,
-        });
-        continuationPolicyDecision=policy;
-        const preferredUci=policy?.selectedUci??(decision?playable.find((candidate)=>candidate.branchKey===decision.selected.branchKey)?.uci:undefined);
-        const pick=playable.find((candidate)=>candidate.uci===preferredUci)??(decision?playable.find((candidate)=>candidate.branchKey===decision.selected.branchKey)??playable[0]:pickWeighted(playable));
-        variationDebug=decision?{...decision}:variationDebug;
-        chosen=pick;
-        source=
-          policy?.source==="lichess_engine_validated"
-            ? `Lichess continuation (${pick.pct}%)`
-            : policy?.source==="human_continuation_unverified"
-              ? "Lichess continuation"
-              : policy?.source==="engine_top"
-                ? `Engine continuation (${rating.target})`
-                : `Lichess continuation (${pick.pct}%)`;
-        variationDebug.opponentVariationReason=policy?.reason??variationDebug.opponentVariationReason;
       }
-      else{
-        const policy=selectContinuedPlayMove({
-          fen:current.fen(),
-          engineTop:policyEngine?.pvs?.[0]?{uci:policyEngine.pvs[0].uci,san:policyEngine.pvs[0].san,source:"engine",engineSafe:true,supported:true}:null,
+      if(maiaGate.allowed){
+        const maiaRequestId=++maiaOpponentRequestSeqRef.current;
+        setMaiaOpponentRequestId(maiaRequestId);
+        pushMaiaTimelineEvent({
+          event:"maia_request_created",
+          requestId:maiaRequestId,
+          fen4:currentFen4,
+          candidateCount:0,
+          selectedUci:null,
+          selectedSan:null,
+          reason:"request_created",
+          fallbackReason:null,
+          skillLevel:maiaSkill,
+          sideToMove:current.turn() as ChessColor,
         });
-        continuationPolicyDecision=policy;
-        if(policy?.selectedUci){
-          const a=applyUci(current.fen(),policy.selectedUci);
-          if(a){
-            chosen=a;
-            source=policy.source==="emergency_legal_fallback"?"Emergency legal fallback":`Engine continuation (${rating.target})`;
-            variationDebug.opponentVariationReason=policy.reason;
+        const requestPayload={
+          requestId:maiaRequestId,
+          fen:current.fen(),
+          fen4:currentFen4,
+          sideToMove:current.turn() as ChessColor,
+          skillLevel:maiaSkill,
+          legalMovesUci,
+          maxCandidates:5,
+          timeoutMs:MAIA_OPPONENT_TIMEOUT_MS,
+          continuationSessionId:selectedRepertoireId ?? null,
+        };
+        const maiaTimedResult=await withMaiaTimeout<MaiaOpponentReplyResult>(
+          maiaOpponentProvider.getOpponentReplies(requestPayload),
+          MAIA_OPPONENT_TIMEOUT_MS,
+        );
+        const maiaResult:MaiaOpponentReplyResult=maiaTimedResult.ok
+          ? maiaTimedResult.value
+          : {
+            status:"timeout",
+            requestId:maiaRequestId,
+            fen4:currentFen4,
+            skillLevel:maiaSkill,
+            candidates:[],
+            selectedCandidate:null,
+            errorReason:"provider_timeout",
+            providerMs:MAIA_OPPONENT_TIMEOUT_MS,
+          };
+        setMaiaOpponentProviderStatus(maiaResult.status);
+        setMaiaApiRouteStatus(maiaResult.status);
+        setMaiaRuntimeMs(typeof maiaResult.providerMs==="number"?maiaResult.providerMs:null);
+        setMaiaRuntimeErrorReason(maiaResult.errorReason??null);
+        setMaiaOpponentCandidateCount(maiaResult.candidates.length);
+        pushMaiaTimelineEvent({
+          event:"maia_result_received",
+          requestId:maiaRequestId,
+          fen4:currentFen4,
+          candidateCount:maiaResult.candidates.length,
+          selectedUci:maiaResult.selectedCandidate?.uci ?? null,
+          selectedSan:maiaResult.selectedCandidate?.san ?? null,
+          reason:maiaResult.status,
+          fallbackReason:maiaResult.errorReason ?? null,
+          skillLevel:maiaSkill,
+          sideToMove:current.turn() as ChessColor,
+        });
+        const maiaResultIsStale=Boolean(
+          maiaRequestId!==maiaOpponentRequestSeqRef.current||
+          maiaResult.requestId!==maiaRequestId||
+          normalizeFen(fenRef.current)!==currentFen4||
+          shouldFlagStaleOpponentReplyCommit({
+            request:{requestId:request.requestId,baseFen:request.baseFen},
+            currentPendingRequest:pendingOpponentRequestRef.current?{requestId:pendingOpponentRequestRef.current.requestId,baseFen:pendingOpponentRequestRef.current.baseFen}:null,
+            liveFen:fenRef.current,
+          }),
+        );
+        if(maiaResultIsStale){
+          setMaiaOpponentStaleResultIgnored(true);
+          setMaiaOpponentFallbackUsed(true);
+          setMaiaOpponentFallbackReason("stale_request");
+          pushMaiaTimelineEvent({
+            event:"maia_result_stale_ignored",
+            requestId:maiaRequestId,
+            fen4:currentFen4,
+            candidateCount:maiaResult.candidates.length,
+            selectedUci:null,
+            selectedSan:null,
+            reason:"stale_request",
+            fallbackReason:"stale_request",
+            skillLevel:maiaSkill,
+            sideToMove:current.turn() as ChessColor,
+          });
+        }else{
+          const selectedMaiaCandidate=selectMaiaOpponentReply(maiaResult,legalMovesUci);
+          const selectedUci=selectedMaiaCandidate?.uci ?? null;
+          const selectedSan=selectedMaiaCandidate?.san ?? null;
+          setMaiaOpponentSelectedUci(selectedUci);
+          setMaiaOpponentSelectedSan(selectedSan ?? null);
+          setMaiaOpponentHumanLikelihood(selectedMaiaCandidate?.humanLikelihood ?? null);
+          if(selectedMaiaCandidate){
+            const selectedApplied=applyUci(current.fen(),selectedMaiaCandidate.uci);
+            if(!selectedApplied){
+              setMaiaOpponentIllegalCandidateRejected(true);
+              setMaiaOpponentFallbackUsed(true);
+              setMaiaOpponentFallbackReason("maia_candidate_illegal");
+              pushMaiaTimelineEvent({
+                event:"maia_candidate_rejected_illegal",
+                requestId:maiaRequestId,
+                fen4:currentFen4,
+                candidateCount:maiaResult.candidates.length,
+                selectedUci:selectedMaiaCandidate.uci,
+                selectedSan:selectedMaiaCandidate.san ?? null,
+                reason:"maia_candidate_illegal",
+                fallbackReason:"maia_candidate_illegal",
+                skillLevel:maiaSkill,
+                sideToMove:current.turn() as ChessColor,
+              });
+            }else{
+              const sanityGuard=evaluateMaiaSanityGuard({
+                enabled:MAIA_OPPONENT_REPLY_SANITY_GUARD_ENABLED,
+                cpLoss:null,
+                maxAllowedCpLoss:MAIA_MAX_ALLOWED_OPPONENT_CP_LOSS,
+              });
+              setMaiaOpponentSanityGuardResult(sanityGuard.result);
+              setMaiaOpponentSanityGuardBlockedReason(sanityGuard.blockedReason);
+              if(!sanityGuard.allowed){
+                setMaiaOpponentFallbackUsed(true);
+                setMaiaOpponentFallbackReason(sanityGuard.blockedReason ?? "maia_sanity_guard_rejected_candidate");
+                pushMaiaTimelineEvent({
+                  event:"maia_candidate_rejected_sanity_guard",
+                  requestId:maiaRequestId,
+                  fen4:currentFen4,
+                  candidateCount:maiaResult.candidates.length,
+                  selectedUci:selectedApplied.uci,
+                  selectedSan:selectedApplied.san,
+                  reason:sanityGuard.result,
+                  fallbackReason:sanityGuard.blockedReason,
+                  skillLevel:maiaSkill,
+                  sideToMove:current.turn() as ChessColor,
+                });
+              }else{
+                chosen={san:selectedApplied.san,uci:selectedApplied.uci,fen:selectedApplied.fen};
+                source="Continuation reply";
+                variationDebug.opponentVariationReason="maia_candidate_selected";
+                setMaiaOpponentDecisionReason("allowed");
+                pushMaiaTimelineEvent({
+                  event:"maia_candidate_selected",
+                  requestId:maiaRequestId,
+                  fen4:currentFen4,
+                  candidateCount:maiaResult.candidates.length,
+                  selectedUci:selectedApplied.uci,
+                  selectedSan:selectedApplied.san,
+                  reason:"maia_candidate_selected",
+                  fallbackReason:null,
+                  skillLevel:maiaSkill,
+                  sideToMove:current.turn() as ChessColor,
+                });
+              }
+            }
+          }else{
+            const fallbackReason=maiaResult.status==="timeout"
+              ?"provider_timeout"
+              :maiaResult.status==="unavailable"
+                ?"provider_unavailable"
+                :"no_legal_candidate";
+            setMaiaOpponentFallbackUsed(true);
+            setMaiaOpponentFallbackReason(fallbackReason);
+            pushMaiaTimelineEvent({
+              event:"maia_fallback_used",
+              requestId:maiaRequestId,
+              fen4:currentFen4,
+              candidateCount:maiaResult.candidates.length,
+              selectedUci:null,
+              selectedSan:null,
+              reason:"fallback_used",
+              fallbackReason,
+              skillLevel:maiaSkill,
+              sideToMove:current.turn() as ChessColor,
+            });
           }
         }
-        if(!chosen){
-          const data=await runBrain("bot_select",{skipGpt:true});
-          const top=data?.engine?.pvs?.[0];
-          const a=top?applyUci(current.fen(),top.uci):null;
-          if(a){chosen=a;source=`Engine continuation (${rating.target})`;}
+      }
+      if(!chosen){
+        const explorer=await loadExplorer(current.fen());
+        const playable=explorer.map(m=>{const a=applyUci(current.fen(),m.uci);return a?{...a,weight:m.total,pct:m.pct,branchKey:`${positionKey}::${m.uci}`}:null}).filter(Boolean) as Array<{san:string;uci:string;fen:string;weight:number;pct:number;branchKey:string}>;
+        const policyEngine=(engineLines.length?{source:"engine_preview",pvs:engineLines}:await runBrowserStockfish(current.fen(),rating.skill,550,3));
+        const bestCp=typeof policyEngine?.pvs?.[0]?.cp==="number"?Number(policyEngine.pvs[0].cp):undefined;
+        const safeUcis=new Set<string>(
+          (policyEngine?.pvs??[])
+            .filter((line,index)=>{
+              if(index===0)return true;
+              if(bestCp===undefined||typeof line.cp!=="number")return false;
+              return Math.abs(bestCp-Number(line.cp))<=100;
+            })
+            .map((line)=>line.uci),
+        );
+        if(playable.length){
+          const decision=selectOpponentCandidateWithVariation({
+            context:variationContext,
+            memory,
+            candidates:playable.map((candidate)=>({
+              uci:candidate.uci,
+              san:candidate.san,
+              branchKey:candidate.branchKey,
+              weight:candidate.weight,
+              legal:true,
+              supported:true,
+              engineSafe:safeUcis.has(candidate.uci),
+              severeBlunder:false,
+              source:"lichess_continuation",
+              pct:candidate.pct,
+            })),
+          });
+          const policy=selectContinuedPlayMove({
+            fen:current.fen(),
+            lichessCandidates:playable.map((candidate)=>({
+              uci:candidate.uci,
+              san:candidate.san,
+              source:"lichess",
+              pct:candidate.pct,
+              weight:candidate.weight,
+              engineSafe:safeUcis.has(candidate.uci),
+              supported:true,
+            })),
+            engineTop:policyEngine?.pvs?.[0]?{uci:policyEngine.pvs[0].uci,san:policyEngine.pvs[0].san,source:"engine",engineSafe:true,supported:true}:null,
+          });
+          continuationPolicyDecision=policy;
+          const preferredUci=policy?.selectedUci??(decision?playable.find((candidate)=>candidate.branchKey===decision.selected.branchKey)?.uci:undefined);
+          const pick=playable.find((candidate)=>candidate.uci===preferredUci)??(decision?playable.find((candidate)=>candidate.branchKey===decision.selected.branchKey)??playable[0]:pickWeighted(playable));
+          variationDebug=decision?{...decision}:variationDebug;
+          chosen=pick;
+          source=
+            policy?.source==="lichess_engine_validated"
+              ? `Lichess continuation (${pick.pct}%)`
+              : policy?.source==="human_continuation_unverified"
+                ? "Lichess continuation"
+                : policy?.source==="engine_top"
+                  ? `Engine continuation (${rating.target})`
+                  : `Lichess continuation (${pick.pct}%)`;
+          variationDebug.opponentVariationReason=policy?.reason??variationDebug.opponentVariationReason;
+        }
+        else{
+          const policy=selectContinuedPlayMove({
+            fen:current.fen(),
+            engineTop:policyEngine?.pvs?.[0]?{uci:policyEngine.pvs[0].uci,san:policyEngine.pvs[0].san,source:"engine",engineSafe:true,supported:true}:null,
+          });
+          continuationPolicyDecision=policy;
+          if(policy?.selectedUci){
+            const a=applyUci(current.fen(),policy.selectedUci);
+            if(a){
+              chosen=a;
+              source=policy.source==="emergency_legal_fallback"?"Emergency legal fallback":`Engine continuation (${rating.target})`;
+              variationDebug.opponentVariationReason=policy.reason;
+            }
+          }
+          if(!chosen){
+            const data=await runBrain("bot_select",{skipGpt:true});
+            const top=data?.engine?.pvs?.[0];
+            const a=top?applyUci(current.fen(),top.uci):null;
+            if(a){chosen=a;source=`Engine continuation (${rating.target})`;}
+          }
         }
       }
     }
@@ -3937,6 +4249,20 @@ export default function App(){
       source,
       playedAt:Date.now(),
     });
+    if(mode==="continuation"){
+      pushMaiaTimelineEvent({
+        event:"maia_opponent_move_applied",
+        requestId:maiaOpponentRequestId,
+        fen4:positionKey,
+        candidateCount:maiaOpponentCandidateCount,
+        selectedUci:chosen.uci,
+        selectedSan:chosen.san,
+        reason:source==="Continuation reply"?"maia_candidate_selected":"fallback_or_existing_policy",
+        fallbackReason:source==="Continuation reply"?null:(maiaOpponentFallbackReason ?? null),
+        skillLevel:maiaOpponentSkillLevel,
+        sideToMove:opponentColor,
+      });
+    }
     setOpponentVariationDebug(variationDebug);
     const next=new Chess(chosen.fen);
     const nextPhase:OverlayPhase=next.isGameOver()?"terminal":(next.turn()===userColor?"ready_for_user":"opponent_selecting");
@@ -4771,6 +5097,43 @@ export default function App(){
     continuationAnalysisRequestId:continuationAnalysisSeqRef.current,
     continuationAnalysisFen4:enginePreview?.fen?normalizeFen(enginePreview.fen):null,
     opponentVariationDebug,
+    maiaEnabled:true,
+    maiaRuntimeEnabled:process.env.NEXT_PUBLIC_MAIA_API_ENABLED==="true",
+    maiaApiClientEnabled:maiaApiClientEnabled,
+    maiaProviderName:maiaOpponentProvider.name,
+    maiaProviderVersion:maiaOpponentProvider.version,
+    maiaProviderStatus:maiaOpponentProviderStatus,
+    maiaRuntimeStatus:maiaOpponentProviderStatus,
+    maiaRuntimeProvider:maiaOpponentProvider.name,
+    maiaRuntimeHealthStatus:maiaOpponentProviderStatus,
+    maiaApiRouteStatus:maiaApiRouteStatus,
+    maiaRuntimeErrorReason:maiaRuntimeErrorReason,
+    maiaRuntimeMs:maiaRuntimeMs,
+    maiaSkillLevel:maiaOpponentSkillLevel,
+    maiaRequestId:maiaOpponentRequestId,
+    maiaRequestFen4:maiaOpponentRequestFen4,
+    maiaContinuationOnly:true,
+    maiaAllowedThisFrame:trainingMode==="continuation"&&userExplicitlyEnteredContinuation,
+    maiaBlockedReason:maiaOpponentDecisionReason,
+    maiaCandidateCount:maiaOpponentCandidateCount,
+    maiaCandidatesTop5:[],
+    maiaSelectedUci:maiaOpponentSelectedUci,
+    maiaSelectedSan:maiaOpponentSelectedSan,
+    maiaSelectedLegal:maiaOpponentSelectedUci?Boolean((game.moves({verbose:true}) as any[]).some((move)=>moveToUci(move)===maiaOpponentSelectedUci)):null,
+    maiaSelectedHumanLikelihood:maiaOpponentHumanLikelihood,
+    maiaSelectedRank:null,
+    maiaFallbackUsed:maiaOpponentFallbackUsed,
+    maiaFallbackReason:maiaOpponentFallbackReason,
+    maiaStaleResultIgnored:maiaOpponentStaleResultIgnored,
+    maiaIllegalCandidateRejected:maiaOpponentIllegalCandidateRejected,
+    maiaTouchedInstructionTarget:false,
+    maiaTouchedVisibleSurface:false,
+    maiaTouchedCoachCopy:false,
+    maiaTouchedRatingBadge:false,
+    maiaTouchedBranchComplete:false,
+    maiaSanityGuardEnabled:MAIA_OPPONENT_REPLY_SANITY_GUARD_ENABLED,
+    maiaSanityGuardResult:maiaOpponentSanityGuardResult,
+    maiaSanityGuardBlockedReason:maiaOpponentSanityGuardBlockedReason,
     coachDecision:displayedCoachDecision,
     coachMoveUci:(displayedCoachDecision?.debug as any)?.coachMoveUci??instructionTarget?.uci??null,
     coachPieceType:(displayedCoachDecision?.debug as any)?.coachPieceType??instructionTarget?.pieceType??null,
@@ -4830,6 +5193,7 @@ export default function App(){
     actionTimeline,
     visualRenderTimeline,
     plainLeakTimeline,
+    maiaTimeline,
     actualCoachCardTitle: surfaceCoachCardDecision?.title ?? null,
     actualCoachCardBody: surfaceCoachCardDecision?.body ?? null,
     actualCoachCardButtons: (v28SurfaceActive
