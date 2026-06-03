@@ -672,6 +672,7 @@ export function testTrainerDebugSnapshot(): void {
   assert.equal(v28BypassSources.health.criticalIssues.includes("legacy_branch_complete_visible_bypass"), true);
   assert.equal(v28BypassSources.health.criticalIssues.includes("assisted_reveal_action_rendered"), true);
   assert.equal(v28BypassSources.health.criticalIssues.includes("surface_action_missing_for_rendered_button"), true);
+  assert.equal(v28BypassSources.health.criticalIssues.includes("surface_action_debug_parity_mismatch"), true);
   assert.equal(v28BypassSources.health.criticalIssues.includes("rendered_visual_missing_surface_source"), true);
   assert.equal(v28BypassSources.health.criticalIssues.includes("legacy_orchestrate_teaching_visible_bypass"), true);
 
@@ -725,6 +726,7 @@ export function testTrainerDebugSnapshot(): void {
     eventLog: [],
   } as any);
   assert.equal(continuationReadyMissingTarget.health.criticalIssues.includes("continuation_candidate_without_target"), true, "continuation_candidate_without_target_is_critical");
+  assert.equal(continuationReadyMissingTarget.health.criticalIssues.includes("continuation_user_turn_without_candidate_or_analyzing"), true);
 
   const alignedSafeRepeatedHistory = buildTrainerDebugSnapshot({
     debugEnabled: true,

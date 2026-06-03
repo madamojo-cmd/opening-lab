@@ -193,6 +193,19 @@ export function testCurrentInstructionFrameRuntimeAuthority(): void {
   assert.equal(terminalLegacyNoUserTurn.mode, "terminal");
   assert.equal(terminalLegacyNoUserTurn.target, null);
 
+  const continuationAnalyzing = buildCurrentInstructionFrame({
+    kind: "transitioning",
+    fenBefore: continuation.fenBefore,
+    ply: continuation.ply,
+    sideToMove: "black",
+    target: null,
+    mode: "continuation",
+    source: "continuation_policy",
+  });
+  assert.equal(continuationAnalyzing.kind, "transitioning");
+  assert.equal(continuationAnalyzing.mode, "continuation");
+  assert.equal(continuationAnalyzing.target, null);
+
   assert.throws(() => assertLockedInstructionTarget(terminal));
 
   const changedTarget = buildCurrentInstructionFrame({

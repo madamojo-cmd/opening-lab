@@ -88,13 +88,16 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
     const warnings = (snapshot?.health.warnings.length ?? 0) > 0;
     const visualFailureKind = String(snapshot?.visual.visualFailureKind ?? "none");
     const visualFail = visualFailureKind !== "none" && visualFailureKind !== "not_applicable";
+    const continuationIssues = (snapshot?.health.criticalIssues ?? []).some((issue) => String(issue).toLowerCase().includes("continuation"));
+    const continuationWarn = Boolean(snapshot?.continuation.isContinuationMode && snapshot?.continuation.continuationLinesPassedToBoard === 0 && !snapshot?.continuation.selectedCandidateUci);
+    const cacheClassification = String((snapshot?.cache as any)?.cacheClassification ?? "");
     return {
       visual: status(visualFail, false),
       coach: status(snapshot?.coach.coachFailureKind !== "none", false),
       actions: status(Boolean(snapshot?.health.criticalIssues.some((issue) => issue.includes("Action"))), false),
-      continuation: status(Boolean(snapshot?.health.criticalIssues.some((issue) => issue.includes("Continuation"))), Boolean(snapshot?.continuation.isContinuationMode && snapshot?.continuation.continuationLinesPassedToBoard === 0)),
+      continuation: status(continuationIssues, continuationWarn),
       legacy: status(Boolean(snapshot?.legacy.legacyBypassDetected), false),
-      cache: status(false, warnings && !critical),
+      cache: cacheClassification === "warn" ? "warn" : cacheClassification === "fail" ? "fail" : status(false, warnings && !critical && cacheClassification !== "not_applicable"),
     };
   }, [snapshot]);
   const coachTimeline = useMemo(() => (Array.isArray(snapshot?.coachTimeline) ? snapshot.coachTimeline : []), [snapshot]);

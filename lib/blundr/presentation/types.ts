@@ -3,6 +3,7 @@ export type TeachingSurfaceMode =
   | "plain_before_show_more"
   | "plain_after_show_more"
   | "branch_complete"
+  | "continuation_analyzing"
   | "opponent_replying"
   | "terminal"
   | "blocked";

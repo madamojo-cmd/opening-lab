@@ -267,10 +267,22 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   if (continuationTerminalDetected && presentationCoach.owner !== "intent_first_coach" && presentationCoach.owner !== "continuation_terminal_surface" && presentationCoach.shouldRender !== true) criticalIssues.push("terminal_position_without_terminal_surface");
   if (input.trainingMode === "continuation" && input.userExplicitlyEnteredContinuation && (continuationRuntimeStatus === "idle" || input.continuationAnalysisStatus === "idle") && !continuationTerminalDetected) criticalIssues.push("continuation_idle_after_continue");
   if (input.trainingMode === "continuation" && input.trainerPhase === "transitioning" && !["analyzing", "opponent_replying", "terminal"].includes(String(continuationRuntimeStatus))) criticalIssues.push("transition_state_without_pending_work");
-  if (isTeachingFrame(input) && instructionTargetUci == null && !branchTransitionSurfaceRendered) criticalIssues.push("instruction_target_missing_on_teaching_frame");
-  if (input.isUserTurn && instructionTargetUci == null && String(input.trainerPhase) === "ready_for_user" && !branchTransitionSurfaceRendered) {
+  if (isTeachingFrame(input) && instructionTargetUci == null && !branchTransitionSurfaceRendered && !continuationNullTargetStatusFrame) criticalIssues.push("instruction_target_missing_on_teaching_frame");
+  if (input.isUserTurn && instructionTargetUci == null && String(input.trainerPhase) === "ready_for_user" && !branchTransitionSurfaceRendered && !continuationNullTargetStatusFrame) {
     criticalIssues.push("user_turn_missing_instruction_target");
     criticalIssues.push("ready_for_user_without_target");
+  }
+  if (
+    String(input.trainingMode) === "continuation" &&
+    input.isUserTurn === true &&
+    String(input.trainerPhase) === "ready_for_user" &&
+    instructionTargetUci == null &&
+    String(continuationRuntimeStatus) !== "analyzing" &&
+    String(continuationRuntimeStatus) !== "requested" &&
+    String(continuationRuntimeStatus) !== "terminal" &&
+    !branchTransitionSurfaceRendered
+  ) {
+    criticalIssues.push("continuation_user_turn_without_candidate_or_analyzing");
   }
   if (instructionTargetUci && presentationCoach.shouldRender === false && !branchTransitionSurfaceRendered) criticalIssues.push("coach_missing_for_instruction_target");
   if (instructionTargetUci && presentationCoach.shouldRender === false && !branchTransitionSurfaceRendered) criticalIssues.push("silent_coach_with_instruction_target");
@@ -541,6 +553,15 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   }
   if (v28VisibleEnabled && renderedActionIds.some((id) => !surfaceActionIds.includes(id))) {
     criticalIssues.push("surface_action_missing_for_rendered_button");
+  }
+  if (
+    v28VisibleEnabled &&
+    (
+      renderedActionIds.some((id) => !surfaceActionIds.includes(id)) ||
+      surfaceActionIds.some((id) => !renderedActionIds.includes(id))
+    )
+  ) {
+    criticalIssues.push("surface_action_debug_parity_mismatch");
   }
   if (v28VisibleEnabled && renderedVisualPrimitiveCount > 0 && surfaceVisualPrimitiveCount === 0) {
     criticalIssues.push("rendered_visual_missing_surface_source");
@@ -993,6 +1014,8 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       presentationCacheKey: input.presentationCacheKey ?? null,
       presentationCacheHit: "not_exposed_from_module",
       cacheInvalidationReasons: [],
+      cacheClassification: "not_applicable",
+      cacheClassificationReason: "cacheNotRequiredForVisibleSurface",
     },
     performance: {
       geometryMs: coachDebug.geometryMs ?? null,

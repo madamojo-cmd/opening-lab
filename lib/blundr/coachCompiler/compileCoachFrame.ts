@@ -93,9 +93,27 @@ function buildAssistedBlock(input: {
   slots: ReturnType<typeof buildCoachTemplateSlots>;
 }): CompiledCoachTextBlock {
   if (!input.frame.target) {
+    if (String(input.frame.trainingMode) === "continuation") {
+      return {
+        title: "Finding a continuation",
+        body: "Blundr is choosing a training move from this position.",
+        bullets: [],
+        evidenceClaimIds: [],
+        leakRisk: "none",
+      };
+    }
+    if (input.frame.kind === "terminal") {
+      return {
+        title: "Line complete",
+        body: "This continuation ended. Restart the line to train again.",
+        bullets: [],
+        evidenceClaimIds: [],
+        leakRisk: "none",
+      };
+    }
     return {
-      title: "No Target",
-      body: "There is no active move target in this frame.",
+      title: "Status",
+      body: "A move target is not available for this frame yet.",
       bullets: [],
       evidenceClaimIds: [],
       leakRisk: "none",
@@ -103,6 +121,29 @@ function buildAssistedBlock(input: {
   }
 
   const concept = highestConcept(input.activatedConcepts);
+  if (String(input.frame.trainingMode) === "continuation") {
+    const san = input.frame.target.san || input.frame.target.uci;
+    const piece = String(input.frame.target.pieceType ?? "").toLowerCase();
+    const pieceNameByCode: Record<string, string> = { p: "pawn", n: "knight", b: "bishop", r: "rook", q: "queen", k: "king" };
+    const pieceName = pieceNameByCode[piece] ?? "piece";
+    const checkmate = Boolean(input.frame.target.isMate || /#/.test(san));
+    const check = !checkmate && Boolean(input.frame.target.isCheck || /\+/.test(san));
+    const capture = Boolean(input.frame.target.isCapture || /x/.test(san));
+    const suffix = checkmate
+      ? " This ends the line with checkmate."
+      : check
+        ? " This gives check."
+        : capture
+          ? " This captures material and keeps the position moving."
+          : " This develops play and keeps the position moving.";
+    return {
+      title: `${san} — Continue the position`,
+      body: `Play ${san} with the ${pieceName}.${suffix}`,
+      bullets: [],
+      evidenceClaimIds: input.evidenceClaimIds,
+      leakRisk: "low",
+    };
+  }
   const template = concept
     ? "Play {targetSan} with the {pieceLabel}; it {moveVerb} through {conceptLabel}."
     : "Play {targetSan}; this move {moveVerb}.";

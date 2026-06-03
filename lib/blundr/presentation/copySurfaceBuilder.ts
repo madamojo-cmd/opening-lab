@@ -52,10 +52,19 @@ export function buildSurfaceCopy(input: {
     });
   }
 
+  if (mode === "continuation_analyzing") {
+    return toVisibleCopy("fallback", {
+      title: "Finding a continuation",
+      body: "Blundr is choosing a training move from this position.",
+      bullets: [],
+      leakRisk: "none",
+    });
+  }
+
   if (mode === "terminal") {
     return toVisibleCopy("fallback", {
       title: "Line complete",
-      body: "This training line is complete.",
+      body: "This continuation ended in checkmate. Restart the line or train it again.",
       bullets: [],
       leakRisk: "none",
     });

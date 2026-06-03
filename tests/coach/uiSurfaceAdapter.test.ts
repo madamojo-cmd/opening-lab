@@ -137,6 +137,44 @@ export function testUiSurfaceAdapter(): void {
   assert.equal(opponentCoach.actions.some((action) => action.kind === "reveal_target"), false);
   assert.equal(opponentBoard.visualRecipes.length, 0);
 
+  const continuationAnalyzingFrame = buildCurrentInstructionFrame({
+    kind: "transitioning",
+    fenBefore: bc4Frame.fenBefore,
+    ply: 2,
+    sideToMove: "white",
+    target: null,
+    mode: "continuation",
+    source: "continuation_policy",
+  });
+  const continuationAnalyzingSurface = buildLiveVisibleTeachingSurface({
+    frame: continuationAnalyzingFrame,
+    requestedMode: "assisted",
+    showMoreRevealed: false,
+  });
+  const continuationAnalyzingCoach = adaptVisibleSurfaceToCoachUi(continuationAnalyzingSurface);
+  assert.equal(continuationAnalyzingCoach.mode, "continuation_analyzing");
+  assert.equal(continuationAnalyzingCoach.title, "Finding a continuation");
+  assert.equal(continuationAnalyzingCoach.body.includes("Opponent is replying"), false);
+  assert.equal(continuationAnalyzingCoach.title.includes("No Target"), false);
+  assert.equal(continuationAnalyzingCoach.actions.length, 0);
+
+  const terminalSurface = buildLiveVisibleTeachingSurface({
+    frame: buildCurrentInstructionFrame({
+      kind: "terminal",
+      fenBefore: "7k/6Q1/6K1/8/8/8/8/8 b - - 0 1",
+      ply: 60,
+      sideToMove: "black",
+      target: null,
+      mode: "terminal",
+      source: "terminal",
+    }),
+    requestedMode: "assisted",
+    showMoreRevealed: false,
+  });
+  const terminalCoach = adaptVisibleSurfaceToCoachUi(terminalSurface);
+  assert.equal(terminalCoach.mode, "terminal");
+  assert.equal(terminalCoach.actions.some((action) => action.kind === "restart_line"), true);
+
   const e4 = buildLiveVisibleTeachingSurface({
     frame: makeGuidedFrame({
       fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",

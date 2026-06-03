@@ -1,0 +1,28 @@
+{
+  "package": "12",
+  "agent": "Agent 12",
+  "status": "blocked",
+  "branch": "v2.8.0-intelligent-coach-live",
+  "objective": "Continuation Flow Stabilization + End-of-Line Polish",
+  "completed": [
+    "Added continuation flow contract helper",
+    "Added continuation analyzing surface mode and copy",
+    "Added continuation candidate lock metadata and stale-result guards",
+    "Removed normal-flow continuation no-target copy",
+    "Added terminal restart action and continuation-end terminal copy",
+    "Added surface action parity critical",
+    "Added continuation flow stability tests",
+    "Passed required automated build/test command suite"
+  ],
+  "blocked_on": [
+    "Full manual interactive acceptance flow and required debug export bundle not yet captured in this run"
+  ],
+  "artifacts": {
+    "docs_report": "docs/BLUNDR_v2.8.0 Foundation Stabilization Gate_AGENT_12_CONTINUATION_FLOW_STABILIZATION_REPORT.md",
+    "run_report": ".agent_runs/v2.8.0-intelligent-coach/20260603_185734/12_continuation_flow_stabilization.md",
+    "phase_report": ".agent_runs/v2.8.0-intelligent-coach/20260603_185734/phase_reports/12_continuation_flow_stabilization.md",
+    "command_log": ".agent_runs/v2.8.0-intelligent-coach/20260603_185734/command_log.md",
+    "risk_register": ".agent_runs/v2.8.0-intelligent-coach/20260603_185734/risk_register.md"
+  },
+  "timestamp_utc": "2026-06-03T19:02:00Z"
+}

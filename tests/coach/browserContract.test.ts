@@ -26,6 +26,9 @@ export const browserContract = {
     lineExhaustedRendersContinue: "When line is exhausted, branch_complete renders Continue from Here and restart actions.",
     opponentPendingHoldsContinue: "While opponent reply is pending, Continue from Here does not render.",
     opponentResolutionTransitionsToBranchComplete: "After opponent resolution on exhausted line, UI transitions to branch_complete instead of stuck ready_for_user opponent-turn.",
+    continuationAnalyzingNotOpponentReplying: "After Continue on user turn, continuation analyzing must not render Opponent is replying.",
+    continuationNoTargetCardSuppressed: "No Target must not appear in normal continuation analyzing/candidate flow.",
+    continuationTerminalHasRestart: "Continuation terminal/checkmate must expose restart/train action on terminal surface.",
   },
 };
 

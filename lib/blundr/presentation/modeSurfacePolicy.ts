@@ -16,12 +16,28 @@ export function resolveTeachingSurfaceMode(input: {
     return "branch_complete";
   }
 
-  if (input.frame.kind === "opponent_replying" || input.frame.kind === "transitioning") {
+  if (
+    input.frame.kind === "transitioning" &&
+    String(input.frame.trainingMode) === "continuation" &&
+    String(input.frame.trainerPhase) === "ready_for_user"
+  ) {
+    return "continuation_analyzing";
+  }
+
+  if (input.frame.kind === "opponent_replying") {
     return "opponent_replying";
   }
 
   if (input.frame.kind === "terminal") {
     return "terminal";
+  }
+
+  if (
+    String(input.frame.trainingMode) === "continuation" &&
+    !input.frame.target &&
+    String(input.frame.trainerPhase) === "ready_for_user"
+  ) {
+    return "continuation_analyzing";
   }
 
   if (input.requestedMode === "assisted") {

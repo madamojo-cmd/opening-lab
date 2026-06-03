@@ -57,6 +57,7 @@ import { decideGuidedCoveragePolicy } from "@/lib/blundr/openings/guidedCoverage
 import type { RepertoireLineInput } from "@/lib/blundr/openings/openingTypes";
 import { buildCurrentInstructionFrame, isBookLikeInstructionTarget } from "@/lib/blundr/runtime/currentInstructionFrame";
 import { resolveBranchCompleteContract } from "@/lib/blundr/runtime/branchCompleteContract";
+import { resolveContinuationFlowContract } from "@/lib/blundr/runtime/continuationFlowContract";
 import { shouldFlagStaleOpponentReplyCommit } from "@/lib/blundr/runtime/opponentReplyGuard";
 import { classifyContinuationRuntimeState, type ContinuationRuntimeStatus } from "@/lib/blundr/runtime/continuationRuntimeState";
 import { BlundrDiagnosticsPanel } from "@/components/debug/BlundrDiagnosticsPanel";
@@ -483,8 +484,8 @@ function buildEngineBestContinuationCopy(target:NonNullable<ReturnType<typeof bu
   const destinationSquare=String(target.to??"").toLowerCase();
   const san=target.san||target.uci;
   return{
-    title:`${san} — Continue with the best move.`,
-    body:`Move the ${pieceName} to ${destinationSquare}. This is the strongest verified continuation from this position.`,
+    title:`${san} — Continue the position`,
+    body:`Play ${san} with the ${pieceName} to ${destinationSquare}. This is a legal continuation from the position.`,
   };
 }
 
@@ -880,6 +881,15 @@ export default function App(){
   const [lastCoachRecords,setLastCoachRecords]=useState<LastCoachRecord[]>([]);
   const [coachTimeline,setCoachTimeline]=useState<CoachSessionLogEntry[]>([]);
   const [continuationAnalysisStatus,setContinuationAnalysisStatus]=useState<ContinuationRuntimeStatus>("idle");
+  const [continuationCandidateLock,setContinuationCandidateLock]=useState<{
+    continuationCandidateLockId:number;
+    continuationCandidateLockFen4:string;
+    continuationCandidateLockRequestId:number;
+    continuationCandidateLockUci:string;
+    continuationCandidateLockSan:string;
+    continuationCandidateLockSource:string;
+    continuationCandidateLockReason:string;
+  }|null>(null);
   const [blundrDebugEnabled,setBlundrDebugEnabled]=useState(false);
   const [debugEventLog,setDebugEventLog]=useState<DebugEvent[]>([]);
   const [lastActionDebug,setLastActionDebug]=useState<Record<string,unknown>|null>(null);
@@ -925,6 +935,9 @@ export default function App(){
   const continuationAnalysisDebounceRef=useRef<number|null>(null);
   const continuationAnalysisAbortRef=useRef<AbortController|null>(null);
   const continuationAnalysisSeqRef=useRef(0);
+  const continuationCandidateLockSeqRef=useRef(0);
+  const continuationCandidateRequestSeqRef=useRef(0);
+  const continuationCandidateLockRef=useRef<typeof continuationCandidateLock>(null);
   const continuationEngineCacheRef=useRef<Record<string,{fen:string;pvs:EngineLine[];source:string}>>({});
   const opponentRequestSeqRef=useRef(0);
   const pendingOpponentRequestRef=useRef<PendingOpponentRequest|null>(null);
@@ -1222,6 +1235,28 @@ export default function App(){
     continuationPauseClicked,
     userExplicitlyEnteredContinuation,
   ]);
+  const continuationLockCandidate=useMemo(()=>{
+    if(trainingMode!=="continuation"||!isUserTurn||!userExplicitlyEnteredContinuation)return null;
+    const lock=continuationCandidateLock;
+    if(!lock)return null;
+    if(lock.continuationCandidateLockFen4!==normalizeFen(fen))return null;
+    const legalUcis=new Set((game.moves({verbose:true}) as any[]).map((move)=>moveToUci(move)));
+    if(!legalUcis.has(lock.continuationCandidateLockUci))return null;
+    return {
+      uci:lock.continuationCandidateLockUci,
+      san:lock.continuationCandidateLockSan,
+      source:lock.continuationCandidateLockSource,
+      reason:lock.continuationCandidateLockReason,
+      isEmergencyLegalFallback:false,
+      isEngineBestFallback:false,
+      engineFallbackUsed:false,
+      engineFallbackReason:null,
+      databaseCandidatesRejected:false,
+      rejectionReasons:[],
+      debug:{lockId:lock.continuationCandidateLockId,requestId:lock.continuationCandidateLockRequestId},
+    };
+  },[trainingMode,isUserTurn,userExplicitlyEnteredContinuation,continuationCandidateLock,fen,game]);
+  const effectiveContinuationCandidate=continuationLockCandidate??continuationPolicyCandidate;
   const branchCompleteContract=useMemo(()=>resolveBranchCompleteContract({
     trainingMode,
     trainerPhase,
@@ -1229,7 +1264,7 @@ export default function App(){
     userExplicitlyEnteredContinuation,
     isTerminal:game.isGameOver()||game.moves().length===0,
     hasInstructionTarget:Boolean(expectedMoveResolution.expectedMoveUci),
-    hasContinuationCandidate:Boolean(continuationPolicyCandidate?.uci),
+    hasContinuationCandidate:Boolean(effectiveContinuationCandidate?.uci),
     pendingOpponentRequestExists:Boolean(pendingOpponentRequest),
     expectedMoveSource:expectedMoveResolution.source,
     expectedMoveReason:expectedMoveResolution.reason,
@@ -1246,7 +1281,7 @@ export default function App(){
     expectedMoveResolution.source,
     expectedMoveResolution.reason,
     expectedMoveResolution.expectedMoveUci,
-    continuationPolicyCandidate?.uci,
+    effectiveContinuationCandidate?.uci,
     pendingOpponentRequest,
     selectedLineCompleteConfirmed,
     lichessEndConfirmed,
@@ -1263,6 +1298,30 @@ export default function App(){
   const branchCompleteShouldCancelPending=branchCompleteContract.shouldCancelPendingOpponent||(
     branchCompleteEligibleNow&&Boolean(pendingOpponentRequest)
   );
+  const continuationFlowContract=useMemo(()=>resolveContinuationFlowContract({
+    trainingMode,
+    branchComplete:branchCompleteEligibleNow,
+    isUserTurn,
+    hasTarget:Boolean(effectiveContinuationCandidate?.uci&&trainingMode==="continuation"&&userExplicitlyEnteredContinuation),
+    selectedCandidateUci:effectiveContinuationCandidate?.uci??null,
+    selectedCandidateSan:effectiveContinuationCandidate?.san??null,
+    selectedCandidateSource:effectiveContinuationCandidate?.source??null,
+    pendingOpponentRequestExists:Boolean(pendingOpponentRequest),
+    candidateAnalysisStatus:continuationAnalysisStatus,
+    continuationRuntimeStatus:continuationAnalysisStatus,
+    terminalReason:game.isGameOver()?"terminal_position":null,
+  }),[
+    trainingMode,
+    branchCompleteEligibleNow,
+    isUserTurn,
+    effectiveContinuationCandidate?.uci,
+    effectiveContinuationCandidate?.san,
+    effectiveContinuationCandidate?.source,
+    pendingOpponentRequest,
+    continuationAnalysisStatus,
+    game,
+    userExplicitlyEnteredContinuation,
+  ]);
   const currentInstructionFrame=useMemo(()=>{
     if(game.isGameOver()||game.moves().length===0){
       return buildCurrentInstructionFrame({
@@ -1291,6 +1350,46 @@ export default function App(){
           continueFromHereAvailable: true,
         },
       });
+    }
+
+    if(trainingMode==="continuation"&&userExplicitlyEnteredContinuation){
+      if(continuationFlowContract.state==="continuation_terminal"){
+        return buildCurrentInstructionFrame({
+          kind: "terminal",
+          fenBefore: fen,
+          ply: game.history().length,
+          sideToMove: game.turn() === "w" ? "white" : "black",
+          target: null,
+          mode: "terminal",
+          source: "terminal",
+        });
+      }
+      if(continuationFlowContract.state==="continuation_opponent_replying"){
+        return buildCurrentInstructionFrame({
+          kind: "opponent_replying",
+          fenBefore: fen,
+          ply: game.history().length,
+          sideToMove: game.turn() === "w" ? "white" : "black",
+          target: null,
+          mode: "blocked",
+          source: "none",
+        });
+      }
+      if(
+        continuationFlowContract.state==="continuation_analyzing"||
+        continuationFlowContract.state==="continuation_error"||
+        continuationFlowContract.state==="continuation_user_move_pending"
+      ){
+        return buildCurrentInstructionFrame({
+          kind: "transitioning",
+          fenBefore: fen,
+          ply: game.history().length,
+          sideToMove: game.turn() === "w" ? "white" : "black",
+          target: null,
+          mode: "continuation",
+          source: "continuation_policy",
+        });
+      }
     }
 
     // Step 4/5 exact priority (transcript as source of truth):
@@ -1376,16 +1475,16 @@ export default function App(){
         kind:expectedMoveResolution.source==="opening_branch"?"lichess_branch_move":expectedMoveResolution.source==="opening_family_plan"?"adaptive_branch_move":"guided_move",
         trust:"book_verified",
       }:null,
-      continuationCandidate:trainingMode==="continuation"&&isUserTurn&&userExplicitlyEnteredContinuation&&!forceContinuationPause&&continuationPolicyCandidate?.uci&&continuationPolicyCandidate.source!=="no_reliable_continuation"?{
+      continuationCandidate:trainingMode==="continuation"&&isUserTurn&&userExplicitlyEnteredContinuation&&!forceContinuationPause&&effectiveContinuationCandidate?.uci&&effectiveContinuationCandidate.source!=="no_reliable_continuation"?{
         uci: useLocked && lockedForThisFrame
           ? lockedForThisFrame.uci
-          : continuationPolicyCandidate.uci,
+          : effectiveContinuationCandidate.uci,
         san: useLocked && lockedForThisFrame
           ? lockedForThisFrame.san
-          : continuationPolicyCandidate.san,
+          : effectiveContinuationCandidate.san,
         source: useLocked && lockedForThisFrame
           ? (lockedForThisFrame.source ?? "locked_continuation_candidate")
-          : continuationPolicyCandidate.source,
+          : effectiveContinuationCandidate.source,
         trust:"continuation_verified",
       }:null,
       preferredTargetKind:trainingMode==="continuation"?"continuation_candidate":"guided_move",
@@ -1401,6 +1500,7 @@ export default function App(){
     game,
     engineLines,
     continuationPolicyCandidate,
+    effectiveContinuationCandidate,
     isInstructionLoading,
     hardEndOfBookGate,
     userExplicitlyEnteredContinuation,
@@ -1411,6 +1511,7 @@ export default function App(){
     continuationPauseDecision.pauseReason,
     branchCompleteEligibleNow,
     branchCompleteReasonNow,
+    continuationFlowContract.state,
   ]);
   const instructionTarget=currentInstructionFrame.target;
 
@@ -2926,12 +3027,33 @@ export default function App(){
   useEffect(()=>{telemetryEnabledRef.current=telemetryEnabled},[telemetryEnabled]);
   useEffect(()=>{telemetryEventsRef.current=telemetryEvents},[telemetryEvents]);
   useEffect(()=>{branchCompleteLatchRef.current=branchCompleteLatch},[branchCompleteLatch]);
+  useEffect(()=>{continuationCandidateLockRef.current=continuationCandidateLock},[continuationCandidateLock]);
   useEffect(()=>{lastCoachRecordsRef.current=lastCoachRecords},[lastCoachRecords]);
   useEffect(()=>{coachTimelineRef.current=coachTimeline},[coachTimeline]);
   useEffect(()=>{
     pendingOpponentRequestRef.current=pendingOpponentRequest;
     if(!pendingOpponentRequest)clearOpponentReplyTimeout();
   },[pendingOpponentRequest]);
+  useEffect(()=>{
+    if(trainingMode!=="continuation"||!userExplicitlyEnteredContinuation||!isUserTurn)return;
+    if(!continuationPolicyCandidate?.uci)return;
+    const fen4=normalizeFen(fen);
+    const existing=continuationCandidateLockRef.current;
+    if(existing&&existing.continuationCandidateLockFen4===fen4&&existing.continuationCandidateLockUci===continuationPolicyCandidate.uci){
+      return;
+    }
+    const requestId=Math.max(1,continuationCandidateRequestSeqRef.current);
+    const lock={
+      continuationCandidateLockId:++continuationCandidateLockSeqRef.current,
+      continuationCandidateLockFen4:fen4,
+      continuationCandidateLockRequestId:requestId,
+      continuationCandidateLockUci:continuationPolicyCandidate.uci,
+      continuationCandidateLockSan:continuationPolicyCandidate.san??continuationPolicyCandidate.uci,
+      continuationCandidateLockSource:String(continuationPolicyCandidate.source??"continuation_policy"),
+      continuationCandidateLockReason:String(continuationPolicyCandidate.reason??"candidate_locked"),
+    };
+    setContinuationCandidateLock(lock);
+  },[trainingMode,userExplicitlyEnteredContinuation,isUserTurn,continuationPolicyCandidate?.uci,continuationPolicyCandidate?.san,continuationPolicyCandidate?.source,continuationPolicyCandidate?.reason,fen]);
   useEffect(()=>{
     if(!branchCompleteContract.branchCompleteEligible)return;
     if(branchCompleteLatchRef.current.active)return;
@@ -2979,7 +3101,19 @@ export default function App(){
     if(presentationFrame.visual.shouldRender&&trainerPhase==="ready_for_user")setOverlayClearedOnPhaseChange(false);
   },[presentationFrame.visual.shouldRender,trainerPhase]);
   useEffect(()=>setBrain(p=>({...p,ratingLabel:rating.label,ratingPool:rating.target})),[rating.label,rating.target]);
-  useEffect(()=>{fenRef.current=fen;setBrainResponse(null);setEnginePreview(null);setVisualModelOutput(null);setVisualModelError(null);setVisualDebugSnapshot(prev=>({...prev,responseSummary:null,responseDebug:null,error:null,durationMs:null,updatedAt:Date.now()}));setOverlayClearedOnPhaseChange(true)},[fen]);
+  useEffect(()=>{
+    fenRef.current=fen;
+    const fen4=normalizeFen(fen);
+    if(continuationCandidateLockRef.current&&continuationCandidateLockRef.current.continuationCandidateLockFen4!==fen4){
+      setContinuationCandidateLock(null);
+    }
+    setBrainResponse(null);
+    setEnginePreview(null);
+    setVisualModelOutput(null);
+    setVisualModelError(null);
+    setVisualDebugSnapshot(prev=>({...prev,responseSummary:null,responseDebug:null,error:null,durationMs:null,updatedAt:Date.now()}));
+    setOverlayClearedOnPhaseChange(true);
+  },[fen]);
   useEffect(()=>{
     if(activeTab!=="train")return;
     if(trainingMode!=="continuation"){
@@ -3002,6 +3136,10 @@ export default function App(){
       setContinuationAnalysisStatus("idle");
       return;
     }
+    if(continuationLockCandidate?.uci){
+      setContinuationAnalysisStatus("ready");
+      return;
+    }
     if(continuationPolicyCandidate?.uci&&continuationPolicyCandidate.source!=="no_reliable_continuation"){
       clearRuntimeCriticalIssue("continuation_no_reliable_candidate");
       setContinuationAnalysisStatus("ready");
@@ -3022,6 +3160,8 @@ export default function App(){
       return;
     }
 
+    continuationCandidateRequestSeqRef.current+=1;
+    const candidateRequestId=continuationCandidateRequestSeqRef.current;
     setContinuationAnalysisStatus("analyzing");
 
     if(continuationAnalysisDebounceRef.current!==null){
@@ -3038,6 +3178,14 @@ export default function App(){
         if(controller.signal.aborted)return;
         if(requestSeq!==continuationAnalysisSeqRef.current)return;
         if(normalizeFen(fenRef.current)!==normalized)return;
+        const existingLock=continuationCandidateLockRef.current;
+        if(
+          existingLock&&
+          existingLock.continuationCandidateLockFen4===normalized&&
+          existingLock.continuationCandidateLockRequestId>candidateRequestId
+        ){
+          return;
+        }
         if(!result?.pvs?.length){
           setContinuationAnalysisStatus("error");
           return;
@@ -3057,7 +3205,7 @@ export default function App(){
         continuationAnalysisDebounceRef.current=null;
       }
     };
-  },[activeTab,trainingMode,isUserTurn,trainerPhase,fen,userColor,rating.skill,enginePreview,game,continuationPolicyCandidate,forceContinuationPause,userExplicitlyEnteredContinuation]);
+  },[activeTab,trainingMode,isUserTurn,trainerPhase,fen,userColor,rating.skill,enginePreview,game,continuationPolicyCandidate,continuationLockCandidate?.uci,forceContinuationPause,userExplicitlyEnteredContinuation]);
   useEffect(()=>{
     if(activeTab!=="train"||trainingMode!=="continuation"||trainerPhase!=="ready_for_user"||!isUserTurn)return;
     if(game.isGameOver()||game.moves().length===0)return;
@@ -3405,6 +3553,10 @@ export default function App(){
       staleSelectedCandidateCleared:false,
     };
     lockedContinuationRef.current={};
+    continuationCandidateRequestSeqRef.current=0;
+    continuationCandidateLockSeqRef.current=0;
+    continuationCandidateLockRef.current=null;
+    setContinuationCandidateLock(null);
     continuationEngineCacheRef.current={};
   }
   function selectRepertoire(id:string){const startFen=new Chess().fen();setSelectedRepertoireId(id);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
@@ -3715,6 +3867,8 @@ export default function App(){
       scheduleOpponentReply({mode:"continuation",delayMs:250,baseFen:current.fen()});
       return;
     }
+    continuationCandidateRequestSeqRef.current+=1;
+    setContinuationCandidateLock(null);
     setContinuationAnalysisStatus("analyzing");
     setTrainerPhase("ready_for_user");
     setFeedback(`Continuation mode active. Blundr is selecting a continuation at ${rating.target}.`);
@@ -4297,6 +4451,16 @@ export default function App(){
     continuationAnalysisStatus,
     continuationRuntimeStatus:continuationRuntimeState.status,
     continuationTerminalReason:continuationRuntimeState.reason??null,
+    continuationFlowState:continuationFlowContract.state,
+    continuationFlowReason:continuationFlowContract.reason,
+    continuationFlowCriticalIssue:continuationFlowContract.criticalIssueIfInvalid,
+    continuationCandidateLockId:continuationCandidateLock?.continuationCandidateLockId??null,
+    continuationCandidateLockFen4:continuationCandidateLock?.continuationCandidateLockFen4??null,
+    continuationCandidateLockRequestId:continuationCandidateLock?.continuationCandidateLockRequestId??null,
+    continuationCandidateLockUci:continuationCandidateLock?.continuationCandidateLockUci??null,
+    continuationCandidateLockSan:continuationCandidateLock?.continuationCandidateLockSan??null,
+    continuationCandidateLockSource:continuationCandidateLock?.continuationCandidateLockSource??null,
+    continuationCandidateLockReason:continuationCandidateLock?.continuationCandidateLockReason??null,
     continuationPauseRequired:forceContinuationPause,
     continuationPauseClicked,
     continuationPauseReason:continuationPauseDecision.pauseReason,

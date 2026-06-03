@@ -151,8 +151,25 @@ export function testVisibleTeachingSurface(): void {
   const terminal = buildSurfacePack({ frame: terminalFrame, requestedMode: "assisted", showMoreRevealed: false });
   assert.equal(terminal.surface.mode, "terminal");
   assert.equal(terminal.surface.targetUci, null);
+  assert.equal(terminal.surface.actions.some((action) => action.kind === "restart_line"), true);
   assert.equal(terminal.surface.actions.some((action) => action.kind === "reveal_target"), false);
   assert.equal(terminal.surface.visuals.some((visual) => visual.type === "move_arrow"), false);
+
+  const continuationAnalyzingFrame = buildCurrentInstructionFrame({
+    kind: "transitioning",
+    fenBefore: bc4Frame.fenBefore,
+    ply: 2,
+    sideToMove: "white",
+    target: null,
+    mode: "continuation",
+    source: "continuation_policy",
+  });
+  const continuationAnalyzing = buildSurfacePack({ frame: continuationAnalyzingFrame, requestedMode: "assisted", showMoreRevealed: false });
+  assert.equal(continuationAnalyzing.surface.mode, "continuation_analyzing");
+  assert.equal(continuationAnalyzing.surface.copy.title, "Finding a continuation");
+  assert.equal(continuationAnalyzing.surface.copy.body.includes("Opponent is replying"), false);
+  assert.equal(continuationAnalyzing.surface.copy.title.includes("No Target"), false);
+  assert.equal(continuationAnalyzing.surface.actions.length, 0);
 
   const graph = assistedBc4.graph;
   const blockedCompiled = {

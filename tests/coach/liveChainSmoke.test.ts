@@ -180,6 +180,23 @@ export function testLiveChainSmoke(): void {
   assert.equal(opponent.surface.actions.some((action) => action.kind === "continue_from_here"), false, "opponent_pending_does_not_render_continue_from_here_yet");
   assert.equal(opponent.surface.actions.some((action) => action.kind === "reveal_target"), false);
 
+  // 6b) Continuation analyzing must not downgrade to opponent replying or No Target
+  const continuationAnalyzingFrame = buildCurrentInstructionFrame({
+    kind: "transitioning",
+    fenBefore: bc4Frame.fenBefore,
+    ply: 1,
+    sideToMove: "white",
+    target: null,
+    mode: "continuation",
+    source: "continuation_policy",
+  });
+  const continuationAnalyzing = fullChain({ frame: continuationAnalyzingFrame });
+  assert.equal(continuationAnalyzing.surface.mode, "continuation_analyzing");
+  assert.equal(continuationAnalyzing.surface.copy.title, "Finding a continuation");
+  assert.equal(continuationAnalyzing.surface.copy.body.includes("Opponent is replying"), false);
+  assert.equal(continuationAnalyzing.surface.copy.title.includes("No Target"), false);
+  assert.equal(continuationAnalyzing.surface.actions.length, 0);
+
   // 7) Mismatch trap
   const mismatchCompiled = {
     ...bc4.compiled,

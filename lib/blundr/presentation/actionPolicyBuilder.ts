@@ -66,6 +66,21 @@ export function buildSurfaceActions(input: {
     return [];
   }
 
+  if (mode === "terminal") {
+    return [
+      action({
+        kind: "restart_line",
+        label: "Restart line",
+        targetUci: null,
+        targetSan: null,
+      }),
+    ];
+  }
+
+  if (mode === "continuation_analyzing") {
+    return [];
+  }
+
   if (mode === "plain_after_show_more") {
     const actions: SurfaceAction[] = [
       action({
