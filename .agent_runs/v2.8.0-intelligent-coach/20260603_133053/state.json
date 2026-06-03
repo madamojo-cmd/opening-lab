@@ -1,0 +1,19 @@
+{
+  "release": "v2.8.0-intelligent-coach",
+  "branch": "v2.8.0-intelligent-coach-live",
+  "baseSha": "27b67e5718062d537ff89b1cd15c608d8316b8ef",
+  "currentSha": "27b67e5718062d537ff89b1cd15c608d8316b8ef",
+  "phase": "04_current_instruction_frame",
+  "gates": {
+    "package1_authority_audit": "pass_with_unresolved_risks",
+    "package2_core_contracts": "pass",
+    "package3_ground_truth_test_harness": "pass",
+    "package4_current_instruction_frame": "pass",
+    "productCodeChanged": false,
+    "runtimeAuthorityHardened": true,
+    "continuationAuthorityHardened": true,
+    "testsUpdated": true
+  },
+  "blocked": false,
+  "blockReason": null
+}

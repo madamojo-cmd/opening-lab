@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { CompiledCoachFrame } from "../../lib/blundr/coachCompiler/types";
 import type { VisibleTeachingSurface } from "../../lib/blundr/presentation/types";
 import type { CurrentInstructionFrame } from "../../lib/blundr/runtime/currentInstructionFrame";
+import { createTargetMismatchIssue } from "../../lib/blundr/runtime/instructionFrameLock";
 
 function assertTargetAlignment(input: {
   instructionTargetUci: string | null;
@@ -147,6 +148,14 @@ export function testTargetInvariant(): void {
       showMoreTargetUci: "g1f3",
     });
   });
+
+  const mismatch = createTargetMismatchIssue({
+    expected: "f1c4",
+    actual: "g1f3",
+    surface: "showMore",
+  });
+  assert.equal(mismatch.code, "target_source_ambiguous");
+  assert.equal(mismatch.severity, "critical");
 }
 
 testTargetInvariant();

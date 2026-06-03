@@ -1,4 +1,5 @@
 import { Chess } from "chess.js";
+import type { CurrentInstructionDebugIssue } from "./currentInstructionTarget";
 import type { CurrentInstructionFrame } from "./currentInstructionFrame";
 
 export type ContinuationRuntimeStatus =
@@ -29,6 +30,25 @@ export interface ContinuationRuntimeAuthorityState {
     | "terminal"
     | "none";
   targetLocked: boolean;
+}
+
+export type ContinuationRuntimePhase =
+  | "not_applicable"
+  | "branch_complete_waiting_for_continue"
+  | "candidate_locked"
+  | "terminal"
+  | "blocked";
+
+export interface ContinuationRuntimeStateV2 {
+  phase: ContinuationRuntimePhase;
+  continueFromHereAvailable: boolean;
+  selectedContinuationCandidate: {
+    uci: string;
+    san?: string;
+    locked: boolean;
+    source: "continuation_policy";
+  } | null;
+  debugIssues: CurrentInstructionDebugIssue[];
 }
 
 function isCheckmate(game: Chess): boolean {
@@ -119,5 +139,91 @@ export function buildContinuationRuntimeAuthorityState(frame: CurrentInstruction
         ? frame.source
         : "none",
     targetLocked: Boolean(frame.target && frame.target.provenance?.confidence === "locked"),
+  };
+}
+
+export function buildContinuationRuntimeState(input: {
+  branchComplete: boolean;
+  continueClicked: boolean;
+  candidateUci?: string | null;
+  candidateSan?: string;
+  candidateSource?: string;
+}): ContinuationRuntimeStateV2 {
+  const issues: CurrentInstructionDebugIssue[] = [];
+  const hasCandidate = Boolean(input.candidateUci);
+
+  if (!input.branchComplete) {
+    return {
+      phase: "not_applicable",
+      continueFromHereAvailable: false,
+      selectedContinuationCandidate: null,
+      debugIssues: issues,
+    };
+  }
+
+  if (input.branchComplete && !input.continueClicked) {
+    return {
+      phase: "branch_complete_waiting_for_continue",
+      continueFromHereAvailable: true,
+      selectedContinuationCandidate: null,
+      debugIssues: issues,
+    };
+  }
+
+  if (input.continueClicked && !hasCandidate) {
+    issues.push({
+      code: "missing_instruction_target",
+      severity: "critical",
+      message: "Continue clicked but no continuation candidate available.",
+    });
+    return {
+      phase: "blocked",
+      continueFromHereAvailable: true,
+      selectedContinuationCandidate: null,
+      debugIssues: issues,
+    };
+  }
+
+  const uci = String(input.candidateUci ?? "").toLowerCase();
+  if (!/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(uci)) {
+    issues.push({
+      code: "illegal_instruction_target",
+      severity: "critical",
+      message: "Continuation candidate UCI is structurally invalid.",
+      details: { candidateUci: input.candidateUci },
+    });
+    return {
+      phase: "blocked",
+      continueFromHereAvailable: true,
+      selectedContinuationCandidate: null,
+      debugIssues: issues,
+    };
+  }
+
+  if (input.candidateSource && input.candidateSource !== "continuation_policy") {
+    issues.push({
+      code: "target_source_ambiguous",
+      severity: "critical",
+      message: "Only continuation_policy may lock continuation candidate target.",
+      details: { candidateSource: input.candidateSource },
+    });
+    return {
+      phase: "blocked",
+      continueFromHereAvailable: true,
+      selectedContinuationCandidate: null,
+      debugIssues: issues,
+    };
+  }
+
+  return {
+    phase: "candidate_locked",
+    continueFromHereAvailable: true,
+    selectedContinuationCandidate: {
+      uci,
+      san: input.candidateSan,
+      locked: true,
+      source: "continuation_policy",
+    },
+    debugIssues: issues,
   };
 }

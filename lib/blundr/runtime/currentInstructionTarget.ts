@@ -130,11 +130,31 @@ export function normalizeBlundrColorFromChessColor(color: ChessColor | BlundrCol
   return "black";
 }
 
+export function normalizeBlundrColor(color: BlundrColor | ChessColor): BlundrColor {
+  return normalizeBlundrColorFromChessColor(color);
+}
+
 export function normalizeChessColor(color: BlundrColor | ChessColor): ChessColor {
   return color === "white" ? "w" : color === "black" ? "b" : color;
 }
 
-export function getCurrentInstructionTargetSignature(target: CurrentInstructionTarget | null | undefined): string {
-  if (!target) return "none";
+export function splitUciMove(uci: string): { from: BlundrSquare; to: BlundrSquare; promotion?: string | null } {
+  const normalized = String(uci || "").trim().toLowerCase();
+  if (!/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(normalized)) {
+    throw new Error(`Invalid UCI move: ${uci}`);
+  }
+  return {
+    from: normalized.slice(0, 2),
+    to: normalized.slice(2, 4),
+    promotion: normalized.length > 4 ? normalized.slice(4, 5) : null,
+  };
+}
+
+export function getTargetSignature(target: CurrentInstructionTarget | null): string | null {
+  if (!target) return null;
   return `${target.uci}|${target.pieceType}|${target.from}->${target.to}`;
+}
+
+export function getCurrentInstructionTargetSignature(target: CurrentInstructionTarget | null | undefined): string {
+  return getTargetSignature(target ?? null) ?? "none";
 }

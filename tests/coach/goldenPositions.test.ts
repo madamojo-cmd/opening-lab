@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { buildCurrentInstructionFrame } from "../../lib/blundr/runtime/currentInstructionFrame";
+import { lockInstructionTarget } from "../../lib/blundr/runtime/instructionFrameLock";
 
 const NULL_TARGET_KINDS = new Set([
   "opponent_replying",
@@ -23,6 +25,14 @@ function loadFixtures(): any {
 
 function isValidUci(uci: string): boolean {
   return /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(uci);
+}
+
+function normalizePieceType(piece: string): "pawn" | "knight" | "bishop" | "rook" | "queen" | "king" {
+  const lower = String(piece).toLowerCase();
+  if (lower === "pawn" || lower === "knight" || lower === "bishop" || lower === "rook" || lower === "queen" || lower === "king") {
+    return lower;
+  }
+  throw new Error(`Unsupported piece type in golden fixture: ${piece}`);
 }
 
 export function testGoldenPositions(): void {
@@ -57,6 +67,17 @@ export function testGoldenPositions(): void {
 
     if (NULL_TARGET_KINDS.has(fixture.frameKind)) {
       assert.equal(hasTarget, false, `${fixture.id} null-target frame should not require targetUci`);
+
+      const nullFrame = buildCurrentInstructionFrame({
+        kind: fixture.frameKind,
+        fenBefore: fixture.fen,
+        ply: 0,
+        sideToMove: fixture.fen.split(" ")[1] === "b" ? "black" : "white",
+        target: null,
+        mode: fixture.frameKind === "terminal" ? "terminal" : "blocked",
+        source: fixture.frameKind === "terminal" ? "terminal" : "none",
+      });
+      assert.equal(nullFrame.target, null, `${fixture.id} null-target fixture must build with null target`);
     }
 
     if (hasTarget) {
@@ -70,6 +91,31 @@ export function testGoldenPositions(): void {
       if (fixture.expectedSan) {
         assert.ok(lowerTerms.includes(String(fixture.expectedSan).toLowerCase()), `${fixture.id} plainMustNotInclude missing SAN`);
       }
+
+      const guidedFrame = buildCurrentInstructionFrame({
+        kind: fixture.frameKind,
+        fenBefore: fixture.fen,
+        ply: 0,
+        sideToMove: fixture.fen.split(" ")[1] === "b" ? "black" : "white",
+        target: lockInstructionTarget({
+          uci: fixture.targetUci,
+          san: fixture.expectedSan,
+          pieceType: normalizePieceType(fixture.expectedPiece),
+          color: fixture.fen.split(" ")[1] === "b" ? "black" : "white",
+          source: fixture.frameKind === "continuation_candidate" ? "continuation_policy" : "opening_tree",
+          reason: `golden:${fixture.id}`,
+        }),
+        mode: fixture.frameKind === "continuation_candidate" ? "continuation" : "guided",
+        source: fixture.frameKind === "continuation_candidate" ? "continuation_policy" : "opening_tree",
+        continuation:
+          fixture.frameKind === "continuation_candidate"
+            ? {
+                candidateLocked: true,
+                candidateUci: fixture.targetUci,
+              }
+            : undefined,
+      });
+      assert.equal(guidedFrame.target?.uci, fixture.targetUci, `${fixture.id} guided fixture should be representable as frame input`);
     }
   }
 }
