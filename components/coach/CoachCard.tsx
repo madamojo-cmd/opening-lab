@@ -16,9 +16,14 @@ type Props = {
     enabled: boolean;
     visible: boolean;
   }>;
+  topRightBadge?: {
+    label: string;
+    severity: "positive" | "neutral" | "warning" | "danger" | "unknown";
+    ariaLabel: string;
+  } | null;
 };
 
-export function CoachCard({ decision, onAction, replayEnabled = true, surfaceActions }: Props): ReactElement | null {
+export function CoachCard({ decision, onAction, replayEnabled = true, surfaceActions, topRightBadge = null }: Props): ReactElement | null {
   const [showWhy, setShowWhy] = useState(false);
   if (!decision.shouldShowCoachCard) return null;
   const visibleActions = filterToVisibleCoachActions(decision.buttons as string[]);
@@ -37,7 +42,28 @@ export function CoachCard({ decision, onAction, replayEnabled = true, surfaceAct
 
   return (
     <div className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm">
-      <div className="text-xs font-black uppercase tracking-wide text-green-700">Blundr Coach</div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="text-xs font-black uppercase tracking-wide text-green-700">Blundr Coach</div>
+        {topRightBadge ? (
+          <div
+            className={
+              topRightBadge.severity === "positive"
+                ? "rounded-full bg-green-100 px-2 py-1 text-[11px] font-black text-green-800"
+                : topRightBadge.severity === "neutral"
+                  ? "rounded-full bg-stone-100 px-2 py-1 text-[11px] font-black text-stone-700"
+                  : topRightBadge.severity === "warning"
+                    ? "rounded-full bg-amber-100 px-2 py-1 text-[11px] font-black text-amber-800"
+                    : topRightBadge.severity === "danger"
+                      ? "rounded-full bg-red-100 px-2 py-1 text-[11px] font-black text-red-800"
+                      : "rounded-full bg-stone-100 px-2 py-1 text-[11px] font-black text-stone-700"
+            }
+            aria-label={topRightBadge.ariaLabel}
+            title={topRightBadge.ariaLabel}
+          >
+            {topRightBadge.label}
+          </div>
+        ) : null}
+      </div>
       <h3 className="mt-1 text-base font-black text-stone-900">{decision.title ?? "Position context"}</h3>
       <p className="mt-2 text-sm leading-6 text-stone-700">{decision.body ?? decision.hint ?? decision.answer ?? ""}</p>
       {shouldUseSurfaceActions && Array.isArray((decision as any).bullets) && (decision as any).bullets.length > 0 ? (

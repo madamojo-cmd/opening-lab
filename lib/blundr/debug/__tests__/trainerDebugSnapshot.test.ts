@@ -861,5 +861,83 @@ export function testTrainerDebugSnapshot(): void {
   assert.equal(unresolvedCompletionStuck.health.criticalIssues.includes("book_complete_without_policy"), true, "no_stuck_ready_for_user_opponent_pending_after_line_end");
   assert.equal(unresolvedCompletionStuck.health.criticalIssues.includes("exhausted_line_without_branch_complete_surface"), true, "exhausted_line_without_branch_complete_is_critical");
 
+  const ungradedBadgeLeak = buildTrainerDebugSnapshot({
+    debugEnabled: true,
+    trainerFrameId: 209,
+    trainerPhase: "ready_for_user",
+    trainerView: "assisted",
+    trainingMode: "continuation",
+    isUserTurn: false,
+    fen: "8/8/8/8/8/8/8/4K3 b - - 0 1",
+    badgeVisible: true,
+    renderedBadgeLabel: "Ungraded",
+    lastContinuationUserMoveRating: {
+      ratingLabel: "Ungraded",
+      providerStatus: "ready",
+      stale: false,
+      normalizedForMoverColor: true,
+    },
+    presentationFrame: { visual: { shouldRender: false, source: "none" }, coach: { shouldRender: true, owner: "intent_first_coach" }, legacy: {} },
+    eventLog: [],
+  } as any);
+  assert.equal(ungradedBadgeLeak.health.criticalIssues.includes("visible_ungraded_badge_rendered_without_debug_flag"), true);
+
+  const ratingFallbackWarning = buildTrainerDebugSnapshot({
+    debugEnabled: true,
+    trainerFrameId: 210,
+    trainerPhase: "ready_for_user",
+    trainerView: "assisted",
+    trainingMode: "continuation",
+    isUserTurn: false,
+    fen: "8/8/8/8/8/8/8/4K3 b - - 0 1",
+    badgeVisible: false,
+    renderedBadgeLabel: null,
+    lastContinuationUserMoveRating: {
+      ratingLabel: "Good",
+      providerStatus: "ready",
+      ratingMethod: "direct_after_move_eval",
+      userMoveFoundInTopMoves: false,
+      depth: 7,
+      stale: false,
+      normalizedForMoverColor: true,
+    },
+    presentationFrame: { visual: { shouldRender: false, source: "none" }, coach: { shouldRender: true, owner: "intent_first_coach" }, legacy: {} },
+    eventLog: [],
+  } as any);
+  assert.equal(ratingFallbackWarning.health.warnings.includes("user_move_rating_direct_eval_fallback_used"), true);
+  assert.equal(ratingFallbackWarning.health.warnings.includes("user_move_not_in_multipv_top10"), true);
+  assert.equal(ratingFallbackWarning.health.warnings.includes("user_move_rating_low_depth"), true);
+
+  const prematureBranchComplete = buildTrainerDebugSnapshot({
+    debugEnabled: true,
+    trainerFrameId: 211,
+    trainerPhase: "branch_complete",
+    trainerView: "assisted",
+    trainingMode: "restricted",
+    isUserTurn: false,
+    selectedLineId: "italian-white",
+    moveHistory: ["e4"],
+    selectedLineExhausted: false,
+    explicitCuratedTerminalNode: false,
+    selectedLineExhaustionReason: null,
+    knownFinalFenMatched: false,
+    exactNodeHasChildren: true,
+    hasNextOpponentMove: true,
+    continueFromHereAvailable: true,
+    branchTransitionSurfaceRendered: true,
+    fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -",
+    visibleTeachingSurface: {
+      owner: "v28_visible_surface",
+      mode: "branch_complete",
+      coach: { shouldRender: true, title: "Line complete", body: "You finished this training line." },
+      actions: [{ kind: "continue_from_here" }, { kind: "restart_line" }],
+      visual: { lines: [] },
+    },
+    presentationFrame: { visual: { shouldRender: false, source: "none" }, coach: { shouldRender: false, owner: "branch_transition_surface", intent: "silent" }, legacy: {} },
+    eventLog: [],
+  } as any);
+  assert.equal(prematureBranchComplete.health.criticalIssues.includes("premature_branch_complete_rendered"), true);
+  assert.equal(prematureBranchComplete.health.criticalIssues.includes("branch_complete_rendered_before_minimum_line_progress"), true);
+
   // 1-6,17 Normal UI forbids legacy (enforced by {blundrDebugEnabled && ...} at the JSX sites identified in Step 3/4 grep: app/page.tsx:3392 (LiveBrain+panels), 3405 (rating grid), 3407 (Active Board), 3417 (view buttons), SettingsPanel Active displays (no Attack/Defense/Plan). Browser on port 3041 without ?debug=1 is the acceptance.
 }

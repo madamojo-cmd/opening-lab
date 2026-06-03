@@ -29,6 +29,10 @@ export const browserContract = {
     continuationAnalyzingNotOpponentReplying: "After Continue on user turn, continuation analyzing must not render Opponent is replying.",
     continuationNoTargetCardSuppressed: "No Target must not appear in normal continuation analyzing/candidate flow.",
     continuationTerminalHasRestart: "Continuation terminal/checkmate must expose restart/train action on terminal surface.",
+    continuationMoveBadgeOnlyAfterUserMove: "Continuation move rating badge renders only after user continuation move feedback.",
+    restrictedModeHasNoMoveRatingBadge: "Restricted opening coach mode must not render continuation move rating badge.",
+    plainPreShowMoreHasNoBadgeLeak: "Plain pre-show-more must not leak continuation move rating badge or next-move rating hints.",
+    ungradedBadgeHidden: "Ungraded continuation move rating is debug-only and must not render as a normal visible badge.",
   },
 };
 

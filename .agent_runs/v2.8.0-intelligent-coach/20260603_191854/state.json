@@ -1,0 +1,27 @@
+{
+  "package": "13",
+  "agent": "Agent 13",
+  "status": "blocked",
+  "branch": "v2.8.0-intelligent-coach-live",
+  "objective": "Stockfish Validation + Continuation Move Rating Badge",
+  "completed": [
+    "Added Stockfish evaluation and continuation validation contracts",
+    "Implemented continuation suggestion top-1 MVP plus top-10 validation gate",
+    "Implemented continuation last-user-move strength rating with Genius evidence guard",
+    "Added continuation-only top-right CoachCard move rating badge",
+    "Extended trainer debug snapshot for stockfish/suggestion/rating diagnostics",
+    "Added Package 13 regression tests for stockfish validation gate and move strength badge",
+    "Passed required Package 13 automated build and test commands"
+  ],
+  "blocked_on": [
+    "Manual interactive QA checklist and required debug export bundle (Task L) not fully captured in this run"
+  ],
+  "artifacts": {
+    "docs_report": "docs/BLUNDR_v2.8.0 Foundation Stabilization Gate_AGENT_13_STOCKFISH_VALIDATION_AND_MOVE_RATING_REPORT.md",
+    "run_report": ".agent_runs/v2.8.0-intelligent-coach/20260603_191854/13_stockfish_validation_and_move_rating.md",
+    "phase_report": ".agent_runs/v2.8.0-intelligent-coach/20260603_191854/phase_reports/13_stockfish_validation_and_move_rating.md",
+    "command_log": ".agent_runs/v2.8.0-intelligent-coach/20260603_191854/command_log.md",
+    "risk_register": ".agent_runs/v2.8.0-intelligent-coach/20260603_191854/risk_register.md"
+  },
+  "timestamp_utc": "2026-06-03T19:30:00Z"
+}

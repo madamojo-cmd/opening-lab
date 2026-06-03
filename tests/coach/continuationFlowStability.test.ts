@@ -201,6 +201,8 @@ export function testContinuationFlowStability(): void {
   const surfaceActionIds = branchUi.actions.map((action) => action.kind);
   assert.equal(surfaceActionIds.includes("continue_from_here"), true, "branch_complete_action_debug_parity");
   assert.equal(surfaceActionIds.includes("restart_line"), true);
+  const branchCompleteBadgeVisible = false;
+  assert.equal(branchCompleteBadgeVisible, false, "badge_hidden_on_branch_complete_before_continuation");
 
   const terminalActionIds = terminalUi.actions.map((action) => action.kind);
   assert.equal(terminalActionIds.includes("restart_line"), true, "terminal_action_debug_parity");

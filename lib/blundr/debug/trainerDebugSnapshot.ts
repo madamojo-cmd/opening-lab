@@ -245,6 +245,12 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   if (input.trainingMode === "continuation" && input.selectedCandidateUci && input.coachDecision?.exactMoveAllowed && continuationLinesPassedToBoard === 0) criticalIssues.push("continuation_candidate_not_rendered");
   const continuationRuntimeStatus = input.continuationRuntimeStatus ?? input.continuationAnalysisStatus ?? null;
   const continuationSurfaceMode = String(input.visibleTeachingSurface?.mode ?? "");
+  const stockfishProviderStatus = String(input.stockfishProviderStatus ?? "unknown");
+  const stockfishSuggestedTop10 = Boolean(input.stockfishSuggestedTop10);
+  const suggestionAccepted = Boolean(input.suggestionAccepted);
+  const badgeVisible = Boolean(input.badgeVisible);
+  const renderedBadgeLabel = String(input.renderedBadgeLabel ?? "");
+  const lastContinuationUserMoveRating = input.lastContinuationUserMoveRating ?? null;
   const continuationNullTargetStatusFrame =
     String(input.trainingMode) === "continuation" &&
     !instructionTargetUci &&
@@ -266,6 +272,45 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   if (continuationTerminalDetected && continuationRuntimeStatus !== "terminal") criticalIssues.push("continuation_terminal_not_classified");
   if (continuationTerminalDetected && presentationCoach.owner !== "intent_first_coach" && presentationCoach.owner !== "continuation_terminal_surface" && presentationCoach.shouldRender !== true) criticalIssues.push("terminal_position_without_terminal_surface");
   if (input.trainingMode === "continuation" && input.userExplicitlyEnteredContinuation && (continuationRuntimeStatus === "idle" || input.continuationAnalysisStatus === "idle") && !continuationTerminalDetected) criticalIssues.push("continuation_idle_after_continue");
+  if (input.trainingMode === "continuation" && input.isUserTurn === true && input.trainerPhase === "ready_for_user" && continuationRuntimeStatus === "analyzing" && continuationSurfaceMode === "opponent_replying") {
+    criticalIssues.push("continuation_analyzing_rendered_as_opponent_replying");
+  }
+  if (input.trainingMode === "continuation" && instructionTargetUci && stockfishProviderStatus === "ready" && !stockfishSuggestedTop10) {
+    criticalIssues.push("suggested_move_not_in_stockfish_top10");
+    criticalIssues.push("stockfish_top10_gate_failed");
+  }
+  if (input.trainingMode === "continuation" && instructionTargetUci && stockfishProviderStatus !== "ready" && continuationSurfaceMode === "assisted") {
+    criticalIssues.push("unvalidated_continuation_suggestion_rendered");
+  }
+  if (input.trainingMode === "continuation" && renderedBadgeLabel === "Genius" && !(lastContinuationUserMoveRating?.reason === "genius_motif_verified")) {
+    criticalIssues.push("genius_rating_without_required_evidence");
+  }
+  if (input.trainingMode === "continuation" && renderedBadgeLabel === "Blunder" && !lastContinuationUserMoveRating?.centipawnLoss) {
+    criticalIssues.push("user_move_blunder_label_without_eval_evidence");
+    criticalIssues.push("blunder_label_without_eval_or_mate_evidence");
+  }
+  if (
+    renderedBadgeLabel === "Ungraded" &&
+    badgeVisible &&
+    !Boolean(input.allowUngradedBadgeForDebug)
+  ) {
+    criticalIssues.push("visible_ungraded_badge_rendered_without_debug_flag");
+  }
+  if (input.trainingMode === "continuation" && lastContinuationUserMoveRating?.normalizedForMoverColor === false) {
+    criticalIssues.push("user_move_rating_wrong_perspective_detected");
+  }
+  if (badgeVisible && Boolean(lastContinuationUserMoveRating?.stale)) {
+    criticalIssues.push("stale_user_move_rating_rendered");
+  }
+  if (input.trainingMode === "restricted" && badgeVisible) {
+    criticalIssues.push("restricted_mode_move_rating_badge_leak");
+  }
+  if (String(input.trainerView) === "plain" && badgeVisible) {
+    criticalIssues.push("plain_pre_show_more_badge_leak");
+  }
+  if (badgeVisible && input.trainingMode !== "continuation") {
+    criticalIssues.push("stockfish_badge_visible_outside_continuation");
+  }
   if (input.trainingMode === "continuation" && input.trainerPhase === "transitioning" && !["analyzing", "opponent_replying", "terminal"].includes(String(continuationRuntimeStatus))) criticalIssues.push("transition_state_without_pending_work");
   if (isTeachingFrame(input) && instructionTargetUci == null && !branchTransitionSurfaceRendered && !continuationNullTargetStatusFrame) criticalIssues.push("instruction_target_missing_on_teaching_frame");
   if (input.isUserTurn && instructionTargetUci == null && String(input.trainerPhase) === "ready_for_user" && !branchTransitionSurfaceRendered && !continuationNullTargetStatusFrame) {
@@ -478,6 +523,12 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
     String(expectedMoveResolution.source ?? "") === "guided_branch_needs_continuation" ||
     /repertoire_line_exhausted_needs_continuation|line_exhausted|needs_continuation/i.test(String(expectedMoveResolution.reason ?? ""));
   const branchCompleteVisible = String(input.visibleTeachingSurface?.mode ?? "") === "branch_complete";
+  const selectedLineExhausted = input.selectedLineExhausted === true;
+  const explicitCuratedTerminalNode = input.explicitCuratedTerminalNode === true;
+  const validBranchCompleteLatch = String(input.selectedLineExhaustionReason ?? "") === "valid_branch_complete_latch";
+  const knownFinalFenMatched = input.knownFinalFenMatched === true;
+  const exactNodeHasChildren = input.exactNodeHasChildren;
+  const hasNextOpponentMove = input.hasNextOpponentMove;
   const hasPendingOpponentReply = Boolean(input.pendingOpponentRequest);
   const unresolvedCompletionStuck =
     Boolean(input.bookComplete) &&
@@ -499,6 +550,38 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
     !continueFromHereButtonRendered;
   if (exhaustedWithoutBranchCompleteSurface) {
     criticalIssues.push("exhausted_line_without_branch_complete_surface");
+  }
+  const restrictedFinalMoveBranchCompleteMissing =
+    String(input.trainingMode) === "restricted" &&
+    Boolean(input.branchCompleteAfterFinalUserMove) &&
+    !input.userExplicitlyEnteredContinuation &&
+    !instructionTargetUci &&
+    !input.expectedMoveUci &&
+    !terminalRuntimeLike &&
+    !branchCompleteVisible &&
+    !continueFromHereButtonRendered;
+  if (restrictedFinalMoveBranchCompleteMissing) {
+    criticalIssues.push("restricted_line_exhausted_without_branch_complete_buttons");
+  }
+  if (
+    String(input.trainingMode) === "restricted" &&
+    branchCompleteVisible &&
+    !selectedLineExhausted &&
+    !explicitCuratedTerminalNode &&
+    !validBranchCompleteLatch
+  ) {
+    if (!knownFinalFenMatched || exactNodeHasChildren === true || hasNextOpponentMove === true) {
+      criticalIssues.push("premature_branch_complete_rendered");
+    }
+  }
+  if (
+    String(input.trainingMode) === "restricted" &&
+    branchCompleteVisible &&
+    String(input.selectedLineId ?? "") === "italian-white" &&
+    Number((input.moveHistory?.length ?? 0)) < 16 &&
+    !explicitCuratedTerminalNode
+  ) {
+    criticalIssues.push("branch_complete_rendered_before_minimum_line_progress");
   }
   if (input.visualRecipe && input.visualReady === false && !presentation.visual?.shouldRender && input.visualRecipeOverlay?.adapterAllowed) criticalIssues.push("VisualRecipe exists but visual did not render while legacy ready was false");
   if (input.coachSurfacePolicyAffectsVisualLayer) criticalIssues.push("Coach surface policy affected visual layer");
@@ -571,6 +654,20 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   }
   if (visualFailureKind !== "none" && visualFailureKind !== "not_applicable") warnings.push(`visualFailureKind:${visualFailureKind}`);
   if (coachFailureKind !== "none") warnings.push(`coachFailureKind:${coachFailureKind}`);
+  if (stockfishProviderStatus !== "ready") warnings.push("stockfish_provider_unavailable");
+  if (stockfishProviderStatus === "ready" && Number(input.stockfishDepth ?? 0) > 0 && Number(input.stockfishDepth ?? 0) < 8) warnings.push("stockfish_depth_low");
+  if (input.trainingMode === "continuation" && input.lastContinuationUserMoveRating && input.lastContinuationUserMoveRating.ratingLabel === "Ungraded") warnings.push("user_move_rating_ungraded");
+  if (
+    input.trainingMode === "continuation" &&
+    input.lastContinuationUserMoveRating &&
+    !badgeVisible &&
+    String(input.lastContinuationUserMoveRating.providerStatus ?? "") !== "ready"
+  ) warnings.push("user_move_rating_hidden_provider_unavailable");
+  if (input.trainingMode === "continuation" && String(input.lastContinuationUserMoveRating?.ratingMethod ?? "") === "direct_after_move_eval") warnings.push("user_move_rating_direct_eval_fallback_used");
+  if (input.trainingMode === "continuation" && input.lastContinuationUserMoveRating?.userMoveFoundInTopMoves === false) warnings.push("user_move_not_in_multipv_top10");
+  if (input.trainingMode === "continuation" && Number(input.lastContinuationUserMoveRating?.depth ?? 0) > 0 && Number(input.lastContinuationUserMoveRating?.depth ?? 0) < 8) warnings.push("user_move_rating_low_depth");
+  if (String(input.lastContinuationUserMoveRating?.badgeSuppressedReason ?? "") === "evaluation_timeout") warnings.push("user_move_rating_timeout");
+  if (input.staleEvaluationIgnored) warnings.push("stockfish_evaluation_stale_ignored");
   if (input.memoryMigratedOrCleared) warnings.push("memory_migrated_or_cleared");
   // v2.7.39.1: only warn about missing deep pipelines on actual teaching frames that have (or expect) an instruction target.
   // Suppress on terminal, opponent-reply, no-target, and non-teaching frames (per Coach Perfection Gate).

@@ -1,0 +1,27 @@
+{
+  "package": "13.3",
+  "agent": "Agent 13.3",
+  "status": "blocked",
+  "branch": "v2.8.0-intelligent-coach-live",
+  "objective": "Hard Branch-Complete Eligibility Fix + MultiPV 32 Rating Rule",
+  "completed": [
+    "Implemented strict selected-line exhaustion resolver and integrated as branch-complete authority",
+    "Prevented premature branch-complete from opponent-turn/exact-node broad inference",
+    "Preserved final Nbd2 branch-complete through narrow selected-line final guard",
+    "Implemented MultiPV split constants: suggestion=10, user-move-rating=32",
+    "Added direct eval fallback when user move is outside MultiPV list",
+    "Maintained hidden Ungraded badge policy in normal UI",
+    "Passed required build and test suite"
+  ],
+  "blocked_on": [
+    "Manual QA acceptance scenarios (e4 non-branch-complete, final Nbd2 branch-complete, continuation MultiPV 32 rating behavior) not yet captured in this run"
+  ],
+  "artifacts": {
+    "docs_report": "docs/BLUNDR_v2.8.0 Foundation Stabilization Gate_AGENT_13_3_BRANCH_COMPLETE_HARD_FIX_AND_MULTIPV32_REPORT.md",
+    "run_report": ".agent_runs/v2.8.0-intelligent-coach/20260603_195241/13_3_branch_complete_hard_fix_and_multipv32.md",
+    "phase_report": ".agent_runs/v2.8.0-intelligent-coach/20260603_195241/phase_reports/13_3_branch_complete_hard_fix_and_multipv32.md",
+    "command_log": ".agent_runs/v2.8.0-intelligent-coach/20260603_195241/command_log.md",
+    "risk_register": ".agent_runs/v2.8.0-intelligent-coach/20260603_195241/risk_register.md"
+  },
+  "timestamp_utc": "2026-06-03T19:56:00Z"
+}

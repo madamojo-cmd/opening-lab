@@ -5,6 +5,8 @@ import type { CSSProperties, ReactNode } from "react";
 import { Chess } from "chess.js";
 import { BarChart3, Beaker, BookOpen, CheckCircle2, ChevronRight, Cloud, Eye, Flame, Home, Plus, RotateCcw, Search, Settings, Target, Trophy, X, XCircle, Zap } from "lucide-react";
 import { getStockfishTopMovesForValidation } from "@/lib/blundr/engine/stockfishValidation";
+import { mapEngineLinesToStockfishTopMoves, rateContinuationUserMove, validateContinuationSuggestionAgainstStockfish } from "@/lib/blundr/engine/stockfishContinuationValidation";
+import type { ContinuationUserMoveRatingResult, MoveStrengthRating } from "@/lib/blundr/engine/stockfishEvaluationTypes";
 import {
   MOVE_QUALITY_GATE_VERSION,
   buildMoveQualityCacheKey,
@@ -140,6 +142,8 @@ type PendingOpponentRequest = {
   startedAt: number;
 };
 const HARD_CONTINUATION_BREAK_PLY = 22;
+const SUGGESTION_VALIDATION_MULTIPV = 10;
+const USER_MOVE_RATING_MULTIPV = 32;
 type LiveBrain = { ratingLabel: string; ratingPool: string; book: SystemState; lichess: SystemState; engine: SystemState; gpt: SystemState; source: string; latency?: number; note?: string };
 type LastCoachRecord = {
   frameId: number;
@@ -881,6 +885,14 @@ export default function App(){
   const [lastCoachRecords,setLastCoachRecords]=useState<LastCoachRecord[]>([]);
   const [coachTimeline,setCoachTimeline]=useState<CoachSessionLogEntry[]>([]);
   const [continuationAnalysisStatus,setContinuationAnalysisStatus]=useState<ContinuationRuntimeStatus>("idle");
+  const [lastContinuationUserMoveRating,setLastContinuationUserMoveRating]=useState<(ContinuationUserMoveRatingResult&{
+    moveUci:string;
+    moveSan:string;
+    pieceType:string|null;
+    ratingLabel:MoveStrengthRating["label"];
+    evaluatedFenBeforeMove:string;
+    createdAtFrameId:number;
+  })|null>(null);
   const [continuationCandidateLock,setContinuationCandidateLock]=useState<{
     continuationCandidateLockId:number;
     continuationCandidateLockFen4:string;
@@ -941,6 +953,7 @@ export default function App(){
   const continuationEngineCacheRef=useRef<Record<string,{fen:string;pvs:EngineLine[];source:string}>>({});
   const opponentRequestSeqRef=useRef(0);
   const pendingOpponentRequestRef=useRef<PendingOpponentRequest|null>(null);
+  const branchCompleteBlockedOpponentRequestIdRef=useRef<number|null>(null);
   const branchCompleteLatchRef=useRef(branchCompleteLatch);
   const opponentReplyTimeoutRef=useRef<number|null>(null);
   const brainAbortRef=useRef<AbortController|null>(null);
@@ -999,6 +1012,27 @@ export default function App(){
     const cur = expectedMoveResolution?.lineCursor ?? 0;
     return len > 0 && cur >= len;
   }, [expectedMoveResolution?.lineCursor, expectedMoveResolution?.lineLength]);
+  const exactSelectedLineNodes = useMemo(
+    () => exactOpeningNodes.filter((node) => node.lineId === selectedRepertoireId),
+    [exactOpeningNodes, selectedRepertoireId],
+  );
+  const exactSelectedLineNodeFound = exactSelectedLineNodes.length > 0;
+  const selectedLineExactNodeHasChildren = useMemo(() => {
+    if (!exactSelectedLineNodes.length) return "unknown" as const;
+    return exactSelectedLineNodes.some((node) => node.continuations.length > 0);
+  }, [exactSelectedLineNodes]);
+  const hasNextOpponentMoveInSelectedLine = useMemo(() => {
+    if (!exactSelectedLineNodes.length) return "unknown" as const;
+    return exactSelectedLineNodes.some((node) => node.continuations.some((move) => move.color === opponentColor));
+  }, [exactSelectedLineNodes, opponentColor]);
+  const hasNextUserMoveInSelectedLine = useMemo(() => {
+    if (!exactSelectedLineNodes.length) return "unknown" as const;
+    return exactSelectedLineNodes.some((node) => node.continuations.some((move) => move.color === userColor));
+  }, [exactSelectedLineNodes, userColor]);
+  const explicitCuratedTerminalNode = useMemo(() => {
+    const sideToMove = game.turn();
+    return exactSelectedLineNodes.some((node) => node.terminal && node.sideToMove === sideToMove);
+  }, [exactSelectedLineNodes, game]);
 
   const lichessTotalGames = useMemo(() => {
     if (!explorerMoves || explorerMoves.length === 0) return null;
@@ -1140,8 +1174,8 @@ export default function App(){
     knownBranchAvailable:expectedMoveResolution.candidateMoves.some((move)=>move.color===userColor),
     adaptiveBranchAvailable:false,
     continuationCandidateExists:Boolean(enginePreview&&normalizeFen(enginePreview.fen)===key&&enginePreview.pvs[0]),
-    explicitCuratedTerminalNode:false,
-  }),[moveHistory.length,fen,repertoire.id,selectedRepertoireId,key,game,userColor,exactOpeningNodes,expectedMoveResolution.candidateMoves,opponentBookOptions.length,enginePreview]);
+    explicitCuratedTerminalNode,
+  }),[moveHistory.length,fen,repertoire.id,selectedRepertoireId,key,game,userColor,exactOpeningNodes,expectedMoveResolution.candidateMoves,opponentBookOptions.length,enginePreview,explicitCuratedTerminalNode]);
   const rating=ratingPreset(ratingFilter);
   const enabledViews:ActiveBoardView[]=([] as ActiveBoardView[]).concat(boardSettings.showAttack?["attack"]:[],boardSettings.showDefense?["defense"]:[],boardSettings.showPlan?["plan"]:[]);
   const safeBoardView:ActiveBoardView=enabledViews.includes(activeBoardView)?activeBoardView:(enabledViews[0]??"plan");
@@ -1162,72 +1196,98 @@ export default function App(){
     const legalVerboseMoves=(game.moves({verbose:true}) as any[]);
     if(game.isGameOver()||legalVerboseMoves.length===0)return null;
     const legalUcis=new Set(legalVerboseMoves.map((move)=>moveToUci(move)));
-    const engineRankByUci=new Map(engineLines.slice(0,10).map((line,index)=>[line.uci,index+1] as const));
-    const legalExplorer=explorerMoves
-      .filter((move)=>legalUcis.has(move.uci))
-      .map((move)=>{
-        const stockfishRank=engineRankByUci.get(move.uci);
-        const games=move.total??0;
-        const playRate=(move.pct??0)/100;
-        return {
-          uci:move.uci,
-          san:move.san,
-          source:"lichess" as const,
-          pct:move.pct,
-          weight:games,
-          games,
-          playRate,
-          supported:games>=500&&playRate>=0.18,
-          engineSafe:Boolean(stockfishRank),
-          stockfishLegal:legalUcis.has(move.uci),
-          stockfishInTop10:Boolean(stockfishRank),
-          stockfishRank,
-        };
-      });
-    const policy=selectContinuedPlayMove({
-      fen,
-      lichessCandidates:legalExplorer,
-      engineTopMoves:engineLines.slice(0,10).map((line,index)=>({uci:line.uci,san:line.san,source:"engine" as const,engineSafe:true,supported:true,stockfishInTop10:true,stockfishRank:index+1})),
-      lastMoveUci: lastMove || null, // v2.7.40 P1: pass for emergency reverse guard
-      requireReliableDatabaseMove:true,
-    });
-    if(!policy?.selectedUci)return policy?{
-      uci:"",
-      san:"",
-      source:policy.source,
-      reason:policy.reason,
-      isEmergencyLegalFallback:false,
-      isEngineBestFallback:policy.source==="engine_best",
-      engineFallbackUsed:Boolean(policy.debug?.engineFallbackUsed),
-      engineFallbackReason:policy.debug?.engineFallbackReason??null,
-      databaseCandidatesRejected:Boolean(policy.debug?.databaseCandidatesRejected),
-      rejectionReasons:Array.isArray(policy.debug?.rejectionReasons)?policy.debug.rejectionReasons:[],
-      debug:policy.debug,
-    }:null;
-    if(!legalUcis.has(policy.selectedUci))return null;
-    const applied=applyUci(fen,policy.selectedUci);
-    if(!applied)return null;
+    const stockfishTop10=engineLines
+      .slice(0,10)
+      .map((line,index)=>({
+        uci:String(line.uci??"").toLowerCase(),
+        san:line.san,
+        rank:index+1,
+        cp:typeof line.cp==="number"?line.cp:0,
+      }))
+      .filter((line)=>legalUcis.has(line.uci));
+    if(!stockfishTop10.length){
+      return {
+        uci:"",
+        san:"",
+        source:"stockfish_unavailable",
+        reason:"stockfish_provider_unavailable",
+        isEmergencyLegalFallback:false,
+        isEngineBestFallback:false,
+        engineFallbackUsed:false,
+        engineFallbackReason:"stockfish_provider_unavailable",
+        databaseCandidatesRejected:false,
+        rejectionReasons:[],
+        debug:{
+          providerStatus:"unavailable",
+          suggestedMoveUci:null,
+          stockfishBestMoveUci:null,
+          stockfishSuggestedRank:null,
+          stockfishSuggestedTop10:false,
+          stockfishDepth:null,
+          candidateReplacedByStockfish:false,
+          replacementReason:"stockfish_provider_unavailable",
+          topMoveUcis:[],
+        },
+      };
+    }
+    const best=stockfishTop10[0];
+    const applied=applyUci(fen,best.uci);
+    if(!applied){
+      return {
+        uci:"",
+        san:"",
+        source:"stockfish_unavailable",
+        reason:"stockfish_top1_illegal",
+        isEmergencyLegalFallback:false,
+        isEngineBestFallback:false,
+        engineFallbackUsed:false,
+        engineFallbackReason:"stockfish_top1_illegal",
+        databaseCandidatesRejected:false,
+        rejectionReasons:[],
+        debug:{
+          providerStatus:"error",
+          suggestedMoveUci:null,
+          stockfishBestMoveUci:best.uci,
+          stockfishSuggestedRank:null,
+          stockfishSuggestedTop10:false,
+          stockfishDepth:null,
+          candidateReplacedByStockfish:false,
+          replacementReason:"stockfish_top1_illegal",
+          topMoveUcis:stockfishTop10.map((move)=>move.uci),
+        },
+      };
+    }
     return {
       uci:applied.uci,
       san:applied.san,
-      source:policy.source,
-      reason:policy.reason,
+      source:"engine_best",
+      reason:"stockfish_top1_mvp",
       isEmergencyLegalFallback:false,
-      isEngineBestFallback:policy.source==="engine_best",
-      engineFallbackUsed:Boolean(policy.debug?.engineFallbackUsed),
-      engineFallbackReason:policy.debug?.engineFallbackReason??null,
-      databaseCandidatesRejected:Boolean(policy.debug?.databaseCandidatesRejected),
-      rejectionReasons:Array.isArray(policy.debug?.rejectionReasons)?policy.debug.rejectionReasons:[],
-      debug:policy.debug,
+      isEngineBestFallback:true,
+      engineFallbackUsed:false,
+      engineFallbackReason:null,
+      databaseCandidatesRejected:false,
+      rejectionReasons:[],
+      debug:{
+        providerStatus:"ready",
+        suggestedMoveUci:applied.uci,
+        suggestedMoveSan:applied.san,
+        stockfishBestMoveUci:best.uci,
+        stockfishBestMoveSan:best.san,
+        stockfishSuggestedRank:1,
+        stockfishSuggestedTop10:true,
+        stockfishDepth:null,
+        candidateReplacedByStockfish:false,
+        replacementReason:null,
+        topMoveUcis:stockfishTop10.map((move)=>move.uci),
+      },
     };
   },[
     trainingMode,
     isUserTurn,
     fen,
     game,
-    explorerMoves,
     engineLines,
-    lastMove,
     selectedLineCompleteConfirmed,
     lichessEndConfirmed,
     userExplicitlyEnteredContinuation,
@@ -1257,6 +1317,49 @@ export default function App(){
     };
   },[trainingMode,isUserTurn,userExplicitlyEnteredContinuation,continuationCandidateLock,fen,game]);
   const effectiveContinuationCandidate=continuationLockCandidate??continuationPolicyCandidate;
+  const stockfishTopMovesForContinuation=useMemo(()=>mapEngineLinesToStockfishTopMoves({
+    fen,
+    pvs:engineLines.map((line)=>({uci:line.uci,san:line.san,cp:line.cp})),
+    depth:10,
+    multipv:SUGGESTION_VALIDATION_MULTIPV,
+    providerStatus:engineLines.length?"ready":"unavailable",
+    errorReason:engineLines.length?undefined:"stockfish_provider_unavailable",
+  }),[fen,engineLines]);
+  const continuationSuggestionValidation=useMemo(()=>{
+    if(trainingMode!=="continuation")return null;
+    if(!effectiveContinuationCandidate?.uci)return null;
+    return validateContinuationSuggestionAgainstStockfish({
+      candidateUci:effectiveContinuationCandidate.uci,
+      candidateSan:effectiveContinuationCandidate.san??effectiveContinuationCandidate.uci,
+      stockfish:stockfishTopMovesForContinuation,
+    });
+  },[trainingMode,effectiveContinuationCandidate?.uci,effectiveContinuationCandidate?.san,stockfishTopMovesForContinuation]);
+  const validatedContinuationCandidate=useMemo(()=>{
+    if(trainingMode!=="continuation")return effectiveContinuationCandidate;
+    if(!effectiveContinuationCandidate?.uci)return effectiveContinuationCandidate;
+    if(!continuationSuggestionValidation){
+      return {
+        ...effectiveContinuationCandidate,
+        uci:"",
+        san:"",
+        source:"stockfish_unavailable",
+        reason:"stockfish_provider_unavailable",
+      };
+    }
+    if(continuationSuggestionValidation.accepted)return effectiveContinuationCandidate;
+    return {
+      ...effectiveContinuationCandidate,
+      uci:continuationSuggestionValidation.replacementUci??"",
+      san:continuationSuggestionValidation.replacementSan??"",
+      source:"engine_best",
+      reason:"continuation_candidate_replaced_by_stockfish_top1",
+      debug:{
+        ...(effectiveContinuationCandidate as any)?.debug,
+        candidateReplacedByStockfish:true,
+        replacementReason:continuationSuggestionValidation.rejectionReason??"suggested_move_not_in_stockfish_top10",
+      },
+    };
+  },[trainingMode,effectiveContinuationCandidate,continuationSuggestionValidation]);
   const branchCompleteContract=useMemo(()=>resolveBranchCompleteContract({
     trainingMode,
     trainerPhase,
@@ -1264,7 +1367,11 @@ export default function App(){
     userExplicitlyEnteredContinuation,
     isTerminal:game.isGameOver()||game.moves().length===0,
     hasInstructionTarget:Boolean(expectedMoveResolution.expectedMoveUci),
-    hasContinuationCandidate:Boolean(effectiveContinuationCandidate?.uci),
+    hasContinuationCandidate:Boolean(
+      trainingMode==="continuation"&&
+      userExplicitlyEnteredContinuation&&
+      validatedContinuationCandidate?.uci
+    ),
     pendingOpponentRequestExists:Boolean(pendingOpponentRequest),
     expectedMoveSource:expectedMoveResolution.source,
     expectedMoveReason:expectedMoveResolution.reason,
@@ -1272,6 +1379,15 @@ export default function App(){
     lineExhaustedByCursor:selectedLineCompleteConfirmed,
     lineExhaustedByLichess:lichessEndConfirmed,
     afterFinalUserMove:!isUserTurn&&lastMoveColor===userColor,
+    selectedLineId:selectedRepertoireId,
+    fen4:normalizeFen(fen),
+    lastUserMoveUci:lastMoveColor===userColor?lastMove:null,
+    lastUserMoveSan:lastMoveColor===userColor?lastMoveSan:null,
+    exactNodeHasChildren:selectedLineExactNodeHasChildren,
+    hasNextOpponentMove:hasNextOpponentMoveInSelectedLine,
+    hasNextUserMove:hasNextUserMoveInSelectedLine,
+    explicitCuratedTerminalNode,
+    validBranchCompleteLatch:Boolean(branchCompleteLatch.active&&branchCompleteLatch.lineId===selectedRepertoireId),
   }),[
     trainingMode,
     trainerPhase,
@@ -1281,20 +1397,25 @@ export default function App(){
     expectedMoveResolution.source,
     expectedMoveResolution.reason,
     expectedMoveResolution.expectedMoveUci,
-    effectiveContinuationCandidate?.uci,
+    validatedContinuationCandidate?.uci,
     pendingOpponentRequest,
     selectedLineCompleteConfirmed,
     lichessEndConfirmed,
     lastMoveColor,
     userColor,
+    selectedRepertoireId,
+    fen,
+    lastMove,
+    lastMoveSan,
+    selectedLineExactNodeHasChildren,
+    hasNextOpponentMoveInSelectedLine,
+    hasNextUserMoveInSelectedLine,
+    explicitCuratedTerminalNode,
+    branchCompleteLatch.active,
+    branchCompleteLatch.lineId,
   ]);
-  const branchCompleteEligibleNow=branchCompleteContract.branchCompleteEligible||(
-    branchCompleteLatch.active&&
-    trainingMode==="restricted"&&
-    !userExplicitlyEnteredContinuation&&
-    !game.isGameOver()
-  );
-  const branchCompleteReasonNow=branchCompleteContract.reason??branchCompleteLatch.reason??"line_complete";
+  const branchCompleteEligibleNow=branchCompleteContract.branchCompleteEligible;
+  const branchCompleteReasonNow=branchCompleteContract.reason??"line_complete";
   const branchCompleteShouldCancelPending=branchCompleteContract.shouldCancelPendingOpponent||(
     branchCompleteEligibleNow&&Boolean(pendingOpponentRequest)
   );
@@ -1302,10 +1423,10 @@ export default function App(){
     trainingMode,
     branchComplete:branchCompleteEligibleNow,
     isUserTurn,
-    hasTarget:Boolean(effectiveContinuationCandidate?.uci&&trainingMode==="continuation"&&userExplicitlyEnteredContinuation),
-    selectedCandidateUci:effectiveContinuationCandidate?.uci??null,
-    selectedCandidateSan:effectiveContinuationCandidate?.san??null,
-    selectedCandidateSource:effectiveContinuationCandidate?.source??null,
+    hasTarget:Boolean(validatedContinuationCandidate?.uci&&trainingMode==="continuation"&&userExplicitlyEnteredContinuation),
+    selectedCandidateUci:validatedContinuationCandidate?.uci??null,
+    selectedCandidateSan:validatedContinuationCandidate?.san??null,
+    selectedCandidateSource:validatedContinuationCandidate?.source??null,
     pendingOpponentRequestExists:Boolean(pendingOpponentRequest),
     candidateAnalysisStatus:continuationAnalysisStatus,
     continuationRuntimeStatus:continuationAnalysisStatus,
@@ -1314,9 +1435,9 @@ export default function App(){
     trainingMode,
     branchCompleteEligibleNow,
     isUserTurn,
-    effectiveContinuationCandidate?.uci,
-    effectiveContinuationCandidate?.san,
-    effectiveContinuationCandidate?.source,
+    validatedContinuationCandidate?.uci,
+    validatedContinuationCandidate?.san,
+    validatedContinuationCandidate?.source,
     pendingOpponentRequest,
     continuationAnalysisStatus,
     game,
@@ -1475,16 +1596,16 @@ export default function App(){
         kind:expectedMoveResolution.source==="opening_branch"?"lichess_branch_move":expectedMoveResolution.source==="opening_family_plan"?"adaptive_branch_move":"guided_move",
         trust:"book_verified",
       }:null,
-      continuationCandidate:trainingMode==="continuation"&&isUserTurn&&userExplicitlyEnteredContinuation&&!forceContinuationPause&&effectiveContinuationCandidate?.uci&&effectiveContinuationCandidate.source!=="no_reliable_continuation"?{
+      continuationCandidate:trainingMode==="continuation"&&isUserTurn&&userExplicitlyEnteredContinuation&&!forceContinuationPause&&validatedContinuationCandidate?.uci&&validatedContinuationCandidate.source!=="no_reliable_continuation"?{
         uci: useLocked && lockedForThisFrame
           ? lockedForThisFrame.uci
-          : effectiveContinuationCandidate.uci,
+          : validatedContinuationCandidate.uci,
         san: useLocked && lockedForThisFrame
           ? lockedForThisFrame.san
-          : effectiveContinuationCandidate.san,
+          : validatedContinuationCandidate.san,
         source: useLocked && lockedForThisFrame
           ? (lockedForThisFrame.source ?? "locked_continuation_candidate")
-          : effectiveContinuationCandidate.source,
+          : validatedContinuationCandidate.source,
         trust:"continuation_verified",
       }:null,
       preferredTargetKind:trainingMode==="continuation"?"continuation_candidate":"guided_move",
@@ -1499,8 +1620,7 @@ export default function App(){
     expectedMoveResolution,
     game,
     engineLines,
-    continuationPolicyCandidate,
-    effectiveContinuationCandidate,
+    validatedContinuationCandidate,
     isInstructionLoading,
     hardEndOfBookGate,
     userExplicitlyEnteredContinuation,
@@ -2847,7 +2967,7 @@ export default function App(){
   // If the current continuation candidate came from pure legal fallback (no trusted source), force neutral non-lesson messaging
   // and prevent it from looking like a "best move" lesson. This stops dumb "Focus on development" / rook shuffle copy.
   let convergedVisibleSurface = visibleTeachingSurface;
-  if (isActiveTeachingFrame && continuationPolicyCandidate?.isEmergencyLegalFallback) {
+  if (isActiveTeachingFrame && validatedContinuationCandidate?.isEmergencyLegalFallback) {
     convergedVisibleSurface = {
       ...visibleTeachingSurface,
       coach: {
@@ -2884,6 +3004,22 @@ export default function App(){
     hint: visibleTeachingSurface.hint.text,
     showMoreContent: visibleTeachingSurface.showMore.content,
   } as any) : null;
+  const continuationRatingBadgeVisible=Boolean(
+    trainingMode==="continuation"&&
+    userExplicitlyEnteredContinuation&&
+    lastContinuationUserMoveRating&&
+    lastContinuationUserMoveRating.providerStatus==="ready"&&
+    lastContinuationUserMoveRating.badgeVisible&&
+    lastContinuationUserMoveRating.ratingLabel!=="Ungraded"&&
+    trainerView!=="plain"&&
+    v28VisibleSurface?.mode!=="branch_complete"&&
+    v28VisibleSurface?.mode!=="continuation_analyzing"
+  );
+  const continuationRatingBadge=continuationRatingBadgeVisible?{
+    label:lastContinuationUserMoveRating?.visibleBadgeLabel ?? "Best",
+    severity:lastContinuationUserMoveRating?.severity ?? "unknown",
+    ariaLabel:`Last move rating: ${lastContinuationUserMoveRating?.visibleBadgeLabel ?? "Best"}`,
+  }:null;
 
   const isReviewingHistory=historyIndex<positionHistory.length-1;
   const selectedLegalMoves=selectedSquare&&!isReviewingHistory&&!game.isGameOver()?(game.moves({square:selectedSquare as any,verbose:true}) as any[]):[];
@@ -3036,10 +3172,10 @@ export default function App(){
   },[pendingOpponentRequest]);
   useEffect(()=>{
     if(trainingMode!=="continuation"||!userExplicitlyEnteredContinuation||!isUserTurn)return;
-    if(!continuationPolicyCandidate?.uci)return;
+    if(!validatedContinuationCandidate?.uci)return;
     const fen4=normalizeFen(fen);
     const existing=continuationCandidateLockRef.current;
-    if(existing&&existing.continuationCandidateLockFen4===fen4&&existing.continuationCandidateLockUci===continuationPolicyCandidate.uci){
+    if(existing&&existing.continuationCandidateLockFen4===fen4&&existing.continuationCandidateLockUci===validatedContinuationCandidate.uci){
       return;
     }
     const requestId=Math.max(1,continuationCandidateRequestSeqRef.current);
@@ -3047,13 +3183,13 @@ export default function App(){
       continuationCandidateLockId:++continuationCandidateLockSeqRef.current,
       continuationCandidateLockFen4:fen4,
       continuationCandidateLockRequestId:requestId,
-      continuationCandidateLockUci:continuationPolicyCandidate.uci,
-      continuationCandidateLockSan:continuationPolicyCandidate.san??continuationPolicyCandidate.uci,
-      continuationCandidateLockSource:String(continuationPolicyCandidate.source??"continuation_policy"),
-      continuationCandidateLockReason:String(continuationPolicyCandidate.reason??"candidate_locked"),
+      continuationCandidateLockUci:validatedContinuationCandidate.uci,
+      continuationCandidateLockSan:validatedContinuationCandidate.san??validatedContinuationCandidate.uci,
+      continuationCandidateLockSource:String(validatedContinuationCandidate.source??"continuation_policy"),
+      continuationCandidateLockReason:String(validatedContinuationCandidate.reason??"candidate_locked"),
     };
     setContinuationCandidateLock(lock);
-  },[trainingMode,userExplicitlyEnteredContinuation,isUserTurn,continuationPolicyCandidate?.uci,continuationPolicyCandidate?.san,continuationPolicyCandidate?.source,continuationPolicyCandidate?.reason,fen]);
+  },[trainingMode,userExplicitlyEnteredContinuation,isUserTurn,validatedContinuationCandidate?.uci,validatedContinuationCandidate?.san,validatedContinuationCandidate?.source,validatedContinuationCandidate?.reason,fen]);
   useEffect(()=>{
     if(!branchCompleteContract.branchCompleteEligible)return;
     if(branchCompleteLatchRef.current.active)return;
@@ -3068,6 +3204,7 @@ export default function App(){
   },[branchCompleteContract.branchCompleteEligible,branchCompleteContract.reason,fen,selectedRepertoireId,moveHistory.length,trainerFrameId]);
   useEffect(()=>{
     if(!branchCompleteShouldCancelPending)return;
+    branchCompleteBlockedOpponentRequestIdRef.current=pendingOpponentRequestRef.current?.requestId??null;
     clearPendingOpponentReplyRequest({clearStaleIssue:true});
     if(trainerPhase==="opponent_replying"||trainerPhase==="opponent_selecting"){
       setTrainerPhase("ready_for_user");
@@ -3140,7 +3277,7 @@ export default function App(){
       setContinuationAnalysisStatus("ready");
       return;
     }
-    if(continuationPolicyCandidate?.uci&&continuationPolicyCandidate.source!=="no_reliable_continuation"){
+    if(validatedContinuationCandidate?.uci&&validatedContinuationCandidate.source!=="no_reliable_continuation"){
       clearRuntimeCriticalIssue("continuation_no_reliable_candidate");
       setContinuationAnalysisStatus("ready");
       return;
@@ -3205,7 +3342,7 @@ export default function App(){
         continuationAnalysisDebounceRef.current=null;
       }
     };
-  },[activeTab,trainingMode,isUserTurn,trainerPhase,fen,userColor,rating.skill,enginePreview,game,continuationPolicyCandidate,continuationLockCandidate?.uci,forceContinuationPause,userExplicitlyEnteredContinuation]);
+  },[activeTab,trainingMode,isUserTurn,trainerPhase,fen,userColor,rating.skill,enginePreview,game,validatedContinuationCandidate,continuationLockCandidate?.uci,forceContinuationPause,userExplicitlyEnteredContinuation]);
   useEffect(()=>{
     if(activeTab!=="train"||trainingMode!=="continuation"||trainerPhase!=="ready_for_user"||!isUserTurn)return;
     if(game.isGameOver()||game.moves().length===0)return;
@@ -3215,7 +3352,7 @@ export default function App(){
       clearRuntimeCriticalIssue("continuation_no_reliable_candidate");
       return;
     }
-    if(engineLines.length>0 && (!continuationPolicyCandidate?.uci || continuationPolicyCandidate.source==="no_reliable_continuation")){
+    if(engineLines.length>0 && (!validatedContinuationCandidate?.uci || validatedContinuationCandidate.source==="no_reliable_continuation")){
       pushRuntimeCriticalIssue("continuation_no_reliable_candidate");
       setContinuationAnalysisStatus("error");
       return;
@@ -3229,12 +3366,12 @@ export default function App(){
       continuationAnalysisStatus==="ready"&&
       continuationRuntimeState.status==="ready"&&
       !transitionalContinuationState&&
-      !continuationPolicyCandidate?.uci&&
-      continuationPolicyCandidate?.source!=="freeplay_continuation"
+      !validatedContinuationCandidate?.uci&&
+      validatedContinuationCandidate?.source!=="freeplay_continuation"
     ){
       pushRuntimeCriticalIssue("continuation_ready_without_candidate");
     }
-  },[activeTab,trainingMode,trainerPhase,isUserTurn,instructionTarget?.kind,fen,game,forceContinuationPause,userExplicitlyEnteredContinuation,engineLines.length,continuationPolicyCandidate?.uci,continuationPolicyCandidate?.source,continuationAnalysisStatus,continuationRuntimeState.status]);
+  },[activeTab,trainingMode,trainerPhase,isUserTurn,instructionTarget?.kind,fen,game,forceContinuationPause,userExplicitlyEnteredContinuation,engineLines.length,validatedContinuationCandidate?.uci,validatedContinuationCandidate?.source,continuationAnalysisStatus,continuationRuntimeState.status]);
   useEffect(()=>{if(activeTab==="train")positionStartedAtRef.current=Date.now()},[fen,activeTab]);
   useEffect(()=>{setCoachInteraction("none");setCoachHintRequestCount(0);setCoachReviewMarked(false);setCoachHiddenFrameId(null);setShowMoreShown(false);},[fen,trainerFrameId,trainerView,trainerPhase]);
   useEffect(()=>{if(!enabledViews.includes(activeBoardView)&&enabledViews.length)setActiveBoardView(enabledViews[0])},[activeBoardView,enabledViews.join("|")]);
@@ -3532,6 +3669,7 @@ export default function App(){
     setContinuationPauseClicked(false);
     setContinuationHardStopAcknowledged(false);
     setContinuationAnalysisStatus("idle");
+    setLastContinuationUserMoveRating(null);
     setShowAnswer(false);
     setShowMoreShown(false);
     setCoachInteraction("none");
@@ -3900,6 +4038,103 @@ export default function App(){
       return;
     }
     const playedUci=moveToUci(legal);
+    if(trainingMode==="continuation"){
+      let ratingSource=mapEngineLinesToStockfishTopMoves({
+        fen:beforeFen,
+        pvs:engineLines.map((line)=>({uci:line.uci,san:line.san,cp:line.cp})),
+        depth:10,
+        multipv:USER_MOVE_RATING_MULTIPV,
+        providerStatus:engineLines.length?"ready":"unavailable",
+      });
+      if(ratingSource.providerStatus!=="ready"){
+        const runtimeEval=await runBrowserStockfish(beforeFen,rating.skill,700,USER_MOVE_RATING_MULTIPV);
+        ratingSource=mapEngineLinesToStockfishTopMoves({
+          fen:beforeFen,
+          pvs:(runtimeEval?.pvs ?? []).map((line)=>({uci:line.uci,san:line.san,cp:line.cp})),
+          depth:runtimeEval?.depth ?? 10,
+          multipv:USER_MOVE_RATING_MULTIPV,
+          providerStatus:runtimeEval?.pvs?.length?"ready":"unavailable",
+          errorReason:runtimeEval?.pvs?.length?undefined:"stockfish_provider_unavailable",
+        });
+      }
+      const userMoveFoundInTopMoves=ratingSource.topMoves.some((move)=>move.uci===playedUci);
+      let directAfterMoveEvaluation:{
+        providerStatus:"ready"|"loading"|"unavailable"|"error";
+        centipawnsFromMoverPerspective?:number|null;
+        centipawnsFromSideToMove?:number|null;
+        depth?:number|null;
+        timeout?:boolean;
+      }|undefined=undefined;
+      if(!userMoveFoundInTopMoves&&ratingSource.providerStatus==="ready"){
+        try{
+          const afterEval=await runBrowserStockfish(current.fen(),rating.skill,650,1);
+          const cpFromSideToMove=typeof afterEval?.pvs?.[0]?.cp==="number"?Number(afterEval.pvs[0].cp):null;
+          directAfterMoveEvaluation={
+            providerStatus:afterEval?.pvs?.length?"ready":"unavailable",
+            centipawnsFromMoverPerspective:cpFromSideToMove===null?null:-cpFromSideToMove,
+            centipawnsFromSideToMove:cpFromSideToMove,
+            depth:afterEval?.depth ?? null,
+            timeout:false,
+          };
+        }catch{
+          directAfterMoveEvaluation={
+            providerStatus:"error",
+            centipawnsFromMoverPerspective:null,
+            centipawnsFromSideToMove:null,
+            depth:null,
+            timeout:true,
+          };
+        }
+      }
+      const strength=rateContinuationUserMove({
+        userMoveUci:playedUci,
+        userMoveSan:legal.san,
+        stockfish:ratingSource,
+        legal:true,
+        stale:false,
+        directAfterMoveEvaluation,
+        geniusMotifs:{
+          givesCheckmate:Boolean(legal.san?.includes("#")),
+          createsForcedMate:Boolean(legal.san?.includes("#")),
+          winsMajorMaterial:Boolean(legal.captured && ["q","r"].includes(String(legal.captured))),
+        },
+      });
+      setLastContinuationUserMoveRating({
+        moveUci:playedUci,
+        moveSan:legal.san,
+        pieceType:String(legal.piece ?? ""),
+        ratingLabel:strength.label,
+        severity:strength.severity,
+        centipawnLoss:strength.centipawnLoss,
+        rank:strength.rank,
+        bestMoveUci:ratingSource.bestMoveUci,
+        bestMoveSan:ratingSource.bestMoveSan,
+        depth:strength.depth,
+        reason:strength.reason,
+        evaluatedFenBeforeMove:normalizeFen(beforeFen),
+        providerStatus:strength.providerStatus,
+        createdAtFrameId:trainerFrameId,
+        visibleBadgeLabel:strength.visibleBadgeLabel,
+        badgeVisible:strength.badgeVisible,
+        badgeSuppressedReason:strength.badgeSuppressedReason,
+        ratingMethod:strength.ratingMethod,
+        userMoveFoundInTopMoves:strength.userMoveFoundInTopMoves,
+        userMoveRank:strength.userMoveRank,
+        bestEvalCp:strength.bestEvalCp,
+        userEvalCp:strength.userEvalCp,
+        mateBefore:strength.mateBefore,
+        mateAfter:strength.mateAfter,
+        normalizedForMoverColor:strength.normalizedForMoverColor,
+        legal:strength.legal,
+        stale:strength.stale,
+        confidence:strength.confidence,
+        isUserFacing:strength.isUserFacing,
+        label:strength.label,
+        debug:strength.debug,
+      });
+    }else{
+      setLastContinuationUserMoveRating(null);
+    }
     const expectedMove=expectedUserOptions[0];
     if(trainingMode==="restricted"){
       const correct=expectedUserOptions.some(m=>m.uci===playedUci);
@@ -3948,6 +4183,12 @@ export default function App(){
       allowEngineFallbackInRestricted:false,
     });
     const nextLineCompleteConfirmed=(nextExpectedMoveResolution.lineLength??0)>0&&(nextExpectedMoveResolution.lineCursor??0)>=(nextExpectedMoveResolution.lineLength??0);
+    const nextExactOpeningNodes=openingTree.nodesByFen4[normalizeFen(nextFen)]??[];
+    const nextExactSelectedLineNodes=nextExactOpeningNodes.filter((node)=>node.lineId===selectedRepertoireId);
+    const nextExactNodeHasChildren=nextExactSelectedLineNodes.length?nextExactSelectedLineNodes.some((node)=>node.continuations.length>0):"unknown";
+    const nextHasNextOpponentMove=nextExactSelectedLineNodes.length?nextExactSelectedLineNodes.some((node)=>node.continuations.some((move)=>move.color===opponentColor)):"unknown";
+    const nextHasNextUserMove=nextExactSelectedLineNodes.length?nextExactSelectedLineNodes.some((node)=>node.continuations.some((move)=>move.color===userColor)):"unknown";
+    const nextExplicitCuratedTerminalNode=nextExactSelectedLineNodes.some((node)=>node.terminal&&node.sideToMove===nextGame.turn());
     const nextBranchCompleteContract=resolveBranchCompleteContract({
       trainingMode,
       trainerPhase:nextGame.isGameOver()?"terminal":(nextIsUserTurn?"ready_for_user":"opponent_replying"),
@@ -3963,6 +4204,15 @@ export default function App(){
       lineExhaustedByCursor:nextLineCompleteConfirmed,
       lineExhaustedByLichess:false,
       afterFinalUserMove:!nextIsUserTurn&&legal.color===userColor,
+      selectedLineId:selectedRepertoireId,
+      fen4:normalizeFen(nextFen),
+      lastUserMoveUci:legal.color===userColor?playedUci:null,
+      lastUserMoveSan:legal.color===userColor?legal.san:null,
+      exactNodeHasChildren:nextExactNodeHasChildren,
+      hasNextOpponentMove:nextHasNextOpponentMove,
+      hasNextUserMove:nextHasNextUserMove,
+      explicitCuratedTerminalNode:nextExplicitCuratedTerminalNode,
+      validBranchCompleteLatch:false,
     });
     const needsOpponentReply=!nextGame.isGameOver()&&nextGame.turn()!==userColor&&!nextBranchCompleteContract.shouldPreventOpponentScheduling;
     commitRuntimeFrame({
@@ -4472,14 +4722,52 @@ export default function App(){
     continuationVisualTargetBeforeClick:!continuationPauseClicked?visualMoveUciForDebug:null,
     continuationCoachTargetBeforeClick:!continuationPauseClicked?((displayedCoachDecision?.debug as any)?.coachMoveUci??instructionTarget?.uci??null):null,
     continuationPolicyDebug:continuationPolicyCandidate?.debug??null,
-    continuationSelectionSource:continuationPolicyCandidate?.source??null,
-    continuationSelectionReason:continuationPolicyCandidate?.reason??null,
-    continuationEngineFallbackUsed:Boolean(continuationPolicyCandidate?.engineFallbackUsed||continuationPolicyCandidate?.isEngineBestFallback),
-    continuationEngineFallbackReason:continuationPolicyCandidate?.engineFallbackReason??null,
-    continuationDatabaseCandidatesRejected:Boolean(continuationPolicyCandidate?.databaseCandidatesRejected),
-    continuationRejectionReasons:continuationPolicyCandidate?.rejectionReasons??[],
-    continuationSelectedCandidateSource:continuationPolicyCandidate?.isEngineBestFallback?"engine_best":(continuationPolicyCandidate?.source??null),
-    continuationAnalysisStatusLabel:continuationPolicyCandidate?.isEngineBestFallback?"complete":continuationAnalysisStatus,
+    continuationSelectionSource:validatedContinuationCandidate?.source??null,
+    continuationSelectionReason:validatedContinuationCandidate?.reason??null,
+    continuationEngineFallbackUsed:Boolean(validatedContinuationCandidate?.engineFallbackUsed||validatedContinuationCandidate?.isEngineBestFallback),
+    continuationEngineFallbackReason:validatedContinuationCandidate?.engineFallbackReason??null,
+    continuationDatabaseCandidatesRejected:Boolean(validatedContinuationCandidate?.databaseCandidatesRejected),
+    continuationRejectionReasons:validatedContinuationCandidate?.rejectionReasons??[],
+    continuationSelectedCandidateSource:validatedContinuationCandidate?.isEngineBestFallback?"engine_best":(validatedContinuationCandidate?.source??null),
+    continuationAnalysisStatusLabel:validatedContinuationCandidate?.isEngineBestFallback?"complete":continuationAnalysisStatus,
+    stockfishProviderStatus:stockfishTopMovesForContinuation.providerStatus,
+    stockfishDepth:stockfishTopMovesForContinuation.depth,
+    stockfishMultipv:stockfishTopMovesForContinuation.multipv,
+    suggestionValidationMultipv:SUGGESTION_VALIDATION_MULTIPV,
+    userMoveRatingMultipv:USER_MOVE_RATING_MULTIPV,
+    stockfishBestMoveUci:stockfishTopMovesForContinuation.bestMoveUci,
+    stockfishBestMoveSan:stockfishTopMovesForContinuation.bestMoveSan,
+    stockfishTopMoveUcis:stockfishTopMovesForContinuation.topMoves.map((move)=>move.uci),
+    stockfishTopMoveSans:stockfishTopMovesForContinuation.topMoves.map((move)=>move.san),
+    stockfishEvaluationFen:stockfishTopMovesForContinuation.fen,
+    stockfishEvaluationMatchesBoardFen:normalizeFen(stockfishTopMovesForContinuation.fen)===normalizeFen(fen),
+    suggestedMoveUci:validatedContinuationCandidate?.uci??null,
+    suggestedMoveSan:validatedContinuationCandidate?.san??null,
+    stockfishSuggestedRank:continuationSuggestionValidation?.rank??null,
+    stockfishSuggestedTop10:Boolean(continuationSuggestionValidation?.isTop10),
+    suggestionAccepted:Boolean(continuationSuggestionValidation?.accepted),
+    candidateReplacedByStockfish:Boolean(continuationSuggestionValidation && !continuationSuggestionValidation.accepted && Boolean(continuationSuggestionValidation.replacementUci)),
+    replacementUci:continuationSuggestionValidation?.replacementUci??null,
+    replacementReason:continuationSuggestionValidation?.rejectionReason??null,
+    lastContinuationUserMoveRating,
+    userMoveFoundInMultipv32:lastContinuationUserMoveRating?.userMoveFoundInTopMoves??null,
+    userMoveOutsideMultipv32:lastContinuationUserMoveRating?lastContinuationUserMoveRating.userMoveFoundInTopMoves===false:null,
+    directEvalFallbackUsed:lastContinuationUserMoveRating?.ratingMethod==="direct_after_move_eval",
+    renderedBadgeLabel:continuationRatingBadge?.label??null,
+    badgeVisible:Boolean(continuationRatingBadgeVisible),
+    badgeSuppressedReason:continuationRatingBadgeVisible?"none":(
+      trainingMode!=="continuation"
+        ?"not_continuation_mode"
+        :trainerView==="plain"
+          ?"plain_pre_show_more_badge_hidden"
+          :!lastContinuationUserMoveRating
+            ?"no_last_user_move_rating"
+            :lastContinuationUserMoveRating.badgeSuppressedReason!=="none"
+              ?lastContinuationUserMoveRating.badgeSuppressedReason
+              :lastContinuationUserMoveRating.providerStatus!=="ready"
+                ?"engine_unavailable"
+                :"surface_mode_hidden"
+    ),
     continuationAnalysisRequestId:continuationAnalysisSeqRef.current,
     continuationAnalysisFen4:enginePreview?.fen?normalizeFen(enginePreview.fen):null,
     opponentVariationDebug,
@@ -4504,9 +4792,22 @@ export default function App(){
     continueFromHereAvailable:Boolean((branchTransitionSurface?.render)||(v28CoachUiModel?.actions ?? []).some((action)=>action.kind==="continue_from_here"&&action.visible!==false)),
     branchCompleteEligible: branchCompleteEligibleNow,
     branchCompleteReason: branchCompleteReasonNow,
+    branchCompleteBlockedReason: branchCompleteContract.branchCompleteBlockedReason,
     branchCompleteLineExhaustedEvidence: branchCompleteContract.lineExhaustedEvidence,
     branchCompleteAfterFinalUserMove: branchCompleteContract.afterFinalUserMove,
+    selectedLineExhausted: branchCompleteContract.selectedLineExhausted,
+    selectedLineExhaustionReason: branchCompleteContract.selectedLineExhaustionReason,
+    selectedLineExhaustionBlockedReason: branchCompleteContract.selectedLineExhaustionBlockedReason,
+    exactNodeHasChildren: branchCompleteContract.exactNodeHasChildren,
+    hasNextOpponentMove: branchCompleteContract.hasNextOpponentMove,
+    hasNextUserMove: branchCompleteContract.hasNextUserMove,
+    knownFinalFenMatched: branchCompleteContract.knownFinalFenMatched,
+    knownFinalMoveMatched: branchCompleteContract.knownFinalMoveMatched,
+    finalGuidedUserMoveCompletedLine: branchCompleteContract.finalGuidedUserMoveCompletedLine,
+    explicitCuratedTerminalNode: explicitCuratedTerminalNode,
     pendingOpponentRequestConflict: branchCompleteContract.pendingOpponentRequestConflict,
+    pendingOpponentRequestCancelledForBranchComplete:Boolean(branchCompleteShouldCancelPending&&!pendingOpponentRequest),
+    branchCompleteBlockedOpponentRequestId:branchCompleteBlockedOpponentRequestIdRef.current,
     continueFromHereClicked,
     opportunityCount:(displayedCoachDecision?.debug as any)?.opportunityCount??liveCoachState?.opportunities?.length,
     renderableOpportunityCount:(displayedCoachDecision?.debug as any)?.renderableOpportunityCount??liveCoachState?.opportunities?.length,
@@ -4676,6 +4977,7 @@ export default function App(){
           onAction={handleCoachAction}
           replayEnabled={visualRecipePlayback.replayAvailable && trainerView !== "plain"}
           surfaceActions={v28CoachUiModel?.actions}
+          topRightBadge={continuationRatingBadge}
         />
       ) : null}
       {showDetails&&visualRecipe&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Visual Recipe</div><div className="mt-2">visualRecipeId: {visualRecipe.visualRecipeId}</div><div>recipeSchemaVersion: {visualRecipe.recipeSchemaVersion}</div><div>patternId: {visualRecipe.patternId}</div><div>recipeMode: {visualRecipe.mode}</div><div>recipeConceptId: {visualRecipe.conceptId}</div><div>recipeFrameId: {visualRecipe.frameId??"n/a"}</div><div>recipeFen: {visualRecipe.fen}</div><div>recipeBeatCount: {visualRecipe.beats.length}</div><div>recipePrimitiveCount: {visualRecipe.beats.reduce((sum,beat)=>sum+beat.primitives.length,0)}</div><div>recipePrimitives: {visualRecipe.beats.flatMap((beat)=>beat.primitives.map((primitive)=>`${primitive.type}:${primitive.id}`)).join(", ")||"none"}</div><div>recipePermissions: {JSON.stringify(visualRecipe.permissions)}</div><div>recipeLearningAnchor: {JSON.stringify(visualRecipe.learningAnchor)}</div><div>recipeSuppressedReason: {visualRecipe.debug?.recipeSuppressedReason??"none"}</div><div>recipeLanes: {visualRecipe.debug?.recipeLanes?.join(", ")||"none"}</div><div>recipeEffectFamilies: {visualRecipe.debug?.recipeEffectFamilies?.join(", ")||"none"}</div><div>recipePrioritySummary: {visualRecipe.debug?.recipePrioritySummary??"none"}</div><div>recipeTimingProfile: {visualRecipe.debug?.recipeTimingProfile?JSON.stringify(visualRecipe.debug.recipeTimingProfile):"n/a"}</div><div>recipeOpacityPolicy: {visualRecipe.debug?.recipeOpacityPolicy?JSON.stringify(visualRecipe.debug.recipeOpacityPolicy):"n/a"}</div><div>suppressedByPriority: {visualRecipe.debug?.suppressedByPriority?.join(", ")||"none"}</div><div>suppressedByBudget: {visualRecipe.debug?.suppressedByBudget?.join(", ")||"none"}</div><div>tacticalPrimitivesPresent: {visualRecipe.debug?.tacticalPrimitivesPresent?"true":"false"}</div><div>tacticalPrimitivesRendered: {visualRecipeOverlay.tacticalPrimitivesRendered?"true":"false"}</div><div>schemaSerializable: {visualRecipe.debug?.schemaSerializable?"true":"false"}</div><div>adapterAllowed: {visualRecipeOverlay.adapterAllowed?"true":"false"}</div><div>adapterSuppressedReason: {visualRecipeOverlay.adapterSuppressedReason??"none"}</div><div>recipeFenRaw: {visualRecipeOverlay.recipeFenRaw??"n/a"}</div><div>boardFenRaw: {visualRecipeOverlay.boardFenRaw}</div><div>recipeFenNormalized: {visualRecipeOverlay.recipeFenNormalized??"n/a"}</div><div>boardFenNormalized: {visualRecipeOverlay.boardFenNormalized??"n/a"}</div><div>recipeFrameIdRaw: {String(visualRecipeOverlay.recipeFrameIdRaw??"n/a")}</div><div>boardFrameIdRaw: {String(visualRecipeOverlay.boardFrameIdRaw)}</div><div>recipeFrameMatchesBoard: {visualRecipeOverlay.recipeFrameMatchesBoard?"true":"false"}</div><div>recipeFenMatchesBoard: {visualRecipeOverlay.recipeFenMatchesBoard?"true":"false"}</div></div>}

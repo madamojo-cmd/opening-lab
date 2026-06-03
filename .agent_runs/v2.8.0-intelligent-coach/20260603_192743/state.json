@@ -1,0 +1,25 @@
+{
+  "package": "13.1",
+  "agent": "Agent 13.1",
+  "status": "blocked",
+  "branch": "v2.8.0-intelligent-coach-live",
+  "objective": "Emergency Branch-Complete Regression Repair After Stockfish Integration",
+  "completed": [
+    "Added final guided move branch-complete evidence path independent of opponent-turn resolver cursor gaps",
+    "Restored restricted branch-complete eligibility and pending-opponent cancellation interaction",
+    "Added stockfish-unavailable non-blocking branch-complete regression coverage",
+    "Added restricted branch-complete missing-buttons critical diagnostic",
+    "Passed required build and test command suite"
+  ],
+  "blocked_on": [
+    "Manual QA acceptance flow for exact Italian line (Task J) and required debug export bundle not yet captured"
+  ],
+  "artifacts": {
+    "docs_report": "docs/BLUNDR_v2.8.0 Foundation Stabilization Gate_AGENT_13_1_BRANCH_COMPLETE_REGRESSION_REPAIR_REPORT.md",
+    "run_report": ".agent_runs/v2.8.0-intelligent-coach/20260603_192743/13_1_branch_complete_regression_repair.md",
+    "phase_report": ".agent_runs/v2.8.0-intelligent-coach/20260603_192743/phase_reports/13_1_branch_complete_regression_repair.md",
+    "command_log": ".agent_runs/v2.8.0-intelligent-coach/20260603_192743/command_log.md",
+    "risk_register": ".agent_runs/v2.8.0-intelligent-coach/20260603_192743/risk_register.md"
+  },
+  "timestamp_utc": "2026-06-03T19:40:00Z"
+}
