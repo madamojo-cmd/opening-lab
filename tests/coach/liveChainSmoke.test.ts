@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { buildEvidenceGraph } from "../../lib/blundr/brain/buildEvidenceGraph";
 import { compileCoachFrame } from "../../lib/blundr/coachCompiler/compileCoachFrame";
 import { activateTeachingConcepts } from "../../lib/blundr/concepts/dynamicConceptActivator";
+import { buildVisibleTeachingSurface } from "../../lib/blundr/presentation/buildVisibleTeachingSurface";
 import { buildCurrentInstructionFrame } from "../../lib/blundr/runtime/currentInstructionFrame";
 import { lockInstructionTarget } from "../../lib/blundr/runtime/instructionFrameLock";
 import { runCoachSafetyGate } from "../../lib/blundr/safety/coachSafetyGate";
@@ -35,6 +36,8 @@ function fullChain(input: {
   frame: ReturnType<typeof buildCurrentInstructionFrame>;
   opening?: { openingKey?: string; openingName?: string };
   mode?: "assisted" | "plain" | "show_more";
+  requestedMode?: "assisted" | "plain";
+  showMoreRevealed?: boolean;
 }) {
   const graph = buildEvidenceGraph({
     frame: input.frame,
@@ -54,7 +57,14 @@ function fullChain(input: {
     compiled,
     activatedConcepts: concepts.activated,
   });
-  return { graph, concepts, compiled, gated };
+  const surface = buildVisibleTeachingSurface({
+    frame: input.frame,
+    graph,
+    safetyOutput: gated,
+    requestedMode: input.requestedMode ?? "assisted",
+    showMoreRevealed: input.showMoreRevealed ?? false,
+  });
+  return { graph, concepts, compiled, gated, surface };
 }
 
 function hasLeak(text: string, tokens: string[]): boolean {
@@ -79,6 +89,7 @@ export function testLiveChainSmoke(): void {
   assert.equal(e4.compiled.targetUci, e4Frame.target?.uci ?? null);
   assert.equal(e4.gated.result.allowed, true);
   assert.equal(e4.gated.safeFrame.targetUci, "e2e4");
+  assert.equal(e4.surface.targetUci, "e2e4");
 
   // 2) Italian Nf3
   const nf3Frame = buildTargetFrame({
@@ -111,6 +122,7 @@ export function testLiveChainSmoke(): void {
   assert.equal(bc4.compiled.visualIntents.every((v) => v.targetUci === "f1c4"), true);
   assert.equal(hasLeak(bc4.compiled.plain.body, ["Bc4", "f1c4", "f1", "c4", "bishop"]), false);
   assert.equal(bc4.gated.result.allowed, true);
+  assert.equal(bc4.surface.actions.some((action) => action.kind === "reveal_target" && action.targetUci === "f1c4"), true);
 
   // 4) Castling O-O
   const castleFrame = buildTargetFrame({
@@ -140,6 +152,8 @@ export function testLiveChainSmoke(): void {
   assert.equal(branch.compiled.revealAction.kind, "continue_from_here");
   assert.equal(branch.compiled.visualIntents.some((v) => v.type === "move_arrow"), false);
   assert.equal(branch.gated.result.allowed, true);
+  assert.equal(branch.surface.mode, "branch_complete");
+  assert.equal(branch.surface.actions.some((action) => action.kind === "continue_from_here"), true);
 
   // 6) Opponent replying
   const opponentFrame = buildCurrentInstructionFrame({
@@ -156,6 +170,8 @@ export function testLiveChainSmoke(): void {
   assert.equal(opponent.compiled.revealAction.kind, "none");
   assert.equal(opponent.compiled.visualIntents.length, 0);
   assert.equal(opponent.gated.result.allowed, true);
+  assert.equal(opponent.surface.mode, "opponent_replying");
+  assert.equal(opponent.surface.actions.some((action) => action.kind === "reveal_target"), false);
 
   // 7) Mismatch trap
   const mismatchCompiled = {
@@ -176,6 +192,15 @@ export function testLiveChainSmoke(): void {
   const plainLeakGate = runCoachSafetyGate({ frame: bc4Frame, graph: bc4.graph, compiled: plainLeakCompiled, activatedConcepts: bc4.concepts.activated });
   assert.equal(plainLeakGate.result.allowed, false);
   assert.equal(hasLeak(plainLeakGate.safeFrame.plain.body, ["Bc4", "f1", "c4", "bishop"]), false);
+  const blockedSurface = buildVisibleTeachingSurface({
+    frame: bc4Frame,
+    graph: bc4.graph,
+    safetyOutput: plainLeakGate,
+    requestedMode: "assisted",
+    showMoreRevealed: false,
+  });
+  assert.equal(blockedSurface.mode, "blocked");
+  assert.equal(blockedSurface.visuals.length, 0);
 
   // 9) Unsupported strong claim trap
   const strongClaimCompiled = {

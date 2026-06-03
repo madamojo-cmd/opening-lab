@@ -1,50 +1,84 @@
-export interface VisualRecipe {
-  frameKey: string;
-  targetUci: string | null;
-  intents: Array<{
-    id: string;
-    type: string;
-    targetUci: string;
-    from?: string;
-    to?: string;
-    squares?: string[];
-    evidenceClaimIds: string[];
-  }>;
+export type TeachingSurfaceMode =
+  | "assisted"
+  | "plain_before_show_more"
+  | "plain_after_show_more"
+  | "branch_complete"
+  | "opponent_replying"
+  | "terminal"
+  | "blocked";
+
+export type SurfaceActionKind =
+  | "show_more"
+  | "hide_more"
+  | "reveal_target"
+  | "continue_from_here"
+  | "none";
+
+export interface VisibleSurfaceCopy {
+  title: string;
+  body: string;
+  bullets: string[];
+  leakRisk: "none" | "low" | "medium" | "high";
+  source: "plain" | "assisted" | "show_more" | "fallback";
 }
 
-export interface VisibleActionPolicy {
-  showHint: boolean;
-  showMore: boolean;
-  revealMove: boolean;
-  continueFromHere: boolean;
-  disabledReasons: Record<string, string>;
+export interface SurfaceVisualRecipe {
+  id: string;
+  type:
+    | "move_arrow"
+    | "source_highlight"
+    | "destination_highlight"
+    | "pressure_arrow"
+    | "king_safety_aura"
+    | "pawn_break_marker"
+    | "concept_square_highlight";
+  targetUci: string | null;
+  from?: string | null;
+  to?: string | null;
+  squares?: string[];
+  evidenceClaimIds: string[];
+  visible: boolean;
+  leakRisk: "none" | "low" | "medium" | "high";
+}
+
+export interface SurfaceAction {
+  kind: SurfaceActionKind;
+  label: string;
+  targetUci: string | null;
+  targetSan: string | null;
+  enabled: boolean;
+  visible: boolean;
 }
 
 export interface VisibleTeachingSurface {
   frameKey: string;
-  owner: "compiled_coach_surface" | "safe_fallback_surface" | "terminal_surface" | "transition_surface";
+  mode: TeachingSurfaceMode;
   targetUci: string | null;
-  displayMode: "assisted" | "plain" | "terminal" | "blocked";
-  coachCard: {
-    title: string;
-    body: string;
-    showMore?: {
-      title: string;
-      body: string;
-    };
-  } | null;
-  plainHint: string | null;
-  revealAction: {
-    kind: "none" | "reveal_move";
-    targetUci: string | null;
-    label?: string;
-  } | null;
-  visualRecipe: VisualRecipe | null;
-  actionPolicy: VisibleActionPolicy;
+  targetSan: string | null;
+  pieceType: string | null;
+
+  copy: VisibleSurfaceCopy;
+  visuals: SurfaceVisualRecipe[];
+  actions: SurfaceAction[];
+
   safety: {
     allowed: boolean;
     criticalIssues: string[];
-    blockedReasons: string[];
+    warnings: string[];
+    originalFrameBlocked: boolean;
   };
-  debug: Record<string, unknown>;
+
+  provenance: {
+    frameKey: string;
+    graphTargetUci: string | null;
+    compilerVersion?: string;
+    surfaceVersion: string;
+  };
+
+  debug: {
+    sourceSafeFrame: boolean;
+    hiddenVisualCount: number;
+    actionKinds: SurfaceActionKind[];
+    targetVisualUcis: Array<string | null>;
+  };
 }

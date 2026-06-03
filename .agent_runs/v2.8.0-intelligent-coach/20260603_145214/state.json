@@ -3,7 +3,7 @@
   "branch": "v2.8.0-intelligent-coach-live",
   "baseSha": "7cad573c0a15de413c143e6a505b4cec6fa90633",
   "currentSha": "35a84d5dd718d8b66cb23b4e10bb993577d2b617",
-  "phase": "08_5_headless_live_chain",
+  "phase": "09_visible_teaching_surface",
   "gates": {
     "package1_authority_audit": "pass_with_unresolved_risks",
     "package2_core_contracts": "pass",
@@ -14,6 +14,7 @@
     "package7_coach_compiler": "pass",
     "package8_coach_safety_gate": "pass",
     "package8_5_headless_live_chain": "pass",
+    "package9_visible_teaching_surface": "pass",
     "productCodeChanged": false,
     "headlessLiveChainSmokeAdded": true
   },

@@ -11,5 +11,11 @@
 ## Package 8.5 Blocking Risks
 - None.
 
+## Package 9 Residual Risks
+- `app/page.tsx` still consumes the legacy `buildVisibleTeachingSurface` shape; Package 9 added a compatibility branch to avoid UI edits, but full UI migration remains pending for Package 10.
+- Existing legacy presentation test files under `lib/blundr/presentation/__tests__` still target the old surface contract and were not rewritten in this package scope.
+- Deterministic surface contract is now implemented and tested headlessly, but final user-visible wiring parity is still deferred.
+
 ## Net Gate
 - Package 8.5 can pass with deterministic headless live-chain validation complete and presentation wiring deferred.
+- Package 9 can pass for contract-complete VisibleTeachingSurface builder with UI wiring deferred to Package 10.

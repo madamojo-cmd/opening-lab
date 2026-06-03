@@ -3,6 +3,7 @@ import { buildEvidenceGraph } from "../../lib/blundr/brain/buildEvidenceGraph";
 import { compileCoachFrame } from "../../lib/blundr/coachCompiler/compileCoachFrame";
 import { activateTeachingConcepts } from "../../lib/blundr/concepts/dynamicConceptActivator";
 import { teachingConceptRegistry } from "../../lib/blundr/concepts/teachingConceptRegistry";
+import { buildVisibleTeachingSurface } from "../../lib/blundr/presentation/buildVisibleTeachingSurface";
 import { buildCurrentInstructionFrame } from "../../lib/blundr/runtime/currentInstructionFrame";
 import { lockInstructionTarget } from "../../lib/blundr/runtime/instructionFrameLock";
 import { runCoachSafetyGate } from "../../lib/blundr/safety/coachSafetyGate";
@@ -64,6 +65,16 @@ export function testPlainLeak(): void {
 
   const gatePass = runCoachSafetyGate({ frame, graph, compiled, activatedConcepts: assistedConcepts.activated });
   assert.equal(gatePass.result.allowed, true);
+  const plainPreSurface = buildVisibleTeachingSurface({
+    frame,
+    graph,
+    safetyOutput: gatePass,
+    requestedMode: "plain",
+    showMoreRevealed: false,
+  });
+  assert.equal(plainPreSurface.actions.some((action) => action.kind === "show_more"), true);
+  assert.equal(plainPreSurface.actions.some((action) => action.kind === "reveal_target"), false);
+  assert.equal(plainPreSurface.visuals.length, 0);
 
   const leaked = {
     ...compiled,

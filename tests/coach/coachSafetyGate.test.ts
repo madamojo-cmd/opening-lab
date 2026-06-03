@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { buildEvidenceGraph } from "../../lib/blundr/brain/buildEvidenceGraph";
 import { compileCoachFrame } from "../../lib/blundr/coachCompiler/compileCoachFrame";
 import { activateTeachingConcepts } from "../../lib/blundr/concepts/dynamicConceptActivator";
+import { buildVisibleTeachingSurface } from "../../lib/blundr/presentation/buildVisibleTeachingSurface";
 import { runCoachSafetyGate } from "../../lib/blundr/safety/coachSafetyGate";
 import { buildCurrentInstructionFrame } from "../../lib/blundr/runtime/currentInstructionFrame";
 import { lockInstructionTarget } from "../../lib/blundr/runtime/instructionFrameLock";
@@ -282,6 +283,16 @@ export function testCoachSafetyGate(): void {
 
   assert.equal(providerMismatch.safeFrame.visualIntents.length, 0);
   assert.equal(providerMismatch.safeFrame.revealAction.kind, "none");
+  const blockedSurface = buildVisibleTeachingSurface({
+    frame: bc4.frame,
+    graph: providerMismatchGraph,
+    safetyOutput: providerMismatch,
+    requestedMode: "assisted",
+    showMoreRevealed: false,
+  });
+  assert.equal(blockedSurface.mode, "blocked");
+  assert.equal(blockedSurface.visuals.length, 0);
+  assert.equal(blockedSurface.actions.some((action) => action.kind === "reveal_target"), false);
 
   assert.notEqual(providerMismatch.safeFrame, bc4.compiled);
   assert.equal(bc4.compiled.revealAction.kind, "reveal_target");

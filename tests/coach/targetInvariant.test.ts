@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { buildEvidenceGraph } from "../../lib/blundr/brain/buildEvidenceGraph";
 import { compileCoachFrame } from "../../lib/blundr/coachCompiler/compileCoachFrame";
 import { activateTeachingConcepts } from "../../lib/blundr/concepts/dynamicConceptActivator";
+import { buildVisibleTeachingSurface } from "../../lib/blundr/presentation/buildVisibleTeachingSurface";
 import { buildCurrentInstructionFrame } from "../../lib/blundr/runtime/currentInstructionFrame";
 import { createTargetMismatchIssue, lockInstructionTarget } from "../../lib/blundr/runtime/instructionFrameLock";
 import { runCoachSafetyGate } from "../../lib/blundr/safety/coachSafetyGate";
@@ -35,6 +36,14 @@ export function testTargetInvariant(): void {
   assert.equal(compiled.showMore.body.toLowerCase().includes("bc4"), true);
   const safety = runCoachSafetyGate({ frame, graph, compiled, activatedConcepts: concepts.activated });
   assert.equal(safety.result.allowed, true);
+  const surface = buildVisibleTeachingSurface({
+    frame,
+    graph,
+    safetyOutput: safety,
+    requestedMode: "assisted",
+    showMoreRevealed: false,
+  });
+  assert.equal(surface.debug.targetVisualUcis.every((uci) => uci === surface.targetUci), true);
 
   const mismatch = createTargetMismatchIssue({ expected: "f1c4", actual: "g1f3", surface: "showMore" });
   assert.equal(mismatch.code, "target_source_ambiguous");

@@ -150,26 +150,37 @@ export function testTypeContracts(): void {
 
   const safeFallbackSurface: VisibleTeachingSurface = {
     frameKey: guidedFrame.frameKey,
-    owner: "safe_fallback_surface",
+    mode: "blocked",
     targetUci: null,
-    displayMode: "blocked",
-    coachCard: null,
-    plainHint: "No safe teaching claim available.",
-    revealAction: { kind: "none", targetUci: null },
-    visualRecipe: null,
-    actionPolicy: {
-      showHint: true,
-      showMore: false,
-      revealMove: false,
-      continueFromHere: true,
-      disabledReasons: { showMore: "blocked_by_safety" },
+    targetSan: null,
+    pieceType: null,
+    copy: {
+      title: "Safety fallback",
+      body: "No safe teaching claim available.",
+      bullets: [],
+      leakRisk: "none",
+      source: "fallback",
     },
+    visuals: [],
+    actions: [],
     safety: {
       allowed: false,
       criticalIssues: ["type_claim_without_evidence"],
-      blockedReasons: ["insufficient_evidence"],
+      warnings: [],
+      originalFrameBlocked: true,
     },
-    debug: {},
+    provenance: {
+      frameKey: guidedFrame.frameKey,
+      graphTargetUci: null,
+      compilerVersion: "v2.8.0-package7-mvp",
+      surfaceVersion: "v2.8.0-package9-visible-surface",
+    },
+    debug: {
+      sourceSafeFrame: true,
+      hiddenVisualCount: 0,
+      actionKinds: [],
+      targetVisualUcis: [],
+    },
   };
   assert.equal(safeFallbackSurface.targetUci, null);
 

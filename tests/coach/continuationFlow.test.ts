@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
+import { buildEvidenceGraph } from "../../lib/blundr/brain/buildEvidenceGraph";
+import { compileCoachFrame } from "../../lib/blundr/coachCompiler/compileCoachFrame";
+import { buildVisibleTeachingSurface } from "../../lib/blundr/presentation/buildVisibleTeachingSurface";
 import { buildContinuationRuntimeState } from "../../lib/blundr/runtime/continuationRuntimeState";
+import { buildCurrentInstructionFrame } from "../../lib/blundr/runtime/currentInstructionFrame";
+import { runCoachSafetyGate } from "../../lib/blundr/safety/coachSafetyGate";
 
 function isLegalUciShape(uci: string | null): boolean {
   if (!uci) return false;
@@ -55,6 +60,30 @@ export function testContinuationFlow(): void {
     candidateSource: "maia",
   });
   assert.equal(maiaCannotLock.phase, "blocked");
+
+  const branchFrame = buildCurrentInstructionFrame({
+    kind: "branch_complete",
+    fenBefore: "r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 6 4",
+    ply: 9,
+    sideToMove: "black",
+    target: null,
+    mode: "blocked",
+    source: "none",
+    branchComplete: { isComplete: true, continueFromHereAvailable: true },
+  });
+  const branchGraph = buildEvidenceGraph({ frame: branchFrame });
+  const branchCompiled = compileCoachFrame({ frame: branchFrame, graph: branchGraph, activatedConcepts: [] });
+  const branchGate = runCoachSafetyGate({ frame: branchFrame, graph: branchGraph, compiled: branchCompiled });
+  const branchSurface = buildVisibleTeachingSurface({
+    frame: branchFrame,
+    graph: branchGraph,
+    safetyOutput: branchGate,
+    requestedMode: "assisted",
+    showMoreRevealed: false,
+  });
+  assert.equal(branchSurface.mode, "branch_complete");
+  assert.equal(branchSurface.targetUci, null);
+  assert.equal(branchSurface.actions.some((action) => action.kind === "continue_from_here"), true);
 }
 
 testContinuationFlow();
