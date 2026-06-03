@@ -10,6 +10,11 @@ import { validateTargetInvariants } from "./targetInvariantPolicy";
 import { validateNullTargetFrame } from "./nullTargetPolicy";
 import type { CoachSafetyResult, SafetyGateOutput } from "./types";
 
+const RECOVERABLE_CODES = new Set([
+  "claim_without_evidence",
+  "unsupported_strong_claim",
+]);
+
 export function runCoachSafetyGate(input: {
   frame: CurrentInstructionFrame;
   graph: EvidenceGraph;
@@ -25,18 +30,37 @@ export function runCoachSafetyGate(input: {
   ];
 
   const criticalIssues = issues.filter((issue) => issue.severity === "critical");
+  const fatalIssues = criticalIssues.filter((issue) => !RECOVERABLE_CODES.has(issue.code));
+  const recoverableIssues = issues.filter((issue) => RECOVERABLE_CODES.has(issue.code));
   const result: CoachSafetyResult = {
-    allowed: criticalIssues.length === 0,
+    allowed: fatalIssues.length === 0,
     issues,
-    criticalIssues,
-    blockedReasons: criticalIssues.map((issue) => issue.code),
-    warningReasons: issues.filter((issue) => issue.severity === "warning").map((issue) => issue.code),
+    criticalIssues: fatalIssues,
+    blockedReasons: fatalIssues.map((issue) => issue.code),
+    fatalReasons: fatalIssues.map((issue) => issue.code),
+    recoverableReasons: recoverableIssues.map((issue) => issue.code),
+    warningReasons: [
+      ...issues.filter((issue) => issue.severity === "warning").map((issue) => issue.code),
+      ...recoverableIssues.map((issue) => issue.code),
+    ],
   };
 
-  if (result.allowed) {
+  if (result.allowed && recoverableIssues.length === 0) {
     return {
       result,
       safeFrame: input.compiled,
+      originalFrameBlocked: false,
+    };
+  }
+
+  if (result.allowed && recoverableIssues.length > 0) {
+    return {
+      result,
+      safeFrame: buildSafeFallbackCompiledFrame({
+        frame: input.frame,
+        compiled: input.compiled,
+        issues: recoverableIssues,
+      }),
       originalFrameBlocked: false,
     };
   }

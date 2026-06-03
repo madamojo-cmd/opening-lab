@@ -75,11 +75,16 @@ export function testAntiHallucination(): void {
   const strongClaimCompiled = {
     ...compiled,
     assisted: { ...compiled.assisted, body: "This is the best move and wins material." },
+    showMore: { ...compiled.showMore, body: "This is the best move and wins material." },
   };
   const gate = runCoachSafetyGate({ frame, graph, compiled: strongClaimCompiled, activatedConcepts: concepts.activated });
-  assert.equal(gate.result.allowed, false);
+  assert.equal(gate.result.allowed, true);
+  assert.equal(gate.result.fatalReasons.length, 0);
+  assert.equal(gate.result.recoverableReasons.includes("claim_without_evidence"), true);
+  assert.equal(gate.safeFrame.assisted.body.toLowerCase().includes("best move"), false);
+  assert.equal(gate.safeFrame.assisted.body.toLowerCase().includes("wins material"), false);
   assert.equal(
-    gate.result.criticalIssues.some((issue) => issue.code === "unsupported_strong_claim" || issue.code === "claim_without_evidence"),
+    gate.result.recoverableReasons.some((code) => code === "unsupported_strong_claim" || code === "claim_without_evidence"),
     true,
   );
 }

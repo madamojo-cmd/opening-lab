@@ -113,6 +113,12 @@ export function buildVisibleTeachingSurface(
     frame: input.frame,
     safetyOutput: input.safetyOutput,
   });
+  const issueCodes = input.safetyOutput.result.issues.map((issue) => issue.code);
+  const fatalReasons = input.safetyOutput.result.fatalReasons ?? input.safetyOutput.result.blockedReasons;
+  const recoverableReasons = input.safetyOutput.result.recoverableReasons ?? [];
+  const blocked = mode === "blocked";
+  const recoveredBySafeTeachingCopy = !blocked && recoverableReasons.length > 0;
+  const mismatchCodes = new Set(["target_mismatch", "compiler_target_mismatch", "graph_target_mismatch"]);
 
   const surfaceBase: VisibleTeachingSurface = {
     frameKey: safeFrame.frameKey,
@@ -120,7 +126,12 @@ export function buildVisibleTeachingSurface(
     targetUci: safeFrame.targetUci,
     targetSan: safeFrame.targetSan,
     pieceType: safeFrame.pieceType,
-    copy: buildSurfaceCopy({ mode, safeFrame }),
+    copy: buildSurfaceCopy({
+      mode,
+      safeFrame,
+      requestedMode: input.requestedMode,
+      showMoreRevealed: input.showMoreRevealed,
+    }),
     visuals: mapVisualIntentsToSurfaceRecipes({ mode, safeFrame }),
     actions: buildSurfaceActions({ mode, safeFrame }),
     safety: {
@@ -128,6 +139,17 @@ export function buildVisibleTeachingSurface(
       criticalIssues: input.safetyOutput.result.criticalIssues.map((issue) => issue.code),
       warnings: input.safetyOutput.result.warningReasons,
       originalFrameBlocked: input.safetyOutput.originalFrameBlocked,
+      blocked,
+      blockedReason: blocked ? (fatalReasons[0] ?? input.safetyOutput.result.blockedReasons[0] ?? null) : null,
+      blockedSeverity: blocked ? "fatal" : (recoverableReasons.length > 0 ? "recoverable" : null),
+      blockedPolicy: blocked ? "fatal_safety_policy" : (recoverableReasons.length > 0 ? "recoverable_safe_teaching_copy" : null),
+      targetMismatch: issueCodes.some((code) => mismatchCodes.has(code)),
+      pieceMismatch: issueCodes.includes("piece_mismatch"),
+      visualMismatch: issueCodes.includes("visual_mismatch"),
+      revealMismatch: issueCodes.includes("reveal_mismatch"),
+      plainLeakDetected: issueCodes.includes("plain_leak"),
+      unsupportedStrongClaim: issueCodes.includes("unsupported_strong_claim") || issueCodes.includes("claim_without_evidence"),
+      recoveredBySafeTeachingCopy,
     },
     provenance: {
       frameKey: safeFrame.provenance.frameKey,

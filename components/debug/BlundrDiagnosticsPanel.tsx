@@ -133,6 +133,34 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
       })),
     };
   }, [coachTimeline]);
+  const coachCardRenderTimeline = useMemo(() => (Array.isArray(snapshot?.coachCardRenderTimeline) ? snapshot.coachCardRenderTimeline : []), [snapshot]);
+  const surfaceModeTransitionTimeline = useMemo(() => (Array.isArray(snapshot?.surfaceModeTransitionTimeline) ? snapshot.surfaceModeTransitionTimeline : []), [snapshot]);
+  const actionTimeline = useMemo(() => (Array.isArray(snapshot?.actionTimeline) ? snapshot.actionTimeline : []), [snapshot]);
+  const visualRenderTimeline = useMemo(() => (Array.isArray(snapshot?.visualRenderTimeline) ? snapshot.visualRenderTimeline : []), [snapshot]);
+  const plainLeakTimeline = useMemo(() => (Array.isArray(snapshot?.plainLeakTimeline) ? snapshot.plainLeakTimeline : []), [snapshot]);
+  const currentCoachCard = useMemo(() => ({
+    title: snapshot?.coach?.visibleTitle ?? null,
+    body: snapshot?.coach?.visibleBody ?? null,
+    buttons: snapshot?.coach?.visibleButtons ?? [],
+    owner: snapshot?.coach?.visibleCoachOwner ?? null,
+    intent: snapshot?.coach?.coachIntent ?? null,
+    source: snapshot?.coach?.coachDecisionSource ?? null,
+    mode: snapshot ? (snapshot.presentation as any)?.visibleSurfaceMode ?? null : null,
+  }), [snapshot]);
+  const fullDebugSession = useMemo(() => ({
+    generatedAt: snapshot?.generatedAt ?? null,
+    frame: snapshot?.frame ?? null,
+    coachCard: currentCoachCard,
+    coachCardRenderTimeline,
+    coachPipelineTimeline: coachTimeline,
+    visualTimeline: visualRenderTimeline,
+    actionTimeline,
+    surfaceModeTransitionTimeline,
+    plainLeakTimeline,
+    health: snapshot?.health ?? null,
+    criticalIssues: snapshot?.health?.criticalIssues ?? [],
+    warnings: snapshot?.health?.warnings ?? [],
+  }), [snapshot, currentCoachCard, coachCardRenderTimeline, coachTimeline, visualRenderTimeline, actionTimeline, surfaceModeTransitionTimeline, plainLeakTimeline]);
 
   if (!enabled && !snapshot?.build.debugEnabled) return null;
   if (!snapshot) return null;
@@ -172,7 +200,14 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
             <DebugCopyButton label="Copy JSON" getText={() => stringifyDebugJson(snapshot)} />
             <DebugCopyButton label="Copy Issue Report" getText={() => issueReport(snapshot)} />
             <DebugCopyButton label="Copy FEN/Opp" getText={() => JSON.stringify({ fen4: snapshot.board.boardFen4, expectedMoveSan: snapshot.frame.expectedMoveSan, expectedMoveUci: snapshot.frame.expectedMoveUci, selectedOpportunity: snapshot.coach.selectedOpportunityId }, null, 2)} />
+            <DebugCopyButton label="Copy Current CoachCard JSON" getText={() => JSON.stringify(currentCoachCard, null, 2)} />
             <DebugCopyButton label="Copy Coach Timeline JSON" getText={() => JSON.stringify(coachTimeline, null, 2)} />
+            <DebugCopyButton label="Copy CoachCard Render Timeline JSON" getText={() => JSON.stringify(coachCardRenderTimeline, null, 2)} />
+            <DebugCopyButton label="Copy Surface Timeline JSON" getText={() => JSON.stringify(surfaceModeTransitionTimeline, null, 2)} />
+            <DebugCopyButton label="Copy Action Timeline JSON" getText={() => JSON.stringify(actionTimeline, null, 2)} />
+            <DebugCopyButton label="Copy Visual Timeline JSON" getText={() => JSON.stringify(visualRenderTimeline, null, 2)} />
+            <DebugCopyButton label="Copy Plain Leak Timeline JSON" getText={() => JSON.stringify(plainLeakTimeline, null, 2)} />
+            <DebugCopyButton label="Copy Full Debug Session JSON" getText={() => JSON.stringify(fullDebugSession, null, 2)} />
             <DebugCopyButton label="Copy Coach QA Summary" getText={() => JSON.stringify(coachQaSummary, null, 2)} />
             <button type="button" onClick={onClearEvents} className="rounded-full bg-stone-100 px-3 py-1 text-[11px] font-black text-stone-900">Clear Events</button>
             <button type="button" onClick={() => { setBlundrDebugEnabled(!enabled); onEnabledChange(!enabled); }} className="rounded-full bg-stone-100 px-3 py-1 text-[11px] font-black text-stone-900">{enabled ? "Disable" : "Enable"}</button>
@@ -213,6 +248,11 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
             </div>
             <div className="mt-2"><DebugJsonViewer value={snapshot.coachTimelineSummary} /></div>
           </DebugSection>
+          <DebugSection title="CoachCard Render Timeline"><DebugJsonViewer value={coachCardRenderTimeline} /></DebugSection>
+          <DebugSection title="Surface Mode Timeline"><DebugJsonViewer value={surfaceModeTransitionTimeline} /></DebugSection>
+          <DebugSection title="Action Timeline"><DebugJsonViewer value={actionTimeline} /></DebugSection>
+          <DebugSection title="Visual Timeline"><DebugJsonViewer value={visualRenderTimeline} /></DebugSection>
+          <DebugSection title="Plain Leak Timeline"><DebugJsonViewer value={plainLeakTimeline} /></DebugSection>
           <DebugSection title="Event Log"><DebugEventTimeline events={snapshot.eventLog} /></DebugSection>
           <DebugSection title="Raw JSON"><DebugJsonViewer value={snapshot} /></DebugSection>
         </div>

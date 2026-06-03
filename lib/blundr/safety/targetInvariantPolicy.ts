@@ -9,6 +9,18 @@ function containsToken(text: string, token: string | null | undefined): boolean 
   return text.toLowerCase().includes(value.toLowerCase());
 }
 
+function normalizePiece(piece: string | null | undefined): string {
+  const value = String(piece ?? "").trim().toLowerCase();
+  if (!value) return "";
+  if (value === "p" || value === "pawn") return "pawn";
+  if (value === "n" || value === "knight") return "knight";
+  if (value === "b" || value === "bishop") return "bishop";
+  if (value === "r" || value === "rook") return "rook";
+  if (value === "q" || value === "queen") return "queen";
+  if (value === "k" || value === "king") return "king";
+  return value;
+}
+
 export function validateTargetInvariants(input: {
   frame: CurrentInstructionFrame;
   graph: EvidenceGraph;
@@ -52,8 +64,8 @@ export function validateTargetInvariants(input: {
       });
     }
 
-    const framePiece = String(frameTarget.pieceType ?? "").toLowerCase();
-    const compiledPiece = String(input.compiled.pieceType ?? "").toLowerCase();
+    const framePiece = normalizePiece(frameTarget.pieceType);
+    const compiledPiece = normalizePiece(input.compiled.pieceType);
     if (framePiece !== compiledPiece) {
       issues.push({
         code: "piece_mismatch",

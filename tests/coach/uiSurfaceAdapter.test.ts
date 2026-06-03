@@ -14,7 +14,7 @@ function makeGuidedFrame(input: {
   fen: string;
   uci: string;
   san: string;
-  pieceType: "pawn" | "knight" | "bishop" | "rook" | "queen" | "king";
+  pieceType: "pawn" | "knight" | "bishop" | "rook" | "queen" | "king" | "p" | "n" | "b" | "r" | "q" | "k";
 }) {
   return buildCurrentInstructionFrame({
     kind: "guided_move",
@@ -172,6 +172,32 @@ export function testUiSurfaceAdapter(): void {
   assert.equal(e4.copy.title.includes("Safety Fallback"), false);
   assert.equal(nf3.copy.title.includes("Safety Fallback"), false);
   assert.equal(bc4.copy.title.includes("Safety Fallback"), false);
+  const e4Coach = adaptVisibleSurfaceToCoachUi(e4);
+  const nf3Coach = adaptVisibleSurfaceToCoachUi(nf3);
+  const bc4Coach = adaptVisibleSurfaceToCoachUi(bc4);
+  assert.equal(e4Coach.title.toLowerCase().includes("safety fallback"), false);
+  assert.equal(e4Coach.body.toLowerCase().includes("safest improving move here"), false);
+  assert.equal(e4Coach.body.toLowerCase().includes("e4") || e4Coach.body.toLowerCase().includes("center"), true);
+  assert.equal(nf3Coach.title.toLowerCase().includes("safety fallback"), false);
+  assert.equal(nf3Coach.body.toLowerCase().includes("safest improving move here"), false);
+  assert.equal(nf3Coach.body.toLowerCase().includes("nf3") || nf3Coach.body.toLowerCase().includes("knight"), true);
+  assert.equal(bc4Coach.title.toLowerCase().includes("safety fallback"), false);
+  assert.equal(bc4Coach.body.toLowerCase().includes("safest improving move here"), false);
+  assert.equal(bc4Coach.body.toLowerCase().includes("bc4") || bc4Coach.body.toLowerCase().includes("bishop"), true);
+  const d4 = buildLiveVisibleTeachingSurface({
+    frame: makeGuidedFrame({
+      fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      uci: "d2d4",
+      san: "d4",
+      pieceType: "p",
+    }),
+    requestedMode: "assisted",
+    showMoreRevealed: false,
+  });
+  const d4Coach = adaptVisibleSurfaceToCoachUi(d4);
+  assert.equal(d4Coach.title.toLowerCase().includes("safety blocked"), false);
+  assert.equal(d4Coach.body.toLowerCase().includes("no move-specific coaching is available"), false);
+  assert.equal(d4Coach.body.toLowerCase().includes("d4") || d4Coach.body.toLowerCase().includes("center"), true);
 
   const graph = buildEvidenceGraph({ frame: bc4Frame });
   const concepts = activateTeachingConcepts({ graph, mode: "assisted", maxConcepts: 20 });

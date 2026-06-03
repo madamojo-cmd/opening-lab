@@ -28,6 +28,12 @@ export function buildSurfaceActions(input: {
   if (mode === "plain_before_show_more") {
     return [
       action({
+        kind: "hint",
+        label: "Hint",
+        targetUci: null,
+        targetSan: null,
+      }),
+      action({
         kind: "show_more",
         label: "Show more",
         targetUci: null,
@@ -45,22 +51,18 @@ export function buildSurfaceActions(input: {
           targetUci: null,
           targetSan: null,
         }),
+        action({
+          kind: "restart_line",
+          label: "Restart line",
+          targetUci: null,
+          targetSan: null,
+        }),
       ];
     }
     return [];
   }
 
   if (mode === "assisted") {
-    if (safeFrame.revealAction.kind === "reveal_target") {
-      return [
-        action({
-          kind: "reveal_target",
-          label: safeFrame.revealAction.label || "Reveal target",
-          targetUci: safeFrame.revealAction.targetUci,
-          targetSan: safeFrame.revealAction.targetSan,
-        }),
-      ];
-    }
     return [];
   }
 
@@ -73,17 +75,6 @@ export function buildSurfaceActions(input: {
         targetSan: null,
       }),
     ];
-
-    if (safeFrame.targetUci && safeFrame.revealAction.kind === "reveal_target") {
-      actions.push(
-        action({
-          kind: "reveal_target",
-          label: safeFrame.revealAction.label || "Reveal target",
-          targetUci: safeFrame.revealAction.targetUci,
-          targetSan: safeFrame.revealAction.targetSan,
-        }),
-      );
-    }
 
     return actions;
   }

@@ -12,7 +12,7 @@ function makeGuidedFrame(input: {
   fen: string;
   uci: string;
   san: string;
-  pieceType: "pawn" | "knight" | "bishop" | "rook" | "queen" | "king";
+  pieceType: "pawn" | "knight" | "bishop" | "rook" | "queen" | "king" | "p" | "n" | "b" | "r" | "q" | "k";
 }) {
   return buildCurrentInstructionFrame({
     kind: "guided_move",
@@ -67,7 +67,7 @@ export function testVisibleTeachingSurface(): void {
   const assistedBc4 = buildSurfacePack({ frame: bc4Frame, requestedMode: "assisted", showMoreRevealed: false });
   assert.equal(assistedBc4.surface.targetUci, "f1c4");
   assert.equal(assistedBc4.surface.visuals.every((visual) => visual.targetUci === "f1c4"), true);
-  assert.equal(assistedBc4.surface.actions.some((action) => action.kind === "reveal_target" && action.targetUci === "f1c4"), true);
+  assert.equal(assistedBc4.surface.actions.some((action) => action.kind === "reveal_target"), false);
 
   const plainPreBc4 = buildSurfacePack({ frame: bc4Frame, requestedMode: "plain", showMoreRevealed: false });
   const plainPreCopy = `${plainPreBc4.surface.copy.title} ${plainPreBc4.surface.copy.body} ${plainPreBc4.surface.copy.bullets.join(" ")}`;
@@ -77,6 +77,7 @@ export function testVisibleTeachingSurface(): void {
     false,
   );
   assert.equal(plainPreBc4.surface.actions.some((action) => action.kind === "show_more"), true);
+  assert.equal(plainPreBc4.surface.actions.some((action) => action.kind === "hint"), true);
   assert.equal(plainPreBc4.surface.actions.some((action) => action.kind === "reveal_target"), false);
 
   const plainPostBc4 = buildSurfacePack({ frame: bc4Frame, requestedMode: "plain", showMoreRevealed: true });
@@ -85,7 +86,8 @@ export function testVisibleTeachingSurface(): void {
     plainPostBc4.surface.visuals.map((visual) => `${visual.id}:${visual.targetUci}:${visual.type}`),
     assistedBc4.surface.visuals.map((visual) => `${visual.id}:${visual.targetUci}:${visual.type}`),
   );
-  assert.equal(plainPostBc4.surface.actions.some((action) => action.kind === "reveal_target"), true);
+  assert.equal(plainPostBc4.surface.actions.some((action) => action.kind === "reveal_target"), false);
+  assert.equal(plainPostBc4.surface.actions.some((action) => action.kind === "hide_more"), true);
   assert.equal(plainPostBc4.surface.copy.body.includes(plainPostBc4.safetyOutput.safeFrame.showMore.body), true);
 
   const nf3Frame = makeGuidedFrame({
@@ -170,6 +172,32 @@ export function testVisibleTeachingSurface(): void {
   assert.equal(blockedSurface.visuals.length, 0);
   assert.equal(hasLeak(`${blockedSurface.copy.title} ${blockedSurface.copy.body}`, ["Bc4", "f1c4", "f1", "c4", "bishop"]), false);
   assert.equal(blockedSurface.copy.body.includes("Play Bc4 from f1 to c4"), false);
+  const strongClaimBlockedSafety = runCoachSafetyGate({
+    frame: bc4Frame,
+    graph,
+    compiled: {
+      ...assistedBc4.compiled,
+      assisted: { ...assistedBc4.compiled.assisted, body: "This is the best move and wins material by force." },
+      showMore: { ...assistedBc4.compiled.showMore, body: "This is the best move and wins material by force." },
+    },
+    activatedConcepts: assistedBc4.concepts.activated,
+  });
+  const strongClaimBlockedSurface = buildVisibleTeachingSurface({
+    frame: bc4Frame,
+    graph,
+    safetyOutput: strongClaimBlockedSafety,
+    requestedMode: "assisted",
+    showMoreRevealed: false,
+  });
+  assert.equal(strongClaimBlockedSurface.mode, "assisted");
+  assert.equal(strongClaimBlockedSurface.targetUci, "f1c4");
+  assert.equal(strongClaimBlockedSurface.safety.blocked, false);
+  assert.equal(strongClaimBlockedSurface.safety.recoveredBySafeTeachingCopy, true);
+  assert.equal(strongClaimBlockedSurface.copy.title.includes("Safety Fallback"), false);
+  assert.equal(strongClaimBlockedSurface.copy.title.includes("Safety Blocked"), false);
+  assert.equal(strongClaimBlockedSurface.copy.body.includes("No move-specific coaching is available"), false);
+  assert.equal(strongClaimBlockedSurface.copy.body.includes("Think about the safest improving move here."), false);
+  assert.equal(strongClaimBlockedSurface.copy.body.toLowerCase().includes("best move"), false);
 
   assert.equal(
     blockedSurface.debug.targetVisualUcis.every((uci) => uci === blockedSurface.targetUci),
@@ -187,6 +215,16 @@ export function testVisibleTeachingSurface(): void {
     showMoreRevealed: false,
   });
   const nf3Chain = buildSurfacePack({ frame: nf3Frame, requestedMode: "assisted", showMoreRevealed: false });
+  const d4Chain = buildSurfacePack({
+    frame: makeGuidedFrame({
+      fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      uci: "d2d4",
+      san: "d4",
+      pieceType: "p",
+    }),
+    requestedMode: "assisted",
+    showMoreRevealed: false,
+  });
   const bc4Chain = buildSurfacePack({ frame: bc4Frame, requestedMode: "assisted", showMoreRevealed: false });
   const castle = buildSurfacePack({
     frame: makeGuidedFrame({
@@ -199,6 +237,11 @@ export function testVisibleTeachingSurface(): void {
     showMoreRevealed: false,
   });
   assert.equal(Boolean(e4.surface.frameKey && nf3Chain.surface.frameKey && bc4Chain.surface.frameKey && castle.surface.frameKey), true);
+  assert.equal(d4Chain.surface.mode, "assisted");
+  assert.equal(d4Chain.surface.safety.blocked, false);
+  assert.equal(d4Chain.surface.copy.title.toLowerCase().includes("safety blocked"), false);
+  assert.equal(d4Chain.surface.copy.body.toLowerCase().includes("no move-specific coaching is available"), false);
+  assert.equal(d4Chain.surface.copy.body.toLowerCase().includes("d4") || d4Chain.surface.copy.body.toLowerCase().includes("center"), true);
 }
 
 testVisibleTeachingSurface();

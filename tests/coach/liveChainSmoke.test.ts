@@ -124,7 +124,7 @@ export function testLiveChainSmoke(): void {
   assert.equal(bc4.compiled.visualIntents.every((v) => v.targetUci === "f1c4"), true);
   assert.equal(hasLeak(bc4.compiled.plain.body, ["Bc4", "f1c4", "f1", "c4", "bishop"]), false);
   assert.equal(bc4.gated.result.allowed, true);
-  assert.equal(bc4.surface.actions.some((action) => action.kind === "reveal_target" && action.targetUci === "f1c4"), true);
+  assert.equal(bc4.surface.actions.some((action) => action.kind === "reveal_target"), false);
   assert.equal(bc4.surface.copy.title.includes("Safety Fallback"), false);
 
   // 4) Castling O-O
@@ -211,9 +211,25 @@ export function testLiveChainSmoke(): void {
   const strongClaimCompiled = {
     ...bc4.compiled,
     assisted: { ...bc4.compiled.assisted, body: "This is the best move and wins material by force" },
+    showMore: { ...bc4.compiled.showMore, body: "This is the best move and wins material by force" },
   };
   const strongClaimGate = runCoachSafetyGate({ frame: bc4Frame, graph: bc4.graph, compiled: strongClaimCompiled, activatedConcepts: bc4.concepts.activated });
-  assert.equal(strongClaimGate.result.allowed, false);
+  assert.equal(strongClaimGate.result.allowed, true);
+  assert.equal(strongClaimGate.result.recoverableReasons.includes("claim_without_evidence"), true);
+  const strongClaimSurface = buildVisibleTeachingSurface({
+    frame: bc4Frame,
+    graph: bc4.graph,
+    safetyOutput: strongClaimGate,
+    requestedMode: "assisted",
+    showMoreRevealed: false,
+  });
+  assert.equal(strongClaimSurface.targetUci, "f1c4");
+  assert.equal(strongClaimSurface.mode, "assisted");
+  assert.equal(strongClaimSurface.safety.blocked, false);
+  assert.equal(strongClaimSurface.copy.title.includes("Safety Fallback"), false);
+  assert.equal(strongClaimSurface.copy.title.includes("Safety Blocked"), false);
+  assert.equal(strongClaimSurface.copy.body.includes("Think about the safest improving move here."), false);
+  assert.equal(strongClaimSurface.copy.body.toLowerCase().includes("best move"), false);
 }
 
 testLiveChainSmoke();

@@ -51,6 +51,8 @@ export interface CoachSafetyResult {
   issues: CoachSafetyIssue[];
   criticalIssues: CoachSafetyIssue[];
   blockedReasons: string[];
+  fatalReasons: string[];
+  recoverableReasons: string[];
   warningReasons: string[];
 }
 

@@ -144,6 +144,15 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
     : [];
   const lastCoachRecords = instructionalCoachRecords;
   const coachTimeline = Array.isArray(input.coachTimeline) ? input.coachTimeline.slice(-100) : [];
+  const coachCardRenderTimeline = Array.isArray(input.coachCardRenderTimeline) ? input.coachCardRenderTimeline.slice(-75) : [];
+  const surfaceModeTransitionTimeline = Array.isArray(input.surfaceModeTransitionTimeline) ? input.surfaceModeTransitionTimeline.slice(-75) : [];
+  const actionTimeline = Array.isArray(input.actionTimeline) ? input.actionTimeline.slice(-100) : [];
+  const visualRenderTimeline = Array.isArray(input.visualRenderTimeline) ? input.visualRenderTimeline.slice(-75) : [];
+  const plainLeakTimeline = Array.isArray(input.plainLeakTimeline) ? input.plainLeakTimeline.slice(-75) : [];
+  const actualCoachCardTitle = input.actualCoachCardTitle == null ? null : String(input.actualCoachCardTitle);
+  const actualCoachCardBody = input.actualCoachCardBody == null ? null : String(input.actualCoachCardBody);
+  const actualCoachCardButtons = Array.isArray(input.actualCoachCardButtons) ? input.actualCoachCardButtons.map(String) : [];
+  const actualCoachCardSource = input.actualCoachCardSource == null ? null : String(input.actualCoachCardSource);
   const verifiedFallbackUsed = Boolean(coachDebug.verifiedFallbackUsed || coachDebug.candidateCoachFallbackUsed);
   const expectedMoveExists = Boolean(input.expectedMoveSan || input.expectedMoveUci);
   const selectedOpportunityMoveSan = String(input.coachDecision?.debug?.coachSelectedCandidateMove ?? input.coachDebug?.selectedOpportunityMoveSan ?? "").trim();
@@ -405,6 +414,29 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   if (input.coachMemoryLegacyDetected && !input.memoryMigratedOrCleared) criticalIssues.push("legacy_memory_not_migrated");
   if (Array.isArray(input.runtimeCriticalIssues)) {
     for (const issue of input.runtimeCriticalIssues.map(String)) criticalIssues.push(issue);
+  }
+  if ((actualCoachCardTitle ?? null) !== (visibleTitle ?? null) || (actualCoachCardBody ?? null) !== (visibleBody ?? null)) {
+    criticalIssues.push("coach_card_debug_parity_mismatch");
+  }
+  if (JSON.stringify(actualCoachCardButtons) !== JSON.stringify(visibleButtons.map(String))) {
+    criticalIssues.push("action_debug_parity_mismatch");
+  }
+  const latestActionFrame = actionTimeline.length ? actionTimeline[actionTimeline.length - 1] : null;
+  if (latestActionFrame && Array.isArray((latestActionFrame as any).renderedActionIds)) {
+    const latestRendered = (latestActionFrame as any).renderedActionIds.map(String);
+    if (JSON.stringify(latestRendered) !== JSON.stringify(actualCoachCardButtons)) {
+      criticalIssues.push("action_debug_parity_mismatch");
+    }
+  }
+  const debugVisualCount = len(input.visibleTeachingSurface?.visual?.lines);
+  const actualVisualCount = len(input.boardLines);
+  if (debugVisualCount !== actualVisualCount) {
+    criticalIssues.push("visual_debug_parity_mismatch");
+  }
+  const plainLeakAtFrame = plainLeakTimeline.find((entry: any) => Boolean(entry?.preShowMoreLeak));
+  if (plainLeakAtFrame) {
+    criticalIssues.push("plain_pre_show_more_leak_at_frame");
+    warnings.push(`plain_pre_show_more_leak_frame:${String((plainLeakAtFrame as any).frameId ?? "unknown")}`);
   }
   if (visualFailureKind !== "none" && visualFailureKind !== "not_applicable") warnings.push(`visualFailureKind:${visualFailureKind}`);
   if (coachFailureKind !== "none") warnings.push(`coachFailureKind:${coachFailureKind}`);
@@ -872,6 +904,11 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
     },
     coachTimelineSummary,
     coachTimeline,
+    coachCardRenderTimeline,
+    surfaceModeTransitionTimeline,
+    actionTimeline,
+    visualRenderTimeline,
+    plainLeakTimeline,
     health: {
       criticalIssues: uniqueCriticalIssues,
       warnings: uniqueWarnings,
@@ -893,6 +930,20 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
         surfaceTargetsAligned: instructionTargetUci ? !(input.surfaceFourTargetMismatch || input.visibleTeachingSurface?.debug?.fourTargetMismatch) : "unknown",
         surfacePiecesAligned: (instructionTargetPieceType || input.instructionTargetPieceType) ? !(input.surfaceTwoPieceMismatch || input.visibleTeachingSurface?.debug?.twoPieceTypeMismatch) : "unknown",
         noPlainLeakFromSurface: !Boolean(input.visibleTeachingSurface?.safety?.plainLeakDetected),
+      },
+    },
+    debugParity: {
+      actualCoachCardTitle,
+      actualCoachCardBody,
+      actualCoachCardButtons,
+      actualCoachCardSource,
+      debugVisibleTitle: visibleTitle,
+      debugVisibleBody: visibleBody,
+      debugVisibleButtons: visibleButtons,
+      parity: {
+        coachCard: (actualCoachCardTitle ?? null) === (visibleTitle ?? null) && (actualCoachCardBody ?? null) === (visibleBody ?? null),
+        actions: JSON.stringify(actualCoachCardButtons) === JSON.stringify(visibleButtons.map(String)),
+        visuals: debugVisualCount === actualVisualCount,
       },
     },
     eventLog: (input.eventLog ?? []) as DebugEvent[],

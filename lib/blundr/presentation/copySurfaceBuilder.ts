@@ -17,8 +17,10 @@ function toVisibleCopy(
 export function buildSurfaceCopy(input: {
   mode: TeachingSurfaceMode;
   safeFrame: CompiledCoachFrame;
+  requestedMode: "assisted" | "plain";
+  showMoreRevealed: boolean;
 }): VisibleSurfaceCopy {
-  const { mode, safeFrame } = input;
+  const { mode, safeFrame, requestedMode, showMoreRevealed } = input;
 
   if (mode === "assisted") {
     return toVisibleCopy("assisted", safeFrame.assisted);
@@ -59,10 +61,17 @@ export function buildSurfaceCopy(input: {
     });
   }
 
-  return toVisibleCopy("fallback", {
-    title: safeFrame.plain.title || "Safety fallback",
-    body: safeFrame.plain.body || "No safe teaching copy is available.",
-    bullets: safeFrame.plain.bullets,
-    leakRisk: "none",
-  });
+  const blockedCopy = requestedMode === "assisted"
+    ? toVisibleCopy("assisted", safeFrame.assisted)
+    : showMoreRevealed
+      ? toVisibleCopy("show_more", safeFrame.showMore)
+      : toVisibleCopy("plain", safeFrame.plain);
+
+  return {
+    ...blockedCopy,
+    title: blockedCopy.title || "Safety fallback",
+    body: blockedCopy.body || "No safe teaching copy is available.",
+    bullets: blockedCopy.bullets ?? [],
+    leakRisk: blockedCopy.leakRisk ?? "none",
+  };
 }

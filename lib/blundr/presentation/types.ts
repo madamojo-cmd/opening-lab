@@ -8,10 +8,12 @@ export type TeachingSurfaceMode =
   | "blocked";
 
 export type SurfaceActionKind =
+  | "hint"
   | "show_more"
   | "hide_more"
   | "reveal_target"
   | "continue_from_here"
+  | "restart_line"
   | "none";
 
 export interface VisibleSurfaceCopy {
@@ -66,6 +68,17 @@ export interface VisibleTeachingSurface {
     criticalIssues: string[];
     warnings: string[];
     originalFrameBlocked: boolean;
+    blocked?: boolean;
+    blockedReason?: string | null;
+    blockedSeverity?: "fatal" | "recoverable" | null;
+    blockedPolicy?: string | null;
+    targetMismatch?: boolean;
+    pieceMismatch?: boolean;
+    visualMismatch?: boolean;
+    revealMismatch?: boolean;
+    plainLeakDetected?: boolean;
+    unsupportedStrongClaim?: boolean;
+    recoveredBySafeTeachingCopy?: boolean;
   };
 
   provenance: {

@@ -2,6 +2,18 @@ import type { CompiledCoachFrame } from "../coachCompiler/types";
 import type { CurrentInstructionFrame } from "../runtime/currentInstructionFrame";
 import type { CoachSafetyIssue } from "./types";
 
+function normalizePieceLeakToken(pieceType: string | null | undefined): string | null {
+  const value = String(pieceType ?? "").trim().toLowerCase();
+  if (!value) return null;
+  if (value === "p" || value === "pawn") return "pawn";
+  if (value === "n" || value === "knight") return "knight";
+  if (value === "b" || value === "bishop") return "bishop";
+  if (value === "r" || value === "rook") return "rook";
+  if (value === "q" || value === "queen") return "queen";
+  if (value === "k" || value === "king") return "king";
+  return null;
+}
+
 export function textContainsTargetLeak(input: {
   text: string;
   targetSan?: string | null;
@@ -11,9 +23,11 @@ export function textContainsTargetLeak(input: {
   pieceType?: string | null;
 }): boolean {
   const lower = String(input.text ?? "").toLowerCase();
+  const normalizedPiece = normalizePieceLeakToken(input.pieceType ?? null);
   const direct = [input.targetSan, input.targetUci, input.from, input.to, input.pieceType]
     .map((value) => String(value ?? "").trim().toLowerCase())
-    .filter((value) => value.length > 0);
+    .filter((value) => value.length > 0 && value.length > 1);
+  if (normalizedPiece) direct.push(normalizedPiece);
 
   if (direct.some((token) => lower.includes(token))) return true;
 

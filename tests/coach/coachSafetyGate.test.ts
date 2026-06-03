@@ -12,7 +12,7 @@ function makeFrame(input: {
   fen: string;
   uci: string;
   san: string;
-  pieceType: "pawn" | "knight" | "bishop" | "rook" | "queen" | "king";
+  pieceType: "pawn" | "knight" | "bishop" | "rook" | "queen" | "king" | "p" | "n" | "b" | "r" | "q" | "k";
 }) {
   return buildCurrentInstructionFrame({
     kind: "guided_move",
@@ -131,23 +131,39 @@ export function testCoachSafetyGate(): void {
   const strongBest = runCoachSafetyGate({
     frame: bc4.frame,
     graph: bc4.graph,
-    compiled: { ...bc4.compiled, assisted: { ...bc4.compiled.assisted, body: "This is the best move." } },
+    compiled: {
+      ...bc4.compiled,
+      assisted: { ...bc4.compiled.assisted, body: "This is the best move." },
+      showMore: { ...bc4.compiled.showMore, body: "This is the best move." },
+    },
   });
-  assert.equal(strongBest.result.allowed, false);
+  assert.equal(strongBest.result.allowed, true);
+  assert.equal(strongBest.result.recoverableReasons.includes("claim_without_evidence"), true);
+  assert.equal(strongBest.safeFrame.assisted.body.toLowerCase().includes("best"), false);
 
   const strongWin = runCoachSafetyGate({
     frame: bc4.frame,
     graph: bc4.graph,
-    compiled: { ...bc4.compiled, assisted: { ...bc4.compiled.assisted, body: "This wins material immediately." } },
+    compiled: {
+      ...bc4.compiled,
+      assisted: { ...bc4.compiled.assisted, body: "This wins material immediately." },
+      showMore: { ...bc4.compiled.showMore, body: "This wins material immediately." },
+    },
   });
-  assert.equal(strongWin.result.allowed, false);
+  assert.equal(strongWin.result.allowed, true);
+  assert.equal(strongWin.safeFrame.assisted.body.toLowerCase().includes("wins"), false);
 
   const strongMate = runCoachSafetyGate({
     frame: bc4.frame,
     graph: bc4.graph,
-    compiled: { ...bc4.compiled, showMore: { ...bc4.compiled.showMore, body: "This is a forced mate." } },
+    compiled: {
+      ...bc4.compiled,
+      assisted: { ...bc4.compiled.assisted, body: "This is a forced mate." },
+      showMore: { ...bc4.compiled.showMore, body: "This is a forced mate." },
+    },
   });
-  assert.equal(strongMate.result.allowed, false);
+  assert.equal(strongMate.result.allowed, true);
+  assert.equal(strongMate.safeFrame.showMore.body.toLowerCase().includes("forced mate"), false);
 
   const checkmateFrame = makeFrame({
     fen: "4k3/8/8/8/8/8/4Q3/4K3 w - - 0 1",
@@ -171,9 +187,15 @@ export function testCoachSafetyGate(): void {
   const engineLanguage = runCoachSafetyGate({
     frame: bc4.frame,
     graph: bc4.graph,
-    compiled: { ...bc4.compiled, assisted: { ...bc4.compiled.assisted, body: "Stockfish says this is engine-approved." } },
+    compiled: {
+      ...bc4.compiled,
+      assisted: { ...bc4.compiled.assisted, body: "Stockfish says this is engine-approved." },
+      showMore: { ...bc4.compiled.showMore, body: "Stockfish says this is engine-approved." },
+    },
   });
-  assert.equal(engineLanguage.result.allowed, false);
+  assert.equal(engineLanguage.result.allowed, true);
+  assert.equal(engineLanguage.result.recoverableReasons.includes("claim_without_evidence"), true);
+  assert.equal(engineLanguage.safeFrame.assisted.body.toLowerCase().includes("stockfish says"), false);
 
   const opponent = buildCurrentInstructionFrame({
     kind: "opponent_replying",
@@ -296,9 +318,53 @@ export function testCoachSafetyGate(): void {
   assert.equal(blockedSurface.mode, "blocked");
   assert.equal(blockedSurface.visuals.length, 0);
   assert.equal(blockedSurface.actions.some((action) => action.kind === "reveal_target"), false);
+  assert.equal(blockedSurface.targetUci, "f1c4");
+  assert.equal(blockedSurface.copy.title.includes("Safety Fallback"), false);
+  assert.equal(blockedSurface.copy.body.includes("Think about the safest improving move here."), false);
 
   assert.notEqual(providerMismatch.safeFrame, bc4.compiled);
   assert.equal(bc4.compiled.revealAction.kind, "reveal_target");
+
+  // valid_knight_development_claim_validation_failed_recovers_to_teaching_copy
+  const nc3 = compilePack(
+    makeFrame({
+      fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      uci: "b1c3",
+      san: "Nc3",
+      pieceType: "n",
+    }),
+    { openingKey: "italian_game", openingName: "Italian Game" },
+  );
+  const nc3Recoverable = runCoachSafetyGate({
+    frame: nc3.frame,
+    graph: nc3.graph,
+    compiled: {
+      ...nc3.compiled,
+      assisted: { ...nc3.compiled.assisted, body: "This is the best development move." },
+      showMore: { ...nc3.compiled.showMore, body: "This is the best development move." },
+    },
+    activatedConcepts: nc3.concepts.activated,
+  });
+  assert.equal(nc3Recoverable.result.allowed, true);
+  assert.equal(nc3Recoverable.result.fatalReasons.length, 0);
+  assert.equal(nc3Recoverable.result.recoverableReasons.includes("claim_without_evidence"), true);
+  assert.equal(nc3Recoverable.safeFrame.targetUci, "b1c3");
+  assert.equal(nc3Recoverable.safeFrame.assisted.title.includes("Nc3"), true);
+  assert.equal(nc3Recoverable.safeFrame.assisted.title.toLowerCase().includes("develop the knight"), true);
+  assert.equal(nc3Recoverable.safeFrame.assisted.body.toLowerCase().includes("move the knight to c3"), true);
+  assert.equal(nc3Recoverable.safeFrame.assisted.title.includes("Safety Blocked"), false);
+  assert.equal(nc3Recoverable.safeFrame.assisted.body.includes("No move-specific coaching is available"), false);
+  const nc3Surface = buildVisibleTeachingSurface({
+    frame: nc3.frame,
+    graph: nc3.graph,
+    safetyOutput: nc3Recoverable,
+    requestedMode: "assisted",
+    showMoreRevealed: false,
+  });
+  assert.equal(nc3Surface.mode, "assisted");
+  assert.equal(nc3Surface.safety.blocked, false);
+  assert.equal(nc3Surface.copy.title.includes("Safety Blocked"), false);
+  assert.equal(nc3Surface.copy.body.includes("No move-specific coaching is available"), false);
 }
 
 testCoachSafetyGate();

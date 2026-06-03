@@ -129,6 +129,44 @@ export function testTrainerDebugSnapshot(): void {
   assert.equal((branchCompleteV28.coach as any).visibleTitle, "Line complete");
   assert.equal((branchCompleteV28.coach as any).visibleBody, "You finished this training line. Continue from this position or train the line again.");
   assert.deepEqual((branchCompleteV28.coach as any).visibleButtons, ["continue_from_here"]);
+  const v28Parity = buildTrainerDebugSnapshot({
+    debugEnabled: true,
+    trainerFrameId: 10,
+    trainerPhase: "ready_for_user",
+    trainerView: "assisted",
+    trainingMode: "restricted",
+    isUserTurn: true,
+    fen: "8/8/8/8/8/8/8/4K3 w - - 0 1",
+    instructionTargetUci: "e2e4",
+    expectedMoveUci: "e2e4",
+    expectedMoveSan: "e4",
+    visibleSurfaceOwner: "v28_visible_surface",
+    visibleCoachOwner: "visible_surface_v28",
+    visibleVisualOwner: "visible_surface_v28",
+    visibleActionOwner: "visible_surface_v28",
+    visibleTeachingSurface: {
+      owner: "v28_visible_surface",
+      mode: "assisted",
+      coach: {
+        shouldRender: true,
+        title: "Challenge the center",
+        body: "Play e4 to challenge central squares.",
+      },
+      actions: [{ kind: "reveal_target" }],
+    },
+    coachDecision: {
+      shouldShowCoachCard: true,
+      title: "Safety Fallback",
+      body: "Think about the safest improving move here.",
+      buttons: ["show_more"],
+      debug: { coachDecisionSource: "verified_safe_fallback", verifiedFallbackUsed: true, fallbackReason: "legacy_source_mismatch" },
+    },
+    presentationFrame: { visual: { shouldRender: false, source: "none" }, coach: { shouldRender: false, owner: "intent_first_coach" }, legacy: {} },
+    eventLog: [],
+  } as any);
+  assert.equal((v28Parity.coach as any).visibleTitle, "Challenge the center");
+  assert.equal((v28Parity.coach as any).visibleBody, "Play e4 to challenge central squares.");
+  assert.equal((v28Parity.coach as any).visibleBody.includes("safest improving move"), false);
 
   const continuationHealthy = buildTrainerDebugSnapshot({
     debugEnabled: true,
@@ -512,6 +550,55 @@ export function testTrainerDebugSnapshot(): void {
     const _frame = { frameKey: sel ? "end-of-book-transition" : "thinking", actions: gate ? ["continue_from_here"] : [] };
     void _frame;
   });
+
+  const timelineSnapshot = buildTrainerDebugSnapshot({
+    debugEnabled: true,
+    trainerFrameId: 200,
+    trainerPhase: "ready_for_user",
+    trainerView: "plain",
+    trainingMode: "restricted",
+    isUserTurn: true,
+    fen: "8/8/8/8/8/8/8/4K3 w - - 0 1",
+    instructionTargetUci: "b1c3",
+    expectedMoveUci: "b1c3",
+    expectedMoveSan: "Nc3",
+    boardLines: [{ from: "b1", to: "c3" }],
+    visibleTeachingSurface: {
+      owner: "v28_visible_surface",
+      mode: "plain_before_show_more",
+      coach: { shouldRender: true, title: "Find the next move", body: "" },
+      visual: { lines: [] },
+      actions: [{ kind: "hint" }, { kind: "show_more" }],
+    },
+    actualCoachCardTitle: "Safety Blocked",
+    actualCoachCardBody: "No move-specific coaching is available in this frame.",
+    actualCoachCardButtons: ["hint", "show_more", "reveal_target"],
+    actualCoachCardSource: "surfaceCoachCardDecision",
+    coachCardRenderTimeline: [
+      { id: 1, frameId: 199, visibleTitle: "Find the next move", actualCoachCardTitle: "Find the next move" },
+      { id: 2, frameId: 200, visibleTitle: "Find the next move", actualCoachCardTitle: "Safety Blocked" },
+    ],
+    actionTimeline: [
+      { id: 1, frameId: 200, renderedActionIds: ["hint", "show_more", "reveal_target"], clickedActionId: "reveal_target" },
+      { id: 2, frameId: 200, renderedActionIds: ["continue_from_here"], clickedActionId: "continue_from_here", clickedActionPayload: { continueFromHereClicked: true } },
+    ],
+    plainLeakTimeline: [
+      { id: 1, frameId: 200, showMoreClicked: false, hintClicked: false, preShowMoreLeak: true, targetVisualRendered: true, revealActionRendered: true },
+    ],
+    surfaceModeTransitionTimeline: [{ id: 1, previousMode: "assisted", nextMode: "plain_before_show_more" }],
+    visualRenderTimeline: [{ id: 1, frameId: 200, moveArrowCount: 1 }],
+    presentationFrame: { visual: { shouldRender: false, source: "none" }, coach: { shouldRender: true, owner: "intent_first_coach" }, legacy: {} },
+    eventLog: [],
+  } as any);
+  assert.equal(Array.isArray(timelineSnapshot.coachCardRenderTimeline), true);
+  assert.equal((timelineSnapshot.coachCardRenderTimeline as any[]).length, 2);
+  assert.equal((timelineSnapshot.actionTimeline as any[]).length, 2);
+  assert.equal(timelineSnapshot.health.criticalIssues.includes("coach_card_debug_parity_mismatch"), true);
+  assert.equal(timelineSnapshot.health.criticalIssues.includes("action_debug_parity_mismatch"), true);
+  assert.equal(timelineSnapshot.health.criticalIssues.includes("visual_debug_parity_mismatch"), true);
+  assert.equal(timelineSnapshot.health.criticalIssues.includes("plain_pre_show_more_leak_at_frame"), true);
+  assert.equal((timelineSnapshot.debugParity as any)?.actualCoachCardTitle, "Safety Blocked");
+  assert.equal(((timelineSnapshot.actionTimeline as any[])[1]?.clickedActionPayload as any)?.continueFromHereClicked, true);
 
   // 1-6,17 Normal UI forbids legacy (enforced by {blundrDebugEnabled && ...} at the JSX sites identified in Step 3/4 grep: app/page.tsx:3392 (LiveBrain+panels), 3405 (rating grid), 3407 (Active Board), 3417 (view buttons), SettingsPanel Active displays (no Attack/Defense/Plan). Browser on port 3041 without ?debug=1 is the acceptance.
 }

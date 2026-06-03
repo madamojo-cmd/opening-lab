@@ -80,6 +80,12 @@ export interface TrainerDebugSnapshot {
     uniqueThemes: string[];
   };
   coachTimeline: Array<Record<string, unknown>>;
+  coachCardRenderTimeline?: Array<Record<string, unknown>>;
+  surfaceModeTransitionTimeline?: Array<Record<string, unknown>>;
+  actionTimeline?: Array<Record<string, unknown>>;
+  visualRenderTimeline?: Array<Record<string, unknown>>;
+  plainLeakTimeline?: Array<Record<string, unknown>>;
+  debugParity?: Record<string, unknown>;
   health: {
     criticalIssues: string[];
     warnings: string[];
