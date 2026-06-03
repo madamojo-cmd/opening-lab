@@ -1,0 +1,38 @@
+app/page.tsx:2048:  // v2.7.40 Agent 5: early brain analysis passed to TrainerPresentationFrame so coach copy comes from BlundrBrain (target->brain->pres->surface chain)
+app/page.tsx:2059:  const presentationFrame=useMemo(()=>computeTrainerPresentationFrame({
+app/page.tsx:46:import { computeTrainerPresentationFrame } from "@/lib/blundr/presentation/trainerPresentationFrame";
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:16:import { computeTrainerPresentationFrame } from "../../presentation/trainerPresentationFrame";
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:36:  presentationFrame: ReturnType<typeof computeTrainerPresentationFrame>;
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:393:  const presentationFrame = computeTrainerPresentationFrame({
+lib/blundr/presentation/__tests__/coachHideDoesNotSuppressVisuals.test.ts:3:import { computeTrainerPresentationFrame } from "../trainerPresentationFrame";
+lib/blundr/presentation/__tests__/coachHideDoesNotSuppressVisuals.test.ts:6:  const frame = computeTrainerPresentationFrame({
+lib/blundr/presentation/__tests__/presentationLegacySuppression.test.ts:3:import { computeTrainerPresentationFrame } from "../trainerPresentationFrame";
+lib/blundr/presentation/__tests__/presentationLegacySuppression.test.ts:6:  const frame = computeTrainerPresentationFrame({
+lib/blundr/presentation/__tests__/presentationVisualIndependence.test.ts:3:import { computeTrainerPresentationFrame } from "../trainerPresentationFrame";
+lib/blundr/presentation/__tests__/presentationVisualIndependence.test.ts:6:  const frame = computeTrainerPresentationFrame({
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:14:export function testTrainerPresentationFrame(): void {
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:15:  const frame = computeTrainerPresentationFrame({
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:161:function makeMockPresentationFrame(visualShould = true, coachShould = true, visualSource = "guided_target_fallback", coachOwner = "intent_first_coach"): TrainerPresentationFrame {
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:3:import { computeTrainerPresentationFrame } from "../trainerPresentationFrame";
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:409:  const presWithBrain = computeTrainerPresentationFrame({
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:42:  const continuationFrame = computeTrainerPresentationFrame({
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:579:    trainerPresentationFrame: computeTrainerPresentationFrame({ ...basePresInput, showMoreShown: false, answerShown: false, visualRecipeLines: plainBc4Recipe.beats.flatMap((b: any) => b.primitives.map((p: any) => ({ from: p.from, to: p.to, kind: p.type }))) as any, coachBody: plainCopy.body } as any),
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:594:    trainerPresentationFrame: computeTrainerPresentationFrame({ ...basePresInput, showMoreShown: true, answerShown: true, visualRecipeLines: plainBc4Recipe.beats.flatMap((b: any) => b.primitives.map((p: any) => ({ from: p.from, to: p.to, kind: p.type }))) as any, coachBody: plainCopy.body } as any),
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:623:  const postPresForShow = computeTrainerPresentationFrame({
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:648:    trainerPresentationFrame: computeTrainerPresentationFrame({ ...basePresInput, showMoreShown: false, answerShown: false, visualRecipeLines: plainBc4Recipe.beats.flatMap((b: any) => b.primitives.map((p: any) => ({ from: p.from, to: p.to, kind: p.type }))) as any, coachBody: "Find the next move." } as any),
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:66:  const safeMoveFrame = computeTrainerPresentationFrame({
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:7:import type { TrainerPresentationFrame } from "../trainerPresentationTypes";
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:89:  const branchTransitionFrame = computeTrainerPresentationFrame({
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:162:  trainerPresentationFrame: TrainerPresentationFrame;
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:19: * 7. TrainerPresentationFrame.visual and .coach content used ONLY when presentation owner aligns with instruction target (no legacy visual owner on teaching frames).
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:358:  // Content from TrainerPresentationFrame ONLY when aligned (no mismatch)
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:42:import type { TrainerPresentationFrame } from "./trainerPresentationTypes";
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:5: *   CurrentInstructionFrame.target → BlundrBrainAnalysis → TrainerPresentationFrame → VisibleTeachingSurface → UI
+lib/blundr/presentation/presentationDebug.ts:1:import type { TrainerPresentationFrame } from "./trainerPresentationTypes";
+lib/blundr/presentation/presentationDebug.ts:3:export function buildPresentationDebug(frame: TrainerPresentationFrame): Record<string, unknown> {
+lib/blundr/presentation/testPresentationFrame.ts:5:import { testTrainerPresentationFrame } from "./__tests__/trainerPresentationFrame.test";
+lib/blundr/presentation/testPresentationFrame.ts:8:  testTrainerPresentationFrame();
+lib/blundr/presentation/trainerPresentationFrame.ts:183:  // CurrentInstructionFrame.target -> BlundrBrainAnalysis.safeFallbackCopy (piece-matched, evidence-backed, no halluc) -> TrainerPresentationFrame -> VisibleTeachingSurface
+lib/blundr/presentation/trainerPresentationFrame.ts:39:type ComputeTrainerPresentationFrameInput = {
+lib/blundr/presentation/trainerPresentationFrame.ts:89:export function computeTrainerPresentationFrame(input: ComputeTrainerPresentationFrameInput) {
+lib/blundr/presentation/trainerPresentationTypes.ts:3:export interface TrainerPresentationFrame {

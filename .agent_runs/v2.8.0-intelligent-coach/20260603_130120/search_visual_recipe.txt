@@ -1,0 +1,189 @@
+app/page.tsx:1414:  const visualRecipe=useMemo(()=>teachingOrchestration?compileVisualRecipe({
+app/page.tsx:1431:  const visualRecipeOverlay=useMemo(()=>adaptVisualRecipe({
+app/page.tsx:1441:  const visualRecipePlayback=useVisualRecipePlayback({
+app/page.tsx:20:import { adaptVisualRecipe } from "@/lib/blundr/visualRecipe/visualRecipeAdapter";
+app/page.tsx:21:import { compileVisualRecipe } from "@/lib/blundr/visualRecipe/visualRecipeCompiler";
+app/page.tsx:22:import { useVisualRecipePlayback } from "@/components/board/useVisualRecipePlayback";
+app/page.tsx:3785:      {showDetails&&visualRecipe&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="flex items-center justify-between gap-3"><div className="font-black text-stone-800">Animation Playback</div><div className="flex items-center gap-2"><button onClick={visualRecipePlayback.replay} disabled={!visualRecipePlayback.replayAvailable||trainerView==="plain"} className={classNames("rounded-full px-3 py-1 text-[11px] font-black",visualRecipePlayback.replayAvailable&&trainerView!=="plain"?"bg-stone-900 text-white":"bg-stone-100 text-stone-400")}>Replay</button><button onClick={visualRecipePlayback.skipToEnd} disabled={visualRecipePlayback.animationState!=="playing"} className={classNames("rounded-full px-3 py-1 text-[11px] font-black",visualRecipePlayback.animationState==="playing"?"bg-stone-900 text-white":"bg-stone-100 text-stone-400")}>Skip</button></div></div><div className="mt-2">animationState: {visualRecipePlayback.animationState}</div><div>activeVisualRecipeId: {visualRecipePlayback.activeVisualRecipeId??"none"}</div><div>activePatternId: {visualRecipePlayback.activePatternId??"none"}</div><div>activeBeatIndex: {visualRecipePlayback.activeBeatIndex??"n/a"}</div><div>activeBeatId: {visualRecipePlayback.activeBeatId??"n/a"}</div><div>activePrimitiveIds: {visualRecipePlayback.activePrimitiveIds.join(", ")||"none"}</div><div>animationReducedMotion: {visualRecipePlayback.animationReducedMotion?"true":"false"}</div><div>animationSkippedToEnd: {visualRecipePlayback.animationSkippedToEnd?"true":"false"}</div><div>animationClearedReason: {visualRecipePlayback.animationClearedReason??"none"}</div><div>animationSuppressedReason: {visualRecipePlayback.animationSuppressedReason??"none"}</div><div>recipeFrameMatchesBoard: {visualRecipePlayback.recipeFrameMatchesBoard?"true":"false"}</div><div>recipeFenMatchesBoard: {visualRecipePlayback.recipeFenMatchesBoard?"true":"false"}</div><div>replayAvailable: {visualRecipePlayback.replayAvailable?"true":"false"}</div><div>tacticalPrimitivesRendered: {visualRecipePlayback.tacticalPrimitivesRendered?"true":"false"}</div></div>}
+components/board/VisualRecipeLayer.tsx:7:export function VisualRecipeLayer({
+components/board/useVisualRecipePlayback.ts:261:    activeVisualRecipeId: snapshot.recipeId,
+components/board/useVisualRecipePlayback.ts:27:  recipe?: VisualRecipe | null;
+components/board/useVisualRecipePlayback.ts:41:export type VisualRecipePlaybackResult = {
+components/board/useVisualRecipePlayback.ts:45:  animationState: ActiveVisualRecipePlayback["playbackState"];
+components/board/useVisualRecipePlayback.ts:46:  activeVisualRecipeId?: string;
+components/board/useVisualRecipePlayback.ts:65:export function useVisualRecipePlayback(input: PlaybackInput): VisualRecipePlaybackResult {
+components/board/useVisualRecipePlayback.ts:69:  const [snapshot, setSnapshot] = useState<ActiveVisualRecipePlayback>(conductorRef.current.snapshot());
+components/board/useVisualRecipePlayback.ts:70:  const snapshotRef = useRef<ActiveVisualRecipePlayback>(snapshot);
+components/board/useVisualRecipePlayback.ts:7:import type { ActiveVisualRecipePlayback, AnimationConductorContext, ReducedMotionMode } from "@/lib/blundr/animation/animationTypes";
+components/board/useVisualRecipePlayback.ts:80:  const updateSnapshot = useCallback((next: ActiveVisualRecipePlayback) => {
+components/board/useVisualRecipePlayback.ts:8:import type { VisualRecipe } from "@/lib/blundr/visualRecipe/visualRecipeTypes";
+components/debug/BlundrDiagnosticsPanel.tsx:37:shouldRender: ${snapshot.visual.shouldRenderVisualRecipeLayer}
+lib/blundr/animation/__tests__/animationConductor.test.ts:24:function recipe(mode: VisualRecipe["mode"] = "move_teaching"): VisualRecipe {
+lib/blundr/animation/__tests__/animationConductor.test.ts:256:  } as VisualRecipe;
+lib/blundr/animation/__tests__/animationConductor.test.ts:25:  const beats: VisualRecipe["beats"] = mode === "assisted_context"
+lib/blundr/animation/__tests__/animationConductor.test.ts:289:    } as VisualRecipe,
+lib/blundr/animation/__tests__/animationConductor.test.ts:5:import type { VisualRecipe } from "../../visualRecipe/visualRecipeTypes";
+lib/blundr/animation/__tests__/animationEndStatePersistence.test.ts:4:import type { VisualRecipe } from "../../visualRecipe/visualRecipeTypes";
+lib/blundr/animation/__tests__/animationEndStatePersistence.test.ts:7:  const recipe: VisualRecipe = {
+lib/blundr/animation/__tests__/visualRecipePlaybackHookKey.test.ts:5:export function testVisualRecipePlaybackHookKey(): void {
+lib/blundr/animation/__tests__/visualRecipePlaybackSnapshot.test.ts:27:export function testVisualRecipePlaybackSnapshot(): void {
+lib/blundr/animation/__tests__/visualRecipePlaybackSnapshot.test.ts:29:  const b: ActiveVisualRecipePlayback = {
+lib/blundr/animation/__tests__/visualRecipePlaybackSnapshot.test.ts:4:import type { ActiveVisualRecipePlayback } from "../animationTypes";
+lib/blundr/animation/__tests__/visualRecipePlaybackSnapshot.test.ts:6:function baseSnapshot(): ActiveVisualRecipePlayback {
+lib/blundr/animation/animationConductor.ts:112:  private applyEndState(recipe: VisualRecipe, playbackState: ActiveVisualRecipePlayback["playbackState"]): ActiveVisualRecipePlayback {
+lib/blundr/animation/animationConductor.ts:133:  private startRecipe(recipe: VisualRecipe, nowMs: number, reducedMotion: boolean): ActiveVisualRecipePlayback {
+lib/blundr/animation/animationConductor.ts:156:  private validateRecipeFrameFen(recipe: VisualRecipe, context: AnimationConductorContext): { frameOk: boolean; fenOk: boolean } {
+lib/blundr/animation/animationConductor.ts:165:    recipe?: VisualRecipe | null;
+lib/blundr/animation/animationConductor.ts:169:  }): ActiveVisualRecipePlayback {
+lib/blundr/animation/animationConductor.ts:1:import type { VisualPrimitive, VisualRecipe } from "../visualRecipe/visualRecipeTypes";
+lib/blundr/animation/animationConductor.ts:22:function endStatePrimitives(recipe: VisualRecipe): VisualPrimitive[] {
+lib/blundr/animation/animationConductor.ts:242:  clear(reason: AnimationClearReason): ActiveVisualRecipePlayback {
+lib/blundr/animation/animationConductor.ts:246:  skipToEnd(): ActiveVisualRecipePlayback {
+lib/blundr/animation/animationConductor.ts:257:  replay(input: { context: AnimationConductorContext; nowMs: number; reducedMotionMode?: ReducedMotionMode }): ActiveVisualRecipePlayback {
+lib/blundr/animation/animationConductor.ts:51:  private state: ActiveVisualRecipePlayback;
+lib/blundr/animation/animationConductor.ts:70:  snapshot(): ActiveVisualRecipePlayback {
+lib/blundr/animation/animationConductor.ts:74:  private setSuppressed(reason: AnimationSuppressionReason): ActiveVisualRecipePlayback {
+lib/blundr/animation/animationConductor.ts:7:  ActiveVisualRecipePlayback,
+lib/blundr/animation/animationConductor.ts:83:  private setCleared(reason: AnimationClearReason): ActiveVisualRecipePlayback {
+lib/blundr/animation/animationConductor.ts:92:  private applyBeat(recipe: VisualRecipe, beatEntry: BeatTimelineEntry, playbackState: ActiveVisualRecipePlayback["playbackState"]): ActiveVisualRecipePlayback {
+lib/blundr/animation/animationStateMachine.ts:11:): ActiveVisualRecipePlayback {
+lib/blundr/animation/animationStateMachine.ts:1:import type { ActiveVisualRecipePlayback, AnimationClearReason, AnimationPlaybackState, AnimationSuppressionReason } from "./animationTypes";
+lib/blundr/animation/animationStateMachine.ts:9:  state: ActiveVisualRecipePlayback,
+lib/blundr/animation/animationTimeline.ts:17:export function buildAnimationTimeline(recipe: VisualRecipe, startsAtMs: number): BeatTimelineEntry[] {
+lib/blundr/animation/animationTimeline.ts:1:import type { VisualBeat, VisualRecipe } from "../visualRecipe/visualRecipeTypes";
+lib/blundr/animation/animationTypes.ts:1:import type { VisualPrimitive, VisualRecipe } from "../visualRecipe/visualRecipeTypes";
+lib/blundr/animation/animationTypes.ts:43:export type ActiveVisualRecipePlayback = {
+lib/blundr/animation/animationTypes.ts:45:  recipe?: VisualRecipe;
+lib/blundr/animation/playbackKey.ts:1:import type { VisualRecipe } from "../visualRecipe/visualRecipeTypes";
+lib/blundr/animation/playbackKey.ts:5:  recipe?: Pick<VisualRecipe, "visualRecipeId" | "frameId" | "fen" | "mode" | "patternId" | "beats" | "endState"> | null;
+lib/blundr/animation/playbackSnapshot.ts:11:export function snapshotsEqual(a: ActiveVisualRecipePlayback, b: ActiveVisualRecipePlayback): boolean {
+lib/blundr/animation/playbackSnapshot.ts:1:import type { ActiveVisualRecipePlayback } from "./animationTypes";
+lib/blundr/coach/__tests__/teachingIntent.test.ts:16:  assert.equal(resolveCoachTeachingIntent({ packet, interaction: "none", hasVisualRecipe: true }), "explain_visual_recipe");
+lib/blundr/coach/__tests__/teachingIntent.test.ts:17:  assert.equal(resolveCoachTeachingIntent({ packet: { ...packet, viewMode: "plain" }, interaction: "hint", hasVisualRecipe: false }), "recall_hint");
+lib/blundr/coach/__tests__/teachingIntent.test.ts:18:  assert.equal(resolveCoachTeachingIntent({ packet, interaction: "hide", hasVisualRecipe: true }), "silent");
+lib/blundr/coach/intentFirstCoachEngine.ts:40:  const intent = resolveCoachTeachingIntent({ packet, interaction: input.interaction, hasVisualRecipe: Boolean(input.visualRecipeId ?? packet.visualRecipeFacts?.patternId) });
+lib/blundr/coach/teachingIntent.ts:13:  if (input.packet.trainingMode === "restricted" && input.packet.viewMode === "assisted" && input.hasVisualRecipe) return "explain_visual_recipe";
+lib/blundr/coach/teachingIntent.ts:7:  hasVisualRecipe: boolean;
+lib/blundr/coachBrain/coachEvidenceTypes.ts:159:  visualRecipeFacts?: VisualRecipeFactPacket;
+lib/blundr/coachBrain/coachEvidenceTypes.ts:82:export interface VisualRecipeFactPacket {
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:111:  const recipe = compileVisualRecipe({
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:18:import { compileVisualRecipe } from "../../visualRecipe/visualRecipeCompiler";
+lib/blundr/debug/trainerDebugSnapshot.ts:363:  if (input.visualRecipe && input.visualReady === false && !presentation.visual?.shouldRender && input.visualRecipeOverlay?.adapterAllowed) criticalIssues.push("VisualRecipe exists but visual did not render while legacy ready was false");
+lib/blundr/debug/trainerDebugSnapshot.ts:546:      shouldRenderVisualRecipeLayer: presentation.visual?.shouldRender ?? false,
+lib/blundr/debug/trainerDebugSnapshot.ts:715:      whyVisualRecipeOpportunityLost: coachDebug.whyVisualRecipeOpportunityLost ?? "not_exposed_from_module",
+lib/blundr/debug/trainerDebugSnapshot.ts:839:        visualRecipeIndependent: !criticalIssues.some((issue) => issue.includes("VisualRecipe exists")),
+lib/blundr/golden/__tests__/italianCastlingGolden.test.ts:11:  const recipe = compileVisualRecipe({ trainingContext: { mode: "move_teaching", moveTrust: "book_supported", contextTrust: "safe_context", nextPlay: { allowed: true }, cue: { conceptId: g.conceptId, metadata: { moveUci: g.moveUci, moveSan: g.moveSan } } } as any, fen: g.fen, viewMode: "assisted", revealState: "hidden", expectedMoveUci: g.moveUci, expectedMoveSan: g.moveSan, frameId: 1 });
+lib/blundr/golden/__tests__/italianCastlingGolden.test.ts:6:import { compileVisualRecipe } from "../../visualRecipe/visualRecipeCompiler";
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:554:  const plainBc4Recipe = compileVisualRecipe({
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:9:import { compileVisualRecipe } from "../../visualRecipe/visualRecipeCompiler";
+lib/blundr/salience/salienceVisualSelector.ts:10:import { renderVisualRecipe } from "./visualRecipes";
+lib/blundr/salience/salienceVisualSelector.ts:26:    const output = renderVisualRecipe(candidate, packet);
+lib/blundr/salience/visualRecipes.ts:184:export function renderVisualRecipe(candidate: TeachingCandidate, packet: BlundrFeaturePacket): BlundrVisualModelOutput {
+lib/blundr/visualRecipe/__tests__/castlingVisualRecipe.test.ts:3:import { compileVisualRecipe } from "../visualRecipeCompiler";
+lib/blundr/visualRecipe/__tests__/castlingVisualRecipe.test.ts:5:export function testCastlingVisualRecipe(): void {
+lib/blundr/visualRecipe/__tests__/castlingVisualRecipe.test.ts:6:  const recipe = compileVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeAdapter.test.ts:108:  const staleFen = adaptVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeAdapter.test.ts:120:  const selecting = adaptVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeAdapter.test.ts:131:  const plain = adaptVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeAdapter.test.ts:142:  const candidateBlocked = adaptVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeAdapter.test.ts:155:  const assistedContextRecipe = compileVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeAdapter.test.ts:171:  const assistedContext = adaptVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeAdapter.test.ts:212:  const tacticalAdapted = adaptVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeAdapter.test.ts:226:  const frameStringMatch = adaptVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeAdapter.test.ts:237:  const differentSide = adaptVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeAdapter.test.ts:248:  const differentCastling = adaptVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeAdapter.test.ts:259:  const differentEnPassant = adaptVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeAdapter.test.ts:292:  const e2e4Adapted = adaptVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeAdapter.test.ts:304:  const trueStaleMismatch = adaptVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeAdapter.test.ts:3:import { adaptVisualRecipe } from "../visualRecipeAdapter";
+lib/blundr/visualRecipe/__tests__/visualRecipeAdapter.test.ts:4:import { compileVisualRecipe } from "../visualRecipeCompiler";
+lib/blundr/visualRecipe/__tests__/visualRecipeAdapter.test.ts:78:export function testVisualRecipeAdapter(): void {
+lib/blundr/visualRecipe/__tests__/visualRecipeAdapter.test.ts:80:  const allowed = adaptVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeAdapter.test.ts:96:  const staleFrame = adaptVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:117:  const re1Recipe = compileVisualRecipe({ trainingContext: re1Tc, fen: re1Fen, viewMode: "assisted", revealState: "hidden", expectedMoveUci: "f1e1", expectedMoveSan: "Re1", openingId: "italian", lineId: "italian", frameId: 13 });
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:121:  const assistedRecipe = compileVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:136:  const plainRecipe = compileVisualRecipe({ trainingContext: bc4Tc, fen: bc4Fen, viewMode: "plain", revealState: "hidden", expectedMoveUci: "f1c4", expectedMoveSan: "Bc4", frameId: 15 });
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:141:  const revealHiddenRecipe = compileVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:152:  const revealShownRecipe = compileVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:166:  const untrustedRecipe = compileVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:178:  const budgetRecipe = compileVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:199:  const bc4RecipeSameAgain = compileVisualRecipe({ trainingContext: bc4Tc, fen: bc4Fen, viewMode: "assisted", revealState: "hidden", openingId: "italian", lineId: "italian", expectedMoveUci: "f1c4", expectedMoveSan: "Bc4", frameId: 10 });
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:204:  const changedRecipe = compileVisualRecipe({ trainingContext: bc4Tc, fen: castleFen, viewMode: "assisted", revealState: "hidden", openingId: "italian", lineId: "italian", expectedMoveUci: "e1g1", expectedMoveSan: "O-O", frameId: 20 });
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:37:export function testVisualRecipeCompiler(): void {
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:4:import { compileVisualRecipe } from "../visualRecipeCompiler";
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:51:  const bc4Recipe = compileVisualRecipe({ trainingContext: bc4Tc, fen: bc4Fen, viewMode: "assisted", revealState: "hidden", openingId: "italian", lineId: "italian", expectedMoveUci: "f1c4", expectedMoveSan: "Bc4", frameId: 10 });
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:6:function hasPrimitive(recipe: ReturnType<typeof compileVisualRecipe>, type: string, matcher: (p: any) => boolean): boolean {
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:75:  const castleRecipe = compileVisualRecipe({ trainingContext: castleTc, fen: castleFen, viewMode: "assisted", revealState: "hidden", expectedMoveUci: "e1g1", expectedMoveSan: "O-O", openingId: "italian", lineId: "italian", frameId: 11 });
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:96:  const c3Recipe = compileVisualRecipe({ trainingContext: c3Tc, fen: c3Fen, viewMode: "assisted", revealState: "hidden", expectedMoveUci: "c2c3", expectedMoveSan: "c3", openingId: "italian", lineId: "italian", frameId: 12 });
+lib/blundr/visualRecipe/__tests__/visualRecipePolicy.test.ts:116:  const assistedRecipe = compileVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipePolicy.test.ts:11:export function testVisualRecipePolicy(): void {
+lib/blundr/visualRecipe/__tests__/visualRecipePolicy.test.ts:127:  const plainRecipe = compileVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipePolicy.test.ts:143:  const assistedRecipeAgain = compileVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipePolicy.test.ts:174:  const adapted = adaptVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipePolicy.test.ts:4:import { adaptVisualRecipe } from "../visualRecipeAdapter";
+lib/blundr/visualRecipe/__tests__/visualRecipePolicy.test.ts:5:import { compileVisualRecipe } from "../visualRecipeCompiler";
+lib/blundr/visualRecipe/testCastlingVisualLifecycle.ts:2:import { testCastlingVisualRecipe } from "./__tests__/castlingVisualRecipe.test";
+lib/blundr/visualRecipe/testCastlingVisualLifecycle.ts:6:  testCastlingVisualRecipe();
+lib/blundr/visualRecipe/visualRecipeAdapter.ts:10:export type VisualRecipeAdapterLine = {
+lib/blundr/visualRecipe/visualRecipeAdapter.ts:17:export type VisualRecipeAdapterSquare = {
+lib/blundr/visualRecipe/visualRecipeAdapter.ts:23:export type VisualRecipeAdapterInput = {
+lib/blundr/visualRecipe/visualRecipeAdapter.ts:24:  recipe?: VisualRecipe | null;
+lib/blundr/visualRecipe/visualRecipeAdapter.ts:284:  const lines = teachingPrimitives.map(asLine).filter((line): line is VisualRecipeAdapterLine => Boolean(line));
+lib/blundr/visualRecipe/visualRecipeAdapter.ts:285:  const squares = teachingPrimitives.map(asSquare).filter((square): square is VisualRecipeAdapterSquare => Boolean(square));
+lib/blundr/visualRecipe/visualRecipeAdapter.ts:34:export type VisualRecipeAdapterResult = {
+lib/blundr/visualRecipe/visualRecipeAdapter.ts:39:  lines: VisualRecipeAdapterLine[];
+lib/blundr/visualRecipe/visualRecipeAdapter.ts:40:  squares: VisualRecipeAdapterSquare[];
+lib/blundr/visualRecipe/visualRecipeAdapter.ts:58:function asLine(primitive: VisualPrimitive): VisualRecipeAdapterLine | null {
+lib/blundr/visualRecipe/visualRecipeAdapter.ts:64:function asSquare(primitive: VisualPrimitive): VisualRecipeAdapterSquare | null {
+lib/blundr/visualRecipe/visualRecipeAdapter.ts:81:export function adaptVisualRecipe(input: VisualRecipeAdapterInput): VisualRecipeAdapterResult {
+lib/blundr/visualRecipe/visualRecipeAdapter.ts:8:import type { VisualPrimitive, VisualRecipe } from "./visualRecipeTypes";
+lib/blundr/visualRecipe/visualRecipeBudget.ts:12:export type VisualRecipeBudgetResult = {
+lib/blundr/visualRecipe/visualRecipeBudget.ts:1:import type { VisualPrimitive, VisualRecipeBudget } from "./visualRecipeTypes";
+lib/blundr/visualRecipe/visualRecipeBudget.ts:26:export function enforceVisualRecipeBudget(
+lib/blundr/visualRecipe/visualRecipeBudget.ts:28:  budget: VisualRecipeBudget = DEFAULT_VISUAL_RECIPE_BUDGET,
+lib/blundr/visualRecipe/visualRecipeBudget.ts:29:): VisualRecipeBudgetResult {
+lib/blundr/visualRecipe/visualRecipeBudget.ts:3:export const DEFAULT_VISUAL_RECIPE_BUDGET: VisualRecipeBudget = {
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:101:}): VisualRecipe {
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:109:  const visualRecipeId = buildVisualRecipeId({
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:11:import { deriveVisualRecipePermissions } from "./visualRecipePermissions";
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:125:  const recipe: VisualRecipe = {
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:20:  type VisualRecipe,
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:21:  type VisualRecipeCompileInput,
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:22:  type VisualRecipeDebug,
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:23:  type VisualRecipeMode,
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:252:  mode: VisualRecipeMode;
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:355:export function compileVisualRecipe(input: VisualRecipeCompileInput): VisualRecipe {
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:36:function expectedMove(input: VisualRecipeCompileInput): { uci?: string; san?: string } {
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:374:  const permissionDecision = deriveVisualRecipePermissions({
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:402:  const visualRecipeId = buildVisualRecipeId({
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:445:  const budgeted = enforceVisualRecipeBudget(priorityPolicy.kept, budget);
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:49:function recipeSerializable(recipe: VisualRecipe): boolean {
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:4:import { DEFAULT_VISUAL_RECIPE_BUDGET, enforceVisualRecipeBudget } from "./visualRecipeBudget";
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:504:  const debug: VisualRecipeDebug = {
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:529:  const recipe: VisualRecipe = {
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:66:}): VisualRecipeDebug {
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:9:  buildVisualRecipeId,
+lib/blundr/visualRecipe/visualRecipeIds.ts:34:export function buildVisualRecipeId(input: {
+lib/blundr/visualRecipe/visualRecipePermissions.ts:15:function basePermissions(): VisualRecipePermissions {
+lib/blundr/visualRecipe/visualRecipePermissions.ts:29:export function deriveVisualRecipePermissions(input: VisualRecipePermissionInput): VisualRecipePermissionDecision {
+lib/blundr/visualRecipe/visualRecipePermissions.ts:3:  VisualRecipePermissionDecision,
+lib/blundr/visualRecipe/visualRecipePermissions.ts:4:  VisualRecipePermissionInput,
+lib/blundr/visualRecipe/visualRecipePermissions.ts:5:  VisualRecipePermissions,
+lib/blundr/visualRecipe/visualRecipeTypes.ts:156:export type VisualRecipeEndState = {
+lib/blundr/visualRecipe/visualRecipeTypes.ts:169:export type VisualRecipePermissions = {
+lib/blundr/visualRecipe/visualRecipeTypes.ts:196:export type VisualRecipeDebug = {
+lib/blundr/visualRecipe/visualRecipeTypes.ts:221:export type VisualRecipe = {
+lib/blundr/visualRecipe/visualRecipeTypes.ts:222:  recipeSchemaVersion: VisualRecipeSchemaVersion;
+lib/blundr/visualRecipe/visualRecipeTypes.ts:226:  mode: VisualRecipeMode;
+lib/blundr/visualRecipe/visualRecipeTypes.ts:233:  endState: VisualRecipeEndState;
+lib/blundr/visualRecipe/visualRecipeTypes.ts:234:  permissions: VisualRecipePermissions;
+lib/blundr/visualRecipe/visualRecipeTypes.ts:236:  debug?: VisualRecipeDebug;
+lib/blundr/visualRecipe/visualRecipeTypes.ts:242:export type VisualRecipeCompileInput = {
+lib/blundr/visualRecipe/visualRecipeTypes.ts:263:  visualBudgetOverride?: Partial<VisualRecipeBudget>;
+lib/blundr/visualRecipe/visualRecipeTypes.ts:266:export type VisualRecipeBudget = {
+lib/blundr/visualRecipe/visualRecipeTypes.ts:275:export type VisualRecipePermissionInput = {
+lib/blundr/visualRecipe/visualRecipeTypes.ts:283:export type VisualRecipePermissionDecision = {
+lib/blundr/visualRecipe/visualRecipeTypes.ts:284:  mode: VisualRecipeMode;
+lib/blundr/visualRecipe/visualRecipeTypes.ts:285:  permissions: VisualRecipePermissions;
+lib/blundr/visualRecipe/visualRecipeTypes.ts:7:export type VisualRecipeSchemaVersion = typeof VISUAL_RECIPE_SCHEMA_VERSION;
+lib/blundr/visualRecipe/visualRecipeTypes.ts:9:export type VisualRecipeMode =

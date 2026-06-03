@@ -1,0 +1,285 @@
+app/page.tsx:1545:    hintUsed:coachHintRequestCount>0,
+app/page.tsx:1557:    hintRequestCount:coachHintRequestCount,
+app/page.tsx:1623:        userRequestedHelp:coachInteraction==="hint"||coachInteraction==="why",
+app/page.tsx:1677:        buttons:exactMoveAllowed?(["hint","show_plan","analyze_idea","show_move"] as CoachButton[]):(["hint","show_plan","analyze_idea"] as CoachButton[]),
+app/page.tsx:2171:      text:displayedCoachDecision.body??displayedCoachDecision.hint??displayedCoachDecision.answer??"",
+app/page.tsx:2176:    const bodyText=String(displayedCoachDecision.body??displayedCoachDecision.hint??displayedCoachDecision.answer??"");
+app/page.tsx:2218:    displayedCoachDecision?.hint,
+app/page.tsx:2297:      hintShown:coachHintRequestCount>0,
+app/page.tsx:2308:    // This eliminates the "renderedButtonActions: ['hint'] vs lastClicked show_more" desync in diagnostics.
+app/page.tsx:2376:      const after={...before,coachInteraction:"replay",showAnswer:false,hintShown:false};
+app/page.tsx:2382:    if(button==="hint"){const after={...before,hintShown:true,coachInteraction:"hint"};setCoachHintRequestCount((count)=>count+1);setCoachInteraction("hint");recordDebugAction({action:button,normalizedAction:"hint",before,after,result:"handled"});return;}
+app/page.tsx:2435:    // Agent 4: pass for ladder (progressive hints + evidence)
+app/page.tsx:2436:    hintCount: coachHintRequestCount,
+app/page.tsx:342:  const templateMatches=rule.templateHints.some((hint)=>currentTemplate.includes(hint));
+app/page.tsx:3741:          <p className="mt-2 text-[11px] font-semibold text-stone-500">{trainerView==="assisted"?"Shows the visual pattern cue before the move.":"Hides pre-move hints for independent recall."}</p>
+app/page.tsx:3758:      {/* v2.7.40 Agent 3 wiring: CoachCard now driven exclusively by VisibleTeachingSurface (coach + hint + showMore + actions).
+app/page.tsx:3767:            body: convergedVisibleSurface.coach.body ?? convergedVisibleSurface.hint.text ?? "",
+app/page.tsx:3775:            // hint/showMore exposed via surface for future Agent 4
+app/page.tsx:3776:            hint: visibleTeachingSurface.hint.text,
+app/page.tsx:490:  if(input.trainerView==="plain"&&!input.showAnswer)return "Plain View • No hints";
+app/page.tsx:521:    return{title:"Find the next move",snippet:"Solve the position without hints.",status:"plain",source:"plain"};
+app/page.tsx:814:  const [coachInteraction,setCoachInteraction]=useState<"none"|"hint"|"answer"|"why"|"hide"|"show_plan"|"analyze_idea"|"show_move">("none");
+components/coach/CoachCard.tsx:34:      <p className="mt-2 text-sm leading-6 text-stone-700">{decision.body ?? decision.hint ?? decision.answer ?? ""}</p>
+lib/blundr/brain/analyzeBlundrPosition.ts:136:// All derive strictly from CurrentInstructionFrame.target facts. No SAN in prompt/hint copy. No banned terms.
+lib/blundr/brain/analyzeBlundrPosition.ts:168:      hint: "Consider development and safety.",
+lib/blundr/brain/analyzeBlundrPosition.ts:186:  let hint = `Think about how the ${pieceName} supports your overall plan.`;
+lib/blundr/brain/analyzeBlundrPosition.ts:191:    hint = "Look for safety improvements before opening the center.";
+lib/blundr/brain/analyzeBlundrPosition.ts:195:    hint = "Consider central influence and pawn structure.";
+lib/blundr/brain/analyzeBlundrPosition.ts:199:    hint = "Weigh captures carefully against development.";
+lib/blundr/brain/analyzeBlundrPosition.ts:207:  const lowerBody = (body + " " + title + " " + (hint || "")).toLowerCase();
+lib/blundr/brain/analyzeBlundrPosition.ts:216:    hint,
+lib/blundr/brain/hints/buildHintLadder.ts:12: * - Reset via hintCount reset on new instruction frame (upstream).
+lib/blundr/brain/hints/buildHintLadder.ts:140:  const hints: HintLevel[] = [
+lib/blundr/brain/hints/buildHintLadder.ts:161:  // Progressive selection: hintCount 0 = no hint yet (current null)
+lib/blundr/brain/hints/buildHintLadder.ts:162:  // count=1 shows level 0 (first hint), count=2 level1, count>=3 level2
+lib/blundr/brain/hints/buildHintLadder.ts:163:  const effectiveCount = Math.max(0, Math.floor(hintCount || 0));
+lib/blundr/brain/hints/buildHintLadder.ts:164:  const hintIndex = effectiveCount > 0 ? Math.min(effectiveCount - 1, maxHints - 1) : 0;
+lib/blundr/brain/hints/buildHintLadder.ts:165:  const currentHint = effectiveCount > 0 && !showMoreShown ? hints[hintIndex].text : null;
+lib/blundr/brain/hints/buildHintLadder.ts:169:    hintIndex,
+lib/blundr/brain/hints/buildHintLadder.ts:171:    hints,
+lib/blundr/brain/hints/buildHintLadder.ts:24:  hintCount: number;
+lib/blundr/brain/hints/buildHintLadder.ts:38:  hintIndex: number;
+lib/blundr/brain/hints/buildHintLadder.ts:3: * Single source for non-answer-leaking, progressive hints in Plain View.
+lib/blundr/brain/hints/buildHintLadder.ts:40:  hints: HintLevel[];
+lib/blundr/brain/hints/buildHintLadder.ts:44: * Build progressive 3-rung hint ladder + select current based on hintCount.
+lib/blundr/brain/hints/buildHintLadder.ts:51:    hintCount = 0,
+lib/blundr/brain/hints/buildHintLadder.ts:61:      hintIndex: 0,
+lib/blundr/brain/hints/buildHintLadder.ts:63:      hints: [],
+lib/blundr/brain/index.ts:6:export { buildHintLadder, type HintLadderInput, type HintLadderOutput, type HintLevel } from "./hints/buildHintLadder"; // v2.7.40 Agent 4
+lib/blundr/brain/types.ts:94:    hint?: string;
+lib/blundr/coach/__tests__/coachContextBuilder.test.ts:30:    hintUsed: false,
+lib/blundr/coach/__tests__/coachContextBuilder.test.ts:53:    hintUsed: false,
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:100:    hintRequestCount: 0,
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:109:    hintRequestCount: 0,
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:118:    hintRequestCount: 0,
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:127:    hintRequestCount: 0,
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:136:    hintRequestCount: 0,
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:145:    hintRequestCount: 0,
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:154:    hintRequestCount: 0,
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:26:    hintUsed: false,
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:48:    hintRequestCount: 0,
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:58:    hintRequestCount: 0,
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:63:  assert.equal(plain.buttons.includes("hint"), true);
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:68:    interaction: "hint",
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:70:    hintRequestCount: 0,
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:73:  assert.equal(softHint.action, "show_soft_hint");
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:78:    interaction: "hint",
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:80:    hintRequestCount: 1,
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:83:  assert.equal(strongHint.action, "show_strong_hint");
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:90:    hintRequestCount: 1,
+lib/blundr/coach/__tests__/coachHintEngine.test.ts:16:  assert.equal(chooseHintLevel(ctx(), 0), "soft_hint");
+lib/blundr/coach/__tests__/coachHintEngine.test.ts:17:  assert.equal(chooseHintLevel(ctx({ wrongAttempts: 1 }), 0), "strong_hint");
+lib/blundr/coach/__tests__/coachHintEngine.test.ts:18:  assert.equal(chooseHintLevel(ctx({ hintUsed: true }), 2), "strong_hint");
+lib/blundr/coach/__tests__/coachHintEngine.test.ts:8:    hintUsed: false,
+lib/blundr/coach/__tests__/teachingIntent.test.ts:17:  assert.equal(resolveCoachTeachingIntent({ packet: { ...packet, viewMode: "plain" }, interaction: "hint", hasVisualRecipe: false }), "recall_hint");
+lib/blundr/coach/coachCardPresenter.ts:14:    body: decision.body ?? decision.hint ?? decision.answer ?? "",
+lib/blundr/coach/coachContextBuilder.ts:103:      hintUsed: input.hintUsed,
+lib/blundr/coach/coachContextBuilder.ts:47:        hintUsed: input.hintUsed,
+lib/blundr/coach/coachCopyLibrary.ts:11:  e({ utteranceId: "dwp_hs1", utteranceFamily: "dwp_hint", conceptId: "develop_with_pressure", text: "Think about which move develops while creating pressure.", allowedModes: ["plain_hint", "plain_wrong_move"], requiredConcreteObjects: ["development", "pressure"], claimTypes: ["plan_principle"], revealRisk: "low", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:12:  e({ utteranceId: "dwp_hg1", utteranceFamily: "dwp_hint", conceptId: "develop_with_pressure", text: "The key target is f7, and a bishop can pressure it.", allowedModes: ["plain_hint", "plain_wrong_move"], requiredConcreteObjects: ["f7", "bishop", "pressure"], claimTypes: ["opening_pattern"], revealRisk: "medium", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:19:  e({ utteranceId: "cfs_h1", utteranceFamily: "castle_hint", conceptId: "castle_for_safety", text: "Think about king safety before the center opens.", allowedModes: ["plain_hint", "plain_wrong_move"], requiredConcreteObjects: ["king safety", "center"], claimTypes: ["plan_principle"], revealRisk: "low", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:20:  e({ utteranceId: "cfs_h2", utteranceFamily: "castle_hint", conceptId: "castle_for_safety", text: "This is the moment to move the king to safety.", allowedModes: ["plain_hint", "plain_wrong_move"], requiredConcreteObjects: ["king", "king safety"], claimTypes: ["opening_pattern"], revealRisk: "medium", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:27:  e({ utteranceId: "pcb_h1", utteranceFamily: "c3_hint", conceptId: "prepare_center_break", text: "Think about preparing d4 before playing it.", allowedModes: ["plain_hint", "plain_wrong_move"], requiredConcreteObjects: ["d4", "pawn break"], claimTypes: ["plan_principle"], revealRisk: "low", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:28:  e({ utteranceId: "pcb_h2", utteranceFamily: "c3_hint", conceptId: "prepare_center_break", text: "The c-pawn can help White prepare d4.", allowedModes: ["plain_hint", "plain_wrong_move"], requiredConcreteObjects: ["pawn", "d4"], claimTypes: ["opening_pattern"], revealRisk: "medium", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:33:  e({ utteranceId: "rtc_h1", utteranceFamily: "re1_hint", conceptId: "rook_to_center", text: "The rook can move onto the e-file to support the center.", allowedModes: ["plain_hint", "plain_wrong_move"], requiredConcreteObjects: ["rook", "e-file", "center"], claimTypes: ["plan_principle"], revealRisk: "medium", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:38:  e({ utteranceId: "ct_h1", utteranceFamily: "center_hint", conceptId: "center_tension", text: "Look at how the central pawns affect piece activity.", allowedModes: ["plain_hint", "plain_wrong_move"], requiredConcreteObjects: ["pawn", "center", "piece activity"], claimTypes: ["plan_principle"], revealRisk: "low", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachDecisionEngine.ts:105:  const { action, hintStrength } = deriveAction(context, mode, input);
+lib/blundr/coach/coachDecisionEngine.ts:151:    previousHintLevel: input.hintRequestCount,
+lib/blundr/coach/coachDecisionEngine.ts:186:      (action === "show_soft_hint" || action === "show_strong_hint" ? (preferFallbackCopy ? fallback?.body : evidenceCopy.hint) : undefined) ??
+lib/blundr/coach/coachDecisionEngine.ts:189:    hint: action === "show_soft_hint" || action === "show_strong_hint" ? (preferFallbackCopy ? fallback?.body : evidenceCopy.hint) : undefined,
+lib/blundr/coach/coachDecisionEngine.ts:214:      coachHintStrength: hintStrength ?? (input.interaction === "hint" ? "adaptive" : "none"),
+lib/blundr/coach/coachDecisionEngine.ts:215:      reviewReason: intentFirst.reviewWorthy ? "intent_first_review_worthy" : evidenceCopy.reviewReason ?? (evidenceCopy.shouldMarkReviewWorthy ? "hint_answer_wrong_or_slow" : "none"),
+lib/blundr/coach/coachDecisionEngine.ts:42:function deriveAction(context: CoachContext, mode: CoachMode, input: CoachDecisionInput): { action: CoachAction; hintStrength?: string } {
+lib/blundr/coach/coachDecisionEngine.ts:45:  if (input.interaction === "hint") {
+lib/blundr/coach/coachDecisionEngine.ts:46:    const level = chooseHintLevel(context, input.hintRequestCount);
+lib/blundr/coach/coachDecisionEngine.ts:47:    if (level === "soft_hint") return { action: "show_soft_hint", hintStrength: level };
+lib/blundr/coach/coachDecisionEngine.ts:48:    if (level === "strong_hint") return { action: "show_strong_hint", hintStrength: level };
+lib/blundr/coach/coachDecisionEngine.ts:49:    return { action: "show_answer", hintStrength: level };
+lib/blundr/coach/coachDecisionEngine.ts:68:  if (mode === "plain_prompt" || mode === "plain_hint" || mode === "plain_wrong_move" || mode === "plain_answer_revealed") {
+lib/blundr/coach/coachDecisionEngine.ts:69:    // Plain teaching pre-ShowMore / pre-answer: ONLY hint + show_more (Show More introduced as first-class; full wiring Agent 4)
+lib/blundr/coach/coachDecisionEngine.ts:73:    return ["hint", "show_more"] as unknown as CoachButton[]; // cast transitional until CoachButton union updated
+lib/blundr/coach/coachDecisionEngine.ts:84:      : action === "show_soft_hint" || action === "show_strong_hint"
+lib/blundr/coach/coachDecisionEngine.ts:85:        ? "plain_hint"
+lib/blundr/coach/coachHintEngine.ts:10:  if (context.elapsedMs >= 30000) return "strong_hint";
+lib/blundr/coach/coachHintEngine.ts:11:  return "soft_hint";
+lib/blundr/coach/coachHintEngine.ts:3:export type HintLevel = "soft_hint" | "strong_hint" | "answer";
+lib/blundr/coach/coachHintEngine.ts:5:export function chooseHintLevel(context: CoachContext, hintRequestCount: number): HintLevel {
+lib/blundr/coach/coachHintEngine.ts:7:  if (context.wrongAttempts >= 1) return "strong_hint";
+lib/blundr/coach/coachHintEngine.ts:8:  if (context.hintUsed) return "strong_hint";
+lib/blundr/coach/coachHintEngine.ts:9:  if (hintRequestCount >= 2) return "strong_hint";
+lib/blundr/coach/coachSafety.ts:102:  if ((decision.body || decision.hint || decision.answer) && !hasRequiredObject(text)) {
+lib/blundr/coach/coachSafety.ts:84:  const text = `${decision.title ?? ""} ${decision.body ?? ""} ${decision.hint ?? ""} ${decision.answer ?? ""} ${decision.why ?? ""}`.trim();
+lib/blundr/coach/coachTypes.ts:169:  hintUsed: boolean;
+lib/blundr/coach/coachTypes.ts:180:  interaction: "none" | "hint" | "answer" | "why" | "hide" | "show_plan" | "analyze_idea" | "show_move";
+lib/blundr/coach/coachTypes.ts:182:  hintRequestCount: number;
+lib/blundr/coach/coachTypes.ts:20:  | "show_soft_hint"
+lib/blundr/coach/coachTypes.ts:21:  | "show_strong_hint"
+lib/blundr/coach/coachTypes.ts:28:  | "hint"
+lib/blundr/coach/coachTypes.ts:73:  hintUsed: boolean;
+lib/blundr/coach/coachTypes.ts:8:  | "plain_hint"
+lib/blundr/coach/coachTypes.ts:95:  hint?: string;
+lib/blundr/coach/intentFirstCoachEngine.ts:185:    reviewWorthy: packet.viewMode === "plain" && (givesAnswer || input.interaction === "hint"),
+lib/blundr/coach/intentFirstCoachEngine.ts:207:  if (intent === "recall_prompt" || intent === "recall_hint" || intent === "reveal_answer") return ["hint", "answer"];
+lib/blundr/coach/intentFirstCoachEngine.ts:95:    intent: (intent === "recall_hint" && opportunity.intent === "recall_prompt" ? "recall_hint" : intent === "reveal_answer" ? "reveal_answer" : intent) as CoachTeachingIntent,
+lib/blundr/coach/sessionCoachMemory.ts:15:    hintUsesByConcept: {},
+lib/blundr/coach/sessionCoachMemory.ts:3:  hintUsesByConcept: Record<string, number>;
+lib/blundr/coach/teachingIntent.ts:11:  if (input.packet.trainingMode === "restricted" && input.packet.viewMode === "plain" && input.interaction === "hint") return "recall_hint";
+lib/blundr/coachBrain/__tests__/coachActionResolver.test.ts:19:  const hint = resolveCoachAction(packet, "hint");
+lib/blundr/coachBrain/__tests__/coachActionResolver.test.ts:20:  assert.equal(hint.interaction, "hint");
+lib/blundr/coachBrain/__tests__/evidenceConditionedCopyBuilder.test.ts:41:  const hint = buildCoachCopyFromEvidence({
+lib/blundr/coachBrain/__tests__/evidenceConditionedCopyBuilder.test.ts:43:    interaction: "hint",
+lib/blundr/coachBrain/__tests__/evidenceConditionedCopyBuilder.test.ts:45:  assert.equal((hint.hint ?? "").toLowerCase().includes("bxf7"), false);
+lib/blundr/coachBrain/coachActionResolver.ts:12:    return { interaction, hintLevel: 2, allowExactMove: packet.exactMoveAllowed };
+lib/blundr/coachBrain/coachActionResolver.ts:14:  if (interaction === "hint") {
+lib/blundr/coachBrain/coachActionResolver.ts:15:    return { interaction, hintLevel: packet.viewMode === "plain" ? 1 : 0, allowExactMove: false };
+lib/blundr/coachBrain/coachActionResolver.ts:18:    return { interaction, hintLevel: 0, allowExactMove: false };
+lib/blundr/coachBrain/coachActionResolver.ts:20:  return { interaction, hintLevel: 0, allowExactMove: packet.exactMoveAllowed };
+lib/blundr/coachBrain/coachActionResolver.ts:5:  hintLevel: number;
+lib/blundr/coachBrain/coachActionResolver.ts:9:    return { interaction: "show_plan", hintLevel: 0, allowExactMove: false };
+lib/blundr/coachBrain/coachEvidenceTypes.ts:10:  | "hint"
+lib/blundr/coachBrain/evidenceConditionedCopyBuilder.ts:141:  if (packet.viewMode === "plain" && packet.bookStatus === "in_book") return ["hint", "answer"];
+lib/blundr/coachBrain/evidenceConditionedCopyBuilder.ts:186:  const hintLevel = input.previousHintLevel ?? 0;
+lib/blundr/coachBrain/evidenceConditionedCopyBuilder.ts:190:    hintLevel > 0 && primary?.type === "attacks_square"
+lib/blundr/coachBrain/evidenceConditionedCopyBuilder.ts:192:      : hintLevel > 0 && primary?.type === "piece_develops"
+lib/blundr/coachBrain/evidenceConditionedCopyBuilder.ts:195:  const hint = capText(
+lib/blundr/coachBrain/evidenceConditionedCopyBuilder.ts:196:    hintLevel > 0
+lib/blundr/coachBrain/evidenceConditionedCopyBuilder.ts:202:  // Narrow fix for plain pre-showMore: ensure the .hint returned for interaction="hint" in plain does not include exact move name (raw verified fallback may name it; surface ladder also protects, but copy .hint must be safe for pre-answer).
+lib/blundr/coachBrain/evidenceConditionedCopyBuilder.ts:204:  let plainSafeHint = hint;
+lib/blundr/coachBrain/evidenceConditionedCopyBuilder.ts:250:    hint: input.interaction === "hint" ? plainSafeHint : undefined,
+lib/blundr/coachBrain/evidenceConditionedCopyBuilder.ts:257:    shouldMarkReviewWorthy: packet.viewMode === "plain" && (givesAnswer || input.interaction === "hint"),
+lib/blundr/coachBrain/evidenceConditionedCopyBuilder.ts:7:  hint?: string;
+lib/blundr/coachQuality/__tests__/coachQualityScorer.test.ts:22:    buttons: ["hint", "answer"],
+lib/blundr/coachQuality/__tests__/coachQualityScorer.test.ts:32:    buttons: ["hint", "answer"],
+lib/blundr/coachQuality/__tests__/coachQualityScorer.test.ts:43:    buttons: ["hint", "answer"],
+lib/blundr/coachQuality/__tests__/coachQualityScorer.test.ts:66:    buttons: ["hint", "answer"],
+lib/blundr/coachQuality/__tests__/coachQualityScorer.test.ts:9:    userState: { answerShown: false, hintUsed: false },
+lib/blundr/coachQuality/coachBenchmarkFixtures.ts:138:    userState: { attempts: 3, wrongAttempts: 0, hintUsed: false, answerShown: false, elapsedMs: 10000, priorPatternMisses: 1, priorPatternSuccesses: 2, weakConcepts: [] },
+lib/blundr/coachQuality/coachBenchmarkFixtures.ts:158:    userState: { attempts: 2, wrongAttempts: 0, hintUsed: false, answerShown: false, elapsedMs: 9000, priorPatternMisses: 1, priorPatternSuccesses: 2, weakConcepts: ["center_tension"] },
+lib/blundr/coachQuality/coachBenchmarkFixtures.ts:191:    userState: { attempts: 1, wrongAttempts: 0, hintUsed: false, answerShown: false, elapsedMs: 10000, priorPatternMisses: 0, priorPatternSuccesses: 0, weakConcepts: [] },
+lib/blundr/coachQuality/coachBenchmarkFixtures.ts:20:      hintUsed: false,
+lib/blundr/coachQuality/coachBenchmarkFixtures.ts:230:    userState: { attempts: 1, wrongAttempts: 0, hintUsed: false, answerShown: false, elapsedMs: 8000, priorPatternMisses: 0, priorPatternSuccesses: 1, weakConcepts: [] },
+lib/blundr/coachQuality/coachBenchmarkFixtures.ts:269:    userState: { attempts: 1, wrongAttempts: 0, hintUsed: false, answerShown: false, elapsedMs: 5000, priorPatternMisses: 0, priorPatternSuccesses: 0, weakConcepts: [] },
+lib/blundr/coachQuality/coachBenchmarkFixtures.ts:302:    userState: { attempts: 2, wrongAttempts: 1, hintUsed: true, answerShown: false, elapsedMs: 20000, priorPatternMisses: 2, priorPatternSuccesses: 1, weakConcepts: ["king_safety"] },
+lib/blundr/coachQuality/coachBenchmarkFixtures.ts:335:    userState: { attempts: 2, wrongAttempts: 1, hintUsed: true, answerShown: false, elapsedMs: 13000, priorPatternMisses: 1, priorPatternSuccesses: 0, weakConcepts: ["development"] },
+lib/blundr/coachQuality/coachBenchmarkFixtures.ts:355:    userState: { attempts: 4, wrongAttempts: 0, hintUsed: false, answerShown: false, elapsedMs: 6000, priorPatternMisses: 1, priorPatternSuccesses: 3, weakConcepts: ["prepare_center_break"] },
+lib/blundr/coachQuality/coachBenchmarkFixtures.ts:382:    userState: { attempts: 1, wrongAttempts: 0, hintUsed: false, answerShown: false, elapsedMs: 7000, priorPatternMisses: 0, priorPatternSuccesses: 1, weakConcepts: [] },
+lib/blundr/coachQuality/coachBenchmarkFixtures.ts:39:      allowedCoachModes: ["assisted_teach", "plain_prompt", "plain_hint", "plain_answer_revealed"],
+lib/blundr/coachQuality/coachBenchmarkFixtures.ts:402:    userState: { attempts: 0, wrongAttempts: 0, hintUsed: false, answerShown: false, elapsedMs: 2000, priorPatternMisses: 0, priorPatternSuccesses: 0, weakConcepts: [] },
+lib/blundr/coachQuality/coachBenchmarkFixtures.ts:421:    userState: { attempts: 0, wrongAttempts: 0, hintUsed: false, answerShown: false, elapsedMs: 1000, priorPatternMisses: 0, priorPatternSuccesses: 0, weakConcepts: [] },
+lib/blundr/coachQuality/coachBenchmarkFixtures.ts:89:    userState: { attempts: 1, wrongAttempts: 1, hintUsed: false, answerShown: false, elapsedMs: 12000, priorPatternMisses: 1, priorPatternSuccesses: 0, weakConcepts: ["prepare_center_break"] },
+lib/blundr/coachQuality/coachBenchmarkFixtures.ts:91:      allowedCoachModes: ["plain_hint", "plain_wrong_move"],
+lib/blundr/coachQuality/coachBenchmarkRunner.ts:114:      hintsUsedRecently: fixture.userState.hintUsed ? 1 : 0,
+lib/blundr/coachQuality/coachBenchmarkRunner.ts:126:    userRequestedHelp: fixture.userState.hintUsed,
+lib/blundr/coachQuality/coachBenchmarkRunner.ts:143:  const buttons = exactMoveAllowed ? ["hint", "show_plan", "analyze_idea", "show_move"] : ["hint", "show_plan", "analyze_idea"];
+lib/blundr/coachQuality/coachBenchmarkRunner.ts:57:    hintUsed: fixture.userState.hintUsed,
+lib/blundr/coachQuality/coachBenchmarkRunner.ts:68:    : fixture.viewMode === "plain" && (fixture.userState.hintUsed || fixture.userState.wrongAttempts > 0)
+lib/blundr/coachQuality/coachBenchmarkRunner.ts:69:      ? "hint"
+lib/blundr/coachQuality/coachBenchmarkRunner.ts:76:    hintRequestCount: fixture.userState.hintUsed ? 1 : 0,
+lib/blundr/coachQuality/coachBenchmarkRunner.ts:82:    text: decision.answer ?? decision.hint ?? decision.body,
+lib/blundr/coachQuality/coachBenchmarkTypes.ts:23:    hintUsed: boolean;
+lib/blundr/coachQuality/coachCopyLint.ts:49:      issues.push({ id: entry.utteranceId, issue: "hint_leaks_exact_move" });
+lib/blundr/coachQuality/coachQualityScorer.ts:52:  if (fixture.viewMode === "plain" && !fixture.userState.answerShown && !fixture.userState.hintUsed && leaksMoveNotation(text)) {
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:20:type CoachInteraction = "none" | "hint" | "answer" | "why" | "hide" | "show_plan" | "analyze_idea" | "show_move";
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:332:            hintUsed: input.coachInteraction === "hint",
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:342:          hintRequestCount: (input.coachInteraction ?? (isUserTurn && (expectedMoveResolution.expectedMoveUci || selectedCandidate?.uci) ? "show_plan" : "none")) === "hint" ? 1 : 0,
+lib/blundr/debug/__tests__/trainerDebugEventLog.test.ts:8:    events = appendDebugEvent(events, { type: "coach_action_clicked", action: "hint", result: "handled" });
+lib/blundr/debug/trainerDebugSnapshot.ts:448:      hintShown: input.coachHintRequestCount > 0,
+lib/blundr/explanation/opportunityTemplateMatcher.ts:16:    (input.opportunity.intent === "recall_hint" && input.template.intent === "recall_prompt");
+lib/blundr/liveCoach/liveCoachTypes.ts:93:  hintsUsedRecently: number;
+lib/blundr/opportunity/opportunityTypes.ts:15:  | "recall_hint"
+lib/blundr/presentation/__tests__/coachActionStylePolicy.test.ts:11:    visibleActions: ["hint"],
+lib/blundr/presentation/__tests__/coachActionStylePolicy.test.ts:14:  assert.equal(resolveCoachActionStyle("hint", startTrainingSurface), "default");
+lib/blundr/presentation/__tests__/coachActionStylePolicy.test.ts:35:    visibleActions: ["hint", "show_more"],
+lib/blundr/presentation/__tests__/phaseActionGating.test.ts:102:  const filteredLegacy = filterToVisibleCoachActions(["hint", "answer", "show_plan", "analyze_idea", "continue_from_here"]);
+lib/blundr/presentation/__tests__/phaseActionGating.test.ts:103:  assert.deepEqual(filteredLegacy, ["hint", "continue_from_here"] as VisibleCoachAction[]);
+lib/blundr/presentation/__tests__/phaseActionGating.test.ts:105:  console.log("✓ v2.7.40 visibleActionPolicy regression tests passed (assisted=[], plain=[hint,show_more], branch=[continue,restart], terminal=[], no forbidden)");
+lib/blundr/presentation/__tests__/phaseActionGating.test.ts:15:    coachButtons: ["hint", "show_more"],
+lib/blundr/presentation/__tests__/phaseActionGating.test.ts:30:    coachButtons: ["hint", "show_more", "continue_from_here", "hide"],
+lib/blundr/presentation/__tests__/phaseActionGating.test.ts:34:  assert.deepEqual(userTurn.filteredButtons, ["hint", "show_more", "continue_from_here"]);
+lib/blundr/presentation/__tests__/phaseActionGating.test.ts:45:    coachButtons: ["hint", "show_more"],
+lib/blundr/presentation/__tests__/phaseActionGating.test.ts:80:  // Plain teaching frame pre-ShowMore produces exactly ["hint", "show_more"]
+lib/blundr/presentation/__tests__/phaseActionGating.test.ts:82:  assert.deepEqual(plainPre.actions, ["hint", "show_more"] as VisibleCoachAction[]);
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:117:import { buildHintLadder } from "../../brain/hints/buildHintLadder"; // v2.7.40 Agent 4 tests
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:212:  // 3/4. v2.7.40 Agent 4 update: Plain pre renders *prompt coach* (for Hint+Show More buttons + progressive body) but hides visuals + full assisted body. Actions exactly hint+show_more. (required for Plain View hygiene)
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:213:  const sPlain = buildVisibleTeachingSurface({ currentInstructionFrame: guidedFrame, trainerPresentationFrame: pres1, trainerView: "plain", showMoreShown: false, hintCount: 0 });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:216:  if (sPlain.hint.suppressed !== false) { throw new Error("hint not suppressed in plain pre"); }
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:218:  assert.ok(plainActions.includes("hint"), "hint action present");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:220:  assert.equal(plainActions.length, 2, "exactly hint + show_more in plain pre");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:273:  const leakYes = detectPlainTeachingLeak(["Play e4 now"], JSON.stringify(["hint","show_more"]), "[]");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:274:  const leakNo = detectPlainTeachingLeak(["Develop your pieces toward the center"], JSON.stringify(["hint","show_more"]), "[]");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:276:  if (leakNo) throw new Error("detector must not false-positive clean hint");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:321:  const l0 = buildHintLadder({ target: guidedFrame.target, hintCount: 0, trainerView: "plain", showMoreShown: false });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:322:  const l1 = buildHintLadder({ target: guidedFrame.target, hintCount: 1, trainerView: "plain", showMoreShown: false });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:323:  const l2 = buildHintLadder({ target: guidedFrame.target, hintCount: 2, trainerView: "plain", showMoreShown: false });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:324:  const l3 = buildHintLadder({ target: guidedFrame.target, hintCount: 3, trainerView: "plain", showMoreShown: false });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:336:  // 2. Plain pre showMore: surface coach may render prompt, but body/visuals suppressed unless progressive hint; actions exactly hint+show_more
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:337:  const sPlainPre0 = buildVisibleTeachingSurface({ currentInstructionFrame: guidedFrame, trainerPresentationFrame: pres, trainerView: "plain", showMoreShown: false, hintCount: 0 });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:338:  if (sPlainPre0.actions.length !== 2 || !sPlainPre0.actions.includes("hint") || !sPlainPre0.actions.includes("show_more")) {
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:339:    throw new Error("Plain pre must expose exactly hint+show_more");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:346:  const sPlainPost = buildVisibleTeachingSurface({ currentInstructionFrame: guidedFrame, trainerPresentationFrame: pres, trainerView: "plain", showMoreShown: true, hintCount: 0 });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:351:  // 4. No Reveal/Show Answer/Show Move strings ever in plain surface actions or hint pre
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:357:  const sNewFrame = buildVisibleTeachingSurface({ currentInstructionFrame: { ...guidedFrame, frameId: "f99", target: { ...guidedFrame.target!, uci: "d2d4" } } as any, trainerPresentationFrame: pres, trainerView: "plain", showMoreShown: false, hintCount: 0 });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:358:  if (sNewFrame.hint.text != null && sNewFrame.hint.text !== "") { /* count 0 */ }
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:360:  if (buildHintLadder({ target: guidedFrame.target, hintCount: 0, trainerView: "plain", showMoreShown: false }).currentHint != null) {
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:367:  console.log("✓ v2.7.40 Agent4 hint ladder + Plain View hygiene tests passed (6 cases)");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:400:  const copyText = (brain.safeFallbackCopy!.title + " " + brain.safeFallbackCopy!.body + " " + (brain.safeFallbackCopy!.hint || "")).toLowerCase();
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:435:    hintCount: 0,
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:475:  const sPlainPre = buildVisibleTeachingSurface({ currentInstructionFrame: guidedFrame, trainerPresentationFrame: pres, trainerView: "plain", showMoreShown: false, hintCount: 0 });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:476:  const plainStr = JSON.stringify(sPlainPre.actions) + (sPlainPre.coach.body || "") + (sPlainPre.hint.text || "");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:562:  const plainCopy = buildCoachCopyFromEvidence({ packet: { ...plainBc4Packet, viewMode: "plain", exactMoveAllowed: false, allowedClaims: [] }, interaction: "hint" });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:570:    coachShouldShow: true, coachTitle: "Opening pattern", coachBody: plainCopy.body || "Focus...", coachButtons: ["hint", "show_more"], coachHiddenForFrame: false,
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:572:    brainAnalysis: null, branchTransitionSurface: null, showMoreShown: false, hintCount: 0,
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:576:  // pre showMore: build surface, prove does not expose SAN/UCI/source/target/arrow/hint (task4)
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:580:    showMoreShown: false, trainerView: "plain", trainingMode: "restricted", isUserTurn: true, trainerPhase: "ready_for_user", bookStatus: "in_book", isBranchTransition: false, isTerminal: false, brainAnalysis: null, hintCount: 0,
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:583:  const preText = ((preSurface.coach?.body || "") + " " + (preSurface.hint?.text || "")).toLowerCase();
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:589:  assert.equal(preSurface.hint.suppressed || !preSurface.hint.text || !/f1|c4|bc4/i.test(preSurface.hint.text || ""), true, "plain pre hint must not name squares/move");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:595:    showMoreShown: true, trainerView: "plain", trainingMode: "restricted", isUserTurn: true, trainerPhase: "ready_for_user", bookStatus: "in_book", isBranchTransition: false, isTerminal: false, brainAnalysis: null, hintCount: 0,
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:634:    showMoreShown: true, trainerView: "plain", trainingMode: "restricted", isUserTurn: true, trainerPhase: "ready_for_user", bookStatus: "in_book", isBranchTransition: false, isTerminal: false, brainAnalysis: null, hintCount: 0,
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:649:    showMoreShown: false, trainerView: "plain", trainingMode: "restricted", isUserTurn: true, trainerPhase: "ready_for_user", bookStatus: "in_book", isBranchTransition: false, isTerminal: false, brainAnalysis: null, hintCount: 0,
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:653:  assert.equal(/bc4|f1c4| f1 | c4 |bishop|arrow|target/i.test(preAll) && !/find the next move|hint/i.test(preAll) ? false : true, true); // pre must not reveal SAN/UCI/sq/piece/arrow/target for Bc4
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:110:  hint: {
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:14: * 2. target mismatch (any consumer vs instruction target) → safety.blocked=true + full suppress of coach body/visuals/hint/showMore content.
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:16: * 4. Plain View (trainerView==="plain") before showMoreShown → hide coach body + visuals; only hint + showMore actions exposed.
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:185:  hintCount?: number;
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:20: * 8. safety.blocked=true forces coach.shouldRender=false, visual.shouldRender=false, hint suppressed, showMore content hidden.
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:215:    hintCount = 0,
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:24: * 12. No forbidden labels, raw UCI/SAN in coach/hint content (responsibility shared with policy + upstream; surface passes through aligned content only).
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:27: * - Progressive hint ladder (via buildHintLadder) drives .hint.text and pre-showMore coach body for plain.
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:28: * - Plain pre: coach renders as minimal prompt ("Find the next move") + progressive hint in body (no answer leak) + exactly hint+show_more actions.
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:30: * - hintCount + showMoreShown drive ladder + suppression.
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:313:  // v2.7.40 Agent 4: Compute progressive hint ladder (always safe; only currentHint used pre-showMore)
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:319:    hintCount,
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:31: * - All hint texts pre-showMore never contain SAN/UCI/direct move/target square (enforced in ladder + tests).
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:326:  // Use known plain pre action set + potential prompt/hint texts (even if coach not yet decided)
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:330:    const earlyPlainActions = JSON.stringify(["hint", "show_more"]);
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:353:  // For plain pre-showmore: policy already gives ["hint","show_more"] — surface enforces no other.
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:355:    actions = actions.filter((a) => a === "hint" || a === "show_more");
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:359:  // Agent 4: for plain pre we still render a *prompt* coach card (title + progressive hint body + actions), but no full body/visuals
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:35: * - Any fail → safety.blocked=true, suppress coach/visual/hint/showMore (except safe fallback), owner=_blocked, debug flags + fourTargetMismatch etc.
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:36: * - Plain leak detector (pre-showMore in plain): scans visible coach/hint/actions for UCI/SAN/squares/"Play {move}"/forbidden debug labels → block + plainLeakDetected.
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:374:      // Prompt + progressive non-leaking hint (no full assisted body yet)
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:410:  const hintSuppressed = safetyBlocked || isBranchTransitionFrame;
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:411:  const hintText = !hintSuppressed ? (progressiveHint || (isPlainPreShowMore ? null : (trainerPresentationFrame?.coach?.title ? `Focus on the key idea.` : null))) : null;
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:48:import { buildHintLadder } from "../brain/hints/buildHintLadder"; // v2.7.40 Agent 4: progressive non-leaking hints for Plain View
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:504:    hint: {
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:505:      text: hintText,
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:506:      suppressed: hintSuppressed,
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:507:      reason: hintSuppressed ? (safetyBlocked ? blockedReason : "plain_or_alignment") : undefined,
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:53: * Scans final visible strings (coach title/body/hint from ladder, actions) for forbidden:
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:545:      visibleCoachOwner: isPlainPreShowMore ? "plain_hint_ladder" : presentationCoachOwner,
+lib/blundr/presentation/phaseActionGating.ts:6:const VISIBLE_TEACHING_ACTIONS = new Set<VisibleCoachAction>(["hint", "show_more"]);
+lib/blundr/presentation/phaseActionGating.ts:73:    if (button === "show_more" || button === "hint") {
+lib/blundr/presentation/phaseActionGating.ts:8:  "hint",
+lib/blundr/presentation/visibleActionPolicy.ts:108:      actions: ["hint", "show_more"],
+lib/blundr/presentation/visibleActionPolicy.ts:110:      reason: "plain_teaching_pre_showmore_only_hint_show_more",
+lib/blundr/presentation/visibleActionPolicy.ts:137:    case "hint":
+lib/blundr/presentation/visibleActionPolicy.ts:158:  const allowed: VisibleCoachAction[] = ["hint", "show_more", "continue_from_here", "restart_line", "review_pattern"];
+lib/blundr/presentation/visibleActionPolicy.ts:15:  | "hint"
+lib/blundr/presentation/visibleActionPolicy.ts:6: * - Plain View active teaching frame: ONLY ["hint", "show_more"]
+lib/blundr/presentation/visibleActionPolicy.ts:89:  // Per strict: Plain View teaching ONLY hint/show_more; Assisted teaching frame: []
+lib/blundr/presentation/visibleActionPolicy.ts:98:  // Plain View teaching frames (recall mode): ONLY hint + show_more pre-reveal
+lib/blundr/teaching/teachingPermissions.ts:39:      userLabel: "Plain View • No hints",
+lib/blundr/teaching/trainingContextEngine.ts:558:      userLabel: "No hints",
+lib/blundr/teaching/trainingContextEngine.ts:675:      suppressedReasons: ["plain_view_no_hints"],
+lib/blundr/teaching/visualOverlayRouter.ts:56:      suppressedReasons: ["plain_view_no_hints"],

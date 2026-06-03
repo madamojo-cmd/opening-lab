@@ -1,0 +1,16 @@
+app/page.tsx:1325:  // expectedMovesForValidation and expectedMovesForValidationKey are now declared early (from expectedMoveResolution only)
+app/page.tsx:1327:  const expectedUserUcis=expectedMovesForValidation.map(move=>move.uci);
+app/page.tsx:1328:  const expectedUserSans=expectedMovesForValidation.map(move=>move.san).filter(Boolean) as string[];
+app/page.tsx:1348:  const shouldValidateTrainingMove=activeTab==="train"&&trainingMode==="restricted"&&isUserTurn&&!bookComplete&&historyIndex>=positionHistory.length-1&&expectedMovesForValidation.length>0;
+app/page.tsx:1356:    const expectedMove=expectedMovesForValidation[0];
+app/page.tsx:1396:        repertoireMoves:expectedMovesForValidation.map((move)=>({uci:move.uci,san:move.san})),
+app/page.tsx:1411:  },[activeTab,trainingMode,isUserTurn,expectedMovesForValidationKey,fen,userColor,trainerView,showAnswer,shouldValidateTrainingMove,moveQualityUserStatus,moveQuality?.status,repertoire.name,historyIndex,positionHistory.length,lastMoveSan,explorerMoves,engineLines,progress.trainedPositions,progress.mistakes]);
+app/page.tsx:2741:    const expectedMoves=expectedMovesForValidation;
+app/page.tsx:2813:  },[fen,shouldValidateTrainingMove,expectedMovesForValidationKey]);
+app/page.tsx:884:  // v2.7.41 TDZ Fix: expectedMovesForValidation + curated / lichess end signals placed early
+app/page.tsx:886:  const expectedMovesForValidation = useMemo(() => {
+app/page.tsx:899:  const expectedMovesForValidationKey = useMemo(
+app/page.tsx:900:    () => expectedMovesForValidation.map((move) => `${move.uci}:${move.san ?? ""}`).join("|"),
+app/page.tsx:901:    [expectedMovesForValidation]
+app/page.tsx:905:  // Never infer from temporary expectedMovesForValidation.length === 0 or source includes("curated"/"terminal")
+lib/blundr/debug/__tests__/trainerDebugSnapshot.test.ts:467:    // mirrors page.tsx declaration order (raw state -> expectedMoveResolution -> expectedMovesForValidation -> selectedLineCompleteConfirmed -> lichessEndConfirmed -> isInstructionLoading -> hardEndOfBookGate -> continuationPolicyCandidate -> currentInstructionFrame)

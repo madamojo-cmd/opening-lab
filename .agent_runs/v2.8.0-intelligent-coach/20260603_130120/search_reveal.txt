@@ -1,0 +1,343 @@
+app/page.tsx:1423:    revealState:showAnswer?"revealed":"hidden",
+app/page.tsx:1518:    revealState:showAnswer?"revealed":"hidden",
+app/page.tsx:151:  revealTargetUci: string | null;
+app/page.tsx:1698:        revealRisk:"none" as const,
+app/page.tsx:1718:        revealRisk:"none" as const,
+app/page.tsx:1738:        revealRisk:"none" as const,
+app/page.tsx:1763:        revealRisk:"none" as const,
+app/page.tsx:1781:        revealRisk:"none" as const,
+app/page.tsx:1844:        revealRisk:"low",
+app/page.tsx:1872:        revealRisk:"low",
+app/page.tsx:2130:      revealRisk:"none" as const,
+app/page.tsx:2144:  const revealTargetStale=Boolean((lastActionDebug as any)?.revealTargetUci&&instructionTarget?.uci&&(lastActionDebug as any)?.revealTargetUci!==instructionTarget.uci);
+app/page.tsx:2190:      revealTargetUci:(lastActionDebug as any)?.revealTargetUci??instructionTarget?.uci??null,
+app/page.tsx:2324:      revealExpectedMoveTriggered:input.normalizedAction==="answer"||input.normalizedAction==="reveal_next_move",
+app/page.tsx:2325:      revealCandidateTriggered:input.normalizedAction==="show_move",
+app/page.tsx:2328:      revealTargetUci:input.extra?.revealTargetUci??(input.normalizedAction.includes("reveal")||input.normalizedAction==="answer"?instructionTarget?.uci??null:null),
+app/page.tsx:2329:      revealTargetSource:input.extra?.revealTargetSource??(instructionTarget?"instruction_target":"none"),
+app/page.tsx:2330:      revealIdempotentNoop:Boolean(input.extra?.revealIdempotentNoop),
+app/page.tsx:2331:      revealBlockedBecauseCoachHidden:Boolean(input.extra?.revealBlockedBecauseCoachHidden),
+app/page.tsx:2920:  useEffect(()=>{if(activeTab!=="train")return;const fast=deriveFastAnnotation({fen,openingName:repertoire.name,userColor,trainingMode,expectedUserOptions,opponentBookOptions});setAnnotation(fast);setVisualReady(true);setThinkingStep("ready");setPipelineNote(trainingMode==="continuation"&&isUserTurn?continuationAnalysisStatus==="analyzing"?"Analyzing continuation candidate.":"Continuation candidate ready.":"Teaching cue ready.");setBrain(p=>({...p,source:"rule visual",gpt:"ready",note:"Manual reveal/debug only"}))},[fen,activeTab,selectedRepertoireId,trainingMode,ratingFilter,continuationAnalysisStatus]);
+app/page.tsx:2970:    const browserEngine=extra.skipClientEngine?null:await runBrowserStockfish(requestFen,rating.skill,eventType==="reveal"?1000:700);
+app/page.tsx:2985:    setPipelineNote(extra.skipGpt?"Manual analysis request sent.":"Sending local facts to Brain because the user requested reveal/debug.");
+app/page.tsx:3004:      setBrain(p=>({...p,engine:data.engine?.fallback?"fallback":"active",gpt:data.annotation?.fallback?"fallback":"active",latency:Math.round(performance.now()-start),source:data.annotation?.fallback?"manual brain fallback":"manual brain",note:data.pipeline?.gpt||data.annotation?.reason||"Manual reveal/debug only"}));
+app/page.tsx:3045:  function selectRepertoire(id:string){const startFen=new Chess().fen();setSelectedRepertoireId(id);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
+app/page.tsx:3046:  function resetBoard(){const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveTab("train");bumpRuntimeFrame()}
+app/page.tsx:3303:    if(!phaseActionGate.revealButtonVisible){
+app/page.tsx:3304:      recordDebugAction({action:"reveal_next_move",normalizedAction:"reveal_next_move",before,after:before,result:"blocked",reason:coachHiddenForFrame?"coach_hidden":phaseActionGate.blockedReason??"no_revealable_move",extra:{revealBlockedBecauseCoachHidden:coachHiddenForFrame,revealTargetUci:instructionTarget?.uci??null,revealTargetSource:instructionTarget?"instruction_target":"none"}});
+app/page.tsx:3308:      recordDebugAction({action:"reveal_next_move",normalizedAction:"reveal_next_move",before,after:before,result:"no_op",reason:"reveal_idempotent",extra:{revealIdempotentNoop:true,revealTargetUci:instructionTarget?.uci??null,revealTargetSource:instructionTarget?"instruction_target":"none"}});
+app/page.tsx:3314:    recordDebugAction({action:"reveal_next_move",normalizedAction:"reveal_next_move",before,after,result:"handled",reason:"manual_reveal_button",extra:{revealTargetUci:instructionTarget?.uci??null,revealTargetSource:instructionTarget?"instruction_target":"none"}});
+app/page.tsx:3316:      type:"cue_revealed",
+app/page.tsx:3321:    void runBrain("reveal");
+app/page.tsx:3341:      trackLearningEvent({type:"cue_revealed",source:"train",fen,metadata:{eventType:"continuation_terminal",lastUserMoveSan:lastMoveSan,lastUserMoveUci:lastMove,terminalReason:current.isCheckmate?.()?"checkmate":"no_legal_moves"}});
+app/page.tsx:3626:    revealTargetUci:(lastActionDebug as any)?.revealTargetUci??instructionTarget?.uci??null,
+app/page.tsx:3627:    revealTargetSource:(lastActionDebug as any)?.revealTargetSource??(instructionTarget?"instruction_target":"none"),
+app/page.tsx:3631:    revealTargetStale,
+app/page.tsx:3697:    {activeTab==="home"&&<section className="space-y-6"><header className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-green-700 text-white shadow-sm"><Beaker size={20}/></div><div><h1 className="text-2xl font-bold tracking-tight">Blundr</h1><p className="text-sm text-stone-500">Visual opening training with a controlled trainer.</p></div></div><button onClick={()=>setShowSettings(true)} className="rounded-2xl bg-white p-3 shadow-sm"><Settings className="text-stone-500" size={20}/></button></header><div className="grid grid-cols-2 gap-3"><MetricCard label="Accuracy" value={`${accuracy}%`} sub="all time" icon={<Trophy size={19}/>}/><MetricCard label="Streak" value={String(progress.streak)} sub="correct" icon={<Flame size={19}/>}/><MetricCard label="Review" value={String(mistakes.length)} sub="mistakes" icon={<XCircle size={19}/>} warning/><MetricCard label="Openings" value={String(repertoires.length)} sub="available" icon={<BookOpen size={19}/>}/></div><div className="rounded-3xl bg-stone-900 p-4 text-white shadow-sm"><div className="flex items-center gap-2 text-sm font-bold text-green-300"><Cloud size={17}/> v2.7.33</div><p className="mt-2 text-sm leading-6 text-stone-300">Training now uses rule-only visual cues by default. Blundr Brain is reserved for manual reveal/debug, so normal practice stays fast, deterministic, and inexpensive.</p></div><div className="space-y-3">{repertoires.slice(0,5).map(r=><button key={r.id} onClick={()=>selectRepertoire(r.id)} className="flex w-full items-center gap-3 rounded-3xl border border-stone-200 bg-white p-3 text-left shadow-sm"><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {countPositions(r)} positions</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>)}</div></section>}
+app/page.tsx:3747:      {showDetails&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Coach Debug</div><div className="mt-2">coachMode: {coachDecision.mode}</div><div>coachAction: {coachDecision.action}</div><div>coachUtteranceId: {coachDecision.utteranceId??"none"}</div><div>coachUtteranceFamily: {coachDecision.utteranceFamily??"none"}</div><div>coachVariationReason: {String((coachDecision.debug as any)?.coachVariationReason??"n/a")}</div><div>coachHintStrength: {String((coachDecision.debug as any)?.coachHintStrength??"none")}</div><div>coachRevealRisk: {coachDecision.revealRisk}</div><div>coachGivesAnswer: {coachDecision.givesAnswer?"true":"false"}</div><div>coachButtons: {displayedCoachDecision.buttons.join(", ")||"none"}</div><div>coachShouldMarkReviewWorthy: {coachDecision.shouldMarkReviewWorthy?"true":"false"}</div><div>coachSuppressedReason: {coachDecision.suppressedReason??"none"}</div><div>coachFrameMatchesBoard: {coachContextResult.context?.recipeFrameMatchesBoard?"true":"false"}</div><div>coachFenMatchesBoard: {coachContextResult.context?.recipeFenMatchesBoard?"true":"false"}</div><div>recentCoachUtteranceIds: {coachUtteranceMemory.slice(-5).map((entry:any)=>entry.utteranceId).join(", ")||"none"}</div><div>coachSafetyWarnings: {JSON.stringify((coachDecision.debug as any)?.coachSafetyWarnings??[])}</div><div>coachReviewMarked: {coachReviewMarked?"true":"false"}</div><div>selectedOpportunity: {String((coachDecision.debug as any)?.selectedOpportunity??liveCoachState?.selected?.opportunity??"none")}</div><div>selectedIntent: {String((coachDecision.debug as any)?.selectedIntent??liveCoachState?.selected?.intent??"none")}</div><div>exactMoveAllowed: {coachContextResult.context?.exactMoveAllowed?"true":"false"}</div><div>claimTypes: {coachDecision.claimTypes.join(", ")||"none"}</div><div>blockedClaims: {String((coachDecision.debug as any)?.blockedClaims??"none")}</div><div>silenceReason: {String((coachDecision.debug as any)?.silenceReason??liveCoachState?.debug?.silenceReason??"none")}</div><div>branchTransitionSurfaceRendered: {branchTransitionSurface?.render?"true":"false"}</div><div>branchTransitionReason: {branchTransitionSurface?.reason??"none"}</div><div>continueFromHereAvailable: {branchTransitionSurface?.render?"true":"false"}</div><div>continueFromHereClicked: {continueFromHereClicked?"true":"false"}</div><div>coachSurfaceOwner: {coachSurfacePolicy.owner}</div><div>allowLegacyTrainingCard: {coachSurfacePolicy.allowLegacyTrainingCard?"true":"false"}</div><div>allowMoveImpactCard: {coachSurfacePolicy.allowMoveImpactCard?"true":"false"}</div><div>allowNextMoveText: {coachSurfacePolicy.allowNextMoveText?"true":"false"}</div><div>legacyCueSuppressedReason: {coachSurfacePolicy.reason}</div><div>moveImpactPresenterReason: {moveImpactPresentation.reason}</div></div>}
+app/page.tsx:3772:            revealRisk: "none",
+app/page.tsx:590:      status:"manual_reveal",
+app/page.tsx:74:type PatternCueStatus = "ready" | "pending" | "suppressed" | "plain" | "wrong_move" | "manual_reveal";
+app/page.tsx:800:  const [brain,setBrain]=useState<LiveBrain>({ratingLabel:"Club",ratingPool:"1200–1600",book:"ready",lichess:"ready",engine:"ready",gpt:"ready",source:"rule visual",note:"Manual reveal/debug only"});
+lib/blundr/animation/__tests__/animationConductor.test.ts:109:      revealRequired: false,
+lib/blundr/animation/__tests__/animationConductor.test.ts:267:  const revealBlocked = conductor.sync({ recipe: recipe("reveal_answer"), context: baseContext({ adapterAllowed: false }), nowMs: 3300, reducedMotionMode: "full" });
+lib/blundr/animation/__tests__/animationConductor.test.ts:268:  assert.equal(revealBlocked.playbackState, "suppressed");
+lib/blundr/animation/__tests__/animationEndStatePersistence.test.ts:46:      revealRequired: false,
+lib/blundr/coach/__tests__/coachContextBuilder.test.ts:46:    revealState: "hidden",
+lib/blundr/coach/__tests__/coachContextBuilder.test.ts:9:    revealState: "hidden",
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:10:    revealState: "hidden",
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:132:  const revealBlocked = decideCoachOutput({
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:133:    context: baseContext({ viewMode: "plain", revealState: "hidden", answerShown: false, exactMoveAllowed: false }),
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:139:  assert.equal(revealBlocked.mode, "suppressed");
+lib/blundr/coach/__tests__/coachDecisionEngine.test.ts:87:    context: baseContext({ viewMode: "plain", revealState: "revealed", answerShown: true, exactMoveAllowed: true }),
+lib/blundr/coach/__tests__/coachHintEngine.test.ts:6:    revealState: "hidden",
+lib/blundr/coach/__tests__/coachSafety.test.ts:13:    revealRisk: "low",
+lib/blundr/coach/__tests__/coachSafety.test.ts:27:    revealRisk: "low",
+lib/blundr/coach/__tests__/coachSafety.test.ts:36:      revealState: "hidden",
+lib/blundr/coach/coachContextBuilder.ts:23:        (input.viewMode === "assisted" || input.revealState === "revealed" || input.answerShown),
+lib/blundr/coach/coachContextBuilder.ts:31:        revealState: input.revealState,
+lib/blundr/coach/coachContextBuilder.ts:78:      (input.viewMode === "assisted" || input.revealState === "revealed" || input.answerShown),
+lib/blundr/coach/coachContextBuilder.ts:87:      revealState: input.revealState,
+lib/blundr/coach/coachCopyLibrary.ts:10:  e({ utteranceId: "dwp_p1", utteranceFamily: "dwp_prompt", conceptId: "develop_with_pressure", text: "Look for a developing move that creates pressure.", allowedModes: ["plain_prompt"], requiredConcreteObjects: ["development", "pressure"], claimTypes: ["plan_principle"], revealRisk: "none", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:11:  e({ utteranceId: "dwp_hs1", utteranceFamily: "dwp_hint", conceptId: "develop_with_pressure", text: "Think about which move develops while creating pressure.", allowedModes: ["plain_hint", "plain_wrong_move"], requiredConcreteObjects: ["development", "pressure"], claimTypes: ["plan_principle"], revealRisk: "low", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:12:  e({ utteranceId: "dwp_hg1", utteranceFamily: "dwp_hint", conceptId: "develop_with_pressure", text: "The key target is f7, and a bishop can pressure it.", allowedModes: ["plain_hint", "plain_wrong_move"], requiredConcreteObjects: ["f7", "bishop", "pressure"], claimTypes: ["opening_pattern"], revealRisk: "medium", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:13:  e({ utteranceId: "dwp_ans1", utteranceFamily: "dwp_answer", conceptId: "develop_with_pressure", text: "Play Bc4. The bishop develops and pressures f7.", allowedModes: ["plain_answer_revealed", "supported_continuation"], requiredConcreteObjects: ["bishop", "f7", "pressure"], claimTypes: ["engine_safe_recommendation", "opening_pattern"], revealRisk: "full_answer", givesAnswer: true, requiresAnswerPermission: true }),
+lib/blundr/coach/coachCopyLibrary.ts:14:  e({ utteranceId: "dwp_r1", utteranceFamily: "dwp_reinforce", conceptId: "develop_with_pressure", text: "Good. You developed with pressure, not just development.", allowedModes: ["assisted_reinforce", "correct_fast", "correct_slow"], requiredConcreteObjects: ["development", "pressure"], claimTypes: ["opening_pattern"], revealRisk: "none", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:15:  e({ utteranceId: "dwp_w1", utteranceFamily: "dwp_why", conceptId: "develop_with_pressure", text: "Good opening moves often develop a piece while creating a concrete target.", allowedModes: ["assisted_teach", "assisted_wrong_move"], requiredConcreteObjects: ["development", "target"], claimTypes: ["plan_principle"], revealRisk: "none", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:17:  e({ utteranceId: "cfs_a1", utteranceFamily: "castle_assist", conceptId: "castle_for_safety", text: "The king moves to safety before the center opens.", allowedModes: ["assisted_teach"], requiredConcreteObjects: ["king", "center", "king safety"], claimTypes: ["opening_pattern"], revealRisk: "low", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:18:  e({ utteranceId: "cfs_p1", utteranceFamily: "castle_prompt", conceptId: "castle_for_safety", text: "Ask whether the king should stay in the center much longer.", allowedModes: ["plain_prompt"], requiredConcreteObjects: ["king", "center"], claimTypes: ["plan_principle"], revealRisk: "none", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:19:  e({ utteranceId: "cfs_h1", utteranceFamily: "castle_hint", conceptId: "castle_for_safety", text: "Think about king safety before the center opens.", allowedModes: ["plain_hint", "plain_wrong_move"], requiredConcreteObjects: ["king safety", "center"], claimTypes: ["plan_principle"], revealRisk: "low", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:20:  e({ utteranceId: "cfs_h2", utteranceFamily: "castle_hint", conceptId: "castle_for_safety", text: "This is the moment to move the king to safety.", allowedModes: ["plain_hint", "plain_wrong_move"], requiredConcreteObjects: ["king", "king safety"], claimTypes: ["opening_pattern"], revealRisk: "medium", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:21:  e({ utteranceId: "cfs_ans1", utteranceFamily: "castle_answer", conceptId: "castle_for_safety", text: "Castle kingside. The king moves to safety before the center opens.", allowedModes: ["plain_answer_revealed", "supported_continuation"], requiredConcreteObjects: ["king", "center", "king safety"], claimTypes: ["engine_safe_recommendation"], revealRisk: "full_answer", givesAnswer: true, requiresAnswerPermission: true }),
+lib/blundr/coach/coachCopyLibrary.ts:22:  e({ utteranceId: "cfs_r1", utteranceFamily: "castle_reinforce", conceptId: "castle_for_safety", text: "Good. The king is safer before the center opens.", allowedModes: ["assisted_reinforce", "correct_fast", "correct_slow"], requiredConcreteObjects: ["king", "center", "king safety"], claimTypes: ["opening_pattern"], revealRisk: "none", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:23:  e({ utteranceId: "cfs_w1", utteranceFamily: "castle_why", conceptId: "castle_for_safety", text: "Castling moves the king away from the center and connects the rook.", allowedModes: ["assisted_teach", "assisted_wrong_move"], requiredConcreteObjects: ["king", "center", "rook"], claimTypes: ["plan_principle"], revealRisk: "none", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:25:  e({ utteranceId: "pcb_a1", utteranceFamily: "c3_assist", conceptId: "prepare_center_break", text: "c3 supports a later d4 break and helps White build the center.", allowedModes: ["assisted_teach"], requiredConcreteObjects: ["pawn", "d4", "center", "pawn break"], claimTypes: ["opening_pattern"], revealRisk: "low", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:26:  e({ utteranceId: "pcb_p1", utteranceFamily: "c3_prompt", conceptId: "prepare_center_break", text: "Look for White’s quiet center-building move.", allowedModes: ["plain_prompt"], requiredConcreteObjects: ["center"], claimTypes: ["plan_principle"], revealRisk: "none", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:27:  e({ utteranceId: "pcb_h1", utteranceFamily: "c3_hint", conceptId: "prepare_center_break", text: "Think about preparing d4 before playing it.", allowedModes: ["plain_hint", "plain_wrong_move"], requiredConcreteObjects: ["d4", "pawn break"], claimTypes: ["plan_principle"], revealRisk: "low", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:28:  e({ utteranceId: "pcb_h2", utteranceFamily: "c3_hint", conceptId: "prepare_center_break", text: "The c-pawn can help White prepare d4.", allowedModes: ["plain_hint", "plain_wrong_move"], requiredConcreteObjects: ["pawn", "d4"], claimTypes: ["opening_pattern"], revealRisk: "medium", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:29:  e({ utteranceId: "pcb_ans1", utteranceFamily: "c3_answer", conceptId: "prepare_center_break", text: "Play c3. It supports a later d4 break.", allowedModes: ["plain_answer_revealed", "supported_continuation"], requiredConcreteObjects: ["pawn", "d4", "pawn break"], claimTypes: ["engine_safe_recommendation", "opening_pattern"], revealRisk: "full_answer", givesAnswer: true, requiresAnswerPermission: true }),
+lib/blundr/coach/coachCopyLibrary.ts:31:  e({ utteranceId: "rtc_a1", utteranceFamily: "re1_assist", conceptId: "rook_to_center", text: "The rook moves toward the center so it can support White’s central plan.", allowedModes: ["assisted_teach"], requiredConcreteObjects: ["rook", "center", "central plan"], claimTypes: ["opening_pattern"], revealRisk: "low", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:32:  e({ utteranceId: "rtc_p1", utteranceFamily: "re1_prompt", conceptId: "rook_to_center", text: "Look for a quiet move that improves central support.", allowedModes: ["plain_prompt"], requiredConcreteObjects: ["center", "central plan"], claimTypes: ["plan_principle"], revealRisk: "none", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:33:  e({ utteranceId: "rtc_h1", utteranceFamily: "re1_hint", conceptId: "rook_to_center", text: "The rook can move onto the e-file to support the center.", allowedModes: ["plain_hint", "plain_wrong_move"], requiredConcreteObjects: ["rook", "e-file", "center"], claimTypes: ["plan_principle"], revealRisk: "medium", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:34:  e({ utteranceId: "rtc_ans1", utteranceFamily: "re1_answer", conceptId: "rook_to_center", text: "Play Re1. The rook moves toward the center so it can support White’s central plan.", allowedModes: ["plain_answer_revealed", "supported_continuation"], requiredConcreteObjects: ["rook", "center", "central plan"], claimTypes: ["engine_safe_recommendation"], revealRisk: "full_answer", givesAnswer: true, requiresAnswerPermission: true }),
+lib/blundr/coach/coachCopyLibrary.ts:36:  e({ utteranceId: "ct_a1", utteranceFamily: "center_assist", conceptId: "center_tension", text: "The fight in the center decides which pieces become active.", allowedModes: ["assisted_teach", "freeplay_principle"], requiredConcreteObjects: ["center", "piece activity"], claimTypes: ["plan_principle"], revealRisk: "none", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:37:  e({ utteranceId: "ct_p1", utteranceFamily: "center_prompt", conceptId: "center_tension", text: "Study the center before choosing a move.", allowedModes: ["plain_prompt"], requiredConcreteObjects: ["center"], claimTypes: ["plan_principle"], revealRisk: "none", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:38:  e({ utteranceId: "ct_h1", utteranceFamily: "center_hint", conceptId: "center_tension", text: "Look at how the central pawns affect piece activity.", allowedModes: ["plain_hint", "plain_wrong_move"], requiredConcreteObjects: ["pawn", "center", "piece activity"], claimTypes: ["plan_principle"], revealRisk: "low", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:40:  e({ utteranceId: "ks_p1", utteranceFamily: "ks", conceptId: "king_safety", text: "Before the center opens, the king’s safety matters more than grabbing space.", allowedModes: ["freeplay_principle", "supported_continuation"], requiredConcreteObjects: ["king safety", "center"], claimTypes: ["plan_principle"], revealRisk: "none", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:41:  e({ utteranceId: "dev_p1", utteranceFamily: "dev", conceptId: "development", text: "Improve the piece that has not joined the game yet.", allowedModes: ["freeplay_principle", "supported_continuation"], requiredConcreteObjects: ["development", "least active piece"], claimTypes: ["plan_principle"], revealRisk: "none", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:42:  e({ utteranceId: "ofr_p1", utteranceFamily: "open_file", conceptId: "open_file_rook", text: "A rook becomes more useful when it supports an open or central file.", allowedModes: ["freeplay_principle", "supported_continuation"], requiredConcreteObjects: ["rook", "open file", "center"], claimTypes: ["plan_principle"], revealRisk: "none", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:8:  e({ utteranceId: "dwp_a1", utteranceFamily: "dwp_assist", conceptId: "develop_with_pressure", title: "Develop with pressure", text: "The bishop develops and pressures f7.", allowedModes: ["assisted_teach"], requiredConcreteObjects: ["bishop", "f7", "pressure"], claimTypes: ["opening_pattern"], revealRisk: "low", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachCopyLibrary.ts:9:  e({ utteranceId: "dwp_a2", utteranceFamily: "dwp_assist", conceptId: "develop_with_pressure", title: "Develop with pressure", text: "White develops while creating a concrete target on f7.", allowedModes: ["assisted_teach"], requiredConcreteObjects: ["development", "target", "f7"], claimTypes: ["opening_pattern"], revealRisk: "low", givesAnswer: false, requiresAnswerPermission: false }),
+lib/blundr/coach/coachDebug.ts:11:    coachRevealRisk: decision.revealRisk,
+lib/blundr/coach/coachDecisionEngine.ts:110:    context.revealState === "hidden" &&
+lib/blundr/coach/coachDecisionEngine.ts:123:    viewMode: input.brainInput?.viewMode ?? (context.viewMode === "reveal" ? "assisted" : context.viewMode),
+lib/blundr/coach/coachDecisionEngine.ts:164:      revealRisk: entry.revealRisk,
+lib/blundr/coach/coachDecisionEngine.ts:18:    revealRisk: "none",
+lib/blundr/coach/coachDecisionEngine.ts:204:    revealRisk: preferIntentFirstCopy ? (intentFirst.revealRisk === "high" ? "full_answer" : intentFirst.revealRisk) : preferFallbackCopy ? (fallback?.revealRisk ?? "low") : (evidenceCopy.givesAnswer ? "full_answer" : "low"),
+lib/blundr/coach/coachDecisionEngine.ts:240:  if (mode === "plain_answer_revealed" && action === "show_answer" && context.moveSan) {
+lib/blundr/coach/coachDecisionEngine.ts:242:    decision.body = `The revealed move is ${context.moveSan}. Use this exact move to continue the plan.`;
+lib/blundr/coach/coachDecisionEngine.ts:246:    decision.revealRisk = "full_answer";
+lib/blundr/coach/coachDecisionEngine.ts:247:    decision.utteranceFamily = "revealed_move";
+lib/blundr/coach/coachDecisionEngine.ts:250:      coachIntent: "reveal_answer",
+lib/blundr/coach/coachDecisionEngine.ts:251:      revealedMoveFallbackUsed: true,
+lib/blundr/coach/coachDecisionEngine.ts:37:  if (context.answerShown || context.revealState === "revealed") return "plain_answer_revealed";
+lib/blundr/coach/coachDecisionEngine.ts:68:  if (mode === "plain_prompt" || mode === "plain_hint" || mode === "plain_wrong_move" || mode === "plain_answer_revealed") {
+lib/blundr/coach/coachDecisionEngine.ts:70:    if (context.answerShown || context.revealState === "revealed") {
+lib/blundr/coach/coachDecisionEngine.ts:87:          ? "plain_answer_revealed"
+lib/blundr/coach/coachHintEngine.ts:6:  if (context.answerShown || context.revealState === "revealed") return "answer";
+lib/blundr/coach/coachSafety.ts:89:  if (context.viewMode === "plain" && context.revealState === "hidden" && decision.givesAnswer && !context.answerShown) {
+lib/blundr/coach/coachTypes.ts:102:  revealRisk: CoachRevealRisk;
+lib/blundr/coach/coachTypes.ts:10:  | "plain_answer_revealed"
+lib/blundr/coach/coachTypes.ts:121:  revealRisk: CoachRevealRisk;
+lib/blundr/coach/coachTypes.ts:142:  revealState: "hidden" | "revealed";
+lib/blundr/coach/coachTypes.ts:1:export type CoachViewMode = "assisted" | "plain" | "reveal" | "freeplay";
+lib/blundr/coach/coachTypes.ts:57:  revealState: "hidden" | "revealed";
+lib/blundr/coach/intentFirstCoachEngine.ts:112:        revealRisk: "none",
+lib/blundr/coach/intentFirstCoachEngine.ts:138:    plainLeakPolicy: packet.viewMode === "plain" && intent !== "reveal_answer",
+lib/blundr/coach/intentFirstCoachEngine.ts:152:        revealRisk: "none",
+lib/blundr/coach/intentFirstCoachEngine.ts:175:  const givesAnswer = intent === "reveal_answer" || intent === "show_trusted_move";
+lib/blundr/coach/intentFirstCoachEngine.ts:184:    revealRisk: givesAnswer ? "high" : packet.viewMode === "plain" ? "low" : "none",
+lib/blundr/coach/intentFirstCoachEngine.ts:207:  if (intent === "recall_prompt" || intent === "recall_hint" || intent === "reveal_answer") return ["hint", "answer"];
+lib/blundr/coach/intentFirstCoachEngine.ts:21:  revealRisk: "none" | "low" | "medium" | "high";
+lib/blundr/coach/intentFirstCoachEngine.ts:220:    revealRisk: "none",
+lib/blundr/coach/intentFirstCoachEngine.ts:53:        revealRisk: "none",
+lib/blundr/coach/intentFirstCoachEngine.ts:95:    intent: (intent === "recall_hint" && opportunity.intent === "recall_prompt" ? "recall_hint" : intent === "reveal_answer" ? "reveal_answer" : intent) as CoachTeachingIntent,
+lib/blundr/coach/teachingIntent.ts:10:  if (input.packet.trainingMode === "restricted" && input.packet.viewMode === "plain" && (input.interaction === "answer" || input.interaction === "show_move")) return "reveal_answer";
+lib/blundr/coachQuality/coachBenchmarkFixtures.ts:39:      allowedCoachModes: ["assisted_teach", "plain_prompt", "plain_hint", "plain_answer_revealed"],
+lib/blundr/coachQuality/coachBenchmarkRunner.ts:29:    revealState: fixture.userState.answerShown ? "revealed" : "hidden",
+lib/blundr/coachQuality/coachBenchmarkRunner.ts:36:      moveTrust: fixture.expected.exactMoveAllowed ? "book_supported" : "reveal_only_unverified",
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:115:    revealState: input.answerShown ? "revealed" : "hidden",
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:313:          revealRisk: "none",
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:324:            revealState: input.answerShown ? "revealed" : "hidden",
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:46:  revealTargetUci: string | null;
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:47:  revealTargetSource: string | null;
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:508:    revealTargetUci: instructionTarget?.uci ?? null,
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:544:          revealTargetUci: currentSelectedCandidateUci,
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:545:          revealTargetSource: expectedMoveResolution.source,
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:546:          revealIdempotentNoop: false,
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:547:          revealBlockedBecauseCoachHidden: false,
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:593:    revealTargetUci: instructionTarget?.uci ?? null,
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:594:    revealTargetSource: expectedMoveResolution.source,
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:641:    assert.equal(frame.phaseActionGate.revealButtonVisible, false, `${label}: reveal should stay hidden without an expected move`);
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:644:  assert.equal(frame.debugSnapshot.actions.revealTargetUci ?? frame.revealTargetUci, expectedUci, `${label}: reveal target should match the current move`);
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:651:  const revealTargetUci = (frame.debugSnapshot.actions as any).revealTargetUci ?? frame.revealTargetUci ?? null;
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:655:  if (revealTargetUci) assert.equal(revealTargetUci, instructionTargetUci, `${label}: revealTargetUci must match instruction target`);
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:704:  assertNoCriticalIssues(mainStart, ["stale_selected_candidate", "visible_coach_with_silent_intent", "generic_context_rendered_with_candidate", "continuation_candidate_not_rendered", "premature_continuation_transition", "guided_complete_without_policy", "restricted_line_exhausted_but_completion_blocked", "branch_transition_missing", "reveal_failed_with_revealable_target"], "mainline start");
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:722:  assert.equal(afterE4.phaseActionGate.revealButtonVisible, false);
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:743:  assert.equal(afterE5.phaseActionGate.revealButtonVisible, true);
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:817:  assert.equal(afterNf3Branch.phaseActionGate.revealButtonVisible, false);
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:916:  assert.equal(plainStart.phaseActionGate.revealButtonVisible, true);
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:931:  assert.equal(plainRevealed.phaseActionGate.revealButtonVisible, true);
+lib/blundr/debug/__tests__/trainerDebugSnapshot.test.ts:123:    revealTargetUci: "e4d5",
+lib/blundr/debug/__tests__/trainerDebugSnapshot.test.ts:131:  assert.equal(continuationHealthy.health.criticalIssues.includes("instruction_target_reveal_mismatch"), false);
+lib/blundr/debug/__tests__/trainerDebugSnapshot.test.ts:132:  assert.equal((continuationHealthy.actions as any).revealTargetMatchesInstructionTarget, true);
+lib/blundr/debug/__tests__/trainerDebugSnapshot.test.ts:144:    lastActionDebug: { lastClickedAction: "reveal_next_move", stateChanged: false, revealIdempotentNoop: true },
+lib/blundr/debug/__tests__/trainerDebugSnapshot.test.ts:203:    revealTargetUci: "e2e4",
+lib/blundr/debug/__tests__/trainerDebugSnapshot.test.ts:204:    revealTargetSource: "instruction_target",
+lib/blundr/debug/__tests__/trainerDebugSnapshot.test.ts:220:    revealTargetUci: "e2e4",
+lib/blundr/debug/__tests__/trainerDebugSnapshot.test.ts:221:    revealTargetSource: "instruction_target",
+lib/blundr/debug/__tests__/trainerDebugSnapshot.test.ts:224:    revealTargetStale: true,
+lib/blundr/debug/__tests__/trainerDebugSnapshot.test.ts:231:  assert.equal(staleFrames.health.criticalIssues.includes("stale_reveal_target"), true);
+lib/blundr/debug/__tests__/trainerDebugSnapshot.test.ts:299:    revealTargetUci: target.uci,
+lib/blundr/debug/__tests__/trainerDebugSnapshot.test.ts:300:    revealTargetSource: "instruction_target",
+lib/blundr/debug/__tests__/trainerDebugSnapshot.test.ts:49:  const reveal = buildTrainerDebugSnapshot({
+lib/blundr/debug/__tests__/trainerDebugSnapshot.test.ts:57:    lastActionDebug: { lastClickedAction: "reveal_next_move", stateChanged: false },
+lib/blundr/debug/__tests__/trainerDebugSnapshot.test.ts:61:  assert.equal(reveal.health.criticalIssues.some((issue) => issue.includes("Action click")), true);
+lib/blundr/debug/trainerDebugSnapshot.ts:184:  if (input.lastActionDebug?.lastClickedAction && input.lastActionDebug?.stateChanged === false && !input.lastActionDebug?.revealIdempotentNoop) criticalIssues.push("Action click did not change state");
+lib/blundr/debug/trainerDebugSnapshot.ts:216:  if (instructionTargetUci && revealTargetUci && instructionTargetUci !== revealTargetUci) {
+lib/blundr/debug/trainerDebugSnapshot.ts:217:    criticalIssues.push("reveal_target_mismatch");
+lib/blundr/debug/trainerDebugSnapshot.ts:218:    criticalIssues.push("instruction_target_reveal_mismatch");
+lib/blundr/debug/trainerDebugSnapshot.ts:220:  if (instructionTargetUci && (coachMoveUci !== instructionTargetUci || (visualMoveUci && visualMoveUci !== instructionTargetUci) || (revealTargetUci && revealTargetUci !== instructionTargetUci))) {
+lib/blundr/debug/trainerDebugSnapshot.ts:286:  if (instructionTargetUci && revealTargetSource && revealTargetSource !== "instruction_target") criticalIssues.push("reveal_target_source_mismatch");
+lib/blundr/debug/trainerDebugSnapshot.ts:289:  if (input.revealTargetStale) criticalIssues.push("stale_reveal_target");
+lib/blundr/debug/trainerDebugSnapshot.ts:340:    if (record?.revealTargetUci && record?.instructionTargetUci && record.revealTargetUci !== record.instructionTargetUci) criticalIssues.push("recent_template_target_mismatch");
+lib/blundr/debug/trainerDebugSnapshot.ts:627:      revealRisk: input.coachDecision?.revealRisk ?? null,
+lib/blundr/debug/trainerDebugSnapshot.ts:660:      revealTargetUci,
+lib/blundr/debug/trainerDebugSnapshot.ts:661:      revealTargetSource,
+lib/blundr/debug/trainerDebugSnapshot.ts:662:      revealTargetMatchesInstructionTarget: instructionTargetUci ? revealTargetUci === instructionTargetUci : "unknown",
+lib/blundr/debug/trainerDebugSnapshot.ts:764:      revealTargetStale: Boolean(input.revealTargetStale),
+lib/blundr/debug/trainerDebugSnapshot.ts:841:      revealButtonFunctional: input.lastActionDebug?.lastClickedAction?.includes("reveal") ? Boolean(input.lastActionDebug?.stateChanged) : "unknown",
+lib/blundr/debug/trainerDebugSnapshot.ts:844:            ? coachMoveUci === instructionTargetUci && visualMoveUci === instructionTargetUci && revealTargetUci === instructionTargetUci
+lib/blundr/debug/trainerDebugSnapshot.ts:94:  const revealTargetUci = input.revealTargetUci ?? input.lastActionDebug?.revealTargetUci ?? null;
+lib/blundr/debug/trainerDebugSnapshot.ts:95:  const revealTargetSource = input.revealTargetSource ?? input.lastActionDebug?.revealTargetSource ?? null;
+lib/blundr/debug/trainerDebugTypes.ts:16:    | "reveal_state_changed"
+lib/blundr/explanation/coachTemplateLibrary.ts:112:  if (category === "strategic_plan" || category === "reveal_answer") return ["moveSan", "planName"];
+lib/blundr/explanation/coachTemplateLibrary.ts:18:  reveal_answer: 20,
+lib/blundr/explanation/coachTemplateLibrary.ts:37:  reveal_answer: "Play {moveSan}. It supports {planName}.",
+lib/blundr/explanation/coachTemplateLibrary.ts:51:            : category === "reveal_answer"
+lib/blundr/explanation/coachTemplateLibrary.ts:52:              ? "reveal_answer"
+lib/blundr/explanation/coachTemplateLibrary.ts:63:        tone: category === "king_safety" ? "urgent" : category === "reveal_answer" ? "review" : "plain",
+lib/blundr/explanation/coachTemplateLibrary.ts:70:          leaksAnswerInPlain: category === "reveal_answer",
+lib/blundr/explanation/coachTemplateLibrary.ts:76:          mentionsExactMove: ["reveal_answer", "castling", "development", "bishop_activity", "italian_c3_d4", "rook_activity"].includes(category),
+lib/blundr/explanation/explanationTypes.ts:18:  | "reveal_answer"
+lib/blundr/golden/__tests__/italianCastlingGolden.test.ts:11:  const recipe = compileVisualRecipe({ trainingContext: { mode: "move_teaching", moveTrust: "book_supported", contextTrust: "safe_context", nextPlay: { allowed: true }, cue: { conceptId: g.conceptId, metadata: { moveUci: g.moveUci, moveSan: g.moveSan } } } as any, fen: g.fen, viewMode: "assisted", revealState: "hidden", expectedMoveUci: g.moveUci, expectedMoveSan: g.moveSan, frameId: 1 });
+lib/blundr/learning/learningEvents.ts:6:  | "cue_revealed"
+lib/blundr/liveCoach/liveCoachTypes.ts:177:export type LiveCoachIntent = "ask_question" | "warn" | "reinforce" | "explain_plan" | "compare_instincts" | "connect_pattern" | "nudge" | "reveal" | "stay_silent";
+lib/blundr/liveCoach/liveCoachTypes.ts:188:  revealRisk: number;
+lib/blundr/liveCoach/pedagogicalOpportunityEngine.ts:10:    score.revealRisk * 0.2 -
+lib/blundr/liveCoach/pedagogicalOpportunityEngine.ts:111:      revealRisk: 0.08,
+lib/blundr/liveCoach/pedagogicalOpportunityEngine.ts:126:      revealRisk: 0.05,
+lib/blundr/liveCoach/pedagogicalOpportunityEngine.ts:142:      revealRisk: 0.2,
+lib/blundr/liveCoach/pedagogicalOpportunityEngine.ts:159:      revealRisk: 0,
+lib/blundr/liveCoach/pedagogicalOpportunityEngine.ts:16:  if (evidence.stale) return [scoreOpportunity({ opportunity: "silence", intent: "stay_silent", confidenceScore: 0, pedagogicalValue: 0, userRelevance: 0, novelty: 0, revealRisk: 0, exactMoveAllowed: false, evidenceSources: ["position_features"], reason: "stale_position" })];
+lib/blundr/liveCoach/pedagogicalOpportunityEngine.ts:28:      revealRisk: 0.05,
+lib/blundr/liveCoach/pedagogicalOpportunityEngine.ts:46:      revealRisk: 0.2,
+lib/blundr/liveCoach/pedagogicalOpportunityEngine.ts:64:      revealRisk: 0.25,
+lib/blundr/liveCoach/pedagogicalOpportunityEngine.ts:81:      revealRisk: 0.1,
+lib/blundr/liveCoach/pedagogicalOpportunityEngine.ts:96:      revealRisk: 0.1,
+lib/blundr/opportunity/opportunityTypes.ts:16:  | "reveal_answer"
+lib/blundr/presentation/__tests__/coachActionStylePolicy.test.ts:48:    revealRisk: "none",
+lib/blundr/presentation/__tests__/phaseActionGating.test.ts:100:    assert.ok(!/reveal|show answer|show move|show plan|analyze|attack|defense|plan|verified/i.test(lbl), `Forbidden label leaked: ${lbl}`);
+lib/blundr/presentation/__tests__/phaseActionGating.test.ts:19:  assert.equal(opponentSelecting.revealButtonVisible, false);
+lib/blundr/presentation/__tests__/phaseActionGating.test.ts:35:  assert.equal(userTurn.revealButtonVisible, true);
+lib/blundr/presentation/__tests__/phaseActionGating.test.ts:48:  assert.equal(missingExpectedMove.revealButtonVisible, false);
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:353:  if (/reveal|answer|show_move|show answer/i.test(plainPreActionsStr)) throw new Error("Forbidden action label in plain");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:354:  if (l1.currentHint && /reveal|answer|show move/i.test(l1.currentHint)) throw new Error("Hint leaks reveal lang");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:471:  if (/reveal|show answer|show move|show plan|analyze idea|analyze_idea/i.test(assistedActionsStr)) {
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:477:  if (/reveal|show answer|show move/i.test(plainStr)) throw new Error("Forbidden in plain non-debug UI");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:555:    trainingContext: plainBc4Tc, fen: plainBc4Fen, viewMode: "assisted", revealState: "hidden",
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:644:  // Step 4: final Plain View Show More verification (pre no reveal Bc4, post shows assisted payload + primary f1-c4 only)
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:653:  assert.equal(/bc4|f1c4| f1 | c4 |bishop|arrow|target/i.test(preAll) && !/find the next move|hint/i.test(preAll) ? false : true, true); // pre must not reveal SAN/UCI/sq/piece/arrow/target for Bc4
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:655:  if (preBc4Surf.coach && preBc4Surf.coach.body && /bc4|f1c4|bishop to c4/i.test(preBc4Surf.coach.body)) throw new Error("plain pre coach body must not reveal Bc4 details");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:685:  console.log("✓ Step 4 Plain View Show More verification (pre no Bc4 reveal, post reuses assisted Bc4 payload + f1-c4 only) passed");
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:68:    // explicit play phrases + move reveal
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:76:    /show answer|reveal (next|move)|show move|show plan/i,
+lib/blundr/presentation/phaseActionGating.ts:29:  revealButtonVisible: boolean;
+lib/blundr/presentation/phaseActionGating.ts:30:  revealableExpectedMove: boolean;
+lib/blundr/presentation/phaseActionGating.ts:31:  revealableContinuationCandidate: boolean;
+lib/blundr/presentation/phaseActionGating.ts:43:  const revealableExpectedMove = activeUserMoveFrame && input.trainingMode === "restricted" && expectedMovePresent;
+lib/blundr/presentation/phaseActionGating.ts:44:  const revealableContinuationCandidate =
+lib/blundr/presentation/phaseActionGating.ts:46:  const revealButtonVisible = revealableExpectedMove || revealableContinuationCandidate;
+lib/blundr/presentation/phaseActionGating.ts:52:      revealButtonVisible: false,
+lib/blundr/presentation/phaseActionGating.ts:53:      revealableExpectedMove: false,
+lib/blundr/presentation/phaseActionGating.ts:54:      revealableContinuationCandidate: false,
+lib/blundr/presentation/phaseActionGating.ts:63:      revealButtonVisible: false,
+lib/blundr/presentation/phaseActionGating.ts:64:      revealableExpectedMove: false,
+lib/blundr/presentation/phaseActionGating.ts:65:      revealableContinuationCandidate: false,
+lib/blundr/presentation/phaseActionGating.ts:97:    revealButtonVisible,
+lib/blundr/presentation/phaseActionGating.ts:98:    revealableExpectedMove,
+lib/blundr/presentation/phaseActionGating.ts:99:    revealableContinuationCandidate,
+lib/blundr/presentation/visibleActionPolicy.ts:102:        actions: [], // post-reveal or after show more may evolve; for now clean per pre-ShowMore spec
+lib/blundr/presentation/visibleActionPolicy.ts:167:  answer: null, // removed from teaching UI; reveal is separate / debug
+lib/blundr/presentation/visibleActionPolicy.ts:98:  // Plain View teaching frames (recall mode): ONLY hint + show_more pre-reveal
+lib/blundr/teaching/__tests__/trainingContextEngine.test.ts:114:  const revealOnly = buildTrainingContext({
+lib/blundr/teaching/__tests__/trainingContextEngine.test.ts:133:  assert.equal(revealOnly.visualDecision.visualLines.length >= 1, true);
+lib/blundr/teaching/__tests__/trainingContextEngine.test.ts:134:  assert.equal(revealOnly.visualDecision.visualLines.some((line) => line.from === "c2" && line.to === "c3"), true);
+lib/blundr/teaching/__tests__/trainingContextEngine.test.ts:135:  assert.equal(revealOnly.moveTrust, "reveal_only_unverified");
+lib/blundr/teaching/__tests__/trainingContextEngine.test.ts:136:  assert.equal(revealOnly.userLabel, "Study-line move");
+lib/blundr/teaching/__tests__/trainingContextEngine.test.ts:137:  assert.equal(revealOnly.cue.userFacing.badge === "Blundr Brain Validated", false);
+lib/blundr/teaching/moveSemanticAnalyzer.ts:103:    revealRisk: input.revealRisk ?? (input.requiresMoveRecommendation ? "high" : "low"),
+lib/blundr/teaching/moveSemanticAnalyzer.ts:96:function effect(input: Omit<MoveSemanticEffect, "claimSafety" | "revealRisk"> & {
+lib/blundr/teaching/moveSemanticAnalyzer.ts:98:  revealRisk?: MoveSemanticEffect["revealRisk"];
+lib/blundr/teaching/storyRanker.ts:137:    if (candidate.revealRisk === "high" && !permissionContext.canShowAnswerOverlays) rejectionReasons.push("reveal_risk_blocked");
+lib/blundr/teaching/storyRanker.ts:45:  const riskPenalty = candidate.revealRisk === "high" ? 0.25 : candidate.revealRisk === "medium" ? 0.12 : candidate.revealRisk === "low" ? 0.05 : 0;
+lib/blundr/teaching/storyRanker.ts:99:      revealRisk: concept.requiresMoveRecommendation ? "high" : concept.claimSafety === "safe" ? "low" : "medium",
+lib/blundr/teaching/storyTypes.ts:38:  | "reveal_risk_blocked"
+lib/blundr/teaching/storyTypes.ts:55:  revealRisk: "none" | "low" | "medium" | "high";
+lib/blundr/teaching/teachingOrchestrator.ts:27:  if (result.moveTrust === "reveal_only_unverified") return "context_only";
+lib/blundr/teaching/trainingContextEngine.ts:117:      trust: "reveal_only_unverified",
+lib/blundr/teaching/trainingContextEngine.ts:118:      reason: topTwoOnlyRejected ? "Move is a study-line choice that fell outside Stockfish top-two; reveal mode can still show it." : "Move is a study-line choice without enough validation to auto-recommend.",
+lib/blundr/teaching/trainingContextEngine.ts:123:  if (input.revealModeActive && !severeBlunder && input.hasSafeSemanticExplanation) {
+lib/blundr/teaching/trainingContextEngine.ts:124:    return { trust: "reveal_only_unverified", reason: "Reveal mode can show the stored study-line move with caution.", safeToRecommend: false, validationFailureReason: status === "rejected" ? "reveal_mode_override" : undefined };
+lib/blundr/teaching/trainingContextEngine.ts:147:    revealRiskPenalty: input.revealRiskPenalty ?? 0,
+lib/blundr/teaching/trainingContextEngine.ts:164:      score.revealRiskPenalty -
+lib/blundr/teaching/trainingContextEngine.ts:179:  revealRisk?: GroundingContract["revealRisk"];
+lib/blundr/teaching/trainingContextEngine.ts:189:    revealRisk: input.revealRisk ?? "low",
+lib/blundr/teaching/trainingContextEngine.ts:234:      revealRisk: trusted ? "low" : effect.revealRisk,
+lib/blundr/teaching/trainingContextEngine.ts:251:      revealRiskPenalty: trusted ? 0 : effect.revealRisk === "high" ? 0.18 : 0,
+lib/blundr/teaching/trainingContextEngine.ts:283:      revealRisk: "low",
+lib/blundr/teaching/trainingContextEngine.ts:494:      if (!showAnswer && story.grounding.revealRisk === "high" && !safeToRecommend) next.rejectionReasons.push("high_reveal_risk_without_trust");
+lib/blundr/teaching/trainingContextEngine.ts:561:  const revealUnverified = moveTrust === "reveal_only_unverified";
+lib/blundr/teaching/trainingContextEngine.ts:562:  const forceRecommend = (trustedExpectedMove && !severeSafetyWarning) || (revealUnverified && input.showAnswer);
+lib/blundr/teaching/trainingContextEngine.ts:570:    moveTrust === "reveal_only_unverified" ? "Study-line move" :
+lib/blundr/teaching/trainingContextEngine.ts:601:  const revealForceRecommend = input.moveTrust === "reveal_only_unverified" && input.permission.canRecommendMove;
+lib/blundr/teaching/trainingContextEngine.ts:602:  const forceRecommend = (input.trustedExpectedMove && !input.severeSafetyWarning) || revealForceRecommend;
+lib/blundr/teaching/trainingContextEngine.ts:665:  revealModeActive: boolean;
+lib/blundr/teaching/trainingContextEngine.ts:678:      revealLevel: "context",
+lib/blundr/teaching/trainingContextEngine.ts:702:  if (input.revealModeActive && input.trainerView === "assisted" && from && to && visualLines.length === 0) {
+lib/blundr/teaching/trainingContextEngine.ts:732:    revealLevel: input.permission.canShowAnswerOverlays ? "answer" : input.permission.canShowContextOverlays ? "context" : "plan",
+lib/blundr/teaching/trainingContextEngine.ts:745:  if (moveTrust === "reveal_only_unverified") return { label: "Study-line", pct: 56, tone: "bg-sky-600", note: "Shown as a stored study move, not engine-validated." };
+lib/blundr/teaching/trainingContextEngine.ts:773:  const revealModeActive = Boolean(input.showAnswer);
+lib/blundr/teaching/trainingContextEngine.ts:795:    revealModeActive,
+lib/blundr/teaching/trainingContextEngine.ts:84:  revealModeActive: boolean;
+lib/blundr/teaching/trainingContextEngine.ts:861:    revealModeActive,
+lib/blundr/teaching/trainingContextEngine.ts:867:  const revealShowsExpectedMove = trust.trust === "reveal_only_unverified" && revealModeActive;
+lib/blundr/teaching/trainingContextEngine.ts:870:      (revealShowsExpectedMove && cue.userFacing.next) ||
+lib/blundr/teaching/trainingContextEngine.ts:881:  if (revealModeActive && expectedMoveExists && visualDecision.visualLines.length === 0) warnings.push("reveal_next_move_without_answer_line");
+lib/blundr/teaching/trainingContextEngine.ts:913:    revealModeActive,
+lib/blundr/teaching/trainingContextEngine.ts:954:      revealModeActive,
+lib/blundr/teaching/trainingContextTypes.ts:104:  revealRisk: "none" | "low" | "medium" | "high";
+lib/blundr/teaching/trainingContextTypes.ts:182:  revealRiskPenalty: number;
+lib/blundr/teaching/trainingContextTypes.ts:240:  revealModeActive: boolean;
+lib/blundr/teaching/trainingContextTypes.ts:298:  revealLevel: "answer" | "context" | "plan";
+lib/blundr/teaching/trainingContextTypes.ts:47:  revealRisk: "none" | "low" | "medium" | "high";
+lib/blundr/teaching/trainingContextTypes.ts:9:  | "reveal_only_unverified"
+lib/blundr/teaching/visualOverlayRouter.ts:116:    revealLevel,
+lib/blundr/teaching/visualOverlayRouter.ts:28:  revealLevel: VisualRevealLevel;
+lib/blundr/teaching/visualOverlayRouter.ts:59:      revealLevel: "context",
+lib/blundr/teaching/visualOverlayRouter.ts:69:  const revealLevel: VisualRevealLevel = canAnswer ? "answer" : canContext ? "context" : "plan";
+lib/blundr/teaching/visualOverlayRouter.ts:93:      revealLevel,
+lib/blundr/visualRecipe/__tests__/castlingVisualRecipe.test.ts:10:    revealState: "hidden",
+lib/blundr/visualRecipe/__tests__/visualRecipeAdapter.test.ts:166:    revealState: "hidden",
+lib/blundr/visualRecipe/__tests__/visualRecipeAdapter.test.ts:51:      revealRequired: false,
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:117:  const re1Recipe = compileVisualRecipe({ trainingContext: re1Tc, fen: re1Fen, viewMode: "assisted", revealState: "hidden", expectedMoveUci: "f1e1", expectedMoveSan: "Re1", openingId: "italian", lineId: "italian", frameId: 13 });
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:125:    revealState: "hidden",
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:136:  const plainRecipe = compileVisualRecipe({ trainingContext: bc4Tc, fen: bc4Fen, viewMode: "plain", revealState: "hidden", expectedMoveUci: "f1c4", expectedMoveSan: "Bc4", frameId: 15 });
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:141:  const revealHiddenRecipe = compileVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:142:    trainingContext: mockContext({ moveTrust: "reveal_only_unverified", mode: "assisted_context", contextTrust: "safe_context", cue: { conceptId: "center_tension", metadata: { moveUci: "c2c3", moveSan: "c3", fenBefore: c3Fen, compilerVersion: "2.7.35d", createdAt: "now" } } }),
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:145:    revealState: "hidden",
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:150:  assert.equal(hasPrimitive(revealHiddenRecipe, "move_arrow", () => true), false);
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:152:  const revealShownRecipe = compileVisualRecipe({
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:153:    trainingContext: mockContext({ moveTrust: "reveal_only_unverified", mode: "move_teaching", contextTrust: "safe_context", nextPlay: { allowed: true }, cue: { conceptId: "center_tension", metadata: { moveUci: "c2c3", moveSan: "c3", fenBefore: c3Fen, compilerVersion: "2.7.35d", createdAt: "now" } } }),
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:156:    revealState: "revealed",
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:161:  assert.equal(revealShownRecipe.mode, "primary_move_only");
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:162:  assert.equal(hasPrimitive(revealShownRecipe, "move_arrow", (p) => p.from === "c2" && p.to === "c3"), true);
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:163:  assert.equal(revealShownRecipe.secondaryVisualsSuppressed, true);
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:164:  assert.equal(revealShownRecipe.primaryMoveUci, "c2c3");
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:170:    revealState: "hidden",
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:188:    revealState: "hidden",
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:199:  const bc4RecipeSameAgain = compileVisualRecipe({ trainingContext: bc4Tc, fen: bc4Fen, viewMode: "assisted", revealState: "hidden", openingId: "italian", lineId: "italian", expectedMoveUci: "f1c4", expectedMoveSan: "Bc4", frameId: 10 });
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:204:  const changedRecipe = compileVisualRecipe({ trainingContext: bc4Tc, fen: castleFen, viewMode: "assisted", revealState: "hidden", openingId: "italian", lineId: "italian", expectedMoveUci: "e1g1", expectedMoveSan: "O-O", frameId: 20 });
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:51:  const bc4Recipe = compileVisualRecipe({ trainingContext: bc4Tc, fen: bc4Fen, viewMode: "assisted", revealState: "hidden", openingId: "italian", lineId: "italian", expectedMoveUci: "f1c4", expectedMoveSan: "Bc4", frameId: 10 });
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:75:  const castleRecipe = compileVisualRecipe({ trainingContext: castleTc, fen: castleFen, viewMode: "assisted", revealState: "hidden", expectedMoveUci: "e1g1", expectedMoveSan: "O-O", openingId: "italian", lineId: "italian", frameId: 11 });
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:96:  const c3Recipe = compileVisualRecipe({ trainingContext: c3Tc, fen: c3Fen, viewMode: "assisted", revealState: "hidden", expectedMoveUci: "c2c3", expectedMoveSan: "c3", openingId: "italian", lineId: "italian", frameId: 12 });
+lib/blundr/visualRecipe/__tests__/visualRecipePolicy.test.ts:120:    revealState: "hidden",
+lib/blundr/visualRecipe/__tests__/visualRecipePolicy.test.ts:131:    revealState: "hidden",
+lib/blundr/visualRecipe/__tests__/visualRecipePolicy.test.ts:147:    revealState: "hidden",
+lib/blundr/visualRecipe/visualRecipeAdapter.ts:218:  } else if (recipe.mode === "reveal_answer") {
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:149:      revealRequired: false,
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:264:  if (input.mode === "primary_move_only" || input.mode === "move_teaching" || input.mode === "reveal_answer") {
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:345:  if ((input.mode as any) === "move_teaching" || (input.mode as any) === "reveal_answer" || (input.mode as any) === "primary_move_only") addMoveArrow(beat, from, to, "primary", "answer_move");
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:377:    revealState: input.revealState,
+lib/blundr/visualRecipe/visualRecipeCompiler.ts:491:      : (permissionDecision.mode === "reveal_answer" || permissionDecision.mode === "primary_move_only" || permissionDecision.mode === "move_teaching")
+lib/blundr/visualRecipe/visualRecipePermissions.ts:24:    revealRequired: false,
+lib/blundr/visualRecipe/visualRecipePermissions.ts:65:  if (trust === "reveal_only_unverified") {
+lib/blundr/visualRecipe/visualRecipePermissions.ts:66:    if (input.revealState === "revealed") {
+lib/blundr/visualRecipe/visualRecipePermissions.ts:74:          revealRequired: true,
+lib/blundr/visualRecipe/visualRecipePermissions.ts:89:          revealRequired: true,
+lib/blundr/visualRecipe/visualRecipePermissions.ts:98:      permissions: { ...basePermissions(), revealRequired: true },
+lib/blundr/visualRecipe/visualRecipePermissions.ts:99:      suppressedReason: "reveal_required",
+lib/blundr/visualRecipe/visualRecipeTypes.ts:14:  | "reveal_answer"
+lib/blundr/visualRecipe/visualRecipeTypes.ts:177:  revealRequired: boolean;
+lib/blundr/visualRecipe/visualRecipeTypes.ts:251:  revealState: "hidden" | "revealed";
+lib/blundr/visualRecipe/visualRecipeTypes.ts:278:  revealState: "hidden" | "revealed";

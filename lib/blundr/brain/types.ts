@@ -5,6 +5,84 @@
 
 import type { CurrentInstructionTarget, CurrentInstructionFrame } from "../runtime/currentInstructionFrame";
 
+export type EvidenceClaimStrength =
+  | "verified"
+  | "probable"
+  | "template_safe"
+  | "blocked";
+
+export type EvidenceProvenanceSource =
+  | "board_truth"
+  | "move_semantics"
+  | "tactical_motif"
+  | "strategic_feature"
+  | "opening_context"
+  | "visual_evidence"
+  | "stockfish"
+  | "maia"
+  | "opening_knowledge"
+  | "grounded_phrasing"
+  | "safety_gate";
+
+export interface EvidenceProvenance {
+  source: EvidenceProvenanceSource;
+  sourceId?: string;
+  confidence: "high" | "medium" | "low";
+  note?: string;
+}
+
+export type CoachEvidenceClaimType =
+  | "development"
+  | "center_control"
+  | "king_safety"
+  | "castling"
+  | "pressure"
+  | "capture"
+  | "check"
+  | "checkmate"
+  | "pawn_break"
+  | "piece_activity"
+  | "tactical_motif"
+  | "strategic_feature"
+  | "opening_plan"
+  | "candidate_comparison"
+  | "opponent_resource"
+  | "human_mistake"
+  | "safe_fallback";
+
+export interface CoachEvidenceClaim {
+  id: string;
+  frameKey: string;
+  type: CoachEvidenceClaimType;
+  strength: EvidenceClaimStrength;
+  targetUci: string;
+  subjectSquare?: string;
+  objectSquare?: string;
+  pieceType?: string;
+  textSafeSummary: string;
+  machineFacts: Record<string, unknown>;
+  provenance: EvidenceProvenance[];
+}
+
+export interface EvidenceGraph {
+  frameKey: string;
+  targetUci: string | null;
+  claims: CoachEvidenceClaim[];
+  deterministicClaims: CoachEvidenceClaim[];
+  tacticClaims: CoachEvidenceClaim[];
+  strategicClaims: CoachEvidenceClaim[];
+  visualEvidence: CoachEvidenceClaim[];
+  blockedClaims: CoachEvidenceClaim[];
+  contradictions: Array<{
+    id: string;
+    severity: "warning" | "critical";
+    message: string;
+    claimIds: string[];
+  }>;
+  providerStatus: Record<string, "not_applicable" | "available" | "unavailable" | "timeout" | "error">;
+  debug: Record<string, unknown>;
+}
+
 // Core contracts from production spec
 export type BlundrBrainInput = {
   fen: string;

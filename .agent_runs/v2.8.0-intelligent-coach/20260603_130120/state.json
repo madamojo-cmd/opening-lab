@@ -1,0 +1,16 @@
+{
+  "release": "v2.8.0-intelligent-coach",
+  "branch": "v2.8.0-intelligent-coach-live",
+  "baseSha": "88f47e1685b0f80dc5cb1b07041f7c7b021afeda",
+  "currentSha": "88f47e1685b0f80dc5cb1b07041f7c7b021afeda",
+  "phase": "01_authority_audit",
+  "gates": {
+    "package1_authority_audit": "pass_with_unresolved_risks",
+    "productCodeChanged": false,
+    "legacyBypassMapComplete": true,
+    "allVisibleSurfacesMapped": true,
+    "unresolvedPathsPresent": true
+  },
+  "blocked": false,
+  "blockReason": null
+}

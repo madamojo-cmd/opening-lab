@@ -1,0 +1,53 @@
+app/page.tsx:2307:    // v2.7.40 stabilization: prefer VisibleTeachingSurface.actions (single source) for rendered button reporting in debug.
+app/page.tsx:2400:  // v2.7.40 Agent 3 (late placement after all frame deps): VisibleTeachingSurface — single owner.
+app/page.tsx:2423:  const visibleTeachingSurface = buildVisibleTeachingSurface({
+app/page.tsx:3493:  // v2.7.40 Agent 3: Visual overlays prefer VisibleTeachingSurface (enforces alignment + plain-pre + mismatch blocks)
+app/page.tsx:3758:      {/* v2.7.40 Agent 3 wiring: CoachCard now driven exclusively by VisibleTeachingSurface (coach + hint + showMore + actions).
+app/page.tsx:48:import { buildVisibleTeachingSurface } from "@/lib/blundr/presentation/buildVisibleTeachingSurface"; // v2.7.40 Agent 3: single visible owner surface
+lib/blundr/debug/trainerDebugSnapshot.ts:766:      // Agent 6: surface owner + 4-target/2-piece + leak/bypass from VisibleTeachingSurface guard
+lib/blundr/debug/trainerDebugSnapshot.ts:787:      // v2.7.40 P0 Fix 2: when VisibleTeachingSurface owns the coach render on teaching, live coach path is not "actually rendered" visibly (internal evidence only).
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:116:// v2.7.40 VisibleTeachingSurface + Agent4/5 tests (imports consolidated at top)
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:190:export function testVisibleTeachingSurface(): void {
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:194:  const s1 = buildVisibleTeachingSurface({ currentInstructionFrame: guidedFrame, trainerPresentationFrame: pres1, trainerView: "assisted", trainerPhase: "ready_for_user", isUserTurn: true });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:207:  const s2 = buildVisibleTeachingSurface({ currentInstructionFrame: contFrame, trainerPresentationFrame: pres2, trainingMode: "continuation", trainerView: "assisted" });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:213:  const sPlain = buildVisibleTeachingSurface({ currentInstructionFrame: guidedFrame, trainerPresentationFrame: pres1, trainerView: "plain", showMoreShown: false, hintCount: 0 });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:225:  const sMismatch = buildVisibleTeachingSurface({ currentInstructionFrame: guidedFrame, trainerPresentationFrame: pres1, legacyCoachDecision: badLegacy as any });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:234:  const sPiece = buildVisibleTeachingSurface({ currentInstructionFrame: guidedFrame, trainerPresentationFrame: pres1, legacyCoachDecision: badPieceLegacy as any });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:240:  const sLegacy = buildVisibleTeachingSurface({ currentInstructionFrame: guidedFrame, trainerPresentationFrame: makeMockPresentationFrame(true, true, "legacy_fallback", "legacy_fallback"), legacyCoachDecision: { body: "legacy" } as any });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:247:  const s4Target = buildVisibleTeachingSurface({
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:262:  const s2Piece = buildVisibleTeachingSurface({
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:278:  const sLeak = buildVisibleTeachingSurface({
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:295:  const sTerm = buildVisibleTeachingSurface({ currentInstructionFrame: termInput, trainerPresentationFrame: pres1, isTerminal: true, isUserTurn: false, trainerPhase: "terminal" });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:299:  const sOpp = buildVisibleTeachingSurface({ currentInstructionFrame: oppInput, trainerPresentationFrame: pres1, trainerPhase: "opponent_replying", isUserTurn: false });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:303:  const sClean = buildVisibleTeachingSurface({ currentInstructionFrame: guidedFrame, trainerPresentationFrame: pres1, coachMoveUci: "e2e4", visualMoveUci: "e2e4", coachPieceType: "p" });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:312:  console.log("✓ v2.7.40 buildVisibleTeachingSurface tests passed (6 cases + 6 Agent6 invariant guard cases)");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:337:  const sPlainPre0 = buildVisibleTeachingSurface({ currentInstructionFrame: guidedFrame, trainerPresentationFrame: pres, trainerView: "plain", showMoreShown: false, hintCount: 0 });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:346:  const sPlainPost = buildVisibleTeachingSurface({ currentInstructionFrame: guidedFrame, trainerPresentationFrame: pres, trainerView: "plain", showMoreShown: true, hintCount: 0 });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:357:  const sNewFrame = buildVisibleTeachingSurface({ currentInstructionFrame: { ...guidedFrame, frameId: "f99", target: { ...guidedFrame.target!, uci: "d2d4" } } as any, trainerPresentationFrame: pres, trainerView: "plain", showMoreShown: false, hintCount: 0 });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:429:  const surface = buildVisibleTeachingSurface({
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:469:  const sAssisted = buildVisibleTeachingSurface({ currentInstructionFrame: guidedFrame, trainerPresentationFrame: pres, trainerView: "assisted", trainerPhase: "ready_for_user", isUserTurn: true });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:475:  const sPlainPre = buildVisibleTeachingSurface({ currentInstructionFrame: guidedFrame, trainerPresentationFrame: pres, trainerView: "plain", showMoreShown: false, hintCount: 0 });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:481:  const sTerm = buildVisibleTeachingSurface({ currentInstructionFrame: termInput, trainerPresentationFrame: pres, isTerminal: true, trainerPhase: "terminal", isUserTurn: false });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:486:  const sOpp = buildVisibleTeachingSurface({ currentInstructionFrame: oppInput, trainerPresentationFrame: pres, trainerPhase: "opponent_replying", isUserTurn: false });
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:491:  const sBranch = buildVisibleTeachingSurface({
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:4:import { buildVisibleTeachingSurface, detectPlainTeachingLeak } from "../buildVisibleTeachingSurface";
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:504:  const noTargetBranchSurface = buildVisibleTeachingSurface({
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:577:  const preSurface = buildVisibleTeachingSurface({
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:592:  const postSurface = buildVisibleTeachingSurface({
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:631:  const postSurfForShow = buildVisibleTeachingSurface({
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:646:  const preBc4Surf = buildVisibleTeachingSurface({
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:150:    visibleSurfaceOwner: VisibleTeachingSurfaceOwner;
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:160:export interface BuildVisibleTeachingSurfaceInput {
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:196: * buildVisibleTeachingSurface
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:199:export function buildVisibleTeachingSurface(
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:200:  input: BuildVisibleTeachingSurfaceInput
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:201:): VisibleTeachingSurface {
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:2: * BLUNDR v2.7.40 VisibleTeachingSurface — the single visible owner.
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:362:  // v2.7.41 Clean Convergence: VisibleTeachingSurface is the SINGLE visible owner on teaching frames.
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:476:  let owner: VisibleTeachingSurfaceOwner = "trainer_presentation_frame";
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:555:export default buildVisibleTeachingSurface;
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:5: *   CurrentInstructionFrame.target → BlundrBrainAnalysis → TrainerPresentationFrame → VisibleTeachingSurface → UI
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:82:export type VisibleTeachingSurfaceOwner =
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:93:export interface VisibleTeachingSurface {
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:94:  owner: VisibleTeachingSurfaceOwner;
+lib/blundr/presentation/trainerPresentationFrame.ts:183:  // CurrentInstructionFrame.target -> BlundrBrainAnalysis.safeFallbackCopy (piece-matched, evidence-backed, no halluc) -> TrainerPresentationFrame -> VisibleTeachingSurface

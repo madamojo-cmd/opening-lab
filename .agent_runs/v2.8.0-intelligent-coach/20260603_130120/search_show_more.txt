@@ -1,0 +1,18 @@
+app/page.tsx:3751:         Plain View must only ever show Hint + Show More. No Reveal/Show Answer/Show Move allowed.
+app/page.tsx:776:  // v2.7.40 Agent 4: dedicated showMoreShown for Plain View Hint+Show More escalation (resets on new frame; distinct from showDetails debug toggle)
+lib/blundr/coach/coachDecisionEngine.ts:69:    // Plain teaching pre-ShowMore / pre-answer: ONLY hint + show_more (Show More introduced as first-class; full wiring Agent 4)
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:212:  // 3/4. v2.7.40 Agent 4 update: Plain pre renders *prompt coach* (for Hint+Show More buttons + progressive body) but hides visuals + full assisted body. Actions exactly hint+show_more. (required for Plain View hygiene)
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:214:  if (sPlain.coach.shouldRender !== true) { throw new Error("coach prompt must render in plain pre for Hint/Show More buttons"); }
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:349:  if (sPlainPost.targetUci !== "e2e4") throw new Error("Show More target must match instruction target");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:364:  // 6. Show More target always matches instruction target (already in sPlainPost)
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:462:// v2.7.40 Agent 7: Full prompt coverage tests for all listed items (UI forbidden labels non-debug; continuation branch clean + candidate locked + no emergency legal fallback as teaching target; stale buttons cleared; Show More not on terminal/opp; debug invariants coach/visual/showMore targets==instruction; piece match; mismatch blocks)
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:479:  // Show More: not available on terminal/opponent (and actions=[])
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:482:  if (sTerm.showMore.actionAvailable !== false) throw new Error("Show More must not be available on terminal");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:487:  if (sOpp.showMore.actionAvailable !== false) throw new Error("Show More must not be available on opponent");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:614:  // Step 3: Show More uses same SAN/target/piece as the main coaching box (from the copy passed)
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:640:  assert.equal(/Bc4/i.test(showMoreContent || mainTitle), true, "Show More must include same SAN as main coaching box");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:644:  // Step 4: final Plain View Show More verification (pre no reveal Bc4, post shows assisted payload + primary f1-c4 only)
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:675:  // Show More reuses Assisted payload and visual recipe (same uci etc)
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:684:  console.log("✓ Step 3 coaching copy format + Show More same payload tests passed");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:685:  console.log("✓ Step 4 Plain View Show More verification (pre no Bc4 reveal, post reuses assisted Bc4 payload + f1-c4 only) passed");
+lib/blundr/presentation/visibleActionPolicy.ts:140:      return "Show More";

@@ -1,0 +1,6 @@
+app/page.tsx:2455:        title: visibleTeachingSurface.coach.title || "Continue from here",
+app/page.tsx:2928:  useEffect(()=>{if(activeTab==="train"&&trainingMode==="restricted"&&isUserTurn&&expectedMoveResolution.shouldTransitionToContinuation&&guidedCoveragePolicy.guidedCompleteAllowed&&!bookComplete&&!game.isGameOver()){setBookComplete(true);setFeedback("Guided line complete. Continue from here against the bot, or restart the opening.");setBrain(p=>({...p,book:"complete",source:guidedCoveragePolicy.guidedCoverageState,gpt:p.gpt}))}},[activeTab,trainingMode,isUserTurn,expectedMoveResolution.shouldTransitionToContinuation,guidedCoveragePolicy.guidedCompleteAllowed,guidedCoveragePolicy.guidedCoverageState,bookComplete,fen]);
+app/page.tsx:2932:      setFeedback("This branch is beyond the guided line. Continue from here, or restart the opening.");
+app/page.tsx:2937:      setFeedback("This branch is not mapped yet. Continue from here, or restart the opening.");
+lib/blundr/continuedPlay/continuedPlayMovePolicy.ts:331: * Used to gate continuation candidate evaluation and target setting before explicit "Continue from here" click.
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:107:    branchTransitionTitle: "Continue from here",

@@ -1,0 +1,312 @@
+app/api/brain/route.ts:362:    source: "brain-fallback",
+app/api/brain/route.ts:530:  const model = process.env.OPENAI_COACH_MODEL || "gpt-4o-mini";
+app/api/brain/route.ts:560:      pipeline: { facts: "complete", engine: engine.source, gpt: !apiKey ? "missing-api-key" : "skipped", visual: "fallback", latencyMs: Date.now() - started },
+app/api/brain/route.ts:568:        gptInput: null,
+app/api/brain/route.ts:580:    const gptInput = {
+app/api/brain/route.ts:603:    debugGptInput = gptInput;
+app/api/brain/route.ts:614:          { role: "user", content: JSON.stringify(gptInput) },
+app/api/brain/route.ts:621:        pipeline: { facts: "complete", engine: engine.source, gpt: `error-${response.status}`, visual: "fallback", latencyMs: Date.now() - started },
+app/api/brain/route.ts:629:          gptInput,
+app/api/brain/route.ts:644:      pipeline: { facts: "complete", engine: engine.source, gpt: "openai", visual: "gpt-validated", latencyMs: Date.now() - started },
+app/api/brain/route.ts:652:        gptInput,
+app/api/brain/route.ts:661:      pipeline: { facts: "complete", engine: engine.source, gpt: "exception", visual: "fallback", latencyMs: Date.now() - started },
+app/api/brain/route.ts:669:        gptInput: debugGptInput,
+app/page.tsx:1000:  // Step 4 correction: secondary async (visual/brain/lichess/pending) and broad trainerPhase must NOT suppress a valid curated target for restricted user turn.
+app/page.tsx:1007:    if (brain.lichess === "loading") return true;
+app/page.tsx:1017:    brain.lichess,
+app/page.tsx:138:type LiveBrain = { ratingLabel: string; ratingPool: string; book: SystemState; lichess: SystemState; engine: SystemState; gpt: SystemState; source: string; latency?: number; note?: string };
+app/page.tsx:1559:    brainInput:{
+app/page.tsx:1598:      const brainFrameKey = computeInstructionFrameKey({ fen, trainingMode, isUserTurn, trainerPhase, source: instructionTarget?.kind || trainingMode });
+app/page.tsx:1599:      const brainAnalysisForCoach = instructionTarget ? analyzeBlundrPosition({
+app/page.tsx:1602:        frameKey: brainFrameKey,
+app/page.tsx:1618:        brainAnalysis: brainAnalysisForCoach,
+app/page.tsx:2048:  // v2.7.40 Agent 5: early brain analysis passed to TrainerPresentationFrame so coach copy comes from BlundrBrain (target->brain->pres->surface chain)
+app/page.tsx:2049:  // (duplicate lightweight call is acceptable for this checkpoint; brain is pure sync facade)
+app/page.tsx:2050:  const brainAnalysisForPresentation = (instructionTarget && currentInstructionFrame) ? analyzeBlundrPosition({
+app/page.tsx:2101:    // Agent 5: brain for canonical coach copy (quarantines legacy liveCoach/coachDecision text from pres coach on teaching frames)
+app/page.tsx:2102:    brainAnalysis: brainAnalysisForPresentation as any,
+app/page.tsx:2103:  }),[trainerFrameId,fen,activeBoard,trainerView,trainerPhase,trainingMode,isUserTurn,visualRecipeForRender,visualRecipeMainLines,safeMoveArrowVisual.lines,continuationCandidateVisual.lines,legacyVisualLines,visualRecipePlayback.activePrimitiveIds,visualRecipePlayback.animationState,visualRecipeOverlay,overlayFrameId,coachDecision,coachHiddenForFrame,coachSurfacePolicy,branchTransitionSurface,brainAnalysisForPresentation,showMoreShown]);
+app/page.tsx:2402:  // v2.7.40 Agent 4: local brain analysis for surface/ladder (dupe of internal liveCoach but safe scope; analyze is lightweight facade)
+app/page.tsx:2403:  const brainAnalysisForSurface = (instructionTarget && currentInstructionFrame) ? analyzeBlundrPosition({
+app/page.tsx:2437:    brainAnalysis: brainAnalysisForSurface as any,
+app/page.tsx:2438:    selectedTeachingConcept: (brainAnalysisForSurface as any)?.pedagogicalFocus?.focus ?? null,
+app/page.tsx:2464:  const gptDebugText=JSON.stringify({pipeline:brainResponse?.pipeline??null,engine:enginePreview??null,moveQuality,moveQualityPending,shouldValidateTrainingMove,debug:brainResponse?.debug??null},null,2);
+app/page.tsx:2689:      void runBrowserStockfish(fen,rating.skill,900,10,controller.signal).then((result)=>{
+app/page.tsx:2774:      reason:"Validating expected move with Stockfish.",
+app/page.tsx:2780:        const topMoves=await getStockfishTopMovesForValidation({
+app/page.tsx:2802:          reason:error instanceof Error?error.message:"Stockfish validation failed.",
+app/page.tsx:2920:  useEffect(()=>{if(activeTab!=="train")return;const fast=deriveFastAnnotation({fen,openingName:repertoire.name,userColor,trainingMode,expectedUserOptions,opponentBookOptions});setAnnotation(fast);setVisualReady(true);setThinkingStep("ready");setPipelineNote(trainingMode==="continuation"&&isUserTurn?continuationAnalysisStatus==="analyzing"?"Analyzing continuation candidate.":"Continuation candidate ready.":"Teaching cue ready.");setBrain(p=>({...p,source:"rule visual",gpt:"ready",note:"Manual reveal/debug only"}))},[fen,activeTab,selectedRepertoireId,trainingMode,ratingFilter,continuationAnalysisStatus]);
+app/page.tsx:2928:  useEffect(()=>{if(activeTab==="train"&&trainingMode==="restricted"&&isUserTurn&&expectedMoveResolution.shouldTransitionToContinuation&&guidedCoveragePolicy.guidedCompleteAllowed&&!bookComplete&&!game.isGameOver()){setBookComplete(true);setFeedback("Guided line complete. Continue from here against the bot, or restart the opening.");setBrain(p=>({...p,book:"complete",source:guidedCoveragePolicy.guidedCoverageState,gpt:p.gpt}))}},[activeTab,trainingMode,isUserTurn,expectedMoveResolution.shouldTransitionToContinuation,guidedCoveragePolicy.guidedCompleteAllowed,guidedCoveragePolicy.guidedCoverageState,bookComplete,fen]);
+app/page.tsx:2933:      setBrain(p=>({...p,book:"ready",source:"guided branch needs continuation",note:expectedMoveResolution.reason,gpt:p.gpt}));
+app/page.tsx:2938:      setBrain(p=>({...p,book:"ready",source:"resolver unresolved",note:guidedCoveragePolicy.bookCompleteBlockedReason??expectedMoveResolution.reason,gpt:p.gpt}));
+app/page.tsx:2961:    const requestSeq=++brainSeq.current;
+app/page.tsx:2962:    brainAbortRef.current?.abort();
+app/page.tsx:2964:    brainAbortRef.current=controller;
+app/page.tsx:2967:    setBrain(p=>({...p,engine:"loading",gpt:extra.skipGpt?"fallback":"loading",source:"Manual analysis"}));
+app/page.tsx:2970:    const browserEngine=extra.skipClientEngine?null:await runBrowserStockfish(requestFen,rating.skill,eventType==="reveal"?1000:700);
+app/page.tsx:2971:    if(requestSeq!==brainSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen)){setStaleOverlayIgnored(true);return null;}
+app/page.tsx:2984:    setThinkingStep("brain");
+app/page.tsx:2988:      const res=await fetch("/api/brain",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload),signal:controller.signal});
+app/page.tsx:2990:      if(requestSeq!==brainSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen)){setStaleOverlayIgnored(true);return null;}
+app/page.tsx:2991:      setThinkingStep("gpt-receive");
+app/page.tsx:3003:      window.setTimeout(()=>{if(requestSeq===brainSeq.current&&normalizeFen(fenRef.current)===normalizeFen(requestFen)){setThinkingStep("ready");setPipelineNote("Manual Brain check complete.")}},250);
+app/page.tsx:3004:      setBrain(p=>({...p,engine:data.engine?.fallback?"fallback":"active",gpt:data.annotation?.fallback?"fallback":"active",latency:Math.round(performance.now()-start),source:data.annotation?.fallback?"manual brain fallback":"manual brain",note:data.pipeline?.gpt||data.annotation?.reason||"Manual reveal/debug only"}));
+app/page.tsx:3008:      if(requestSeq!==brainSeq.current||normalizeFen(fenRef.current)!==normalizeFen(requestFen)){setStaleOverlayIgnored(true);return null;}
+app/page.tsx:3012:      setBrain(p=>({...p,engine:"error",gpt:"error",source:"Brain error",note:e instanceof Error?e.message:"Brain failed"}));
+app/page.tsx:3125:      const policyEngine=(engineLines.length?{source:"engine_preview",pvs:engineLines}:await runBrowserStockfish(current.fen(),rating.skill,550,3));
+app/page.tsx:3712:          <LiveBrain brain={brain}/>
+app/page.tsx:3713:          <GptDebugPanel open={showGptDebug} setOpen={setShowGptDebug} text={gptDebugText}/>
+app/page.tsx:3756:      {false && activeBoard&&!displayedCoachDecision?.shouldShowCoachCard&&!branchTransitionSurface&&coachSurfacePolicy.allowLegacyTrainingCard&&!visibleTeachingSurface?.coach?.shouldRender&&!isActiveTeachingFrame&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 shadow-sm"><div className="mb-2 flex items-center justify-between gap-3"><div><div className="text-xs font-black uppercase tracking-wide text-green-700">{patternCueBadgeLabel.replace("Cue ready","Plan mode")}</div><h2 className="text-lg font-black">{patternCue.title}</h2></div><button onClick={()=>setShowDetails(!showDetails)} className="rounded-full bg-stone-100 px-3 py-2 text-xs font-black text-stone-600">{showDetails?"Hide":"Show more"}</button></div><p className="text-sm leading-6 text-stone-700">{patternCue.snippet}</p>{opponentCue&&boardSettings.showOpponentCue&&shouldRenderOpponentLastMoveHighlight({committed:opponentCue.committed,cueFen:opponentCue.fen,boardFen:normalizeFen(fen)})&&<p className="mt-2 rounded-2xl bg-purple-50 p-3 text-sm leading-6 text-purple-800"><span className="font-black">Opponent cue: </span>{opponentCue.message}</p>}{coachSurfacePolicy.allowNextMoveText&&patternCue.next&&(trainerView==="assisted"||showAnswer)&&<p className="mt-2 rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600"><span className="font-black text-stone-900">Next: </span>{patternCue.next}</p>}{visualModelError&&<p className="mt-2 rounded-2xl bg-amber-50 p-2 text-[11px] font-bold leading-5 text-amber-700">Visual cue unavailable: {visualModelError}</p>}{coachSurfacePolicy.allowMoveImpactCard&&moveImpactPresentation.show&&<MoveImpact impact={{label:moveImpactPresentation.label,pct:moveImpact.pct,tone:moveImpact.tone,note:moveImpactPresentation.note}}/>}{showDetails&&<div className="mt-3 space-y-2"><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Headline: {patternCue.title}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual: {activeVisualModelOutput?.animationPackage?.name??annotation.visualExplanation}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Move Quality Gate</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Version: {MOVE_QUALITY_GATE_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Required: {shouldValidateTrainingMove?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Status: {moveQualityPending?"pending":moveQuality?.status??"idle"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected UCI: {moveQuality?.expectedMovesUci?.join(", ")||expectedUserUcis.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Expected SAN: {expectedUserSans.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Stockfish top two: {moveQuality?.topMoves?.map((line)=>line.uci).join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Reason: {moveQuality?.reason??"No validation result."}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Checked: {moveQuality?.checkedAt?new Date(moveQuality.checkedAt).toLocaleTimeString():"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Hints hidden: {hideUnverifiedTrainingHints?"yes":"no"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Teaching Cue Compiler</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler version: {TEACHING_CUE_COMPILER_VERSION}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler concept: {teachingOrchestration?.cue.conceptId??"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler confidence: {teachingOrchestration?Number((teachingOrchestration.cue.debug.confidence??0).toFixed(3)):"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler reason: {teachingOrchestration?.cue.debug.selectedReason??"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler delta: {teachingOrchestration?.cue.debug.deltaSummary?.join(" | ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Compiler scores: {teachingOrchestration?.cue.debug.detectorScores?.map((s)=>`${s.conceptId}:${s.finalScore.toFixed(2)}`).slice(0,6).join(", ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Orchestrator tier: {teachingOrchestration?.classification.tier??"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Selected story: {teachingOrchestration?.selectedStory?.kind??"n/a"} ({teachingOrchestration?.selectedStory?.score.total?.toFixed?.(2)??"n/a"})</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Rejected stories: {teachingOrchestration?.debug.rejectedStories?.map((r)=>`${r.kind}:${r.total.toFixed(2)}`).join(", ")||"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Visual budget: {teachingOrchestration?JSON.stringify(teachingOrchestration.debug.visualBudget):"n/a"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Suppressed visuals: {teachingOrchestration?.debug.suppressionReasons?.join(", ")||"none"}</div><div className="rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">Learning events are being stored locally for future progress and Review features.</div>{annotation.reason&&<div className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">Fallback reason: {annotation.reason}</div>}</div>}</div>}
+app/page.tsx:3875:function PipelineStatus({step,note}:{step:ThinkingStep;note:string}){const labels:Record<ThinkingStep,string>={idle:"Ready",facts:"Analyzing",engine:"Engine",brain:"Blundr Brain","gpt-receive":"Receiving","visual-update":"Updating",ready:"Ready",error:"Error"};const tone=step==="error"?"bg-red-50 text-red-700 ring-red-100":step==="ready"||step==="idle"?"bg-green-50 text-green-700 ring-green-100":"bg-blue-50 text-blue-700 ring-blue-100";return <div className={classNames("max-w-[190px] rounded-2xl px-3 py-2 text-right text-[11px] font-black leading-4 ring-1",tone)} title={note}><div>{labels[step]}</div><div className="truncate text-[10px] font-semibold opacity-75">{note}</div></div>}
+app/page.tsx:3882:        <div className="text-xs font-semibold text-stone-500">Live prompt/input/output from /api/brain</div>
+app/page.tsx:3919:function LiveBrain({brain}:{brain:LiveBrain}){return <div className="rounded-3xl border border-stone-200 bg-white p-3 shadow-sm"><div className="mb-2 flex items-center justify-between"><div className="flex items-center gap-2 text-sm font-black"><Zap size={16} className="text-green-700"/> Live Brain</div><span className="text-xs font-black text-stone-400">{brain.ratingLabel} • {brain.ratingPool}</span></div><div className="grid grid-cols-4 gap-1.5"><Status label="Book" state={brain.book}/><Status label="Lichess" state={brain.lichess}/><Status label="Engine" state={brain.engine}/><Status label="Brain" state={brain.gpt}/></div><div className="mt-2 rounded-2xl bg-stone-50 px-3 py-2 text-xs font-semibold leading-5 text-stone-500">Source: <span className="font-black text-stone-800">{brain.source}</span>{brain.latency?` • ${brain.latency} ms`:""}{brain.note?` • ${brain.note}`:""}</div></div>}
+app/page.tsx:411:    brainAnalysis: null,  // v2.7.39.3 ready; wired in main live coach path
+app/page.tsx:61:import { analyzeBlundrPosition } from "@/lib/blundr/brain/analyzeBlundrPosition";  // v2.7.39.2+ Brain facade for 2.7.39.3 coach migration
+app/page.tsx:659:function parseStockfishInfo(line:string,fen:string){
+app/page.tsx:673:async function resolveStockfishWorkerPath(){
+app/page.tsx:682:async function runBrowserStockfish(fen:string,skill:number,movetime=750,multiPv=3,signal?:AbortSignal):Promise<{source:string;pvs:EngineLine[];depth?:number;timeMs:number}|null>{
+app/page.tsx:685:  const enginePath=await resolveStockfishWorkerPath();
+app/page.tsx:720:        const parsed=parseStockfishInfo(line,fen);
+app/page.tsx:73:type ThinkingStep = "idle" | "facts" | "engine" | "brain" | "gpt-receive" | "visual-update" | "ready" | "error";
+app/page.tsx:788:  const [brainResponse,setBrainResponse]=useState<BrainResponse|null>(null);
+app/page.tsx:7:import { getStockfishTopMovesForValidation } from "@/lib/blundr/engine/stockfishValidation";
+app/page.tsx:800:  const [brain,setBrain]=useState<LiveBrain>({ratingLabel:"Club",ratingPool:"1200–1600",book:"ready",lichess:"ready",engine:"ready",gpt:"ready",source:"rule visual",note:"Manual reveal/debug only"});
+app/page.tsx:827:  const brainSeq=useRef(0);
+app/page.tsx:855:  const brainAbortRef=useRef<AbortController|null>(null);
+app/page.tsx:917:  const lichessStatsStatus = brain.lichess === "loading" ? "loading" : (explorerMoves.length > 0 ? "resolved" : "pending");
+app/page.tsx:95:type BrainResponse = { pipeline: { facts: string; engine: string; gpt: string; visual: string; latencyMs: number }; engine: { source: string; fallback: boolean; pvs: EngineLine[] }; annotation: BrainAnnotation; candidates?: any; debug?: any };
+app/page.tsx:978:  // This must take precedence over secondary async (brain/visual/lichess/pending) so the lesson is playable from move 1.
+lib/blundr/brain/analyzeBlundrPosition.ts:103:      source: "brain",
+lib/blundr/brain/analyzeBlundrPosition.ts:112:    // v2.7.40 Agent 5 minimal foundation: intelligence flows target -> brain -> pres -> surface
+lib/blundr/brain/analyzeBlundrPosition.ts:128:      sourceModules: ["advancedFeatureExtractor", "planRecognitionEngine", "boardTruth", "generateCandidateMoves", "agent5-brain-foundation"],
+lib/blundr/brain/analyzeBlundrPosition.ts:17:import { validateCandidateWithStockfish } from "./engineValidation/validateCandidateWithStockfish";
+lib/blundr/brain/analyzeBlundrPosition.ts:42:    // Note: Full Stockfish per-candidate validation is expensive; we do it selectively in production flows.
+lib/blundr/brain/analyzeBlundrPosition.ts:56:        id: `brain:target:${target.uci}`,
+lib/blundr/brain/analyzeBlundrPosition.ts:78:        debug: { source: "brain_facade" },
+lib/blundr/brain/analyzeBlundrPosition.ts:83:    advanced = { error: "feature_extraction_failed_in_brain" };
+lib/blundr/brain/analyzeBlundrPosition.ts:87:    version: "brain-v2-production-skeleton",
+lib/blundr/brain/engineValidation/validateCandidateWithStockfish.ts:10:export async function validateCandidateWithStockfish(
+lib/blundr/brain/engineValidation/validateCandidateWithStockfish.ts:14:): Promise<StockfishValidation> {
+lib/blundr/brain/engineValidation/validateCandidateWithStockfish.ts:16:    const engineLines = await getStockfishTopMovesForValidation({ fen }); // Use existing helper (simplified call for now)
+lib/blundr/brain/engineValidation/validateCandidateWithStockfish.ts:21:    let safety: StockfishValidation["safety"] = "uncertain";
+lib/blundr/brain/engineValidation/validateCandidateWithStockfish.ts:2: * validateCandidateWithStockfish - Production Stockfish Validation (Step 5+)
+lib/blundr/brain/engineValidation/validateCandidateWithStockfish.ts:7:import type { StockfishValidation } from "../types";
+lib/blundr/brain/engineValidation/validateCandidateWithStockfish.ts:8:import { getStockfishTopMovesForValidation } from "../../engine/stockfishValidation";
+lib/blundr/brain/hints/buildHintLadder.ts:108:  } else if (brainAnalysis?.pedagogicalFocus?.focus) {
+lib/blundr/brain/hints/buildHintLadder.ts:10: * - Evidence-backed from CurrentInstructionTarget facts + optional brainAnalysis (claims/features).
+lib/blundr/brain/hints/buildHintLadder.ts:110:    const focus = String((brainAnalysis.pedagogicalFocus as any).focus || "").toLowerCase();
+lib/blundr/brain/hints/buildHintLadder.ts:135:  if (brainAnalysis?.strategicFeatures?.length) {
+lib/blundr/brain/hints/buildHintLadder.ts:21:  brainAnalysis?: BlundrBrainAnalysis | null;
+lib/blundr/brain/hints/buildHintLadder.ts:50:    brainAnalysis = null,
+lib/blundr/brain/hints/buildHintLadder.ts:78:  // Evidence from target (always available) + brain if present
+lib/blundr/brain/hints/buildHintLadder.ts:86:  if (brainAnalysis) {
+lib/blundr/brain/hints/buildHintLadder.ts:87:    evidenceIds.push("brain_analysis_available");
+lib/blundr/brain/hints/buildHintLadder.ts:88:    if (brainAnalysis.coachClaims && Array.isArray(brainAnalysis.coachClaims) && brainAnalysis.coachClaims.length > 0) {
+lib/blundr/brain/hints/buildHintLadder.ts:89:      evidenceIds.push("brain_coach_claims");
+lib/blundr/brain/hints/buildHintLadder.ts:91:    if (brainAnalysis.strategicFeatures && Array.isArray(brainAnalysis.strategicFeatures) && brainAnalysis.strategicFeatures.length > 0) {
+lib/blundr/brain/hints/buildHintLadder.ts:92:      evidenceIds.push("brain_strategic_features");
+lib/blundr/brain/hints/buildHintLadder.ts:94:    if (brainAnalysis.pedagogicalFocus) {
+lib/blundr/brain/hints/buildHintLadder.ts:95:      evidenceIds.push("brain_pedagogical_focus");
+lib/blundr/brain/hints/buildHintLadder.ts:97:    if (brainAnalysis.selectedTeachingCandidate) {
+lib/blundr/brain/hints/buildHintLadder.ts:98:      evidenceIds.push("brain_selected_teaching_candidate");
+lib/blundr/brain/types.ts:102:  stockfishValidation: StockfishValidation | null;
+lib/blundr/brain/types.ts:27:export type StockfishValidation = any;
+lib/blundr/brain/types.ts:78:    source: "lesson" | "branch" | "continuation" | "review" | "engine" | "brain";
+lib/blundr/coach/__tests__/coachSafety.test.ts:23:    text: "Stockfish top two says this is best",
+lib/blundr/coach/coachDecisionEngine.ts:117:  const trainingMode = input.brainInput?.trainingMode ?? (context.bookStatus === "in_book" ? "restricted" : "continuation");
+lib/blundr/coach/coachDecisionEngine.ts:120:    trainerFrameId: input.brainInput?.trainerFrameId ?? context.frameId,
+lib/blundr/coach/coachDecisionEngine.ts:121:    fen: input.brainInput?.fen ?? context.fen,
+lib/blundr/coach/coachDecisionEngine.ts:122:    boardFen: input.brainInput?.fen ?? context.fen,
+lib/blundr/coach/coachDecisionEngine.ts:123:    viewMode: input.brainInput?.viewMode ?? (context.viewMode === "reveal" ? "assisted" : context.viewMode),
+lib/blundr/coach/coachDecisionEngine.ts:125:    bookStatus: input.brainInput?.bookStatus ?? context.bookStatus,
+lib/blundr/coach/coachDecisionEngine.ts:126:    visualRecipe: input.brainInput?.visualRecipe,
+lib/blundr/coach/coachDecisionEngine.ts:127:    trainingContext: input.brainInput?.trainingContext,
+lib/blundr/coach/coachDecisionEngine.ts:128:    teachingOrchestration: input.brainInput?.teachingOrchestration,
+lib/blundr/coach/coachDecisionEngine.ts:129:    expectedMoveUci: input.brainInput?.expectedMoveUci ?? context.moveUci,
+lib/blundr/coach/coachDecisionEngine.ts:130:    expectedMoveSan: input.brainInput?.expectedMoveSan ?? context.moveSan,
+lib/blundr/coach/coachDecisionEngine.ts:131:    selectedCandidateMoveUci: input.brainInput?.selectedCandidateMoveUci,
+lib/blundr/coach/coachDecisionEngine.ts:132:    selectedCandidateMoveSan: input.brainInput?.selectedCandidateMoveSan,
+lib/blundr/coach/coachDecisionEngine.ts:133:    enginePreview: input.brainInput?.enginePreview,
+lib/blundr/coach/coachDecisionEngine.ts:134:    repertoireMoves: input.brainInput?.repertoireMoves,
+lib/blundr/coach/coachDecisionEngine.ts:135:    lichessContinuationMoves: input.brainInput?.lichessContinuationMoves,
+lib/blundr/coach/coachDecisionEngine.ts:136:    maiaRaw: input.brainInput?.maiaRaw,
+lib/blundr/coach/coachDecisionEngine.ts:137:    stale: input.brainInput?.stale || !context.recipeFrameMatchesBoard || !context.recipeFenMatchesBoard,
+lib/blundr/coach/coachDecisionEngine.ts:145:    openingId: (input.brainInput?.teachingOrchestration as any)?.openingId ?? "italian",
+lib/blundr/coach/coachDecisionEngine.ts:229:      coachMaiaStatus: packet.maiaSupport.status,
+lib/blundr/coach/coachDecisionEngine.ts:234:      expectedMoveSource: input.brainInput?.expectedMoveSource,
+lib/blundr/coach/coachDecisionEngine.ts:235:      expectedMoveCoverageTier: input.brainInput?.expectedMoveCoverageTier,
+lib/blundr/coach/coachDecisionEngine.ts:236:      expectedMoveResolutionReason: input.brainInput?.expectedMoveResolutionReason,
+lib/blundr/coach/coachTypes.ts:184:  brainInput?: {
+lib/blundr/coachBrain/__tests__/maiaStatus.test.ts:5:export function testMaiaStatus(): void {
+lib/blundr/coachBrain/coachBrainDebug.ts:22:    coachMaiaStatus: packet.maiaSupport.status,
+lib/blundr/coachBrain/coachEvidenceBuilder.ts:169:  const maiaSupport = buildMaiaSupport(input.maiaRaw);
+lib/blundr/coachBrain/coachEvidenceBuilder.ts:18:  MaiaSupportPacket,
+lib/blundr/coachBrain/coachEvidenceBuilder.ts:69:function buildMaiaSupport(maiaRaw: unknown): MaiaSupportPacket {
+lib/blundr/coachBrain/coachEvidenceBuilder.ts:71:  // v2.7.38e honesty gate: treat Maia as unavailable unless an explicitly verified live payload exists.
+lib/blundr/coachBrain/coachEvidenceTypes.ts:111:export interface MaiaSupportPacket {
+lib/blundr/coachBrain/coachEvidenceTypes.ts:162:  maiaSupport: MaiaSupportPacket;
+lib/blundr/coachBrain/coachExplanationPipeline.ts:19:  brainAnalysis?: BlundrBrainAnalysis | null;  // v2.7.39.3: optional Brain input for migration
+lib/blundr/coachBrain/coachExplanationPipeline.ts:4:import type { BlundrBrainAnalysis } from "../brain/types";  // v2.7.39.3 integration start
+lib/blundr/coachBrain/coachExplanationPipeline.ts:625:  brainAnalysis?: BlundrBrainAnalysis | null;  // v2.7.39.3 exposure
+lib/blundr/coachBrain/coachExplanationPipeline.ts:633:  if (context.brainAnalysis) {
+lib/blundr/coachBrain/coachExplanationPipeline.ts:634:    const b: any = context.brainAnalysis;
+lib/blundr/coachBrain/coachExplanationPipeline.ts:636:      if (b.features.kingSafety) featurePacket.kingSafetyFeatures = [...featurePacket.kingSafetyFeatures, "brain:king_safety"];
+lib/blundr/coachBrain/coachExplanationPipeline.ts:637:      if (b.features.pawnStructure) featurePacket.centerFeatures = [...featurePacket.centerFeatures, "brain:pawn_structure"];
+lib/blundr/coachBrain/coachExplanationPipeline.ts:644:          planId: `brain:${p.type || i}`,
+lib/blundr/coachBrain/coachExplanationPipeline.ts:648:          evidenceTags: ["brain"],
+lib/blundr/coachBrain/coachExplanationPipeline.ts:688:    brainAnalysis: context.brainAnalysis ?? null,  // v2.7.39.3: pass through for migration
+lib/blundr/coachBrain/testCoachBrain.ts:16:  testMaiaStatus();
+lib/blundr/coachBrain/testCoachBrain.ts:6:import { testMaiaStatus } from "./__tests__/maiaStatus.test";
+lib/blundr/coachQuality/__tests__/coachQualityScorer.test.ts:31:    text: "Stockfish top two says this is best.",
+lib/blundr/coachQuality/coachBenchmarkTypes.ts:41:  maiaFixture?: MaiaSignalSet;
+lib/blundr/coachQuality/coachBenchmarkTypes.ts:6:  MaiaSignalSet,
+lib/blundr/continuedPlay/continuedPlayMovePolicy.ts:105:function deterministicPick(candidates: ContinuedCandidate[], preferStockfishRank = false): ContinuedCandidate | null {
+lib/blundr/continuedPlay/continuedPlayMovePolicy.ts:110:      if (preferStockfishRank) {
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:344:          brainInput: candidateTrainingContext
+lib/blundr/debug/trainerDebugSnapshot.ts:375:  const brainActive = !!input.brainAnalysis;
+lib/blundr/debug/trainerDebugSnapshot.ts:376:  if (!brainActive && isTeachingFrame(input) && !coachDebug.advancedFeatureClaimTypes && !instructionTargetUci) warnings.push("feature_pipeline_not_exposed");
+lib/blundr/debug/trainerDebugSnapshot.ts:377:  if (!brainActive && isTeachingFrame(input) && !coachDebug.recognizedPlanTypes && !instructionTargetUci) warnings.push("plan_pipeline_not_exposed");
+lib/blundr/debug/trainerDebugSnapshot.ts:380:  if (input.brainAnalysis) {
+lib/blundr/debug/trainerDebugSnapshot.ts:381:    const b = input.brainAnalysis;
+lib/blundr/debug/trainerDebugSnapshot.ts:382:    if (b.features) (coachDebug as any).brainFeatures = b.features;
+lib/blundr/debug/trainerDebugSnapshot.ts:383:    if (b.plans) (coachDebug as any).brainPlans = b.plans;
+lib/blundr/debug/trainerDebugSnapshot.ts:384:    if (b.opportunities) (coachDebug as any).brainOpportunities = b.opportunities;
+lib/blundr/debug/trainerDebugSnapshot.ts:467:      brainAnalysis: input.debugEnabled ? analyzeBlundrPosition({
+lib/blundr/debug/trainerDebugSnapshot.ts:666:      advancedFeaturePacketExists: !!input.brainAnalysis?.features || coachDebug.advancedFeaturePacketExists || Array.isArray(coachDebug.advancedFeatureClaimTypes),
+lib/blundr/debug/trainerDebugSnapshot.ts:669:      featureClaimCount: input.brainAnalysis?.features ? Object.keys(input.brainAnalysis.features).length : len(coachDebug.advancedFeatureClaimTypes),
+lib/blundr/debug/trainerDebugSnapshot.ts:670:      userFacingFeatureClaimCount: input.brainAnalysis?.features ? Object.keys(input.brainAnalysis.features).length : len(coachDebug.advancedFeatureClaimTypes),
+lib/blundr/debug/trainerDebugSnapshot.ts:672:      topFeatureClaims: input.brainAnalysis?.features ? Object.keys(input.brainAnalysis.features).filter(k => input.brainAnalysis.features[k]) : (coachDebug.advancedFeatureClaimTypes ?? []),
+lib/blundr/debug/trainerDebugSnapshot.ts:674:      pawnStructureSummary: input.brainAnalysis?.features?.pawnStructure ? [input.brainAnalysis.features.pawnStructure] : (coachDebug.coachBoardFactsSummary?.plausiblePawnBreaks ?? []),
+lib/blundr/debug/trainerDebugSnapshot.ts:675:      kingSafetySummary: input.brainAnalysis?.features?.kingSafety ? [input.brainAnalysis.features.kingSafety] : (coachDebug.coachBoardFactsSummary?.kingSafetyFacts ?? []),
+lib/blundr/debug/trainerDebugSnapshot.ts:676:      pieceQualitySummary: input.brainAnalysis?.features?.pieceQuality ? [input.brainAnalysis.features.pieceQuality] : (coachDebug.advancedFeatureClaimTypes?.filter((type: string) => type.includes("piece") || type.includes("bishop") || type.includes("rook")) ?? []),
+lib/blundr/debug/trainerDebugSnapshot.ts:678:      tacticalMotifSummary: input.brainAnalysis?.features?.tacticalMotifs ? JSON.stringify(input.brainAnalysis.features.tacticalMotifs).slice(0,100) : "blocked_debug_only",
+lib/blundr/debug/trainerDebugSnapshot.ts:680:      featureCacheHit: input.brainAnalysis ? "brain_hit" : (coachDebug.featureCacheHit ?? (instructionTargetUci ? "unknown" : "not_exposed_from_module")),
+lib/blundr/debug/trainerDebugSnapshot.ts:684:      strategicPlanPacketExists: !!input.brainAnalysis?.plans || coachDebug.strategicPlanPacketExists || Array.isArray(coachDebug.recognizedPlanTypes),
+lib/blundr/debug/trainerDebugSnapshot.ts:687:      recognizedPlanCount: input.brainAnalysis?.plans?.recognized?.length || len(coachDebug.recognizedPlanTypes),
+lib/blundr/debug/trainerDebugSnapshot.ts:688:      topPlans: input.brainAnalysis?.plans?.recognized ?? (coachDebug.recognizedPlanTypes ?? []),
+lib/blundr/debug/trainerDebugSnapshot.ts:689:      blockedPlans: input.brainAnalysis?.plans?.blocked ?? (coachDebug.blockedPlans ?? []),
+lib/blundr/debug/trainerDebugSnapshot.ts:690:      selectedPlanId: input.brainAnalysis?.plans?.primary?.id ?? (coachDebug.mappingPlanIds?.[0] ?? null),
+lib/blundr/debug/trainerDebugSnapshot.ts:691:      selectedPlanType: input.brainAnalysis?.plans?.primary?.type ?? (coachDebug.recognizedPlanTypes?.[0] ?? null),
+lib/blundr/debug/trainerDebugSnapshot.ts:693:      planCacheHit: input.brainAnalysis ? "brain_hit" : (coachDebug.planCacheHit ?? (instructionTargetUci ? "unknown" : "not_exposed_from_module")),
+lib/blundr/debug/trainerDebugSnapshot.ts:694:      openingRegistryHit: input.brainAnalysis?.plans?.recognized?.length > 0 || len(coachDebug.recognizedPlanTypes) > 0,
+lib/blundr/debug/trainerDebugSnapshot.ts:695:      openingRegistryEntryId: input.brainAnalysis?.plans?.primary?.id ?? (coachDebug.mappingPlanIds?.[0] ?? null),
+lib/blundr/debug/trainerDebugSnapshot.ts:6:import { analyzeBlundrPosition } from "../brain/analyzeBlundrPosition";  // v2.7.39.2+ Brain facade exposure (debug only for now)
+lib/blundr/debug/trainerDebugSnapshot.ts:700:      opportunityCount: input.brainAnalysis?.opportunities?.ranked?.length ?? (input.opportunityCount ?? coachDebug.opportunityCount ?? (instructionTargetUci ? 0 : "not_exposed_from_module")),
+lib/blundr/debug/trainerDebugSnapshot.ts:701:      renderableOpportunityCount: input.brainAnalysis?.opportunities?.ranked?.length ?? (input.renderableOpportunityCount ?? coachDebug.renderableOpportunityCount ?? (instructionTargetUci ? 0 : "not_exposed_from_module")),
+lib/blundr/debug/trainerDebugSnapshot.ts:702:      selectedOpportunityId: input.brainAnalysis?.opportunities?.selectedId ?? selectedOpportunityId,
+lib/blundr/debug/trainerDebugSnapshot.ts:703:      selectedOpportunityLayer: input.brainAnalysis?.opportunities?.selected ? "brain" : selectedOpportunityLayer,
+lib/blundr/engine/stockfishValidation.ts:107:      finish(undefined, new Error("Failed to initialize Stockfish worker."));
+lib/blundr/engine/stockfishValidation.ts:118:      finish(undefined, new Error("Stockfish worker crashed during validation."));
+lib/blundr/engine/stockfishValidation.ts:137:          finish(undefined, new Error("Stockfish returned no validation lines."));
+lib/blundr/engine/stockfishValidation.ts:141:          finish(undefined, new Error("Stockfish MultiPV top-two output unavailable."));
+lib/blundr/engine/stockfishValidation.ts:37:async function resolveStockfishWorkerPath(): Promise<string | null> {
+lib/blundr/engine/stockfishValidation.ts:48:export async function getStockfishTopMovesForValidation(input: {
+lib/blundr/engine/stockfishValidation.ts:55:    throw new Error("Stockfish validation is unavailable outside browser worker runtime.");
+lib/blundr/engine/stockfishValidation.ts:58:  const enginePath = await resolveStockfishWorkerPath();
+lib/blundr/engine/stockfishValidation.ts:60:    throw new Error("Stockfish worker path is unavailable.");
+lib/blundr/engine/stockfishValidation.ts:98:        finish(undefined, new Error("Stockfish MultiPV top-two output unavailable."));
+lib/blundr/explanation/__tests__/explanationSafetyLinter.test.ts:6:  assert.equal(lintCoachExplanation({ text: "Stockfish says this is verified_top2." }).allowed, false);
+lib/blundr/explanation/chessLanguageLibrary.ts:2:  "Stockfish",
+lib/blundr/explanation/coachVoicePolicy.ts:6:  return !/verified_top2|Stockfish|maia|centipawn|engine delta|rule-only visual|GPT manual/i.test(text);
+lib/blundr/featurePacketBuilder.ts:510:    planExplanation: "Wait for a repertoire move, Stockfish move, or explicit candidate move.",
+lib/blundr/golden/goldenAssertions.ts:4:  assert.equal(/Stockfish|verified_top2|rule-only visual|GPT manual|Maia probability|centipawn|top two/i.test(text), false);
+lib/blundr/liveCoach/__tests__/liveCoachSafety.test.ts:6:  assert.equal(validateLiveCoachCopy("Stockfish says +120 centipawn").allowed, false);
+lib/blundr/liveCoach/__tests__/maiaSignalAdapter.test.ts:15:  const unavailable = adaptMaiaSignals({ raw: null, userElo: 1500, opponentElo: 1500 });
+lib/blundr/liveCoach/__tests__/maiaSignalAdapter.test.ts:2:import { adaptMaiaSignals } from "../maiaSignalAdapter";
+lib/blundr/liveCoach/__tests__/maiaSignalAdapter.test.ts:4:export function testMaiaSignalAdapter(): void {
+lib/blundr/liveCoach/__tests__/maiaSignalAdapter.test.ts:5:  const adapted = adaptMaiaSignals({
+lib/blundr/liveCoach/liveCoachTypes.ts:107:  maiaSignals?: MaiaSignalSet;
+lib/blundr/liveCoach/liveCoachTypes.ts:12:export interface MaiaMoveDistribution {
+lib/blundr/liveCoach/liveCoachTypes.ts:142:  skillTrend?: MaiaSkillGradient["trend"];
+lib/blundr/liveCoach/liveCoachTypes.ts:18:export interface MaiaSkillGradient {
+lib/blundr/liveCoach/liveCoachTypes.ts:29:export interface MaiaSignalSet {
+lib/blundr/liveCoach/liveCoachTypes.ts:41:    below: MaiaMoveDistribution;
+lib/blundr/liveCoach/liveCoachTypes.ts:42:    current: MaiaMoveDistribution;
+lib/blundr/liveCoach/liveCoachTypes.ts:43:    above: MaiaMoveDistribution;
+lib/blundr/liveCoach/liveCoachTypes.ts:44:    advanced: MaiaMoveDistribution;
+lib/blundr/liveCoach/liveCoachTypes.ts:46:  skillGradients: MaiaSkillGradient[];
+lib/blundr/liveCoach/maiaSignalAdapter.ts:19:export function adaptMaiaSignals(input: {
+lib/blundr/liveCoach/maiaSignalAdapter.ts:1:import type { MaiaSignalSet } from "./liveCoachTypes";
+lib/blundr/liveCoach/maiaSignalAdapter.ts:20:  raw?: MaiaRaw | null;
+lib/blundr/liveCoach/maiaSignalAdapter.ts:24:}): MaiaSignalSet {
+lib/blundr/liveCoach/maiaSignalAdapter.ts:3:export type MaiaRaw = {
+lib/blundr/liveCoach/maiaSignalAdapter.ts:47:  const humanConsensus: MaiaSignalSet["humanConsensus"] = topMoveProbability >= 0.35 || signalEntropy < 1.8 ? "high" : topMoveProbability >= 0.18 ? "medium" : "low";
+lib/blundr/liveCoach/positionEvidenceBuilder.ts:14:  maiaSignals?: MaiaSignalSet;
+lib/blundr/liveCoach/positionEvidenceBuilder.ts:4:import type { EngineSignalSet, MaiaSignalSet, PatternSignalSet, PositionEvidencePacket, UserMemorySignalSet } from "./liveCoachTypes";
+lib/blundr/liveCoach/skillGradientAnalyzer.ts:1:import type { MaiaMoveDistribution, MaiaSkillGradient } from "./liveCoachTypes";
+lib/blundr/liveCoach/skillGradientAnalyzer.ts:24:    let trend: MaiaSkillGradient["trend"] = "unclear";
+lib/blundr/liveCoach/skillGradientAnalyzer.ts:4:  below: MaiaMoveDistribution;
+lib/blundr/liveCoach/skillGradientAnalyzer.ts:5:  current: MaiaMoveDistribution;
+lib/blundr/liveCoach/skillGradientAnalyzer.ts:6:  above: MaiaMoveDistribution;
+lib/blundr/liveCoach/skillGradientAnalyzer.ts:7:  advanced: MaiaMoveDistribution;
+lib/blundr/liveCoach/skillGradientAnalyzer.ts:8:}): MaiaSkillGradient[] {
+lib/blundr/liveCoach/testLiveCoach.ts:22:  testMaiaSignalAdapter();
+lib/blundr/liveCoach/testLiveCoach.ts:7:import { testMaiaSignalAdapter } from "./__tests__/maiaSignalAdapter.test";
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:117:import { buildHintLadder } from "../../brain/hints/buildHintLadder"; // v2.7.40 Agent 4 tests
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:373:  const presBase = makeMockPresentationFrame(true, false, "guided_target_fallback", "none"); // legacy coach off to test brain path
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:376:  const brain = analyzeBlundrPosition({
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:384:  if (!brain.currentTarget || brain.currentTarget.uci !== "e2e4" || brain.currentTarget.pieceType !== "p") {
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:387:  if (!brain.conceptClassification || !brain.evidenceClaims || brain.evidenceClaims.length === 0) {
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:390:  if (!brain.safeFallbackCopy || brain.safeFallbackCopy.pieceType !== "p" || brain.safeFallbackCopy.targetUci !== "e2e4") {
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:395:  if (brain.safeFallbackCopy!.pieceType !== brain.currentTarget.pieceType) {
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:400:  const copyText = (brain.safeFallbackCopy!.title + " " + brain.safeFallbackCopy!.body + " " + (brain.safeFallbackCopy!.hint || "")).toLowerCase();
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:405:  if (!brain.safeFallbackCopy!.isSafe) throw new Error("safeFallbackCopy.isSafe must be true");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:406:  if (brain.safeFallbackCopy!.evidenceClaims.length === 0) throw new Error("safe copy must be evidence-backed");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:408:  // 4. PresentationFrame uses brain copy for coach when passed (chain)
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:416:    brainAnalysis: brain as any,
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:418:  if (presWithBrain.coach.owner !== "brain_skeleton") {
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:419:    throw new Error(`Presentation must use brain_skeleton owner for coach when brain safe copy present; got ${presWithBrain.coach.owner}`);
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:422:    throw new Error("Presentation coach must render body from brain safe copy");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:428:  // 5. Visible surface receives brain-derived coach via pres; target/piece from instruction only
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:436:    brainAnalysis: brain as any,
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:439:    // may be legacy if pres not providing, but in our case with brain it should be trainer
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:447:  // coach from pres/brain, not legacy body
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:453:  // (surface test already covers in Agent3; here verify brain path doesn't leak legacy)
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:456:  const fb = brain.safeFallbackCopy!;
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:459:  console.log("✓ v2.7.40 Agent5 coach intelligence consolidation + brain chain tests passed (6 cases)");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:572:    brainAnalysis: null, branchTransitionSurface: null, showMoreShown: false, hintCount: 0,
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:580:    showMoreShown: false, trainerView: "plain", trainingMode: "restricted", isUserTurn: true, trainerPhase: "ready_for_user", bookStatus: "in_book", isBranchTransition: false, isTerminal: false, brainAnalysis: null, hintCount: 0,
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:595:    showMoreShown: true, trainerView: "plain", trainingMode: "restricted", isUserTurn: true, trainerPhase: "ready_for_user", bookStatus: "in_book", isBranchTransition: false, isTerminal: false, brainAnalysis: null, hintCount: 0,
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:5:import { analyzeBlundrPosition } from "../../brain/analyzeBlundrPosition";
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:634:    showMoreShown: true, trainerView: "plain", trainingMode: "restricted", isUserTurn: true, trainerPhase: "ready_for_user", bookStatus: "in_book", isBranchTransition: false, isTerminal: false, brainAnalysis: null, hintCount: 0,
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:649:    showMoreShown: false, trainerView: "plain", trainingMode: "restricted", isUserTurn: true, trainerPhase: "ready_for_user", bookStatus: "in_book", isBranchTransition: false, isTerminal: false, brainAnalysis: null, hintCount: 0,
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:183:  brainAnalysis?: { currentTarget?: { uci?: string; pieceType?: string } | null } | null | BlundrBrainAnalysis;
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:214:    brainAnalysis = null,
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:258:    // legacy visual on brain frame is a form of mismatch risk
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:262:  // Piece mismatch (from legacy input or brain target vs instruction)
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:267:  const brainTargetPiece = brainAnalysis?.currentTarget?.pieceType;
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:268:  if (brainTargetPiece && targetPieceType && brainTargetPiece !== targetPieceType) {
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:316:    brainAnalysis: brainAnalysis as any, // tolerate minimal or full
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:363:  // Force coachShouldRender = true on any active brain teaching frame (after safety checks).
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:48:import { buildHintLadder } from "../brain/hints/buildHintLadder"; // v2.7.40 Agent 4: progressive non-leaking hints for Plain View
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:49:import type { BlundrBrainAnalysis } from "../brain/types";
+lib/blundr/presentation/trainerPresentationFrame.ts:134:      // v2.7.40 P0 Fix 2: do not promote legacy visual to visible on teaching frames; surface + recipe/brain own.
+lib/blundr/presentation/trainerPresentationFrame.ts:184:  // Legacy coachDecision / liveCoach text remains input-only for debug/bypass; brain copy used for visible coach title/body on teaching frames.
+lib/blundr/presentation/trainerPresentationFrame.ts:185:  const brainCopy = input.brainAnalysis?.safeFallbackCopy;
+lib/blundr/presentation/trainerPresentationFrame.ts:187:    brainCopy &&
+lib/blundr/presentation/trainerPresentationFrame.ts:188:    brainCopy.isSafe &&
+lib/blundr/presentation/trainerPresentationFrame.ts:193:  if (useBrainForCoach && brainCopy) {
+lib/blundr/presentation/trainerPresentationFrame.ts:194:    // Defense: pieceType always from target via brain; surface will also cross-check vs instructionTarget
+lib/blundr/presentation/trainerPresentationFrame.ts:197:      owner: "brain_skeleton" as any,
+lib/blundr/presentation/trainerPresentationFrame.ts:199:      title: brainCopy.title,
+lib/blundr/presentation/trainerPresentationFrame.ts:1:// v2.7.40 Agent 5: brain for coach intelligence in chain (skeletal ok)
+lib/blundr/presentation/trainerPresentationFrame.ts:200:      body: brainCopy.body,
+lib/blundr/presentation/trainerPresentationFrame.ts:203:      intent: "brain_safe_fallback",
+lib/blundr/presentation/trainerPresentationFrame.ts:204:      // coachPieceType implicitly brainCopy.pieceType (matches target)
+lib/blundr/presentation/trainerPresentationFrame.ts:2:import type { BlundrBrainAnalysis } from "../brain/types";
+lib/blundr/presentation/trainerPresentationFrame.ts:6:export type TrainerCoachOwner = "none" | "coach_decision" | "branch_transition_surface" | "brain_skeleton";
+lib/blundr/presentation/trainerPresentationFrame.ts:81:  // v2.7.40 Agent 5: pass brainAnalysis (from analyzeBlundrPosition) so coach copy derives from CurrentInstructionFrame.target via Brain -> PresentationFrame
+lib/blundr/presentation/trainerPresentationFrame.ts:82:  brainAnalysis?: BlundrBrainAnalysis | null;
+lib/blundr/presentation/visibleActionPolicy.ts:11: * - No raw UCI/SAN, "verified_top*", "Stockfish validated" in policy outputs for teaching frames.
+lib/blundr/salience/visualRecipes.ts:91:    message: "Follow the verified Stockfish candidate.",
+lib/blundr/teaching/__tests__/trainingContextEngine.test.ts:120:      reason: "Expected training move did not match Stockfish's top two moves.",
+lib/blundr/teaching/__tests__/trainingContextEngine.test.ts:146:      reason: "Expected training move did not match Stockfish's top two moves.",
+lib/blundr/teaching/__tests__/trainingContextEngine.test.ts:68:      reason: "Expected training move did not match Stockfish's top two moves.",
+lib/blundr/teaching/__tests__/trainingContextEngine.test.ts:94:      reason: "Expected training move did not match Stockfish's top two moves.",
+lib/blundr/teaching/moveQualityGate.ts:102:      reason: "Stockfish did not return top-two candidate moves.",
+lib/blundr/teaching/moveQualityGate.ts:123:          ? "Expected move matched Stockfish's top move."
+lib/blundr/teaching/moveQualityGate.ts:124:          : "Expected move matched Stockfish's second choice.",
+lib/blundr/teaching/moveQualityGate.ts:137:    reason: "Expected training move did not match Stockfish's top two moves.",
+lib/blundr/teaching/trainingContextEngine.ts:118:      reason: topTwoOnlyRejected ? "Move is a study-line choice that fell outside Stockfish top-two; reveal mode can still show it." : "Move is a study-line choice without enough validation to auto-recommend.",
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:109:    moveQuality: { status: "rejected", reason: "Expected training move did not match Stockfish's top two moves.", topMoves: [{ rank: 1, uci: "c1g5", san: "Bg5", scoreCp: 36 }, { rank: 2, uci: "b1d2", san: "Nbd2", scoreCp: 31 }] },
+lib/blundr/visualRecipe/__tests__/visualRecipeCompiler.test.ts:88:    moveQuality: { status: "rejected", reason: "Expected training move did not match Stockfish's top two moves.", topMoves: [{ rank: 1, uci: "b1c3", san: "Nc3", scoreCp: 30 }, { rank: 2, uci: "e1g1", san: "O-O", scoreCp: 25 }] },

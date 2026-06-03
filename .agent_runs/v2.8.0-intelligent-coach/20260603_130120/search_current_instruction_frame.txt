@@ -1,0 +1,46 @@
+app/page.tsx:1196:      // Fall through to the normal buildCurrentInstructionFrame path below with a good guidedMove.
+app/page.tsx:1234:    return buildCurrentInstructionFrame({
+app/page.tsx:2419:  // v2.7.40 P0 Fix 2: on active teaching frames (CurrentInstructionFrame.target present + ready user turn), surface is sole visible owner.
+app/page.tsx:391:  target:NonNullable<ReturnType<typeof buildCurrentInstructionFrame>["target"]>;
+app/page.tsx:428:function buildEngineBestContinuationCopy(target:NonNullable<ReturnType<typeof buildCurrentInstructionFrame>["target"]>){
+app/page.tsx:55:import { buildCurrentInstructionFrame, isBookLikeInstructionTarget } from "@/lib/blundr/runtime/currentInstructionFrame";
+lib/blundr/brain/analyzeBlundrPosition.ts:127:      note: "Production Brain v2.7.40 Agent5 - target facts + concept + evidence + safe copy (pieceType enforced from CurrentInstructionFrame.target)",
+lib/blundr/brain/analyzeBlundrPosition.ts:136:// All derive strictly from CurrentInstructionFrame.target facts. No SAN in prompt/hint copy. No banned terms.
+lib/blundr/brain/analyzeBlundrPosition.ts:217:    pieceType: target.pieceType, // enforced match to CurrentInstructionFrame.target
+lib/blundr/brain/analyzeBlundrPosition.ts:8: * - Target is always respected from CurrentInstructionFrame.
+lib/blundr/brain/types.ts:12:  currentInstructionFrame: CurrentInstructionFrame | null;
+lib/blundr/brain/types.ts:6:import type { CurrentInstructionTarget, CurrentInstructionFrame } from "../runtime/currentInstructionFrame";
+lib/blundr/brain/types.ts:88:  // CurrentInstructionFrame.target is source; these derive strictly from it + basic facts (no halluc)
+lib/blundr/coachBrain/__tests__/coachExplanationPipeline.test.ts:4:import { buildCurrentInstructionFrame } from "../../runtime/currentInstructionFrame";
+lib/blundr/coachBrain/__tests__/coachExplanationPipeline.test.ts:8:  const frame = buildCurrentInstructionFrame({
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:13:import { buildCurrentInstructionFrame } from "../../runtime/currentInstructionFrame";
+lib/blundr/debug/__tests__/multiMoveTrainingQa.test.ts:440:  const instructionFrame = buildCurrentInstructionFrame({
+lib/blundr/debug/__tests__/trainerDebugSnapshot.test.ts:271:  const nextFrame = buildCurrentInstructionFrame({
+lib/blundr/debug/__tests__/trainerDebugSnapshot.test.ts:5:import { buildCurrentInstructionFrame } from "../../runtime/currentInstructionFrame";
+lib/blundr/debug/testTrainerDebug.ts:19:  testCurrentInstructionFrame();
+lib/blundr/debug/testTrainerDebug.ts:6:import { testCurrentInstructionFrame } from "../runtime/__tests__/currentInstructionFrame.test";
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:119:function makeMockInstructionFrame(targetKind: "guided_move" | "continuation_candidate", uci = "e2e4", san = "e4", piece = "p"): CurrentInstructionFrame {
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:442:    throw new Error("Surface target/pieceType must come ONLY from CurrentInstructionFrame.target");
+lib/blundr/presentation/__tests__/trainerPresentationFrame.test.ts:6:import type { CurrentInstructionFrame } from "../../runtime/currentInstructionFrame";
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:161:  currentInstructionFrame: CurrentInstructionFrame;
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:41:import type { CurrentInstructionFrame } from "../runtime/currentInstructionFrame";
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:5: *   CurrentInstructionFrame.target → BlundrBrainAnalysis → TrainerPresentationFrame → VisibleTeachingSurface → UI
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:7: * CurrentInstructionFrame.target is the SINGLE SOURCE OF TRUTH for targetUci/targetSan/targetPieceType.
+lib/blundr/presentation/buildVisibleTeachingSurface.ts:97:  // STRICTLY from CurrentInstructionFrame.target — never legacy
+lib/blundr/presentation/trainerPresentationFrame.ts:183:  // CurrentInstructionFrame.target -> BlundrBrainAnalysis.safeFallbackCopy (piece-matched, evidence-backed, no halluc) -> TrainerPresentationFrame -> VisibleTeachingSurface
+lib/blundr/presentation/trainerPresentationFrame.ts:81:  // v2.7.40 Agent 5: pass brainAnalysis (from analyzeBlundrPosition) so coach copy derives from CurrentInstructionFrame.target via Brain -> PresentationFrame
+lib/blundr/runtime/__tests__/currentInstructionFrame.test.ts:107:  const adaptiveBranch = buildCurrentInstructionFrame({
+lib/blundr/runtime/__tests__/currentInstructionFrame.test.ts:12:export function testCurrentInstructionFrame(): void {
+lib/blundr/runtime/__tests__/currentInstructionFrame.test.ts:21:  const e5 = buildCurrentInstructionFrame({
+lib/blundr/runtime/__tests__/currentInstructionFrame.test.ts:30:  const f4 = buildCurrentInstructionFrame({
+lib/blundr/runtime/__tests__/currentInstructionFrame.test.ts:39:  const nf3 = buildCurrentInstructionFrame({
+lib/blundr/runtime/__tests__/currentInstructionFrame.test.ts:48:  const bc4 = buildCurrentInstructionFrame({
+lib/blundr/runtime/__tests__/currentInstructionFrame.test.ts:4:import { buildCurrentInstructionFrame, buildVerifiedMoveFacts, isBookLikeInstructionTarget } from "../currentInstructionFrame";
+lib/blundr/runtime/__tests__/currentInstructionFrame.test.ts:56:  const castle = buildCurrentInstructionFrame({
+lib/blundr/runtime/__tests__/currentInstructionFrame.test.ts:65:  const nxc6Check = buildCurrentInstructionFrame({
+lib/blundr/runtime/__tests__/currentInstructionFrame.test.ts:75:  const qxe7Mate = buildCurrentInstructionFrame({
+lib/blundr/runtime/__tests__/currentInstructionFrame.test.ts:85:  const promotion = buildCurrentInstructionFrame({
+lib/blundr/runtime/__tests__/currentInstructionFrame.test.ts:98:  const lichessBranch = buildCurrentInstructionFrame({
+lib/blundr/runtime/currentInstructionFrame.ts:249:export function buildCurrentInstructionFrame(input: BuildCurrentInstructionFrameInput): CurrentInstructionFrame {
+lib/blundr/runtime/currentInstructionFrame.ts:44:export type CurrentInstructionFrame = {
+lib/blundr/runtime/currentInstructionFrame.ts:61:export type BuildCurrentInstructionFrameInput = {

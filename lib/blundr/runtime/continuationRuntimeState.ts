@@ -1,4 +1,5 @@
 import { Chess } from "chess.js";
+import type { CurrentInstructionFrame } from "./currentInstructionFrame";
 
 export type ContinuationRuntimeStatus =
   | "idle"
@@ -15,6 +16,20 @@ export type ContinuationRuntimeState = {
   legalMoveCount: number;
   sideToMove: "w" | "b" | null;
 };
+
+export interface ContinuationRuntimeAuthorityState {
+  frameKey: string;
+  targetUci: string | null;
+  mode: "guided" | "continuation" | "terminal" | "blocked";
+  source:
+    | "opening_tree"
+    | "lichess_branch"
+    | "adaptive_branch"
+    | "continuation_policy"
+    | "terminal"
+    | "none";
+  targetLocked: boolean;
+}
 
 function isCheckmate(game: Chess): boolean {
   const anyGame = game as any;
@@ -87,4 +102,22 @@ export function classifyContinuationRuntimeState(input: {
   }
 
   return { status: "requested", reason: "idle", legalMoveCount, sideToMove };
+}
+
+export function buildContinuationRuntimeAuthorityState(frame: CurrentInstructionFrame): ContinuationRuntimeAuthorityState {
+  return {
+    frameKey: frame.frameKey,
+    targetUci: frame.target?.uci ?? null,
+    mode: frame.mode,
+    source:
+      frame.source === "opening_tree" ||
+      frame.source === "lichess_branch" ||
+      frame.source === "adaptive_branch" ||
+      frame.source === "continuation_policy" ||
+      frame.source === "terminal" ||
+      frame.source === "none"
+        ? frame.source
+        : "none",
+    targetLocked: Boolean(frame.target && frame.target.provenance?.confidence === "locked"),
+  };
 }

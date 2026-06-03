@@ -1,0 +1,17 @@
+{
+  "release": "v2.8.0-intelligent-coach",
+  "branch": "v2.8.0-intelligent-coach-live",
+  "baseSha": "88f47e1685b0f80dc5cb1b07041f7c7b021afeda",
+  "currentSha": "88f47e1685b0f80dc5cb1b07041f7c7b021afeda",
+  "phase": "02_core_contracts",
+  "gates": {
+    "package1_authority_audit": "pass_with_unresolved_risks",
+    "package2_core_contracts": "pass",
+    "productCodeChanged": false,
+    "contractsAdded": true,
+    "mockProvidersAdded": true,
+    "shapeContractTestsAdded": true
+  },
+  "blocked": false,
+  "blockReason": null
+}

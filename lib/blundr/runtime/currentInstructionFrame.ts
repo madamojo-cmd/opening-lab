@@ -1,8 +1,21 @@
 import { Chess } from "chess.js";
+import {
+  type BlundrColor,
+  type ChessColor,
+  type BlundrPieceType,
+  type BlundrSquare,
+  type CurrentInstructionTarget,
+  type CurrentInstructionSource,
+  type CurrentInstructionFrameKind,
+  type CurrentInstructionMode,
+  type CurrentInstructionDebugIssue,
+  getCurrentInstructionTargetSignature,
+  normalizeBlundrColorFromChessColor,
+  normalizeChessColor,
+} from "./currentInstructionTarget";
 
 export type TrainingMode = "restricted" | "continuation";
 export type TrainerView = "assisted" | "plain";
-export type ChessColor = "w" | "b";
 export type InstructionTargetKind = "guided_move" | "lichess_branch_move" | "adaptive_branch_move" | "continuation_candidate";
 
 export type InstructionMoveInput = {
@@ -13,35 +26,23 @@ export type InstructionMoveInput = {
   trust?: string | null;
 };
 
-export type CurrentInstructionTarget = {
-  kind: InstructionTargetKind;
-  uci: string;
-  san: string;
-  from: string;
-  to: string;
-  promotion?: string;
-  color: ChessColor;
-  resultingFen: string;
-  source: string;
-  trust: string;
-  pieceType: string;
-  capture: boolean;
-  check: boolean;
-  mate: boolean;
-  isCapture: boolean;
-  isCheck: boolean;
-  isMate: boolean;
-  isPromotion: boolean;
-  isDevelopment: boolean;
-  isDiagonalMove: boolean;
-  isKingSafetyMove: boolean;
-  isCentralPawnAdvance: boolean;
-  isCastle: boolean;
-  promotionPiece: string | null;
-  fenBefore: string;
-};
-
 export type CurrentInstructionFrame = {
+  frameKey: string;
+  kind: CurrentInstructionFrameKind;
+  fenBefore: string;
+  fenAfterTarget?: string;
+  ply: number;
+  sideToMove: BlundrColor;
+  target: CurrentInstructionTarget | null;
+  mode: CurrentInstructionMode;
+  source: CurrentInstructionSource;
+  debug: {
+    issues: CurrentInstructionDebugIssue[];
+    targetSignature: string | null;
+    createdAt: string;
+  };
+
+  // Compatibility fields used across current app runtime.
   frameId: number | string;
   fen: string;
   normalizedFen: string;
@@ -49,11 +50,10 @@ export type CurrentInstructionFrame = {
   trainerPhase: string;
   trainerView: TrainerView | string;
   isUserTurn: boolean;
-  target: CurrentInstructionTarget | null;
   targetSource: string;
   nullReason: string | null;
   invariantKey: string;
-  instructionFrameKey: string;   // v2.7.39.1 — stable key for target locking (Coach Perfection Gate)
+  instructionFrameKey: string;
 };
 
 export type VerifiedMoveFacts = ReturnType<typeof buildVerifiedMoveFacts>;
@@ -94,7 +94,7 @@ function coerceTargetKind(value: unknown, fallback: InstructionTargetKind): Inst
 }
 
 function isBackRankDevelopment(move: any) {
-  if (!move || move.piece !== "n" && move.piece !== "b") return false;
+  if (!move || (move.piece !== "n" && move.piece !== "b")) return false;
   return (move.color === "w" && move.from[1] === "1") || (move.color === "b" && move.from[1] === "8");
 }
 
@@ -102,6 +102,31 @@ function isDiagonalMove(from: string, to: string) {
   const df = Math.abs((FILE_TO_INDEX[from[0]] ?? -99) - (FILE_TO_INDEX[to[0]] ?? 99));
   const dr = Math.abs(Number(from[1]) - Number(to[1]));
   return df > 0 && df === dr;
+}
+
+function mapSource(raw: string | null | undefined, fallbackKind: InstructionTargetKind): CurrentInstructionSource {
+  const value = String(raw ?? fallbackKind);
+  if (value === "opening_branch") return "lichess_branch";
+  if (value === "opening_family_plan") return "adaptive_branch";
+  if (value === "continuation_candidate") return "continuation_policy";
+  if (value === "lesson_line") return "opening_tree";
+  if (value === "engine_preview_fallback") return "engine_preview_fallback";
+  if (value === "legacy_recoverable") return "legacy_recoverable";
+  if (value === "guided_move" || value === "lichess_branch_move" || value === "adaptive_branch_move") return "opening_tree";
+  return "none";
+}
+
+function mapMode(trainingMode: TrainingMode | string, hasTarget: boolean, kind: CurrentInstructionFrameKind): CurrentInstructionMode {
+  if (kind === "terminal") return "terminal";
+  if (!hasTarget) return "blocked";
+  return trainingMode === "continuation" ? "continuation" : "guided";
+}
+
+function estimatePlyFromFen(fen: string): number {
+  const parts = String(fen).split(" ");
+  const fullMove = Number(parts[5] ?? 1) || 1;
+  const side = parts[1] === "b" ? 1 : 0;
+  return Math.max(0, (fullMove - 1) * 2 + side);
 }
 
 function buildTargetFromMove(fen: string, moveInput: InstructionMoveInput, kind: InstructionTargetKind): CurrentInstructionTarget | null {
@@ -121,30 +146,50 @@ function buildTargetFromMove(fen: string, moveInput: InstructionMoveInput, kind:
     const capture = Boolean(move.captured);
     const check = Boolean(move.san?.includes("+"));
     const mate = Boolean(move.san?.includes("#"));
+    const isEnPassant = Boolean(move.flags?.includes("e"));
+
     return {
       kind,
       uci: actualUci,
       san: move.san || moveInput.san || actualUci,
       from,
       to,
+      color: normalizeChessColor(move.color as ChessColor),
+      blundrColor: normalizeBlundrColorFromChessColor(move.color as ChessColor),
+      pieceType: move.piece as BlundrPieceType,
+      flags: {
+        isCapture: capture,
+        isCheck: check,
+        isCheckmate: mate,
+        isCastle,
+        isPromotion: Boolean(move.promotion || promotion),
+        isEnPassant,
+      },
+      provenance: {
+        source: mapSource(moveInput.source, kind),
+        reason: String(moveInput.source ?? kind),
+        confidence: kind === "continuation_candidate" ? "derived" : "locked",
+      },
+
+      // Compatibility payload
       promotion,
-      color: move.color as ChessColor,
       resultingFen: game.fen(),
       source: String(moveInput.source ?? kind),
       trust: String(moveInput.trust ?? (kind === "continuation_candidate" ? "continuation_verified" : "book_verified")),
-      pieceType: move.piece,
       capture,
       check,
       mate,
       isCapture: capture,
       isCheck: check,
       isMate: mate,
+      isCheckmate: mate,
       isPromotion: Boolean(move.promotion || promotion),
       isDevelopment: isBackRankDevelopment(move),
       isDiagonalMove: isDiagonalMove(from, to),
       isKingSafetyMove,
       isCentralPawnAdvance,
       isCastle,
+      isEnPassant,
       promotionPiece: move.promotion ?? null,
       fenBefore: fen,
     };
@@ -153,8 +198,51 @@ function buildTargetFromMove(fen: string, moveInput: InstructionMoveInput, kind:
   }
 }
 
+function buildIssues(input: {
+  isUserTurn: boolean;
+  trainerPhase: string;
+  target: CurrentInstructionTarget | null;
+  nullReason: string | null;
+  kind: CurrentInstructionFrameKind;
+}): CurrentInstructionDebugIssue[] {
+  const issues: CurrentInstructionDebugIssue[] = [];
+  if (!input.target) {
+    if (input.isUserTurn && input.trainerPhase === "ready_for_user") {
+      issues.push({
+        code: "missing_instruction_target",
+        severity: "critical",
+        message: "User teaching frame has no locked instruction target.",
+        details: { nullReason: input.nullReason },
+      });
+    }
+    if (input.kind === "terminal") {
+      issues.push({
+        code: "terminal_frame_has_target",
+        severity: "info",
+        message: "Terminal frame is targetless by contract.",
+      });
+    }
+  } else {
+    if (!input.target.pieceType) {
+      issues.push({
+        code: "target_piece_missing",
+        severity: "critical",
+        message: "Instruction target is missing piece type.",
+      });
+    }
+  }
+  if (!input.isUserTurn && input.target) {
+    issues.push({
+      code: "opponent_turn_has_user_target",
+      severity: "critical",
+      message: "Opponent turn frame should not expose a user teaching target.",
+    });
+  }
+  return issues;
+}
+
 export function isBookLikeInstructionTarget(target: CurrentInstructionTarget | null | undefined): target is CurrentInstructionTarget {
-  return Boolean(target && BOOK_TARGET_KINDS.has(target.kind));
+  return Boolean(target && target.kind && BOOK_TARGET_KINDS.has(target.kind as InstructionTargetKind));
 }
 
 export function buildVerifiedMoveFacts(
@@ -186,9 +274,15 @@ export function buildVerifiedMoveFacts(
     r: "rook",
     q: "queen",
     k: "king",
+    pawn: "pawn",
+    knight: "knight",
+    bishop: "bishop",
+    rook: "rook",
+    queen: "queen",
+    king: "king",
   };
 
-  const pieceName = pieceNameByCode[target.pieceType] ?? target.pieceType;
+  const pieceName = pieceNameByCode[target.pieceType] ?? String(target.pieceType);
 
   const claims = [
     `move:${target.uci}`,
@@ -248,17 +342,9 @@ export function buildVerifiedMoveFacts(
 
 export function buildCurrentInstructionFrame(input: BuildCurrentInstructionFrameInput): CurrentInstructionFrame {
   const normalizedFen = normalizeFen(input.fen);
-  const base = {
-    frameId: input.frameId,
-    fen: input.fen,
-    normalizedFen,
-    trainingMode: input.trainingMode,
-    trainerPhase: input.trainerPhase,
-    trainerView: input.trainerView,
-    isUserTurn: input.isUserTurn,
-  };
+  const sideToMove = normalizeBlundrColorFromChessColor((String(input.fen).split(" ")[1] as ChessColor) ?? "w");
+  const ply = estimatePlyFromFen(input.fen);
 
-  // v2.7.39.1: compute stable frame key for target locking (used by app to prevent async overwrites)
   const frameKeyInputs = {
     fen: input.fen,
     trainingMode: input.trainingMode,
@@ -268,42 +354,134 @@ export function buildCurrentInstructionFrame(input: BuildCurrentInstructionFrame
   };
   const instructionFrameKey = computeInstructionFrameKey(frameKeyInputs);
 
+  const baseCompat = {
+    frameId: input.frameId,
+    fen: input.fen,
+    normalizedFen,
+    trainingMode: input.trainingMode,
+    trainerPhase: input.trainerPhase,
+    trainerView: input.trainerView,
+    isUserTurn: input.isUserTurn,
+    instructionFrameKey,
+  };
+
   if (!input.isUserTurn) {
-    return { ...base, target: null, targetSource: "none", nullReason: "opponent_turn", invariantKey: `${normalizedFen}|opponent_turn|none`, instructionFrameKey };
+    const kind: CurrentInstructionFrameKind = "opponent_replying";
+    const issues = buildIssues({ isUserTurn: input.isUserTurn, trainerPhase: input.trainerPhase, target: null, nullReason: "opponent_turn", kind });
+    return {
+      ...baseCompat,
+      frameKey: instructionFrameKey,
+      kind,
+      fenBefore: input.fen,
+      ply,
+      sideToMove,
+      target: null,
+      mode: "blocked",
+      source: "none",
+      targetSource: "none",
+      nullReason: "opponent_turn",
+      invariantKey: `${normalizedFen}|opponent_turn|none`,
+      debug: {
+        issues,
+        targetSignature: null,
+        createdAt: new Date().toISOString(),
+      },
+    };
   }
 
   if (!USER_TURN_PHASES.has(input.trainerPhase)) {
-    return { ...base, target: null, targetSource: "none", nullReason: `phase_${input.trainerPhase}`, invariantKey: `${normalizedFen}|${input.trainerPhase}|none`, instructionFrameKey };
+    const kind: CurrentInstructionFrameKind = input.trainerPhase === "terminal" ? "terminal" : "transitioning";
+    const issues = buildIssues({ isUserTurn: input.isUserTurn, trainerPhase: input.trainerPhase, target: null, nullReason: `phase_${input.trainerPhase}`, kind });
+    return {
+      ...baseCompat,
+      frameKey: instructionFrameKey,
+      kind,
+      fenBefore: input.fen,
+      ply,
+      sideToMove,
+      target: null,
+      mode: kind === "terminal" ? "terminal" : "blocked",
+      source: kind === "terminal" ? "terminal" : "none",
+      targetSource: "none",
+      nullReason: `phase_${input.trainerPhase}`,
+      invariantKey: `${normalizedFen}|${input.trainerPhase}|none`,
+      debug: {
+        issues,
+        targetSignature: null,
+        createdAt: new Date().toISOString(),
+      },
+    };
   }
 
   const preferred = input.preferredTargetKind === "continuation_candidate" || input.trainingMode === "continuation" ? "continuation_candidate" : "guided_move";
-  const candidates: Array<{ move: InstructionMoveInput | null | undefined; kind: InstructionTargetKind; source: string }> = preferred === "continuation_candidate"
-    ? [
-        { move: input.continuationCandidate, kind: "continuation_candidate", source: "continuation_candidate" },
-        { move: input.guidedMove, kind: coerceTargetKind(input.guidedMove?.kind, "guided_move"), source: "guided_move" },
-      ]
-    : [
-        { move: input.guidedMove, kind: coerceTargetKind(input.guidedMove?.kind, "guided_move"), source: "guided_move" },
-        { move: input.continuationCandidate, kind: "continuation_candidate", source: "continuation_candidate" },
-      ];
+  const candidates: Array<{ move: InstructionMoveInput | null | undefined; kind: InstructionTargetKind; source: string }> =
+    preferred === "continuation_candidate"
+      ? [
+          { move: input.continuationCandidate, kind: "continuation_candidate", source: "continuation_candidate" },
+          { move: input.guidedMove, kind: coerceTargetKind(input.guidedMove?.kind, "guided_move"), source: "guided_move" },
+        ]
+      : [
+          { move: input.guidedMove, kind: coerceTargetKind(input.guidedMove?.kind, "guided_move"), source: "guided_move" },
+          { move: input.continuationCandidate, kind: "continuation_candidate", source: "continuation_candidate" },
+        ];
 
   for (const candidate of candidates) {
     if (!candidate.move?.uci) continue;
     const target = buildTargetFromMove(input.fen, candidate.move, candidate.kind);
     if (target) {
-      return { ...base, target, targetSource: candidate.source, nullReason: null, invariantKey: `${normalizedFen}|${target.kind}|${target.uci}`, instructionFrameKey };
+      const kind = target.kind as CurrentInstructionFrameKind;
+      const mode = mapMode(input.trainingMode, true, kind);
+      const source = mapSource(target.source ?? candidate.source, candidate.kind);
+      const issues = buildIssues({ isUserTurn: input.isUserTurn, trainerPhase: input.trainerPhase, target, nullReason: null, kind });
+      return {
+        ...baseCompat,
+        frameKey: instructionFrameKey,
+        kind,
+        fenBefore: input.fen,
+        fenAfterTarget: target.resultingFen,
+        ply,
+        sideToMove,
+        target,
+        mode,
+        source,
+        targetSource: candidate.source,
+        nullReason: null,
+        invariantKey: `${normalizedFen}|${target.kind}|${target.uci}`,
+        debug: {
+          issues,
+          targetSignature: getCurrentInstructionTargetSignature(target),
+          createdAt: new Date().toISOString(),
+        },
+      };
     }
   }
 
   const expectedReason = preferred === "continuation_candidate" ? "missing_or_illegal_continuation_candidate" : "missing_or_illegal_guided_move";
-  return { ...base, target: null, targetSource: "none", nullReason: expectedReason, invariantKey: `${normalizedFen}|${preferred}|none`, instructionFrameKey };
+  const kind: CurrentInstructionFrameKind = "blocked";
+  const issues = buildIssues({ isUserTurn: input.isUserTurn, trainerPhase: input.trainerPhase, target: null, nullReason: expectedReason, kind });
+  return {
+    ...baseCompat,
+    frameKey: instructionFrameKey,
+    kind,
+    fenBefore: input.fen,
+    ply,
+    sideToMove,
+    target: null,
+    mode: "blocked",
+    source: "none",
+    targetSource: "none",
+    nullReason: expectedReason,
+    invariantKey: `${normalizedFen}|${preferred}|none`,
+    debug: {
+      issues,
+      targetSignature: null,
+      createdAt: new Date().toISOString(),
+    },
+  };
 }
 
 /**
- * v2.7.39.1 Target Stability (Coach Perfection Gate 3A)
- * Stable key that uniquely identifies an "instructional frame" for target locking.
- * Prevents engine previews, explorer data, or re-renders from swapping the official
- * instructional target (especially continuation_candidate) for the same logical frame.
+ * Stable key that uniquely identifies an instructional frame for target locking.
  */
 export function computeInstructionFrameKey(params: {
   fen: string;
@@ -323,3 +501,44 @@ export function computeInstructionFrameKey(params: {
   const src = String(params.source || "auto").toLowerCase().replace(/[^a-z0-9_]/g, "");
   return [fen4, mode, userTurn, phase, side, uColor, src].join("|");
 }
+
+export function isUserTurnTeachingFrame(frame: CurrentInstructionFrame): boolean {
+  return Boolean(frame.isUserTurn && frame.trainerPhase === "ready_for_user" && frame.target);
+}
+
+export function isGuidedTeachingFrame(frame: CurrentInstructionFrame): boolean {
+  if (!isUserTurnTeachingFrame(frame)) return false;
+  return frame.mode === "guided" && frame.target?.kind !== "continuation_candidate";
+}
+
+export function isContinuationTeachingFrame(frame: CurrentInstructionFrame): boolean {
+  if (!isUserTurnTeachingFrame(frame)) return false;
+  return frame.mode === "continuation" || frame.target?.kind === "continuation_candidate";
+}
+
+export function getInstructionTargetOrNull(frame: CurrentInstructionFrame): CurrentInstructionTarget | null {
+  return frame.target ?? null;
+}
+
+export function assertLockedInstructionTarget(frame: CurrentInstructionFrame): CurrentInstructionTarget {
+  const target = frame.target;
+  if (!target) {
+    throw new Error("CurrentInstructionFrame has no locked instruction target.");
+  }
+  return target;
+}
+
+export function getFrameTargetSignature(frame: CurrentInstructionFrame): string {
+  return getCurrentInstructionTargetSignature(frame.target);
+}
+
+export type {
+  BlundrColor,
+  BlundrPieceType,
+  BlundrSquare,
+  CurrentInstructionDebugIssue,
+  CurrentInstructionFrameKind,
+  CurrentInstructionMode,
+  CurrentInstructionSource,
+  CurrentInstructionTarget,
+};

@@ -1,0 +1,19 @@
+{
+  "release": "v2.8.0-intelligent-coach",
+  "branch": "v2.8.0-intelligent-coach-live",
+  "baseSha": "88f47e1685b0f80dc5cb1b07041f7c7b021afeda",
+  "currentSha": "88f47e1685b0f80dc5cb1b07041f7c7b021afeda",
+  "phase": "00_baseline",
+  "gates": {
+    "package0_baseline": "PASS_WITH_BASELINE_RISKS",
+    "productCodeChanged": false,
+    "buildResult": "pass",
+    "testResult": "pass_with_missing_default_test_script",
+    "lintResult": "not_available_script",
+    "customTrainerDebugResult": "pass",
+    "customCoachQualityResult": "pass",
+    "customMultiMoveQaResult": "pass"
+  },
+  "blocked": false,
+  "blockReason": null
+}
