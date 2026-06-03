@@ -1,0 +1,23 @@
+{
+  "release": "v2.8.0-intelligent-coach",
+  "branch": "v2.8.0-intelligent-coach-live",
+  "baseSha": "7cad573c0a15de413c143e6a505b4cec6fa90633",
+  "currentSha": "75c52964d78c5ae4c39dd8c0b7d7cb6977df730b",
+  "phase": "07_coach_compiler",
+  "gates": {
+    "package1_authority_audit": "pass_with_unresolved_risks",
+    "package2_core_contracts": "pass",
+    "package3_ground_truth_test_harness": "pass",
+    "package4_current_instruction_frame": "pass",
+    "package5_deterministic_evidence_graph": "pass",
+    "package6_teaching_concept_registry": "pass",
+    "package7_coach_compiler": "pass",
+    "productCodeChanged": false,
+    "coachCompilerMvpAdded": true,
+    "compileCoachFrameAdded": true,
+    "plainLeakControlsAdded": true,
+    "targetAlignmentPrecheckAdded": true
+  },
+  "blocked": false,
+  "blockReason": null
+}

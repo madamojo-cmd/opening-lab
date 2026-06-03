@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { buildEvidenceGraph } from "../../lib/blundr/brain/buildEvidenceGraph";
+import { compileCoachFrame } from "../../lib/blundr/coachCompiler/compileCoachFrame";
 import { activateTeachingConcepts } from "../../lib/blundr/concepts/dynamicConceptActivator";
 import { teachingConceptRegistry } from "../../lib/blundr/concepts/teachingConceptRegistry";
 import { buildCurrentInstructionFrame } from "../../lib/blundr/runtime/currentInstructionFrame";
@@ -50,6 +51,15 @@ export function testPlainLeak(): void {
   const graph = buildEvidenceGraph({ frame, openingKey: "italian_game", openingName: "Italian Game" });
   const plainActivated = activateTeachingConcepts({ graph, mode: "plain", maxConcepts: 40 });
   assert.equal(plainActivated.activated.some((entry) => entry.conceptId === "show_more_reveal"), false);
+
+  const assistedConcepts = activateTeachingConcepts({ graph, mode: "assisted", maxConcepts: 20 });
+  const compiled = compileCoachFrame({ frame, graph, activatedConcepts: assistedConcepts.activated });
+  const compiledPlain = compiled.plain.body.toLowerCase();
+  assert.equal(compiledPlain.includes("bc4"), false);
+  assert.equal(compiledPlain.includes("f1c4"), false);
+  assert.equal(compiledPlain.includes("f1"), false);
+  assert.equal(compiledPlain.includes("c4"), false);
+  assert.equal(compiledPlain.includes("bishop"), false);
 }
 
 testPlainLeak();
