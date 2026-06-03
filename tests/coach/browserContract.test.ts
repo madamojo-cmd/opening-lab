@@ -17,6 +17,7 @@ export const browserContract = {
     providerFailureSafeFallback: "Engine/Maia/opening failures must degrade claims without crashing UI.",
     safetyGateBlocksMismatches: "SafetyGate must block target/reveal/visual mismatches before UI rendering.",
     visibleSurfaceSafeFrameOnly: "VisibleTeachingSurface must be built from SafetyGateOutput.safeFrame only.",
+    uiConsumesVisibleSurface: "When v2.8 flag is enabled, UI consumes coach/actions/visuals from VisibleTeachingSurface adapters.",
   },
 };
 
@@ -26,7 +27,7 @@ export function testBrowserContract(): void {
   assert.equal(typeof browserContract.selectors.visualArrowByUci("f1c4"), "string");
 
   const assertionTexts = Object.values(browserContract.assertions);
-  assert.equal(assertionTexts.length >= 6, true);
+  assert.equal(assertionTexts.length >= 7, true);
   for (const text of assertionTexts) {
     assert.equal(typeof text, "string");
     assert.equal(text.trim().length > 0, true);

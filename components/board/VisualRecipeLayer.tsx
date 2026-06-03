@@ -1,17 +1,28 @@
 import type { VisualPrimitive } from "@/lib/blundr/visualRecipe/visualRecipeTypes";
 import { primitivesToTeachingOverlay, type TeachingOverlayLine, type TeachingOverlaySquare } from "./visualPrimitiveRenderers";
 import type { ReactElement } from "react";
+import type { BoardVisualUiModel } from "@/lib/blundr/presentation/uiSurfaceAdapter";
 
 type Point = { x: number; y: number };
 
 export function VisualRecipeLayer({
   primitives,
+  surfaceVisuals,
   centerFor,
 }: {
   primitives: VisualPrimitive[];
+  surfaceVisuals?: BoardVisualUiModel | null;
   centerFor: (square: string) => Point;
 }): ReactElement | null {
-  const overlay = primitivesToTeachingOverlay(primitives);
+  const overlay = surfaceVisuals
+    ? {
+        lines: surfaceVisuals.visualRecipes
+          .filter((visual) => visual.visible && visual.from && visual.to)
+          .map((visual) => ({ from: visual.from as string, to: visual.to as string, kind: "plan" as const })),
+        squares: surfaceVisuals.visualRecipes
+          .flatMap((visual) => (visual.squares ?? []).map((square) => ({ square, kind: "target" as const }))),
+      }
+    : primitivesToTeachingOverlay(primitives);
   if (!overlay.lines.length && !overlay.squares.length) return null;
 
   return (

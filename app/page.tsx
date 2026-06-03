@@ -46,6 +46,9 @@ import { presentMoveImpact } from "@/lib/blundr/coachSurface/moveImpactPresenter
 import { computeTrainerPresentationFrame } from "@/lib/blundr/presentation/trainerPresentationFrame";
 import { attributeLastMove, decideTrainerPhaseActionGate } from "@/lib/blundr/presentation/phaseActionGating";
 import { buildVisibleTeachingSurface } from "@/lib/blundr/presentation/buildVisibleTeachingSurface"; // v2.7.40 Agent 3: single visible owner surface
+import { buildLiveVisibleTeachingSurface } from "@/lib/blundr/presentation/buildLiveVisibleTeachingSurface";
+import { adaptVisibleSurfaceToBoardVisuals, adaptVisibleSurfaceToCoachUi } from "@/lib/blundr/presentation/uiSurfaceAdapter";
+import { isV28VisibleSurfaceEnabled } from "@/lib/blundr/presentation/featureFlags";
 import { buildContinuationCandidateVisual } from "@/lib/blundr/visual/continuationCandidateVisual";
 import { buildOpeningTree } from "@/lib/blundr/openings/openingTree";
 import { resolveExpectedMoveForFrame } from "@/lib/blundr/openings/expectedMoveResolver";
@@ -2334,7 +2337,7 @@ export default function App(){
     setLastActionDebug(details);
     setDebugEventLog((events)=>appendDebugEvent(events,{type:"coach_action_clicked",action:input.action,normalizedAction:input.normalizedAction,before:input.before,after:input.after,result:input.result,reason:input.reason,details}));
   }
-  function handleCoachAction(button:CoachButton){
+  function handleCoachAction(button:CoachButton|string){
     const before=currentDebugActionState();
     if(button==="continue_from_here"){
       const after={...before,coachInteraction:"continue_from_here",showAnswer:false};
@@ -2380,7 +2383,9 @@ export default function App(){
     }
     if(button==="hide"){const after={...before,coachInteraction:"hide"};setCoachHiddenFrameId(String(trainerFrameId));setCoachInteraction("hide");recordDebugAction({action:button,normalizedAction:"hide",before,after,result:"handled"});return;}
     if(button==="hint"){const after={...before,hintShown:true,coachInteraction:"hint"};setCoachHintRequestCount((count)=>count+1);setCoachInteraction("hint");recordDebugAction({action:button,normalizedAction:"hint",before,after,result:"handled"});return;}
+    if((button as any)==="hide_more"){const after={...before,coachInteraction:"hide",showMoreShown:false};setShowMoreShown(false);setCoachInteraction("hide");recordDebugAction({action:String(button),normalizedAction:"hide_more",before,after,result:"handled"});return;}
     if(button==="show_more" || (button as any)==="show_more"){const after={...before,showMoreShown:true,coachInteraction:"show_plan"};setShowMoreShown(true);setCoachInteraction("show_plan");recordDebugAction({action:button,normalizedAction:"show_more",before,after,result:"handled",reason:"plain_show_more_escalation_to_full_content"});return;}
+    if((button as any)==="reveal_target"){const after={...before,answerShown:true,showAnswer:true,coachInteraction:"answer"};setCoachInteraction("answer");setCoachReviewMarked(true);setShowAnswer(true);recordDebugAction({action:String(button),normalizedAction:"reveal_target",before,after,result:"handled"});handleReveal();return;}
     if(button==="answer"){const after={...before,answerShown:true,showAnswer:true,coachInteraction:"answer"};setCoachInteraction("answer");setCoachReviewMarked(true);recordDebugAction({action:button,normalizedAction:"answer",before,after,result:"handled"});handleReveal();return;}
     if(button==="why"){const after={...before,coachInteraction:"why"};setCoachInteraction("why");recordDebugAction({action:button,normalizedAction:"why",before,after,result:"handled"});return;}
     if(button==="show_plan"){const after={...before,coachInteraction:"show_plan"};setCoachInteraction("show_plan");recordDebugAction({action:button,normalizedAction:"show_plan",before,after,result:"handled"});return;}
@@ -2419,8 +2424,9 @@ export default function App(){
   // v2.7.40 P0 Fix 2: on active teaching frames (CurrentInstructionFrame.target present + ready user turn), surface is sole visible owner.
   // Pass no legacyCoachDecision (even for debug detect) so surface.legacyBypassDetected=false and noLegacyBypass=true.
   const isActiveTeachingFrame = Boolean(instructionTarget) && trainerPhase === "ready_for_user" && isUserTurn;
+  const v28VisibleSurfaceEnabled = isV28VisibleSurfaceEnabled();
 
-  const visibleTeachingSurface = buildVisibleTeachingSurface({
+  const legacyVisibleTeachingSurface = buildVisibleTeachingSurface({
     currentInstructionFrame,
     trainerPresentationFrame: presentationFrame as any, // v2.7.40: compute shape vs interface drift (pre-existing); surface tolerates
     legacyCoachDecision: isActiveTeachingFrame ? null : (coachDecision ?? rawCoachDecision ?? (liveCoachState as any)?.coach ?? null),
@@ -2442,6 +2448,81 @@ export default function App(){
     showMoreTargetUci: intendedShowMoreTargetUci,
     coachPieceType: intendedCoachPieceType,
   });
+
+  const v28VisibleSurface = (v28VisibleSurfaceEnabled && currentInstructionFrame) ? buildLiveVisibleTeachingSurface({
+    frame: currentInstructionFrame as any,
+    requestedMode: trainerView as "assisted" | "plain",
+    showMoreRevealed: showMoreShown,
+    moveSequence: moveHistory,
+    openingKey: selectedRepertoireId || undefined,
+    openingName: repertoire.name || undefined,
+    lineKey: selectedRepertoireId || undefined,
+    lineName: repertoire.name || undefined,
+    expectedMoveReason: expectedMoveResolution?.reason,
+    themeTags: [],
+    branchComplete: Boolean(bookComplete && !instructionTarget),
+    endOfBook: Boolean(bookComplete),
+    continuationEligible: trainingMode === "continuation",
+  }) : null;
+
+  const v28CoachUiModel = v28VisibleSurface ? adaptVisibleSurfaceToCoachUi(v28VisibleSurface) : null;
+  const v28BoardVisualUiModel = v28VisibleSurface ? adaptVisibleSurfaceToBoardVisuals(v28VisibleSurface) : null;
+  const v28ActionKinds = v28CoachUiModel?.actions.map((action) => action.kind) ?? [];
+  const v28VisualLines: ActiveLine[] = (v28BoardVisualUiModel?.visualRecipes ?? [])
+    .filter((visual) => Boolean(visual.from && visual.to))
+    .map((visual) => ({
+      from: visual.from as string,
+      to: visual.to as string,
+      kind: "plan" as const,
+      label: visual.type,
+    }));
+
+  const visibleTeachingSurface = v28VisibleSurface ? {
+    owner: "v28_visible_surface",
+    isBrainTeachingFrame: isActiveTeachingFrame,
+    targetUci: v28VisibleSurface.targetUci,
+    targetSan: v28VisibleSurface.targetSan,
+    targetPieceType: v28VisibleSurface.pieceType,
+    coach: {
+      shouldRender: Boolean(v28CoachUiModel),
+      title: v28CoachUiModel?.title ?? null,
+      body: v28CoachUiModel?.body ?? null,
+      suppressedReason: v28VisibleSurface.mode === "blocked" ? "blocked_surface" : null,
+    },
+    hint: {
+      text: null,
+      suppressed: true,
+    },
+    showMore: {
+      shown: showMoreShown,
+      content: showMoreShown ? (v28CoachUiModel?.body ?? null) : null,
+      actionAvailable: v28ActionKinds.includes("show_more"),
+    },
+    visual: {
+      shouldRender: v28VisualLines.length > 0,
+      lines: v28VisualLines,
+      highlights: [],
+      source: "visible_surface_v28",
+      blockedReason: v28VisualLines.length > 0 ? null : "no_surface_visuals",
+    },
+    actions: v28ActionKinds,
+    safety: {
+      blocked: !v28VisibleSurface.safety.allowed,
+      reason: v28VisibleSurface.safety.criticalIssues[0] ?? null,
+      targetMismatch: v28VisibleSurface.safety.criticalIssues.includes("target_mismatch"),
+      pieceMismatch: v28VisibleSurface.safety.criticalIssues.includes("piece_mismatch"),
+      legacyBypassDetected: false,
+      plainLeakDetected: v28VisibleSurface.safety.criticalIssues.includes("plain_leak"),
+    },
+    debug: {
+      visibleCoachOwner: "visible_surface_v28",
+      visibleVisualOwner: "visible_surface_v28",
+      visibleActionOwner: "visible_surface_v28",
+      plainLeakDetected: v28VisibleSurface.safety.criticalIssues.includes("plain_leak"),
+      fourTargetMismatch: false,
+      twoPieceTypeMismatch: false,
+    },
+  } as any : legacyVisibleTeachingSurface;
 
   // v2.7.41 Clean Convergence: Emergency legal fallback must never be presented as normal coached teaching.
   // If the current continuation candidate came from pure legal fallback (no trusted source), force neutral non-lesson messaging
@@ -3494,13 +3575,16 @@ export default function App(){
   const surfaceVisualLines = (visibleTeachingSurface?.visual?.shouldRender ? (visibleTeachingSurface.visual.lines as ActiveLine[]) : null);
   const rawBoardLines:ActiveLine[]= surfaceVisualLines ?? (presentationFrame.visual.shouldRender&&!staleCanSuppressVisual?(presentationFrame.visual.lines as ActiveLine[]):[]);
   const boardLinesToRender:ActiveLine[]=useMemo(()=>{
+    if(v28VisibleSurface){
+      return rawBoardLines;
+    }
     if(!instructionTarget?.uci)return[];
     const expectedFrom=instructionTarget.from;
     const expectedTo=instructionTarget.to;
     const matching=rawBoardLines.find((line)=>line.from===expectedFrom&&line.to===expectedTo);
     const primary=matching??{from:expectedFrom,to:expectedTo,kind:"plan" as const,label:instructionTarget.san};
     return [primary];
-  },[instructionTarget?.uci,instructionTarget?.from,instructionTarget?.to,instructionTarget?.san,rawBoardLines]);
+  },[v28VisibleSurface,instructionTarget?.uci,instructionTarget?.from,instructionTarget?.to,instructionTarget?.san,rawBoardLines]);
   if(!instructionTarget?.uci){
     for(const square of Object.keys(squareStyles))delete squareStyles[square];
   }else if(trainerPhase==="ready_for_user"&&isUserTurn){
@@ -3763,9 +3847,10 @@ export default function App(){
           key={`${trainerFrameId}:surface:${convergedVisibleSurface.targetUci ?? "no-target"}`}
           decision={{
             shouldShowCoachCard: true,
-            title: convergedVisibleSurface.coach.title ?? "Training move",
-            body: convergedVisibleSurface.coach.body ?? convergedVisibleSurface.hint.text ?? "",
-            buttons: convergedVisibleSurface.actions as any,
+            title: v28CoachUiModel?.title ?? convergedVisibleSurface.coach.title ?? "Training move",
+            body: v28CoachUiModel?.body ?? convergedVisibleSurface.coach.body ?? convergedVisibleSurface.hint.text ?? "",
+            bullets: v28CoachUiModel?.bullets ?? [],
+            buttons: (v28CoachUiModel?.actions.map((action)=>action.kind) ?? convergedVisibleSurface.actions) as any,
             utteranceId: "surface",
             mode: "supported_continuation",
             action: "show_plan",
@@ -3778,6 +3863,7 @@ export default function App(){
           } as any}
           onAction={handleCoachAction}
           replayEnabled={visualRecipePlayback.replayAvailable && trainerView !== "plain"}
+          surfaceActions={v28CoachUiModel?.actions}
         />
       )}
       {showDetails&&visualRecipe&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Visual Recipe</div><div className="mt-2">visualRecipeId: {visualRecipe.visualRecipeId}</div><div>recipeSchemaVersion: {visualRecipe.recipeSchemaVersion}</div><div>patternId: {visualRecipe.patternId}</div><div>recipeMode: {visualRecipe.mode}</div><div>recipeConceptId: {visualRecipe.conceptId}</div><div>recipeFrameId: {visualRecipe.frameId??"n/a"}</div><div>recipeFen: {visualRecipe.fen}</div><div>recipeBeatCount: {visualRecipe.beats.length}</div><div>recipePrimitiveCount: {visualRecipe.beats.reduce((sum,beat)=>sum+beat.primitives.length,0)}</div><div>recipePrimitives: {visualRecipe.beats.flatMap((beat)=>beat.primitives.map((primitive)=>`${primitive.type}:${primitive.id}`)).join(", ")||"none"}</div><div>recipePermissions: {JSON.stringify(visualRecipe.permissions)}</div><div>recipeLearningAnchor: {JSON.stringify(visualRecipe.learningAnchor)}</div><div>recipeSuppressedReason: {visualRecipe.debug?.recipeSuppressedReason??"none"}</div><div>recipeLanes: {visualRecipe.debug?.recipeLanes?.join(", ")||"none"}</div><div>recipeEffectFamilies: {visualRecipe.debug?.recipeEffectFamilies?.join(", ")||"none"}</div><div>recipePrioritySummary: {visualRecipe.debug?.recipePrioritySummary??"none"}</div><div>recipeTimingProfile: {visualRecipe.debug?.recipeTimingProfile?JSON.stringify(visualRecipe.debug.recipeTimingProfile):"n/a"}</div><div>recipeOpacityPolicy: {visualRecipe.debug?.recipeOpacityPolicy?JSON.stringify(visualRecipe.debug.recipeOpacityPolicy):"n/a"}</div><div>suppressedByPriority: {visualRecipe.debug?.suppressedByPriority?.join(", ")||"none"}</div><div>suppressedByBudget: {visualRecipe.debug?.suppressedByBudget?.join(", ")||"none"}</div><div>tacticalPrimitivesPresent: {visualRecipe.debug?.tacticalPrimitivesPresent?"true":"false"}</div><div>tacticalPrimitivesRendered: {visualRecipeOverlay.tacticalPrimitivesRendered?"true":"false"}</div><div>schemaSerializable: {visualRecipe.debug?.schemaSerializable?"true":"false"}</div><div>adapterAllowed: {visualRecipeOverlay.adapterAllowed?"true":"false"}</div><div>adapterSuppressedReason: {visualRecipeOverlay.adapterSuppressedReason??"none"}</div><div>recipeFenRaw: {visualRecipeOverlay.recipeFenRaw??"n/a"}</div><div>boardFenRaw: {visualRecipeOverlay.boardFenRaw}</div><div>recipeFenNormalized: {visualRecipeOverlay.recipeFenNormalized??"n/a"}</div><div>boardFenNormalized: {visualRecipeOverlay.boardFenNormalized??"n/a"}</div><div>recipeFrameIdRaw: {String(visualRecipeOverlay.recipeFrameIdRaw??"n/a")}</div><div>boardFrameIdRaw: {String(visualRecipeOverlay.boardFrameIdRaw)}</div><div>recipeFrameMatchesBoard: {visualRecipeOverlay.recipeFrameMatchesBoard?"true":"false"}</div><div>recipeFenMatchesBoard: {visualRecipeOverlay.recipeFenMatchesBoard?"true":"false"}</div></div>}

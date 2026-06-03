@@ -5,3 +5,6 @@ export * from "./visualRecipeMapper";
 export * from "./actionPolicyBuilder";
 export * from "./surfaceDebug";
 export * from "./buildVisibleTeachingSurface";
+export * from "./featureFlags";
+export * from "./buildLiveVisibleTeachingSurface";
+export * from "./uiSurfaceAdapter";
