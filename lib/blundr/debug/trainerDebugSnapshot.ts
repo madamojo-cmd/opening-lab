@@ -13,7 +13,29 @@ function bool(value: unknown): boolean {
   return Boolean(value);
 }
 
+function isAllowedNullTargetState(input: any): boolean {
+  const phase = String(input?.trainerPhase ?? "");
+  const visibleSurfaceMode = String(input?.visibleTeachingSurface?.mode ?? "");
+  const visibleSurfaceOwner = String(input?.visibleSurfaceOwner ?? input?.visibleTeachingSurface?.owner ?? "");
+
+  const phaseAllowed =
+    phase === "branch_complete"
+    || phase === "line_complete"
+    || phase === "opponent_replying"
+    || phase === "terminal"
+    || phase === "transitioning";
+
+  const surfaceAllowed =
+    visibleSurfaceMode === "branch_complete"
+    || visibleSurfaceMode === "opponent_replying"
+    || visibleSurfaceMode === "terminal";
+
+  const ownerAllowed = visibleSurfaceOwner === "v28_visible_surface" && surfaceAllowed;
+  return phaseAllowed || surfaceAllowed || ownerAllowed;
+}
+
 function inferVisualFailure(input: any): string {
+  if (isAllowedNullTargetState(input)) return "not_applicable";
   if (input.presentationFrame?.visual?.shouldRender) return "none";
   if (input.trainerView !== "assisted") return "not_assisted_view";
   if (!input.isUserTurn) return "not_user_turn";
@@ -28,6 +50,7 @@ function inferVisualFailure(input: any): string {
 function inferCoachFailure(input: any): string {
   const body = String(input.coachDecision?.body ?? "");
   const expected = input.expectedMoveSan || input.expectedMoveUci;
+  if (isAllowedNullTargetState(input)) return "none";
   if (!input.coachDecision?.shouldShowCoachCard) return "none";
   if (input.coachDebug?.selectedOpportunityLayer === "fallback" && expected) return "generic_fallback_won";
   if (!expected && input.trainingMode === "restricted") return "expected_move_missing";
@@ -77,12 +100,27 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   const coachDebug = input.coachDecision?.debug ?? {};
   const presentation = input.presentationFrame ?? {};
   const presentationCoach = presentation.coach ?? {};
-  const visibleTitle = presentationCoach.shouldRender ? presentationCoach.title ?? null : input.coachDecision?.shouldShowCoachCard ? input.coachDecision?.title ?? null : null;
-  const visibleBody = presentationCoach.shouldRender ? presentationCoach.body ?? null : input.coachDecision?.shouldShowCoachCard ? input.coachDecision?.body ?? null : null;
+  const v28OwnerActive =
+    String(input.visibleCoachOwner ?? "") === "visible_surface_v28"
+    || String(input.visibleSurfaceOwner ?? "") === "v28_visible_surface"
+    || String(input.visibleTeachingSurface?.owner ?? "") === "v28_visible_surface";
+  const surfaceCoach = input.visibleTeachingSurface?.coach ?? null;
+  const surfaceActionsRaw = Array.isArray(input.visibleTeachingSurface?.actions) ? input.visibleTeachingSurface.actions : [];
+  const surfaceActionKinds = surfaceActionsRaw.map((action: any) => (typeof action === "string" ? action : String(action?.kind ?? ""))).filter(Boolean);
+  const visibleTitle = v28OwnerActive
+    ? (surfaceCoach?.title ?? input.visibleTeachingSurface?.copy?.title ?? null)
+    : (presentationCoach.shouldRender ? presentationCoach.title ?? null : input.coachDecision?.shouldShowCoachCard ? input.coachDecision?.title ?? null : null);
+  const visibleBody = v28OwnerActive
+    ? (surfaceCoach?.body ?? input.visibleTeachingSurface?.copy?.body ?? null)
+    : (presentationCoach.shouldRender ? presentationCoach.body ?? null : input.coachDecision?.shouldShowCoachCard ? input.coachDecision?.body ?? null : null);
   const visibleBodyText = String(visibleBody ?? "");
-  const visibleButtons = presentationCoach.shouldRender ? presentationCoach.buttons ?? [] : input.coachDecision?.shouldShowCoachCard ? input.coachDecision?.buttons ?? [] : [];
-  const visibleCoachOwner = presentationCoach.owner ?? "none";
-  const visibleCoachIntent = presentationCoach.intent ?? input.coachDecision?.debug?.coachIntent ?? input.coachDecision?.debug?.selectedIntent ?? null;
+  const visibleButtons = v28OwnerActive
+    ? surfaceActionKinds
+    : (presentationCoach.shouldRender ? presentationCoach.buttons ?? [] : input.coachDecision?.shouldShowCoachCard ? input.coachDecision?.buttons ?? [] : []);
+  const visibleCoachOwner = v28OwnerActive ? "visible_surface_v28" : (presentationCoach.owner ?? "none");
+  const visibleCoachIntent = v28OwnerActive
+    ? (input.visibleTeachingSurface?.mode ?? presentationCoach.intent ?? input.coachDecision?.debug?.coachIntent ?? input.coachDecision?.debug?.selectedIntent ?? null)
+    : (presentationCoach.intent ?? input.coachDecision?.debug?.coachIntent ?? input.coachDecision?.debug?.selectedIntent ?? null);
   const visualFailureKind = inferVisualFailure(input);
   const coachFailureKind = inferCoachFailure({ ...input, coachDebug });
   const continuationLinesPassedToBoard = input.trainingMode === "continuation" ? len(input.boardLines) : 0;
@@ -354,7 +392,9 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       criticalIssues.push("recent_repeated_generic_coach_copy");
     }
   }
-  if (presentationCoach.shouldRender && visibleCoachIntent === "silent") criticalIssues.push("visible_coach_with_silent_intent");
+  if ((presentationCoach.shouldRender || v28OwnerActive) && visibleCoachIntent === "silent" && !isAllowedNullTargetState(input)) {
+    criticalIssues.push("visible_coach_with_silent_intent");
+  }
   if (input.trainingMode === "continuation" && input.selectedCandidateUci && visibleTitle === "Position context" && !branchTransitionSurfaceRendered) criticalIssues.push("generic_context_rendered_with_candidate");
   if (input.trainingMode === "continuation" && input.selectedCandidateUci && presentationCoach.shouldRender && visibleCoachOwner !== "branch_transition_surface" && !coachDebug.selectedOpportunityId && !coachDebug.selectedTemplateId && !coachDebug.mappingTemplateId && !coachDebug.candidateCoachFallbackUsed) criticalIssues.push("visible_coach_missing_template_and_opportunity");
   if (input.staleSelectedCandidateDetected) criticalIssues.push("stale_selected_candidate");
@@ -366,7 +406,7 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   if (Array.isArray(input.runtimeCriticalIssues)) {
     for (const issue of input.runtimeCriticalIssues.map(String)) criticalIssues.push(issue);
   }
-  if (visualFailureKind !== "none") warnings.push(`visualFailureKind:${visualFailureKind}`);
+  if (visualFailureKind !== "none" && visualFailureKind !== "not_applicable") warnings.push(`visualFailureKind:${visualFailureKind}`);
   if (coachFailureKind !== "none") warnings.push(`coachFailureKind:${coachFailureKind}`);
   if (input.memoryMigratedOrCleared) warnings.push("memory_migrated_or_cleared");
   // v2.7.39.1: only warn about missing deep pipelines on actual teaching frames that have (or expect) an instruction target.

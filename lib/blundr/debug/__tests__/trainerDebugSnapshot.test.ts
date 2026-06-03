@@ -93,6 +93,43 @@ export function testTrainerDebugSnapshot(): void {
   assert.equal(unresolvedWithTransition.coach.visibleTitle, "Line complete");
   assert.deepEqual(unresolvedWithTransition.coach.visibleButtons, ["continue_from_here","restart_line"]);
 
+  const branchCompleteV28 = buildTrainerDebugSnapshot({
+    debugEnabled: true,
+    trainerFrameId: 10,
+    trainerPhase: "branch_complete",
+    trainerView: "assisted",
+    trainingMode: "restricted",
+    isUserTurn: true,
+    fen: "8/8/8/8/8/8/8/4K3 w - - 0 1",
+    expectedMoveSan: null,
+    expectedMoveUci: null,
+    instructionTargetUci: null,
+    visibleSurfaceOwner: "v28_visible_surface",
+    visibleCoachOwner: "visible_surface_v28",
+    visibleVisualOwner: "visible_surface_v28",
+    visibleActionOwner: "visible_surface_v28",
+    visibleTeachingSurface: {
+      owner: "v28_visible_surface",
+      mode: "branch_complete",
+      coach: {
+        shouldRender: true,
+        title: "Line complete",
+        body: "You finished this training line. Continue from this position or train the line again.",
+      },
+      actions: [{ kind: "continue_from_here" }],
+    },
+    presentationFrame: { visual: { shouldRender: false, source: "none" }, coach: { shouldRender: false, owner: "branch_transition_surface", intent: "silent" }, legacy: {} },
+    eventLog: [],
+  } as any);
+  assert.equal(branchCompleteV28.health.criticalIssues.includes("visible_coach_with_silent_intent"), false);
+  assert.equal(branchCompleteV28.health.warnings.includes("visualFailureKind:no_recipe"), false);
+  assert.equal(branchCompleteV28.health.warnings.includes("coachFailureKind:expected_move_missing"), false);
+  assert.equal((branchCompleteV28.visual as any).visualFailureKind, "not_applicable");
+  assert.equal((branchCompleteV28.coach as any).coachFailureKind, "none");
+  assert.equal((branchCompleteV28.coach as any).visibleTitle, "Line complete");
+  assert.equal((branchCompleteV28.coach as any).visibleBody, "You finished this training line. Continue from this position or train the line again.");
+  assert.deepEqual((branchCompleteV28.coach as any).visibleButtons, ["continue_from_here"]);
+
   const continuationHealthy = buildTrainerDebugSnapshot({
     debugEnabled: true,
     trainerFrameId: 11,

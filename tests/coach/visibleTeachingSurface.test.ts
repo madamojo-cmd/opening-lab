@@ -113,7 +113,12 @@ export function testVisibleTeachingSurface(): void {
   const branch = buildSurfacePack({ frame: branchFrame, requestedMode: "assisted", showMoreRevealed: false });
   assert.equal(branch.surface.mode, "branch_complete");
   assert.equal(branch.surface.targetUci, null);
+  assert.equal(branch.surface.copy.title, "Line complete");
+  assert.equal(branch.surface.copy.body, "You finished this training line. Continue from this position or train the line again.");
+  assert.equal(branch.surface.copy.title.includes("Safety Fallback"), false);
+  assert.equal(branch.surface.copy.body.includes("Think about the safest improving move here."), false);
   assert.equal(branch.surface.actions.some((action) => action.kind === "continue_from_here"), true);
+  assert.equal(branch.surface.actions.some((action) => action.kind === "reveal_target"), false);
   assert.equal(branch.surface.visuals.some((visual) => visual.type === "move_arrow"), false);
 
   const opponentFrame = buildCurrentInstructionFrame({

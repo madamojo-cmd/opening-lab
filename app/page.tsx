@@ -1154,45 +1154,37 @@ export default function App(){
     // 3. isInstructionLoading (no trusted target yet + actually resolving) → Thinking...
     // 4. safe neutral
     if (!game.isGameOver() && game.moves().length>0 && isUserTurn&&forceContinuationPause&&!userExplicitlyEnteredContinuation) {
-      return {
-        frameKey: "continuation-pause",
-        kind: "branch_transition",
+      return buildCurrentInstructionFrame({
+        kind: "branch_complete",
+        fenBefore: fen,
+        ply: game.history().length,
+        sideToMove: game.turn() === "w" ? "white" : "black",
         target: null,
-        instructionTarget: null,
-        expectedMoveUci: null,
-        expectedMoveSan: null,
-        selectedContinuationCandidate: null,
-        currentSelectedCandidateUci: null,
-        continuationCandidateReady: false,
-        continueFromHereAvailable: true,
-        continueFromHereButtonRendered: true,
-        branchTransitionSurfaceRendered: true,
-        branchTransitionPayloadValid: true,
-        coachTitle: "Line complete",
-        coachBody: "You finished this training line. Continue from this position or train the line again.",
-        actions: ["continue_from_here","restart_line"],
-      } as any;
+        mode: "blocked",
+        source: "none",
+        branchComplete: {
+          isComplete: true,
+          reason: "continuation_pause_required",
+          continueFromHereAvailable: true,
+        },
+      });
     }
 
     if (!game.isGameOver() && game.moves().length>0 && hardEndOfBookGate && !userExplicitlyEnteredContinuation) {
-      return {
-        frameKey: "end-of-book-transition",
-        kind: "branch_transition",
+      return buildCurrentInstructionFrame({
+        kind: "branch_complete",
+        fenBefore: fen,
+        ply: game.history().length,
+        sideToMove: game.turn() === "w" ? "white" : "black",
         target: null,
-        instructionTarget: null,
-        expectedMoveUci: null,
-        expectedMoveSan: null,
-        selectedContinuationCandidate: null,
-        currentSelectedCandidateUci: null,
-        continuationCandidateReady: false,
-        continueFromHereAvailable: true,
-        continueFromHereButtonRendered: true,
-        branchTransitionSurfaceRendered: true,
-        branchTransitionPayloadValid: true,
-        coachTitle: "Line complete",
-        coachBody: "You finished this training line. Continue from this position or train the line again.",
-        actions: ["continue_from_here","restart_line"],
-      } as any;
+        mode: "blocked",
+        source: "none",
+        branchComplete: {
+          isComplete: true,
+          reason: selectedLineCompleteConfirmed ? "curated_line_complete" : "line_complete",
+          continueFromHereAvailable: true,
+        },
+      });
     }
 
     if (trustedInstructionTargetExists) {
@@ -1201,24 +1193,15 @@ export default function App(){
     }
 
     if (isInstructionLoading) {
-      return {
-        frameKey: "thinking",
-        kind: "thinking",
+      return buildCurrentInstructionFrame({
+        kind: "transitioning",
+        fenBefore: fen,
+        ply: game.history().length,
+        sideToMove: game.turn() === "w" ? "white" : "black",
         target: null,
-        instructionTarget: null,
-        expectedMoveUci: null,
-        expectedMoveSan: null,
-        selectedContinuationCandidate: null,
-        currentSelectedCandidateUci: null,
-        continuationCandidateReady: false,
-        continueFromHereAvailable: false,
-        continueFromHereButtonRendered: false,
-        branchTransitionSurfaceRendered: false,
-        branchTransitionPayloadValid: false,
-        coachTitle: "Thinking...",
-        coachBody: "Finding the next teaching moment.",
-        actions: [],
-      } as any;
+        mode: "blocked",
+        source: "none",
+      });
     }
 
     const thisFrameKey = computeInstructionFrameKey({
@@ -2460,7 +2443,7 @@ export default function App(){
     lineName: repertoire.name || undefined,
     expectedMoveReason: expectedMoveResolution?.reason,
     themeTags: [],
-    branchComplete: Boolean(bookComplete && !instructionTarget),
+    branchComplete: currentInstructionFrame?.kind === "branch_complete",
     endOfBook: Boolean(bookComplete),
     continuationEligible: trainingMode === "continuation",
   }) : null;
@@ -2479,6 +2462,12 @@ export default function App(){
 
   const visibleTeachingSurface = v28VisibleSurface ? {
     owner: "v28_visible_surface",
+    mode: v28VisibleSurface.mode,
+    copy: {
+      title: v28CoachUiModel?.title ?? null,
+      body: v28CoachUiModel?.body ?? null,
+      bullets: v28CoachUiModel?.bullets ?? [],
+    },
     isBrainTeachingFrame: isActiveTeachingFrame,
     targetUci: v28VisibleSurface.targetUci,
     targetSan: v28VisibleSurface.targetSan,

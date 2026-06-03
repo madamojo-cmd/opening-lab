@@ -90,6 +90,7 @@ export function testLiveChainSmoke(): void {
   assert.equal(e4.gated.result.allowed, true);
   assert.equal(e4.gated.safeFrame.targetUci, "e2e4");
   assert.equal(e4.surface.targetUci, "e2e4");
+  assert.equal(e4.surface.copy.title.includes("Safety Fallback"), false);
 
   // 2) Italian Nf3
   const nf3Frame = buildTargetFrame({
@@ -103,6 +104,7 @@ export function testLiveChainSmoke(): void {
   assert.equal(nf3.concepts.activated.some((c) => c.conceptId === "bishop_development"), false);
   assert.equal(hasLeak(nf3.compiled.plain.body, ["Nf3", "g1", "f3", "knight"]), false);
   assert.equal(nf3.gated.result.allowed, true);
+  assert.equal(nf3.surface.copy.title.includes("Safety Fallback"), false);
 
   // 3) Italian Bc4
   const bc4Frame = buildTargetFrame({
@@ -123,6 +125,7 @@ export function testLiveChainSmoke(): void {
   assert.equal(hasLeak(bc4.compiled.plain.body, ["Bc4", "f1c4", "f1", "c4", "bishop"]), false);
   assert.equal(bc4.gated.result.allowed, true);
   assert.equal(bc4.surface.actions.some((action) => action.kind === "reveal_target" && action.targetUci === "f1c4"), true);
+  assert.equal(bc4.surface.copy.title.includes("Safety Fallback"), false);
 
   // 4) Castling O-O
   const castleFrame = buildTargetFrame({
@@ -153,6 +156,8 @@ export function testLiveChainSmoke(): void {
   assert.equal(branch.compiled.visualIntents.some((v) => v.type === "move_arrow"), false);
   assert.equal(branch.gated.result.allowed, true);
   assert.equal(branch.surface.mode, "branch_complete");
+  assert.equal(branch.surface.copy.title, "Line complete");
+  assert.equal(branch.surface.copy.body, "You finished this training line. Continue from this position or train the line again.");
   assert.equal(branch.surface.actions.some((action) => action.kind === "continue_from_here"), true);
 
   // 6) Opponent replying

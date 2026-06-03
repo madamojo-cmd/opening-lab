@@ -18,6 +18,8 @@ export const browserContract = {
     safetyGateBlocksMismatches: "SafetyGate must block target/reveal/visual mismatches before UI rendering.",
     visibleSurfaceSafeFrameOnly: "VisibleTeachingSurface must be built from SafetyGateOutput.safeFrame only.",
     uiConsumesVisibleSurface: "When v2.8 flag is enabled, UI consumes coach/actions/visuals from VisibleTeachingSurface adapters.",
+    branchCompleteNoSafetyFallback: "Valid branch_complete must render line-complete copy and must not render Safety Fallback.",
+    branchCompleteDiagnosticPass: "Valid branch_complete diagnostics treat no_recipe and expected_move_missing as pass/not_applicable.",
   },
 };
 
@@ -27,7 +29,7 @@ export function testBrowserContract(): void {
   assert.equal(typeof browserContract.selectors.visualArrowByUci("f1c4"), "string");
 
   const assertionTexts = Object.values(browserContract.assertions);
-  assert.equal(assertionTexts.length >= 7, true);
+  assert.equal(assertionTexts.length >= 9, true);
   for (const text of assertionTexts) {
     assert.equal(typeof text, "string");
     assert.equal(text.trim().length > 0, true);

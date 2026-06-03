@@ -34,9 +34,9 @@ export function buildSurfaceCopy(input: {
 
   if (mode === "branch_complete") {
     return toVisibleCopy("fallback", {
-      title: safeFrame.assisted.title || "Branch Complete",
-      body: safeFrame.assisted.body || "You can continue from here when ready.",
-      bullets: safeFrame.assisted.bullets,
+      title: "Line complete",
+      body: "You finished this training line. Continue from this position or train the line again.",
+      bullets: [],
       leakRisk: "none",
     });
   }

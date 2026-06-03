@@ -114,7 +114,12 @@ export function testUiSurfaceAdapter(): void {
   const branchCoach = adaptVisibleSurfaceToCoachUi(branchSurface);
   const branchBoard = adaptVisibleSurfaceToBoardVisuals(branchSurface);
   assert.equal(branchCoach.targetUci, null);
+  assert.equal(branchCoach.title, "Line complete");
+  assert.equal(branchCoach.body, "You finished this training line. Continue from this position or train the line again.");
+  assert.equal(branchCoach.title.includes("Safety Fallback"), false);
+  assert.equal(branchCoach.body.includes("Think about the safest improving move here."), false);
   assert.equal(branchCoach.actions.some((action) => action.kind === "continue_from_here"), true);
+  assert.equal(branchCoach.actions.some((action) => action.kind === "reveal_target"), false);
   assert.equal(branchBoard.visualRecipes.some((visual) => visual.type === "move_arrow"), false);
 
   const opponentFrame = buildCurrentInstructionFrame({
@@ -164,6 +169,9 @@ export function testUiSurfaceAdapter(): void {
     showMoreRevealed: false,
   });
   assert.equal(Boolean(e4.frameKey && nf3.frameKey && bc4.frameKey && castle.frameKey), true);
+  assert.equal(e4.copy.title.includes("Safety Fallback"), false);
+  assert.equal(nf3.copy.title.includes("Safety Fallback"), false);
+  assert.equal(bc4.copy.title.includes("Safety Fallback"), false);
 
   const graph = buildEvidenceGraph({ frame: bc4Frame });
   const concepts = activateTeachingConcepts({ graph, mode: "assisted", maxConcepts: 20 });

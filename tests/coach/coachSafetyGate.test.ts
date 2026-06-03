@@ -227,6 +227,9 @@ export function testCoachSafetyGate(): void {
   const branchCompiled = compileCoachFrame({ frame: branchComplete, graph: branchGraph, activatedConcepts: [] });
   const branchPass = runCoachSafetyGate({ frame: branchComplete, graph: branchGraph, compiled: branchCompiled });
   assert.equal(branchPass.result.allowed, true);
+  assert.equal(branchPass.originalFrameBlocked, false);
+  assert.equal(branchPass.safeFrame.plain.title.includes("Safety Fallback"), false);
+  assert.equal(branchPass.safeFrame.revealAction.kind, "continue_from_here");
 
   const branchRevealBad = runCoachSafetyGate({
     frame: branchComplete,
