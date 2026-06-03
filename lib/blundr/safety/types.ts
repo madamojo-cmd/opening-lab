@@ -1,22 +1,49 @@
+import type { CompiledCoachFrame } from "../coachCompiler/types";
+
+export type CoachSafetyIssueSeverity =
+  | "info"
+  | "warning"
+  | "critical";
+
 export type CoachSafetyIssueCode =
-  | "type_target_mismatch"
-  | "type_piece_mismatch"
-  | "type_reveal_mismatch"
-  | "type_visual_mismatch"
-  | "type_show_more_mismatch"
-  | "type_plain_leak"
-  | "type_claim_without_evidence"
-  | "type_legacy_bypass"
-  | "type_stale_frame"
-  | "type_illegal_target"
-  | "type_unsafe_copy"
-  | "type_provider_authority_violation";
+  | "target_mismatch"
+  | "piece_mismatch"
+  | "reveal_mismatch"
+  | "visual_mismatch"
+  | "show_more_mismatch"
+  | "assisted_show_more_mismatch"
+  | "plain_leak"
+  | "claim_without_evidence"
+  | "unsupported_strong_claim"
+  | "legacy_bypass"
+  | "stale_frame"
+  | "illegal_target"
+  | "unsafe_copy"
+  | "provider_authority_violation"
+  | "null_target_move_coaching"
+  | "null_target_visual"
+  | "null_target_reveal"
+  | "graph_target_mismatch"
+  | "compiler_target_mismatch";
 
 export interface CoachSafetyIssue {
   code: CoachSafetyIssueCode;
-  severity: "info" | "warning" | "critical";
+  severity: CoachSafetyIssueSeverity;
   message: string;
-  details?: Record<string, unknown>;
+  surface:
+    | "frame"
+    | "graph"
+    | "compiled"
+    | "plain"
+    | "assisted"
+    | "show_more"
+    | "visual"
+    | "reveal"
+    | "provider"
+    | "legacy"
+    | "unknown";
+  expected?: string | null;
+  actual?: string | null;
 }
 
 export interface CoachSafetyResult {
@@ -25,4 +52,10 @@ export interface CoachSafetyResult {
   criticalIssues: CoachSafetyIssue[];
   blockedReasons: string[];
   warningReasons: string[];
+}
+
+export interface SafetyGateOutput {
+  result: CoachSafetyResult;
+  safeFrame: CompiledCoachFrame;
+  originalFrameBlocked: boolean;
 }

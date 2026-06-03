@@ -4,6 +4,7 @@ import { compileCoachFrame } from "../../lib/blundr/coachCompiler/compileCoachFr
 import { activateTeachingConcepts } from "../../lib/blundr/concepts/dynamicConceptActivator";
 import { buildCurrentInstructionFrame } from "../../lib/blundr/runtime/currentInstructionFrame";
 import { lockInstructionTarget } from "../../lib/blundr/runtime/instructionFrameLock";
+import { runCoachSafetyGate } from "../../lib/blundr/safety/coachSafetyGate";
 
 const STRONG_TERMS = [
   "best",
@@ -70,6 +71,17 @@ export function testAntiHallucination(): void {
   const compiledText = `${compiled.assisted.body} ${compiled.showMore.body}`.toLowerCase();
   assert.equal(compiledText.includes("wins material"), false);
   assert.equal(compiledText.includes("best move"), false);
+
+  const strongClaimCompiled = {
+    ...compiled,
+    assisted: { ...compiled.assisted, body: "This is the best move and wins material." },
+  };
+  const gate = runCoachSafetyGate({ frame, graph, compiled: strongClaimCompiled, activatedConcepts: concepts.activated });
+  assert.equal(gate.result.allowed, false);
+  assert.equal(
+    gate.result.criticalIssues.some((issue) => issue.code === "unsupported_strong_claim" || issue.code === "claim_without_evidence"),
+    true,
+  );
 }
 
 testAntiHallucination();

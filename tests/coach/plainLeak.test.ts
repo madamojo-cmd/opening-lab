@@ -5,6 +5,7 @@ import { activateTeachingConcepts } from "../../lib/blundr/concepts/dynamicConce
 import { teachingConceptRegistry } from "../../lib/blundr/concepts/teachingConceptRegistry";
 import { buildCurrentInstructionFrame } from "../../lib/blundr/runtime/currentInstructionFrame";
 import { lockInstructionTarget } from "../../lib/blundr/runtime/instructionFrameLock";
+import { runCoachSafetyGate } from "../../lib/blundr/safety/coachSafetyGate";
 
 function containsForbiddenLeak(text: string, forbiddenTerms: string[]): boolean {
   const lower = text.toLowerCase();
@@ -60,6 +61,17 @@ export function testPlainLeak(): void {
   assert.equal(compiledPlain.includes("f1"), false);
   assert.equal(compiledPlain.includes("c4"), false);
   assert.equal(compiledPlain.includes("bishop"), false);
+
+  const gatePass = runCoachSafetyGate({ frame, graph, compiled, activatedConcepts: assistedConcepts.activated });
+  assert.equal(gatePass.result.allowed, true);
+
+  const leaked = {
+    ...compiled,
+    plain: { ...compiled.plain, body: "Play Bc4 by moving the bishop from f1 to c4." },
+  };
+  const gateLeak = runCoachSafetyGate({ frame, graph, compiled: leaked, activatedConcepts: assistedConcepts.activated });
+  assert.equal(gateLeak.result.allowed, false);
+  assert.equal(gateLeak.result.criticalIssues.some((i) => i.code === "plain_leak"), true);
 }
 
 testPlainLeak();

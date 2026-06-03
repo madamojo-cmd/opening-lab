@@ -5,7 +5,10 @@ import { createMockStockfishTop10GateResult } from "../../lib/blundr/engine/mock
 import { createMockMaiaContinuationContext } from "../../lib/blundr/maia/mockMaiaProvider";
 import type { OpeningKnowledgeContext } from "../../lib/blundr/knowledge/openingKnowledgeTypes";
 import { buildEvidenceGraph } from "../../lib/blundr/brain/buildEvidenceGraph";
+import { compileCoachFrame } from "../../lib/blundr/coachCompiler/compileCoachFrame";
+import { runCoachSafetyGate } from "../../lib/blundr/safety/coachSafetyGate";
 import { buildCurrentInstructionFrame } from "../../lib/blundr/runtime/currentInstructionFrame";
+import { lockInstructionTarget } from "../../lib/blundr/runtime/instructionFrameLock";
 
 function readJson(path: string): any {
   return JSON.parse(fs.readFileSync(new URL(path, import.meta.url), "utf8"));
@@ -56,6 +59,40 @@ export function testProviderFailure(): void {
   assert.equal(nullGraph.providerStatus.stockfish, "not_applicable");
   assert.equal(nullGraph.providerStatus.maia, "not_applicable");
   assert.equal(nullGraph.providerStatus.opening_knowledge, "not_applicable");
+
+  const guided = buildCurrentInstructionFrame({
+    kind: "guided_move",
+    fenBefore: "r1bqk1nr/pppp1ppp/2n5/2b1p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 4 3",
+    ply: 6,
+    sideToMove: "white",
+    target: lockInstructionTarget({
+      uci: "f1c4",
+      san: "Bc4",
+      pieceType: "bishop",
+      color: "white",
+      source: "opening_tree",
+      reason: "test",
+    }),
+    mode: "guided",
+    source: "opening_tree",
+  });
+  const guidedGraph = buildEvidenceGraph({ frame: guided, openingKey: "italian_game", openingName: "Italian Game" });
+  const compiled = compileCoachFrame({ frame: guided, graph: guidedGraph, activatedConcepts: [] });
+  const providerMismatch = {
+    ...guidedGraph,
+    claims: [
+      ...guidedGraph.claims,
+      {
+        ...guidedGraph.claims[0],
+        id: "provider_mismatch",
+        targetUci: "g1f3",
+        provenance: [{ source: "stockfish", confidence: "high" as const }],
+      },
+    ],
+  };
+  const gate = runCoachSafetyGate({ frame: guided, graph: providerMismatch, compiled });
+  assert.equal(gate.result.allowed, false);
+  assert.equal(gate.result.criticalIssues.some((i) => i.code === "provider_authority_violation"), true);
 }
 
 testProviderFailure();

@@ -5,6 +5,7 @@ import { compileCoachFrame } from "../../lib/blundr/coachCompiler/compileCoachFr
 import { activateTeachingConcepts } from "../../lib/blundr/concepts/dynamicConceptActivator";
 import { buildCurrentInstructionFrame } from "../../lib/blundr/runtime/currentInstructionFrame";
 import { createTargetMismatchIssue, lockInstructionTarget } from "../../lib/blundr/runtime/instructionFrameLock";
+import { runCoachSafetyGate } from "../../lib/blundr/safety/coachSafetyGate";
 
 export function testTargetInvariant(): void {
   const frame = buildCurrentInstructionFrame({
@@ -32,6 +33,8 @@ export function testTargetInvariant(): void {
   assert.equal(compiled.revealAction.targetUci, frame.target?.uci ?? null);
   assert.equal(compiled.visualIntents.every((intent) => intent.targetUci === frame.target?.uci), true);
   assert.equal(compiled.showMore.body.toLowerCase().includes("bc4"), true);
+  const safety = runCoachSafetyGate({ frame, graph, compiled, activatedConcepts: concepts.activated });
+  assert.equal(safety.result.allowed, true);
 
   const mismatch = createTargetMismatchIssue({ expected: "f1c4", actual: "g1f3", surface: "showMore" });
   assert.equal(mismatch.code, "target_source_ambiguous");

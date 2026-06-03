@@ -5,6 +5,7 @@ import { compileCoachFrame } from "../../lib/blundr/coachCompiler/compileCoachFr
 import { activateTeachingConcepts } from "../../lib/blundr/concepts/dynamicConceptActivator";
 import { buildCurrentInstructionFrame } from "../../lib/blundr/runtime/currentInstructionFrame";
 import { lockInstructionTarget } from "../../lib/blundr/runtime/instructionFrameLock";
+import { runCoachSafetyGate } from "../../lib/blundr/safety/coachSafetyGate";
 
 export function testShowMoreVisualReveal(): void {
   const frame = buildCurrentInstructionFrame({
@@ -30,6 +31,8 @@ export function testShowMoreVisualReveal(): void {
   assert.equal(compiled.revealAction.targetUci, frame.target?.uci ?? null);
   assert.equal(compiled.visualIntents.every((intent) => intent.targetUci === frame.target?.uci), true);
   assert.equal(compiled.visualIntents.every((intent) => intent.displayModes.includes("assisted") && intent.displayModes.includes("show_more")), true);
+  const safety = runCoachSafetyGate({ frame, graph, compiled, activatedConcepts: concepts.activated });
+  assert.equal(safety.result.allowed, true);
 }
 
 testShowMoreVisualReveal();

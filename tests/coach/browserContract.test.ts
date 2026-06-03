@@ -15,6 +15,7 @@ export const browserContract = {
     showMoreRevealsSameTarget: "After Show More, revealed visual target must equal CurrentInstructionFrame.target.",
     continueBeforeCandidate: "Before Continue from Here, continuation candidate target is null and action is visible.",
     providerFailureSafeFallback: "Engine/Maia/opening failures must degrade claims without crashing UI.",
+    safetyGateBlocksMismatches: "SafetyGate must block target/reveal/visual mismatches before UI rendering.",
   },
 };
 
@@ -24,7 +25,7 @@ export function testBrowserContract(): void {
   assert.equal(typeof browserContract.selectors.visualArrowByUci("f1c4"), "string");
 
   const assertionTexts = Object.values(browserContract.assertions);
-  assert.equal(assertionTexts.length >= 4, true);
+  assert.equal(assertionTexts.length >= 5, true);
   for (const text of assertionTexts) {
     assert.equal(typeof text, "string");
     assert.equal(text.trim().length > 0, true);

@@ -5,6 +5,7 @@ import { compileCoachFrame } from "../../lib/blundr/coachCompiler/compileCoachFr
 import { activateTeachingConcepts } from "../../lib/blundr/concepts/dynamicConceptActivator";
 import { buildCurrentInstructionFrame } from "../../lib/blundr/runtime/currentInstructionFrame";
 import { lockInstructionTarget } from "../../lib/blundr/runtime/instructionFrameLock";
+import { runCoachSafetyGate } from "../../lib/blundr/safety/coachSafetyGate";
 
 function makeFrame(input: {
   fen: string;
@@ -148,6 +149,9 @@ export function testCoachCompiler(): void {
   assert.equal(new Set(assistedTargets).size, 1);
   assert.equal(new Set(showTargets).size, 1);
   assert.equal(assistedTargets[0], showTargets[0]);
+
+  const safety = runCoachSafetyGate({ frame: bc4Frame, graph: bc4.graph, compiled: bc4.compiled, activatedConcepts: bc4.concepts.activated });
+  assert.equal(safety.result.allowed, true);
 }
 
 testCoachCompiler();
