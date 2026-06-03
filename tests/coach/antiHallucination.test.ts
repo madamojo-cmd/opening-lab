@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { buildEvidenceGraph } from "../../lib/blundr/brain/buildEvidenceGraph";
+import { activateTeachingConcepts } from "../../lib/blundr/concepts/dynamicConceptActivator";
 import { buildCurrentInstructionFrame } from "../../lib/blundr/runtime/currentInstructionFrame";
 import { lockInstructionTarget } from "../../lib/blundr/runtime/instructionFrameLock";
 
@@ -59,6 +60,10 @@ export function testAntiHallucination(): void {
   assert.equal(textBlob.includes("wins material"), false);
   assert.equal(textBlob.includes("only move"), false);
   assert.equal(textBlob.includes("assisted"), false);
+
+  const concepts = activateTeachingConcepts({ graph, mode: "assisted", maxConcepts: 40 });
+  assert.equal(concepts.activated.some((c) => c.conceptId === "sacrifice_requires_proof"), false);
+  assert.equal(concepts.activated.some((c) => c.conceptId === "mate_threat"), false);
 }
 
 testAntiHallucination();

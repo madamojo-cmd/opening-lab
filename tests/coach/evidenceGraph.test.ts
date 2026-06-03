@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { buildEvidenceGraph } from "../../lib/blundr/brain/buildEvidenceGraph";
+import { activateTeachingConcepts } from "../../lib/blundr/concepts/dynamicConceptActivator";
 import { buildCurrentInstructionFrame } from "../../lib/blundr/runtime/currentInstructionFrame";
 import { lockInstructionTarget } from "../../lib/blundr/runtime/instructionFrameLock";
 
@@ -142,6 +143,14 @@ export function testEvidenceGraph(): void {
 
   assert.equal(illegal.providerStatus.stockfish, "not_applicable");
   assert.equal(illegal.providerStatus.maia, "not_applicable");
+
+  const conceptActivation = activateTeachingConcepts({ graph: bc4, mode: "assisted", maxConcepts: 10 });
+  assert.equal(
+    conceptActivation.activated.every((entry) =>
+      entry.evidenceClaimIds.every((id) => bc4.claims.some((claim) => claim.id === id)),
+    ),
+    true,
+  );
 }
 
 testEvidenceGraph();

@@ -1,4 +1,9 @@
 import assert from "node:assert/strict";
+import { buildEvidenceGraph } from "../../lib/blundr/brain/buildEvidenceGraph";
+import { activateTeachingConcepts } from "../../lib/blundr/concepts/dynamicConceptActivator";
+import { teachingConceptRegistry } from "../../lib/blundr/concepts/teachingConceptRegistry";
+import { buildCurrentInstructionFrame } from "../../lib/blundr/runtime/currentInstructionFrame";
+import { lockInstructionTarget } from "../../lib/blundr/runtime/instructionFrameLock";
 
 function containsForbiddenLeak(text: string, forbiddenTerms: string[]): boolean {
   const lower = text.toLowerCase();
@@ -17,6 +22,34 @@ export function testPlainLeak(): void {
   const forbiddenProviderTerms = ["best", "strongest", "forced", "only move", "checkmate"];
   const safeProviderHint = "This move supports your position and keeps options flexible.";
   assert.equal(containsForbiddenLeak(safeProviderHint, forbiddenProviderTerms), false);
+
+  const highLeakTemplatesAreSafe = teachingConceptRegistry
+    .filter((concept) => concept.plainHintTemplate.leakRisk === "high")
+    .every((concept) => {
+      const low = concept.plainHintTemplate.template.toLowerCase();
+      return !low.includes("{targetsan}") && !low.includes("{targetuci}") && !low.includes("{from}") && !low.includes("{to}");
+    });
+  assert.equal(highLeakTemplatesAreSafe, true);
+
+  const frame = buildCurrentInstructionFrame({
+    kind: "guided_move",
+    fenBefore: "r1bqk1nr/pppp1ppp/2n5/2b1p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 4 3",
+    ply: 6,
+    sideToMove: "white",
+    target: lockInstructionTarget({
+      uci: "f1c4",
+      san: "Bc4",
+      pieceType: "bishop",
+      color: "white",
+      source: "opening_tree",
+      reason: "test",
+    }),
+    mode: "guided",
+    source: "opening_tree",
+  });
+  const graph = buildEvidenceGraph({ frame, openingKey: "italian_game", openingName: "Italian Game" });
+  const plainActivated = activateTeachingConcepts({ graph, mode: "plain", maxConcepts: 40 });
+  assert.equal(plainActivated.activated.some((entry) => entry.conceptId === "show_more_reveal"), false);
 }
 
 testPlainLeak();
