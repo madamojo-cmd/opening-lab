@@ -262,6 +262,8 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   const maiaIllegalCandidateRejected = Boolean(input.maiaIllegalCandidateRejected);
   const maiaSelectedUci = String(input.maiaSelectedUci ?? "").trim();
   const maiaSelectedLegal = input.maiaSelectedLegal;
+  const maiaRuntimeCandidateLegal = input.maiaRuntimeCandidateLegal ?? maiaSelectedLegal;
+  const maiaAppliedMoveUci = String(input.maiaAppliedMoveUci ?? "").trim();
   const maiaSanityGuardResult = String(input.maiaSanityGuardResult ?? "not_run");
   const maiaSanityGuardBlockedReason = String(input.maiaSanityGuardBlockedReason ?? "");
   const badgeVisible = Boolean(input.badgeVisible);
@@ -352,7 +354,7 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   if (maiaIllegalCandidateRejected) warnings.push("maia_runtime_illegal_bestmove");
   if (Boolean(input.maiaRuntimeVisibleErrorLeak)) criticalIssues.push("maia_runtime_visible_error_leak");
   if (maiaStaleResultIgnored && !maiaFallbackUsed) criticalIssues.push("maia_runtime_applied_stale_move");
-  if (maiaSelectedUci && maiaSelectedLegal === false) criticalIssues.push("maia_runtime_applied_illegal_move");
+  if (maiaAppliedMoveUci && maiaRuntimeCandidateLegal === false) criticalIssues.push("maia_runtime_applied_illegal_move");
   if (Boolean(input.maiaTouchedInstructionTarget)) criticalIssues.push("maia_runtime_modified_user_target");
   if (Boolean(input.maiaTouchedBranchComplete)) criticalIssues.push("maia_runtime_modified_branch_complete");
   if (Boolean(input.maiaTouchedRatingBadge)) criticalIssues.push("maia_runtime_modified_rating_badge");
@@ -480,7 +482,7 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
     criticalIssues.push("assisted_view_target_without_visual");
   }
   if (input.trainingMode === "continuation" && input.trainerPhase === "ready_for_user" && input.isUserTurn && input.continuationAnalysisStatus === "ready" && !instructionTargetUci) {
-    if (continuationNullTargetStatusFrame) {
+    if (continuationNullTargetStatusFrame && !input.effectiveContinuationCandidateUci) {
       warnings.push("continuation_ready_without_candidate_transitioning");
     } else {
       criticalIssues.push("continuation_analysis_ready_without_target");
@@ -648,7 +650,7 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   if (input.coachMemoryLegacyDetected && !input.memoryMigratedOrCleared) criticalIssues.push("legacy_memory_not_migrated");
   if (Array.isArray(input.runtimeCriticalIssues)) {
     for (const issue of input.runtimeCriticalIssues.map(String)) {
-      if (issue === "continuation_ready_without_candidate" && continuationNullTargetStatusFrame) {
+      if (issue === "continuation_ready_without_candidate" && continuationNullTargetStatusFrame && !input.effectiveContinuationCandidateUci) {
         warnings.push("continuation_ready_without_candidate_transitioning");
         continue;
       }
@@ -1029,7 +1031,11 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       maiaSelectedHumanLikelihood: input.maiaSelectedHumanLikelihood ?? null,
       maiaSelectedRank: input.maiaSelectedRank ?? null,
       maiaRuntimeCandidateUci: maiaSelectedUci || null,
-      maiaRuntimeCandidateLegal: input.maiaSelectedLegal ?? null,
+      maiaRuntimeCandidateLegal: input.maiaRuntimeCandidateLegal ?? input.maiaSelectedLegal ?? null,
+      maiaAppliedMoveUci: input.maiaAppliedMoveUci ?? null,
+      maiaAppliedMoveSan: input.maiaAppliedMoveSan ?? null,
+      maiaAppliedFromFen4: input.maiaAppliedFromFen4 ?? null,
+      maiaAppliedToFen4: input.maiaAppliedToFen4 ?? null,
       maiaFallbackUsed,
       maiaFallbackReason: maiaFallbackReason || null,
       maiaRuntimeFallbackUsed: maiaFallbackUsed,

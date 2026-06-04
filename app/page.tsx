@@ -67,6 +67,7 @@ import type { MaiaMoveCandidate, MaiaOpponentReplyResult, MaiaProviderStatus, Ma
 import { unavailableMaiaProvider } from "@/lib/blundr/maia/maiaProvider";
 import { MaiaApiClientProvider } from "@/lib/blundr/maia/maiaApiClientProvider";
 import { buildMaiaOpponentReplyDecision, classifyMaiaProviderStatus, evaluateMaiaSanityGuard, resolveMaiaSkillLevel, selectMaiaOpponentReply, withMaiaTimeout } from "@/lib/blundr/maia/maiaOpponentProvider";
+import { applyMaiaMoveOnRequestFen } from "@/lib/blundr/maia/maiaLegalityRequestFenContract";
 import { appendMaiaTimeline, createMaiaTimelineEvent, type MaiaTimelineEvent } from "@/lib/blundr/debug/maiaTimeline";
 import { BlundrDiagnosticsPanel } from "@/components/debug/BlundrDiagnosticsPanel";
 import { collectTrainerDebugSnapshot } from "@/lib/blundr/debug/trainerDebugCollector";
@@ -921,6 +922,12 @@ export default function App(){
   const [maiaOpponentFallbackReason,setMaiaOpponentFallbackReason]=useState<string|null>(null);
   const [maiaOpponentStaleResultIgnored,setMaiaOpponentStaleResultIgnored]=useState(false);
   const [maiaOpponentIllegalCandidateRejected,setMaiaOpponentIllegalCandidateRejected]=useState(false);
+  const [maiaOpponentSelectedLegal,setMaiaOpponentSelectedLegal]=useState<boolean|null>(null);
+  const [maiaOpponentRuntimeCandidateLegal,setMaiaOpponentRuntimeCandidateLegal]=useState<boolean|null>(null);
+  const [maiaOpponentAppliedMoveUci,setMaiaOpponentAppliedMoveUci]=useState<string|null>(null);
+  const [maiaOpponentAppliedMoveSan,setMaiaOpponentAppliedMoveSan]=useState<string|null>(null);
+  const [maiaOpponentAppliedFromFen4,setMaiaOpponentAppliedFromFen4]=useState<string|null>(null);
+  const [maiaOpponentAppliedToFen4,setMaiaOpponentAppliedToFen4]=useState<string|null>(null);
   const [maiaOpponentSanityGuardResult,setMaiaOpponentSanityGuardResult]=useState<string>("not_run");
   const [maiaOpponentSanityGuardBlockedReason,setMaiaOpponentSanityGuardBlockedReason]=useState<string|null>(null);
   const [maiaRuntimeMs,setMaiaRuntimeMs]=useState<number|null>(null);
@@ -1187,6 +1194,13 @@ export default function App(){
   // Step 4 correction: secondary async (visual/brain/lichess/pending) and broad trainerPhase must NOT suppress a valid curated target for restricted user turn.
   // Only treat as loading when there is genuinely no trusted instruction target yet.
   const isInstructionLoading = useMemo(() => {
+    const continuationReadyForSurface =
+      trainingMode === "continuation" &&
+      trainerPhase === "ready_for_user" &&
+      isUserTurn &&
+      userExplicitlyEnteredContinuation &&
+      continuationAnalysisStatus === "ready";
+    if (continuationReadyForSurface) return false;
     if (trustedInstructionTargetExists) return false; // curated target wins; secondary loading may still refine explanation later
     if (trainerPhase !== "ready_for_user") return true;
     if (moveQualityPending || visualModelPending) return true;
@@ -1202,6 +1216,7 @@ export default function App(){
     visualModelPending,
     continuationAnalysisStatus,
     brain.lichess,
+    userExplicitlyEnteredContinuation,
     expectedMoveResolution?.source,
     bookComplete,
     trainingMode,
@@ -3873,6 +3888,12 @@ export default function App(){
     setMaiaOpponentFallbackReason(null);
     setMaiaOpponentStaleResultIgnored(false);
     setMaiaOpponentIllegalCandidateRejected(false);
+    setMaiaOpponentSelectedLegal(null);
+    setMaiaOpponentRuntimeCandidateLegal(null);
+    setMaiaOpponentAppliedMoveUci(null);
+    setMaiaOpponentAppliedMoveSan(null);
+    setMaiaOpponentAppliedFromFen4(null);
+    setMaiaOpponentAppliedToFen4(null);
     setMaiaOpponentSanityGuardResult("not_run");
     setMaiaOpponentSanityGuardBlockedReason(null);
     setMaiaRuntimeMs(null);
@@ -4006,9 +4027,15 @@ export default function App(){
       setMaiaOpponentCandidateCount(0);
       setMaiaOpponentSelectedUci(null);
       setMaiaOpponentSelectedSan(null);
+      setMaiaOpponentSelectedLegal(null);
+      setMaiaOpponentRuntimeCandidateLegal(null);
       setMaiaOpponentHumanLikelihood(null);
       setMaiaOpponentStaleResultIgnored(false);
       setMaiaOpponentIllegalCandidateRejected(false);
+      setMaiaOpponentAppliedMoveUci(null);
+      setMaiaOpponentAppliedMoveSan(null);
+      setMaiaOpponentAppliedFromFen4(null);
+      setMaiaOpponentAppliedToFen4(null);
       setMaiaOpponentFallbackUsed(false);
       setMaiaOpponentFallbackReason(null);
       setMaiaOpponentSanityGuardResult("not_run");
@@ -4120,8 +4147,14 @@ export default function App(){
           setMaiaOpponentSelectedSan(selectedSan ?? null);
           setMaiaOpponentHumanLikelihood(selectedMaiaCandidate?.humanLikelihood ?? null);
           if(selectedMaiaCandidate){
-            const selectedApplied=applyUci(current.fen(),selectedMaiaCandidate.uci);
-            if(!selectedApplied){
+            const legality=applyMaiaMoveOnRequestFen({
+              requestFen:current.fen(),
+              selectedUci:selectedMaiaCandidate.uci,
+              legalMovesUci,
+            });
+            setMaiaOpponentSelectedLegal(legality.legalOnRequestFen);
+            setMaiaOpponentRuntimeCandidateLegal(legality.legalOnRequestFen);
+            if(!legality.legalOnRequestFen||!legality.applied||!legality.appliedMoveUci||!legality.appliedMoveSan||!legality.appliedFen){
               setMaiaOpponentIllegalCandidateRejected(true);
               setMaiaOpponentFallbackUsed(true);
               setMaiaOpponentFallbackReason("maia_candidate_illegal");
@@ -4153,25 +4186,29 @@ export default function App(){
                   requestId:maiaRequestId,
                   fen4:currentFen4,
                   candidateCount:maiaResult.candidates.length,
-                  selectedUci:selectedApplied.uci,
-                  selectedSan:selectedApplied.san,
+                  selectedUci:legality.appliedMoveUci,
+                  selectedSan:legality.appliedMoveSan,
                   reason:sanityGuard.result,
                   fallbackReason:sanityGuard.blockedReason,
                   skillLevel:maiaSkill,
                   sideToMove:current.turn() as ChessColor,
                 });
               }else{
-                chosen={san:selectedApplied.san,uci:selectedApplied.uci,fen:selectedApplied.fen};
+                chosen={san:legality.appliedMoveSan,uci:legality.appliedMoveUci,fen:legality.appliedFen};
                 source="Continuation reply";
                 variationDebug.opponentVariationReason="maia_candidate_selected";
                 setMaiaOpponentDecisionReason("allowed");
+                setMaiaOpponentAppliedMoveUci(legality.appliedMoveUci);
+                setMaiaOpponentAppliedMoveSan(legality.appliedMoveSan);
+                setMaiaOpponentAppliedFromFen4(legality.appliedFromFen4);
+                setMaiaOpponentAppliedToFen4(legality.appliedToFen4);
                 pushMaiaTimelineEvent({
                   event:"maia_candidate_selected",
                   requestId:maiaRequestId,
                   fen4:currentFen4,
                   candidateCount:maiaResult.candidates.length,
-                  selectedUci:selectedApplied.uci,
-                  selectedSan:selectedApplied.san,
+                  selectedUci:legality.appliedMoveUci,
+                  selectedSan:legality.appliedMoveSan,
                   reason:"maia_candidate_selected",
                   fallbackReason:null,
                   skillLevel:maiaSkill,
@@ -4180,6 +4217,8 @@ export default function App(){
               }
             }
           }else{
+            setMaiaOpponentSelectedLegal(null);
+            setMaiaOpponentRuntimeCandidateLegal(null);
             const fallbackReason=maiaResult.status==="timeout"
               ?"provider_timeout"
               :maiaResult.status==="unavailable"
@@ -5251,7 +5290,12 @@ export default function App(){
     maiaCandidatesTop5:[],
     maiaSelectedUci:maiaOpponentSelectedUci,
     maiaSelectedSan:maiaOpponentSelectedSan,
-    maiaSelectedLegal:maiaOpponentSelectedUci?Boolean((game.moves({verbose:true}) as any[]).some((move)=>moveToUci(move)===maiaOpponentSelectedUci)):null,
+    maiaSelectedLegal:maiaOpponentSelectedLegal,
+    maiaRuntimeCandidateLegal:maiaOpponentRuntimeCandidateLegal,
+    maiaAppliedMoveUci:maiaOpponentAppliedMoveUci,
+    maiaAppliedMoveSan:maiaOpponentAppliedMoveSan,
+    maiaAppliedFromFen4:maiaOpponentAppliedFromFen4,
+    maiaAppliedToFen4:maiaOpponentAppliedToFen4,
     maiaSelectedHumanLikelihood:maiaOpponentHumanLikelihood,
     maiaSelectedRank:null,
     maiaFallbackUsed:maiaOpponentFallbackUsed,
