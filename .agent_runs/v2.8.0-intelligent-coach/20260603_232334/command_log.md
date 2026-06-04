@@ -1,0 +1,26 @@
+- npm run build
+- node --import tsx tests/coach/trainerRuntimeState.test.ts
+- node --import tsx tests/coach/continuationEntryStateMachine.test.ts
+- node --import tsx tests/coach/branchCompleteSecondRun.test.ts
+- node --import tsx tests/coach/debugPanelResilience.test.ts
+- node --import tsx tests/coach/continuationNoTargetStatus.test.ts
+- node --import tsx tests/coach/restrictedOpponentTurnBranchComplete.test.ts
+- node --import tsx tests/coach/maiaAppliedMoveLegality.test.ts
+- node --import tsx tests/coach/maiaContinuationProvider.test.ts
+- node --import tsx tests/coach/maiaRuntimeAdapter.test.ts
+- node --import tsx tests/coach/maiaApiRoute.test.ts
+- node --import tsx tests/coach/continuationFlowStability.test.ts
+- node --import tsx tests/coach/browserContract.test.ts
+- node --import tsx tests/coach/liveChainSmoke.test.ts
+- node --import tsx tests/coach/branchCompleteRegressionAfterStockfish.test.ts
+- node --import tsx tests/coach/branchCompleteContract.test.ts
+- node --import tsx tests/coach/stockfishValidationGate.test.ts
+- node --import tsx tests/coach/moveStrengthBadge.test.ts
+- node --import tsx tests/coach/plainLeak.test.ts
+- node --import tsx tests/coach/showMoreVisualReveal.test.ts
+- node --import tsx tests/coach/visibleTeachingSurface.test.ts
+- node --import tsx tests/coach/uiSurfaceAdapter.test.ts
+- node --import tsx tests/coach/currentInstructionFrame.test.ts
+- node --import tsx lib/blundr/debug/__tests__/trainerDebugSnapshot.test.ts
+- npm run maia:check
+- npm run maia:bench

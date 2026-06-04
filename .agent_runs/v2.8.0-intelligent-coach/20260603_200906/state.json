@@ -1,0 +1,12 @@
+{
+  "package": "14",
+  "package_name": "Maia Continuation Provider",
+  "branch": "v2.8.0-intelligent-coach-live",
+  "baseline_commit": "2019a20",
+  "status": "completed_with_manual_qa_gap",
+  "automated_tests": "pass",
+  "build": "pass",
+  "manual_runtime_smoke": "pass",
+  "manual_scenarios": "partial",
+  "gate_verdict": "BLOCKED"
+}

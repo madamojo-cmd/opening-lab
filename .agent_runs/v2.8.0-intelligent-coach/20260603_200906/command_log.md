@@ -1,0 +1,42 @@
+# Package 14 Command Log
+
+- git branch --show-current
+- git status --short
+- git log --oneline -12
+- npm run build
+- node --import tsx tests/coach/branchCompleteRegressionAfterStockfish.test.ts
+- node --import tsx tests/coach/branchCompleteContract.test.ts
+- node --import tsx tests/coach/continuationFlowStability.test.ts
+- node --import tsx tests/coach/stockfishValidationGate.test.ts
+- node --import tsx tests/coach/moveStrengthBadge.test.ts
+- node --import tsx tests/coach/liveChainSmoke.test.ts
+- node --import tsx tests/coach/browserContract.test.ts
+- node --import tsx tests/coach/plainLeak.test.ts
+- node --import tsx tests/coach/showMoreVisualReveal.test.ts
+- node --import tsx tests/coach/visibleTeachingSurface.test.ts
+- node --import tsx tests/coach/uiSurfaceAdapter.test.ts
+- node --import tsx tests/coach/currentInstructionFrame.test.ts
+- node --import tsx lib/blundr/debug/__tests__/trainerDebugSnapshot.test.ts
+- npm run build
+- node --import tsx tests/coach/maiaContinuationProvider.test.ts
+- node --import tsx tests/coach/continuationFlowStability.test.ts
+- node --import tsx tests/coach/browserContract.test.ts
+- node --import tsx tests/coach/liveChainSmoke.test.ts
+- node --import tsx tests/coach/branchCompleteRegressionAfterStockfish.test.ts
+- node --import tsx tests/coach/branchCompleteContract.test.ts
+- node --import tsx tests/coach/stockfishValidationGate.test.ts
+- node --import tsx tests/coach/moveStrengthBadge.test.ts
+- node --import tsx tests/coach/plainLeak.test.ts
+- node --import tsx tests/coach/showMoreVisualReveal.test.ts
+- node --import tsx tests/coach/visibleTeachingSurface.test.ts
+- node --import tsx tests/coach/uiSurfaceAdapter.test.ts
+- node --import tsx tests/coach/currentInstructionFrame.test.ts
+- node --import tsx lib/blundr/debug/__tests__/trainerDebugSnapshot.test.ts
+- npm run dev (sandbox, failed: EPERM 0.0.0.0:3000)
+- npm run dev (escalated), curl http://localhost:3000 => HTTP 200
+
+## Result Summary
+- Build: pass
+- Required automated tests: pass
+- Dev runtime smoke: pass after escalated server launch
+- Manual interaction scenarios: partially verified (non-interactive environment)

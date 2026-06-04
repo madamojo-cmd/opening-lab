@@ -1,0 +1,20 @@
+version: "3.9"
+services:
+  blundr:
+    build:
+      context: ../..
+      dockerfile: services/maia/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_MAIA_API_ENABLED: "true"
+      MAIA_ENABLED: "true"
+      MAIA_LC0_PATH: "/usr/local/bin/lc0"
+      MAIA_WEIGHTS_PATH: "/models/maia-1500.pb.gz"
+      MAIA_SKILL_LEVEL: "maia-1500"
+      MAIA_TIMEOUT_MS: "1500"
+      MAIA_NODES: "1"
+      MAIA_MAX_CONCURRENT_REQUESTS: "2"
+      MAIA_CACHE_ENABLED: "true"
+    volumes:
+      - ../../.maia:/models:ro

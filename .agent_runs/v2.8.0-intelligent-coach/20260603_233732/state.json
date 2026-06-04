@@ -1,0 +1,23 @@
+{
+  "package": "14B.4",
+  "status": "blocked_on_manual_browser_qa",
+  "branch": "v2.8.0-intelligent-coach-live",
+  "baselineCommit": "96a162b",
+  "build": {
+    "passed": true,
+    "notes": "Build failed in sandbox process-spawn context, then passed in escalated run."
+  },
+  "tests": {
+    "requiredSuiteExecuted": true,
+    "allRequiredPassing": true,
+    "notes": "maia:check initially failed with runtime disabled env; passed after env-enabled rerun."
+  },
+  "manualQA": {
+    "debugPageHttp200": true,
+    "realBrowserGateComplete": false
+  },
+  "artifacts": {
+    "commandLog": ".agent_runs/v2.8.0-intelligent-coach/20260603_233732/command_log.md",
+    "report": "docs/BLUNDR_v2.8.0 Foundation Stabilization Gate_AGENT_14B_4_MANUAL_QA_DEFECT_REPAIR_REPORT.md"
+  }
+}

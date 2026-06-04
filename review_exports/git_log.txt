@@ -1,0 +1,40 @@
+1b4c509 (HEAD -> v2.8.0-intelligent-coach-live) Wire v2.8.0 visible teaching surface into UI
+58721ef Add v2.8.0 visible teaching surface builder
+896b92e Add v2.8.0 headless live chain smoke test
+35a84d5 Add v2.8.0 coach safety gate
+5757851 Add v2.8.0 coach compiler MVP
+75c5296 Add v2.8.0 teaching concept registry
+ff565d6 Add v2.8.0 deterministic evidence graph
+7cad573 Add v2.8.0 current instruction frame authority
+27b67e5 Add v2.8.0 intelligent coach ground truth harness
+1567e53 Add v2.8.0 intelligent coach core contracts
+88f47e1 (origin/checkpoint/v2.7.42-continuation-stabilization, checkpoint/v2.7.42-continuation-stabilization) Document v2.7.42 final stable checkpoint
+b2ead91 (tag: v2.7.42-final-code-backup, tag: v2.7.42-cleaned-ui-repair-checkpoint, origin/backup/v2.7.42-final-code, backup/v2.7.42-final-code) Scope green continuation pause actions
+0dc77ba Restore one-shot hard stop continuation pause
+224d5fc Fix continuation break reset and primary-only visuals
+664f176 (tag: v2.7.42-pre-final-polish-checkpoint) Document v2.7.42 pre-final polish checkpoint
+e14779d Finalize continuation pause actions and visuals
+1494beb Use engine best move as continuation fallback
+c88ed37 Fix continuation candidate selection and single target rendering
+ef8d237 Require explicit continuation pause and move 11 hard stop
+5311253 (checkpoint/step1-step2-visual-repair) Verify plain view show more assisted reuse
+bfbfeb6 (origin/checkpoint/step1-step2-visual-repair) Fix coaching copy to include SAN and verified piece
+cdc4568 Harden primary move visual tests and plain leak guards
+6744eb3 Guard coach fallback against null SAN
+2370dab Normalize teaching visuals to primary move indication
+b74dda6 Fix board piece rendering regression
+fd40323 (tag: v2.7.99-cleaned-ui, tag: v2.7.41-fixed-trainer-ui-playability, tag: v2.7.41-final-stable-trainer-coach, origin/v2.7.41-final-stable-trainer-coach, origin/cleaned-ui, cleaned-ui) Finalize stable v2.7.41 trainer and coach playability
+b8e79b9 (tag: v2.7.41-forensic-stable-hotfix, origin/v2.7.41-forensic-stable-hotfix) Forensic rebuild stable v2.7.41 trainer hotfix
+f09263d (tag: v2.7.41-stable-trainer-convergence, tag: v2.7.41-recovered-continuation-hotfix, tag: v2.7.41-current-stable-deploy, origin/v2.7.41-clean-convergence) Checkpoint v2.7.41 stable trainer convergence
+cc5e861 (tag: v2.7.41-clean-convergence-stable) Clean converge v2.7.41 trainer surface
+3c4ad92 (tag: v2.7.40-stable-clean, origin/v2.7.40-clean-intelligent-coach-base) Stabilize v2.7.40 clean coach checkpoint
+5b658c4 (v2.7.40-clean-intelligent-coach-base) Regenerate lockfile with public npm registry
+ff02e4e Stop tracking TypeScript build cache
+d3e624e Fix v2.7.40 checkpoint source tracking for Vercel
+50dd402 (tag: v2.7.40-stable-clean-coach, tag: v2.7.39-coach-timeline-checkpoint) Create v2.7.39 coach timeline checkpoint
+0c57b94 (tag: v2.7.37e-visual-stable, agent/2.7.38-adaptive-coach-system) Stabilize visual trainer pipeline through v2.7.37e
+1218689 (tag: v2.7.37-stable, tag: v2.7.36b-stable, agent/2.7.37-animation-conductor, agent/2.7.36-visual-recipe-schema, agent/2.7.35d-trust-overlay-stabilization, agent/2.7.35c-opponent-variation-guard, agent/2.7.35b-production-training-context-engine, agent/2.7.35-validation-tuning-context-assisted) Implement v2.7.35 teaching intelligence orchestrator
+1006784 (origin/agent/2.7.34-teaching-cue-compiler, agent/2.7.34-teaching-cue-compiler) v2.7.34 add deterministic teaching cue compiler
+f74dd2a (agent/2.7.34-bot-selector-lichess-policy) v2.7.33 polish MVP language and add learning events foundation
+cb1aea0 (origin/agent/2.7.33-mvp-language-learning-events, agent/2.7.33-mvp-language-learning-events) v2.7.33 polish MVP language and add learning events foundation
+7fb8c4e (origin/agent/2.7.32-move-quality-gate, agent/2.7.32-move-quality-gate) v2.7.32 add move quality gate for restricted training

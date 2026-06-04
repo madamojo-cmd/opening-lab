@@ -1,0 +1,14 @@
+{
+  "package": "14B.3",
+  "status": "architecture_pass_runtime_not_verified",
+  "branch": "v2.8.0-intelligent-coach-live",
+  "baselineCommit": "96a162b",
+  "runtimeStateHelperAdded": true,
+  "debugCrashHardeningAdded": true,
+  "maiaLegalitySelectionStateAdded": true,
+  "buildPass": true,
+  "testsPass": true,
+  "maiaCheck": "ready",
+  "maiaBench": "pass",
+  "manualQa": "partial"
+}
