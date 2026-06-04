@@ -146,6 +146,9 @@ function mapSource(raw: string | null | undefined, fallbackKind: InstructionTarg
   if (value === "opening_branch") return "lichess_branch";
   if (value === "opening_family_plan") return "adaptive_branch";
   if (value === "continuation_candidate") return "continuation_policy";
+  if (value === "stockfish_top_move") return "continuation_policy";
+  if (value === "stockfish_safe_move") return "continuation_policy";
+  if (value === "engine_best") return "continuation_policy";
   if (value === "lesson_line") return "opening_tree";
   if (value === "engine_preview_fallback") return "engine_preview_fallback";
   if (value === "legacy_recoverable") return "legacy_recoverable";

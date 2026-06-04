@@ -62,6 +62,7 @@ import { resolveBranchCompleteContract } from "@/lib/blundr/runtime/branchComple
 import { resolveContinuationFlowContract } from "@/lib/blundr/runtime/continuationFlowContract";
 import { shouldFlagStaleOpponentReplyCommit } from "@/lib/blundr/runtime/opponentReplyGuard";
 import { classifyContinuationRuntimeState, type ContinuationRuntimeStatus } from "@/lib/blundr/runtime/continuationRuntimeState";
+import { resolveEffectiveContinuationCandidate } from "@/lib/blundr/runtime/resolveEffectiveContinuationCandidate";
 import type { MaiaMoveCandidate, MaiaOpponentReplyResult, MaiaProviderStatus, MaiaSkillLevel } from "@/lib/blundr/maia/maiaTypes";
 import { unavailableMaiaProvider } from "@/lib/blundr/maia/maiaProvider";
 import { MaiaApiClientProvider } from "@/lib/blundr/maia/maiaApiClientProvider";
@@ -1347,7 +1348,6 @@ export default function App(){
       debug:{lockId:lock.continuationCandidateLockId,requestId:lock.continuationCandidateLockRequestId},
     };
   },[trainingMode,isUserTurn,userExplicitlyEnteredContinuation,continuationCandidateLock,fen,game]);
-  const effectiveContinuationCandidate=continuationLockCandidate??continuationPolicyCandidate;
   const stockfishTopMovesForContinuation=useMemo(()=>mapEngineLinesToStockfishTopMoves({
     fen,
     pvs:engineLines.map((line)=>({uci:line.uci,san:line.san,cp:line.cp})),
@@ -1356,6 +1356,85 @@ export default function App(){
     providerStatus:engineLines.length?"ready":"unavailable",
     errorReason:engineLines.length?undefined:"stockfish_provider_unavailable",
   }),[fen,engineLines]);
+  const continuationResolvedTargetUci=stockfishTopMovesForContinuation.bestMoveUci??null;
+  const continuationResolvedTargetSan=stockfishTopMovesForContinuation.bestMoveSan??null;
+  const continuationResolvedTargetSource=continuationResolvedTargetUci?"stockfish_top_move":null;
+  const continuationResolvedTargetLabel=continuationResolvedTargetUci?"Best":null;
+  const continuationTargetResolverStatus=trainingMode!=="continuation"
+    ?"not_continuation_mode"
+    :stockfishTopMovesForContinuation.providerStatus==="ready"&&continuationResolvedTargetUci
+      ?"stockfish_ready"
+      :stockfishTopMovesForContinuation.providerStatus==="ready"
+        ?"stockfish_ready_without_target"
+        :"stockfish_unavailable";
+  const continuationLegalMoveUcis=useMemo(
+    ()=>((game.moves({verbose:true}) as any[]).map((move)=>moveToUci(move))),
+    [game],
+  );
+  const continuationCandidateResolution=useMemo(()=>resolveEffectiveContinuationCandidate({
+    trainingMode,
+    isUserTurn,
+    trainerPhase,
+    boardFen:fen,
+    boardFen4:normalizeFen(fen),
+    legalMoveUcis:continuationLegalMoveUcis,
+    lockedCandidate:continuationLockCandidate?{
+      uci:continuationLockCandidate.uci,
+      san:continuationLockCandidate.san,
+      source:continuationLockCandidate.source,
+      label:"Best",
+    }:null,
+    continuationResolvedTargetUci,
+    continuationResolvedTargetSan,
+    continuationResolvedTargetSource,
+    continuationResolvedTargetLabel,
+    continuationResolvedTargetFen4:stockfishTopMovesForContinuation.fen,
+  }),[
+    trainingMode,
+    isUserTurn,
+    trainerPhase,
+    fen,
+    continuationLegalMoveUcis.join("|"),
+    continuationLockCandidate?.uci,
+    continuationLockCandidate?.san,
+    continuationLockCandidate?.source,
+    continuationResolvedTargetUci,
+    continuationResolvedTargetSan,
+    continuationResolvedTargetSource,
+    continuationResolvedTargetLabel,
+    stockfishTopMovesForContinuation.fen,
+  ]);
+  const effectiveContinuationCandidate=continuationCandidateResolution.candidate?{
+    uci:continuationCandidateResolution.candidate.uci,
+    san:continuationCandidateResolution.candidate.san,
+    source:continuationCandidateResolution.candidate.source,
+    label:continuationCandidateResolution.candidate.label,
+    reason:continuationCandidateResolution.candidate.reason,
+    fen4:continuationCandidateResolution.candidate.fen4,
+    pieceTypeCode:continuationCandidateResolution.candidate.pieceTypeCode,
+    pieceTypeCanonical:continuationCandidateResolution.candidate.pieceTypeCanonical,
+    from:continuationCandidateResolution.candidate.from,
+    to:continuationCandidateResolution.candidate.to,
+    isEmergencyLegalFallback:false,
+    isEngineBestFallback:false,
+    engineFallbackUsed:false,
+    engineFallbackReason:null,
+    databaseCandidatesRejected:false,
+    rejectionReasons:[],
+    debug:{
+      providerStatus:stockfishTopMovesForContinuation.providerStatus,
+      suggestedMoveUci:continuationCandidateResolution.candidate.uci,
+      suggestedMoveSan:continuationCandidateResolution.candidate.san,
+      stockfishBestMoveUci:continuationResolvedTargetUci,
+      stockfishBestMoveSan:continuationResolvedTargetSan,
+      stockfishSuggestedRank:continuationResolvedTargetUci?1:null,
+      stockfishSuggestedTop10:Boolean(continuationResolvedTargetUci),
+      stockfishDepth:stockfishTopMovesForContinuation.depth,
+      candidateReplacedByStockfish:false,
+      replacementReason:null,
+      topMoveUcis:stockfishTopMovesForContinuation.topMoves.map((move)=>move.uci),
+    },
+  }:null;
   const continuationSuggestionValidation=useMemo(()=>{
     if(trainingMode!=="continuation")return null;
     if(!effectiveContinuationCandidate?.uci)return null;
@@ -1365,32 +1444,7 @@ export default function App(){
       stockfish:stockfishTopMovesForContinuation,
     });
   },[trainingMode,effectiveContinuationCandidate?.uci,effectiveContinuationCandidate?.san,stockfishTopMovesForContinuation]);
-  const validatedContinuationCandidate=useMemo(()=>{
-    if(trainingMode!=="continuation")return effectiveContinuationCandidate;
-    if(!effectiveContinuationCandidate?.uci)return effectiveContinuationCandidate;
-    if(!continuationSuggestionValidation){
-      return {
-        ...effectiveContinuationCandidate,
-        uci:"",
-        san:"",
-        source:"stockfish_unavailable",
-        reason:"stockfish_provider_unavailable",
-      };
-    }
-    if(continuationSuggestionValidation.accepted)return effectiveContinuationCandidate;
-    return {
-      ...effectiveContinuationCandidate,
-      uci:continuationSuggestionValidation.replacementUci??"",
-      san:continuationSuggestionValidation.replacementSan??"",
-      source:"engine_best",
-      reason:"continuation_candidate_replaced_by_stockfish_top1",
-      debug:{
-        ...(effectiveContinuationCandidate as any)?.debug,
-        candidateReplacedByStockfish:true,
-        replacementReason:continuationSuggestionValidation.rejectionReason??"suggested_move_not_in_stockfish_top10",
-      },
-    };
-  },[trainingMode,effectiveContinuationCandidate,continuationSuggestionValidation]);
+  const validatedContinuationCandidate=effectiveContinuationCandidate;
   const branchCompleteContract=useMemo(()=>resolveBranchCompleteContract({
     trainingMode,
     trainerPhase,
@@ -3127,7 +3181,10 @@ export default function App(){
     setRuntimeCriticalIssues((prev)=>prev.includes(issue)?prev:[...prev.slice(-19),issue]);
   }
   function clearRuntimeCriticalIssue(issue:string){
-    setRuntimeCriticalIssues((prev)=>prev.filter((entry)=>entry!==issue));
+    setRuntimeCriticalIssues((prev)=>{
+      if(!prev.includes(issue))return prev;
+      return prev.filter((entry)=>entry!==issue);
+    });
   }
   function clearOpponentReplyTimeout(){
     if(opponentReplyTimeoutRef.current!==null){
@@ -3403,7 +3460,23 @@ export default function App(){
         continuationAnalysisDebounceRef.current=null;
       }
     };
-  },[activeTab,trainingMode,isUserTurn,trainerPhase,fen,userColor,rating.skill,enginePreview,game,validatedContinuationCandidate,continuationLockCandidate?.uci,forceContinuationPause,userExplicitlyEnteredContinuation]);
+  },[
+    activeTab,
+    trainingMode,
+    isUserTurn,
+    trainerPhase,
+    fen,
+    userColor,
+    rating.skill,
+    enginePreview?.fen,
+    enginePreview?.pvs?.length,
+    validatedContinuationCandidate?.uci,
+    validatedContinuationCandidate?.san,
+    validatedContinuationCandidate?.source,
+    continuationLockCandidate?.uci,
+    forceContinuationPause,
+    userExplicitlyEnteredContinuation,
+  ]);
   useEffect(()=>{
     if(activeTab!=="train"||trainingMode!=="continuation"||trainerPhase!=="ready_for_user"||!isUserTurn)return;
     if(game.isGameOver()||game.moves().length===0)return;
@@ -3432,7 +3505,21 @@ export default function App(){
     ){
       pushRuntimeCriticalIssue("continuation_ready_without_candidate");
     }
-  },[activeTab,trainingMode,trainerPhase,isUserTurn,instructionTarget?.kind,fen,game,forceContinuationPause,userExplicitlyEnteredContinuation,engineLines.length,validatedContinuationCandidate?.uci,validatedContinuationCandidate?.source,continuationAnalysisStatus,continuationRuntimeState.status]);
+  },[
+    activeTab,
+    trainingMode,
+    trainerPhase,
+    isUserTurn,
+    instructionTarget?.kind,
+    fen,
+    forceContinuationPause,
+    userExplicitlyEnteredContinuation,
+    engineLines.length,
+    validatedContinuationCandidate?.uci,
+    validatedContinuationCandidate?.source,
+    continuationAnalysisStatus,
+    continuationRuntimeState.status,
+  ]);
   useEffect(()=>{if(activeTab==="train")positionStartedAtRef.current=Date.now()},[fen,activeTab]);
   useEffect(()=>{setCoachInteraction("none");setCoachHintRequestCount(0);setCoachReviewMarked(false);setCoachHiddenFrameId(null);setShowMoreShown(false);},[fen,trainerFrameId,trainerView,trainerPhase]);
   useEffect(()=>{if(!enabledViews.includes(activeBoardView)&&enabledViews.length)setActiveBoardView(enabledViews[0])},[activeBoardView,enabledViews.join("|")]);
@@ -5050,6 +5137,21 @@ export default function App(){
     continuationPolicyDebug:continuationPolicyCandidate?.debug??null,
     continuationSelectionSource:validatedContinuationCandidate?.source??null,
     continuationSelectionReason:validatedContinuationCandidate?.reason??null,
+    continuationTargetResolverStatus,
+    continuationResolvedTargetUci,
+    continuationResolvedTargetSource,
+    continuationResolvedTargetLabel,
+    effectiveContinuationCandidateUci:continuationCandidateResolution.guard.effectiveContinuationCandidateUci,
+    effectiveContinuationCandidateSan:continuationCandidateResolution.guard.effectiveContinuationCandidateSan,
+    effectiveContinuationCandidateSource:continuationCandidateResolution.guard.effectiveContinuationCandidateSource,
+    effectiveContinuationCandidateFen4:effectiveContinuationCandidate?.fen4??null,
+    effectiveContinuationCandidateBlockedReason:continuationCandidateResolution.guard.effectiveContinuationCandidateBlockedReason,
+    stockfishPromotionGuardTrainingMode:continuationCandidateResolution.guard.stockfishPromotionGuardTrainingMode,
+    stockfishPromotionGuardIsUserTurn:continuationCandidateResolution.guard.stockfishPromotionGuardIsUserTurn,
+    stockfishPromotionGuardTrainerPhase:continuationCandidateResolution.guard.stockfishPromotionGuardTrainerPhase,
+    stockfishPromotionGuardFenMatches:continuationCandidateResolution.guard.stockfishPromotionGuardFenMatches,
+    stockfishPromotionGuardLegal:continuationCandidateResolution.guard.stockfishPromotionGuardLegal,
+    stockfishPromotionGuardSourceAllowed:continuationCandidateResolution.guard.stockfishPromotionGuardSourceAllowed,
     continuationEngineFallbackUsed:Boolean(validatedContinuationCandidate?.engineFallbackUsed||validatedContinuationCandidate?.isEngineBestFallback),
     continuationEngineFallbackReason:validatedContinuationCandidate?.engineFallbackReason??null,
     continuationDatabaseCandidatesRejected:Boolean(validatedContinuationCandidate?.databaseCandidatesRejected),

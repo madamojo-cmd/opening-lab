@@ -58,7 +58,7 @@ export function resolveContinuationFlowContract(input: ResolveContinuationFlowCo
 
   const base: Omit<ContinuationFlowContract, "state" | "reason" | "shouldRenderTarget" | "shouldRenderVisuals" | "shouldRenderActions" | "shouldRenderOpponentReplying" | "shouldRenderAnalyzingCopy" | "shouldRenderNoTarget" | "criticalIssueIfInvalid"> = {
     isUserTurn: Boolean(input.isUserTurn),
-    hasTarget: Boolean(input.hasTarget),
+    hasTarget: Boolean(input.hasTarget || candidateUci),
     selectedCandidateUci: candidateUci,
     selectedCandidateSan: candidateSan,
     selectedCandidateSource: candidateSource,
@@ -128,7 +128,7 @@ export function resolveContinuationFlowContract(input: ResolveContinuationFlowCo
     };
   }
 
-  if (input.hasTarget && candidateUci) {
+  if (candidateUci) {
     return {
       ...base,
       state: "continuation_candidate_ready",

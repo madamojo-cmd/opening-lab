@@ -569,6 +569,14 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   }
   if (input.trainingMode === "continuation" && input.selectedCandidateUci && visibleTitle === "Position context" && !branchTransitionSurfaceRendered) criticalIssues.push("generic_context_rendered_with_candidate");
   if (input.trainingMode === "continuation" && input.selectedCandidateUci && presentationCoach.shouldRender && visibleCoachOwner !== "branch_transition_surface" && !coachDebug.selectedOpportunityId && !coachDebug.selectedTemplateId && !coachDebug.mappingTemplateId && !coachDebug.candidateCoachFallbackUsed) criticalIssues.push("visible_coach_missing_template_and_opportunity");
+  if (
+    input.trainingMode === "continuation" &&
+    input.continuationTargetResolverStatus === "stockfish_ready" &&
+    input.continuationResolvedTargetUci &&
+    !input.effectiveContinuationCandidateUci
+  ) {
+    criticalIssues.push("stockfish_ready_without_promoted_candidate");
+  }
   if (input.staleSelectedCandidateDetected) criticalIssues.push("stale_selected_candidate");
   if (input.trainingMode === "continuation" && !input.userExplicitlyEnteredContinuation && !guidedCoveragePolicy.guidedCompleteAllowed && (input.moveHistory?.length ?? 0) < (guidedCoveragePolicy.minimumGuidedDepthPly ?? 8)) criticalIssues.push("premature_continuation_transition");
   const lineExhaustedOrNeedsContinuation =
@@ -966,6 +974,21 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       continuationAnalysisRequestId: input.continuationAnalysisRequestId ?? null,
       continuationAnalysisFen4: input.continuationAnalysisFen4 ?? null,
       continuationAnalysisFenMatchesBoard: input.continuationAnalysisFen4 ? input.continuationAnalysisFen4 === boardFen4 : "unknown",
+      continuationTargetResolverStatus: input.continuationTargetResolverStatus ?? null,
+      continuationResolvedTargetUci: input.continuationResolvedTargetUci ?? null,
+      continuationResolvedTargetSource: input.continuationResolvedTargetSource ?? null,
+      continuationResolvedTargetLabel: input.continuationResolvedTargetLabel ?? null,
+      effectiveContinuationCandidateUci: input.effectiveContinuationCandidateUci ?? null,
+      effectiveContinuationCandidateSan: input.effectiveContinuationCandidateSan ?? null,
+      effectiveContinuationCandidateSource: input.effectiveContinuationCandidateSource ?? null,
+      effectiveContinuationCandidateFen4: input.effectiveContinuationCandidateFen4 ?? null,
+      effectiveContinuationCandidateBlockedReason: input.effectiveContinuationCandidateBlockedReason ?? null,
+      stockfishPromotionGuardTrainingMode: input.stockfishPromotionGuardTrainingMode ?? null,
+      stockfishPromotionGuardIsUserTurn: input.stockfishPromotionGuardIsUserTurn ?? null,
+      stockfishPromotionGuardTrainerPhase: input.stockfishPromotionGuardTrainerPhase ?? null,
+      stockfishPromotionGuardFenMatches: input.stockfishPromotionGuardFenMatches ?? null,
+      stockfishPromotionGuardLegal: input.stockfishPromotionGuardLegal ?? null,
+      stockfishPromotionGuardSourceAllowed: input.stockfishPromotionGuardSourceAllowed ?? null,
       continuationPolicySource: input.opponentVariationDebug?.opponentVariationReason ?? null,
       continuationPolicyReason: input.opponentVariationDebug?.opponentVariationReason ?? null,
       selectedMoveInCandidateList: input.opponentVariationDebug?.continuedPlaySelectedMoveInCandidateList ?? null,
