@@ -119,6 +119,18 @@ export function resolveSelectedLineExhaustion(input: ResolveSelectedLineExhausti
       knownFinalMoveMatched,
     };
   }
+  if (input.afterFinalUserMove && input.hasNextOpponentMove === false) {
+    return {
+      exhausted: true,
+      reason: "restricted_line_exhausted_after_final_known_move",
+      blockedReason: null,
+      hasNextOpponentMove: input.hasNextOpponentMove,
+      hasNextUserMove: input.hasNextUserMove,
+      exactNodeHasChildren: input.exactNodeHasChildren,
+      knownFinalFenMatched,
+      knownFinalMoveMatched,
+    };
+  }
   if (input.exactNodeHasChildren === true) {
     return {
       exhausted: false,
