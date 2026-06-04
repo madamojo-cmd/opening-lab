@@ -739,11 +739,24 @@ function parseStockfishInfo(line:string,fen:string){
 }
 
 async function resolveStockfishWorkerPath(){
-  try{
-    const response=await fetch("/stockfish/manifest.json",{cache:"no-store"});
-    const manifest=await response.json();
-    if(manifest?.enginePath)return String(manifest.enginePath);
-  }catch{}
+  const manifestPath="/stockfish/manifest.json";
+  const fallbackPath="/stockfish/stockfish-18-lite-single.js";
+
+  try {
+    const response = await fetch(manifestPath, { cache: "no-store" });
+    if (response.ok) {
+      const manifest = await response.json();
+      if (manifest?.enginePath) {
+        return String(manifest.enginePath);
+      }
+    }
+  } catch {}
+
+  try {
+    const response = await fetch(fallbackPath, { cache: "no-store" });
+    if (response.ok) return fallbackPath;
+  } catch {}
+
   return null;
 }
 
@@ -758,6 +771,9 @@ async function runBrowserStockfish(fen:string,skill:number,movetime=750,multiPv=
     let worker:Worker|null=null;
     const bestByPv=new Map<number,any>();
     let resolved=false;
+    let sawUciOk=false;
+    let sawReadyOk=false;
+    let searchStarted=false;
 
     const finish=()=>{
       if(resolved)return;
@@ -778,6 +794,13 @@ async function runBrowserStockfish(fen:string,skill:number,movetime=750,multiPv=
     };
 
     const send=(cmd:string)=>{try{worker?.postMessage(cmd)}catch{}};
+    const startSearch=()=>{
+      if(searchStarted)return;
+      if(!sawUciOk||!sawReadyOk)return;
+      searchStarted=true;
+      send(`position fen ${fen}`);
+      send(`go movetime ${movetime}`);
+    };
     const timeout=window.setTimeout(finish,Math.max(1600,movetime+1200));
     signal?.addEventListener("abort",abortHandler,{once:true});
 
@@ -787,6 +810,19 @@ async function runBrowserStockfish(fen:string,skill:number,movetime=750,multiPv=
         const line=String(event.data??"");
         const parsed=parseStockfishInfo(line,fen);
         if(parsed)bestByPv.set(parsed.multipv??1,parsed);
+        if(line==="uciok"){
+          sawUciOk=true;
+          send(`setoption name MultiPV value ${Math.max(1,Math.min(10,multiPv))}`);
+          send("setoption name UCI_LimitStrength value true");
+          send(`setoption name UCI_Elo value ${Math.max(1320,Math.min(3190,skill))}`);
+          send("isready");
+          return;
+        }
+        if(line==="readyok"){
+          sawReadyOk=true;
+          startSearch();
+          return;
+        }
         if(line.startsWith("bestmove")){
           window.clearTimeout(timeout);
           finish();
@@ -800,12 +836,6 @@ async function runBrowserStockfish(fen:string,skill:number,movetime=750,multiPv=
       };
 
       send("uci");
-      send(`setoption name MultiPV value ${Math.max(1,Math.min(10,multiPv))}`);
-      send("setoption name UCI_LimitStrength value true");
-      send(`setoption name UCI_Elo value ${Math.max(1320,Math.min(3190,skill))}`);
-      send("isready");
-      send(`position fen ${fen}`);
-      send(`go movetime ${movetime}`);
     }catch{
       window.clearTimeout(timeout);
       signal?.removeEventListener("abort",abortHandler);
