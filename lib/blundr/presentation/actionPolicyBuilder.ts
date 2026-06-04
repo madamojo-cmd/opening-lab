@@ -53,7 +53,7 @@ export function buildSurfaceActions(input: {
         }),
         action({
           kind: "restart_line",
-          label: "Restart line",
+          label: "Restart/Train Again",
           targetUci: null,
           targetSan: null,
         }),
@@ -70,7 +70,7 @@ export function buildSurfaceActions(input: {
     return [
       action({
         kind: "restart_line",
-        label: "Restart line",
+        label: "Restart/Train Again",
         targetUci: null,
         targetSan: null,
       }),

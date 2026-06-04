@@ -496,7 +496,12 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   if (instructionTargetUci && String(input.trainerView) === "assisted" && !visualMoveUci) criticalIssues.push("assisted_view_target_without_visual");
   if (instructionTargetUci && String(input.trainerView) === "assisted" && !visualMoveUci) criticalIssues.push("missing_visual_for_instruction_target");
   const currentUnverifiedClaims = Array.isArray(coachDebug.unverifiedClaims) ? coachDebug.unverifiedClaims.map(String) : [];
-  if (instructionTargetUci && currentUnverifiedClaims.length) {
+  const currentUnverifiedClaimsForSafety = Boolean(
+    instructionTargetUci &&
+    coachDebug.verifiedFallbackUsed === true &&
+    String(coachDebug.fallbackReason ?? "") === "claim_validation_failed"
+  ) ? [] : currentUnverifiedClaims;
+  if (instructionTargetUci && currentUnverifiedClaimsForSafety.length) {
     criticalIssues.push("unsafe_template_rendered");
     for (const claim of currentUnverifiedClaims) {
       if (claim.includes("unverified_piece_claim")) criticalIssues.push("unverified_piece_claim");
@@ -716,7 +721,14 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   }
   if (visualFailureKind !== "none" && visualFailureKind !== "not_applicable") warnings.push(`visualFailureKind:${visualFailureKind}`);
   if (coachFailureKind !== "none") warnings.push(`coachFailureKind:${coachFailureKind}`);
-  if (stockfishProviderStatus !== "ready") warnings.push("stockfish_provider_unavailable");
+  if (
+    stockfishProviderStatus !== "ready" &&
+    input.trainingMode === "continuation" &&
+    input.isUserTurn === true &&
+    String(input.trainerPhase) === "ready_for_user" &&
+    instructionTargetUci &&
+    String(input.visibleTeachingSurface?.mode ?? "") === "assisted"
+  ) warnings.push("stockfish_provider_unavailable");
   if (stockfishProviderStatus === "ready" && Number(input.stockfishDepth ?? 0) > 0 && Number(input.stockfishDepth ?? 0) < 8) warnings.push("stockfish_depth_low");
   if (input.trainingMode === "continuation" && input.lastContinuationUserMoveRating && input.lastContinuationUserMoveRating.ratingLabel === "Ungraded") warnings.push("user_move_rating_ungraded");
   if (

@@ -2447,7 +2447,8 @@ export default function App(){
           ...(out.debug??{}),
           verifiedFallbackUsed:true,
           fallbackReason:"claim_validation_failed",
-          unverifiedClaims:claimValidation.unverifiedClaims,
+          unverifiedClaims:[],
+          originalUnverifiedClaims:claimValidation.unverifiedClaims,
           verifiedClaims:claimValidation.verifiedClaims,
           coachDecisionSource:"verified_safe_fallback",
           selectedTheme:safeFallback.theme,
@@ -2849,6 +2850,7 @@ export default function App(){
       revealCandidateTriggered:input.normalizedAction==="show_move",
       candidateAnalysisTriggered:input.normalizedAction==="analyze_idea",
       stateChanged,
+      frameId:Number(trainerFrameId),
       revealTargetUci:input.extra?.revealTargetUci??(input.normalizedAction.includes("reveal")||input.normalizedAction==="answer"?instructionTarget?.uci??null:null),
       revealTargetSource:input.extra?.revealTargetSource??(instructionTarget?"instruction_target":"none"),
       revealIdempotentNoop:Boolean(input.extra?.revealIdempotentNoop),
@@ -3566,7 +3568,7 @@ export default function App(){
     continuationRuntimeState.status,
   ]);
   useEffect(()=>{if(activeTab==="train")positionStartedAtRef.current=Date.now()},[fen,activeTab]);
-  useEffect(()=>{setCoachInteraction("none");setCoachHintRequestCount(0);setCoachReviewMarked(false);setCoachHiddenFrameId(null);setShowMoreShown(false);},[fen,trainerFrameId,trainerView,trainerPhase]);
+  useEffect(()=>{setCoachInteraction("none");setCoachHintRequestCount(0);setCoachReviewMarked(false);setCoachHiddenFrameId(null);setShowMoreShown(false);setLastActionDebug(null);},[fen,trainerFrameId,trainerView,trainerPhase]);
   useEffect(()=>{if(!enabledViews.includes(activeBoardView)&&enabledViews.length)setActiveBoardView(enabledViews[0])},[activeBoardView,enabledViews.join("|")]);
   useEffect(()=>{
     if(!shouldValidateTrainingMove){
@@ -5313,8 +5315,8 @@ export default function App(){
     coachDecision:displayedCoachDecision,
     coachMoveUci:(displayedCoachDecision?.debug as any)?.coachMoveUci??instructionTarget?.uci??null,
     coachPieceType:(displayedCoachDecision?.debug as any)?.coachPieceType??instructionTarget?.pieceType??null,
-    revealTargetUci:(lastActionDebug as any)?.revealTargetUci??instructionTarget?.uci??null,
-    revealTargetSource:(lastActionDebug as any)?.revealTargetSource??(instructionTarget?"instruction_target":"none"),
+    revealTargetUci:(lastActionDebug as any)?.frameId===trainerFrameId ? (lastActionDebug as any)?.revealTargetUci ?? instructionTarget?.uci ?? null : instructionTarget?.uci ?? null,
+    revealTargetSource:(lastActionDebug as any)?.frameId===trainerFrameId ? (lastActionDebug as any)?.revealTargetSource ?? (instructionTarget?"instruction_target":"none") : (instructionTarget?"instruction_target":"none"),
     frameKey,
     coachFrameStale,
     visualFrameStale,

@@ -169,8 +169,15 @@ const DEBUG_BANNED = [
   "candidate source",
 ];
 
-function pieceName(pieceType: string): string {
-  return pieceType === "p" ? "pawn" : pieceType === "n" ? "knight" : pieceType === "b" ? "bishop" : pieceType === "r" ? "rook" : pieceType === "q" ? "queen" : "king";
+function normalizePieceName(pieceType: string | null | undefined): string {
+  const normalized = String(pieceType || "").trim().toLowerCase();
+  if (normalized === "p" || normalized === "pawn") return "pawn";
+  if (normalized === "n" || normalized === "knight") return "knight";
+  if (normalized === "b" || normalized === "bishop") return "bishop";
+  if (normalized === "r" || normalized === "rook") return "rook";
+  if (normalized === "q" || normalized === "queen") return "queen";
+  if (normalized === "k" || normalized === "king") return "king";
+  return "piece";
 }
 
 function normalizeFen4(fen: string): string {
@@ -212,7 +219,7 @@ export function buildMoveFactPacket(context: CoachInputContext): CurrentInstruct
   evidenceTags: string[];
 } {
   const target = context.target;
-  const piece = pieceName(target.pieceType);
+  const piece = normalizePieceName(target.pieceType);
   const after = target.resultingFen;
   const pieceAttacksCenter = attacksCenterSquares(after, target.to);
   const centralPawnAdvance = target.pieceType === "p" && EXTENDED_CENTER.has(target.to);
@@ -445,16 +452,24 @@ export function buildVerifiedUserFacingFallback(moveFacts: ReturnType<typeof bui
     return { title: "Improve your position", body: "A legal developing move is available.", reason: "no_verified_move" };
   }
   const san = moveFacts.san;
-  const pieceName = moveFacts.pieceName || "piece";
+  const pieceName = moveFacts.pieceName || normalizePieceName(moveFacts.pieceType);
   const dest = (moveFacts.to || "").toLowerCase();
-  let shortTitle = "Improve the position";
+  const centralSquares = new Set(["d4", "e4", "d5", "e5"]);
+  const isCentralCapture = moveFacts.isCapture && centralSquares.has(dest);
+  let shortTitle = "Continue the position";
   let reasonText = `This improves your ${pieceName} and keeps your position flexible.`;
   if (moveFacts.givesMate) {
-    shortTitle = "Finish the attack";
+    shortTitle = "Checkmate";
     reasonText = `This is checkmate, so Black has no legal reply.`;
   } else if (moveFacts.givesCheck) {
-    shortTitle = "Use the forcing move";
+    shortTitle = "Give check";
     reasonText = `This gives check and forces a response.`;
+  } else if (moveFacts.castlesKing) {
+    shortTitle = "Castle to safety";
+    reasonText = `This moves your king to safety and brings the rook into the game.`;
+  } else if (moveFacts.isCapture) {
+    shortTitle = isCentralCapture ? "Capture in the center" : "Gain material";
+    reasonText = `This capture improves your material balance.`;
   } else if (moveFacts.centralPawnAdvance) {
     shortTitle = "Challenge the center";
     reasonText = `This contests central space and opens lines for your pieces.`;
@@ -467,9 +482,6 @@ export function buildVerifiedUserFacingFallback(moveFacts: ReturnType<typeof bui
   } else if (moveFacts.pieceType === "b" && moveFacts.isDevelopment) {
     shortTitle = "Develop the bishop";
     reasonText = `This develops the bishop to an active diagonal.`;
-  } else if (moveFacts.isCapture) {
-    shortTitle = "Win material cleanly";
-    reasonText = `This capture improves your material balance.`;
   }
   return {
     title: `${san} — ${shortTitle}`,
@@ -495,16 +507,23 @@ export function renderCoachExplanation(
   const san = moveFacts.san || "move";
   const pieceName = moveFacts.pieceName || "piece";
   const dest = (moveFacts.to || "").toLowerCase();
-  let shortTitle = "Improve the position";
+  const centralSquares = new Set(["d4", "e4", "d5", "e5"]);
+  const isCentralCapture = moveFacts.isCapture && centralSquares.has(dest);
+  let shortTitle = "Continue the position";
   let reasonText = `This improves your ${pieceName} and keeps your position flexible.`;
   if (selected.theme === "checkmate" || moveFacts.givesMate) {
-    shortTitle = "Finish the attack";
+    shortTitle = "Checkmate";
     reasonText = `This is checkmate, so Black has no legal reply.`;
   } else if (selected.theme === "check" || selected.theme === "forcing_move" || moveFacts.givesCheck) {
-    shortTitle = "Use the forcing move";
+    shortTitle = "Give check";
     reasonText = `This gives check and forces Black to respond before continuing their plan.`;
+  } else if (selected.theme === "castle_king_safety" || moveFacts.castlesKing) {
+    shortTitle = "Castle to safety";
+    reasonText = moveFacts.castlesKing
+      ? `This moves your king to safety and brings the rook into the game.`
+      : `This supports castling and improves king safety.`;
   } else if (selected.theme === "capture_or_recapture" || moveFacts.isCapture) {
-    shortTitle = "Win material cleanly";
+    shortTitle = isCentralCapture ? "Capture in the center" : "Gain material";
     reasonText = `This capture improves your material balance.`;
   } else if (selected.theme === "central_pawn_advance" || moveFacts.centralPawnAdvance) {
     shortTitle = "Challenge the center";
@@ -518,11 +537,6 @@ export function renderCoachExplanation(
   } else if (selected.theme === "bishop_activation" || (moveFacts.pieceType === "b" && moveFacts.isDevelopment)) {
     shortTitle = "Develop the bishop";
     reasonText = `This develops the bishop to an active diagonal and improves piece coordination.`;
-  } else if (selected.theme === "castle_king_safety" || moveFacts.castlesKing) {
-    shortTitle = "Castle for safety";
-    reasonText = moveFacts.castlesKing
-      ? `This moves your king to safety and brings the rook into the game.`
-      : `This supports castling and improves king safety.`;
   } else if (selected.theme === "center_support") {
     shortTitle = "Support the center";
     reasonText = `This improves your piece while adding support to central squares.`;
@@ -533,7 +547,7 @@ export function renderCoachExplanation(
     shortTitle = "Activate on the diagonal";
     reasonText = `This opens lines for your pieces and improves long-range activity.`;
   } else if (selected.theme === "stable_continuation") {
-    shortTitle = "Solid continuation";
+    shortTitle = "Continue the position";
     reasonText = `This keeps improving your position with a solid continuation.`;
   }
   const title = `${san} — ${shortTitle}`;
