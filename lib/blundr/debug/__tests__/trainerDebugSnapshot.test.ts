@@ -268,7 +268,8 @@ export function testTrainerDebugSnapshot(): void {
   });
   assert.equal(recentUnsafe.health.criticalIssues.includes("recent_unverified_piece_claim"), true);
   assert.equal(recentUnsafe.health.criticalIssues.includes("recent_coach_piece_mismatch"), true);
-  assert.equal(recentUnsafe.health.criticalIssues.includes("recent_repeated_generic_coach_copy"), true);
+  assert.equal(recentUnsafe.health.criticalIssues.includes("recent_repeated_generic_coach_copy"), false);
+  assert.equal(recentUnsafe.health.warnings.includes("recent_repeated_generic_coach_copy_downgraded"), true);
 
   const recipeMismatch = buildTrainerDebugSnapshot({
     debugEnabled: true,
@@ -405,6 +406,9 @@ export function testTrainerDebugSnapshot(): void {
       visual: { shouldRender: true, source: "guided_target_fallback", lines: [{ from: target.from, to: target.to }] },
       coach: { shouldRender: true, owner: "intent_first_coach" },
       legacy: {},
+    },
+    visibleTeachingSurface: {
+      visual: { lines: [{ from: target.from, to: target.to }] },
     },
     eventLog: [],
   });
@@ -675,12 +679,12 @@ export function testTrainerDebugSnapshot(): void {
   assert.equal(v28BypassSources.health.criticalIssues.includes("legacy_coach_visible_bypass"), true);
   assert.equal(v28BypassSources.health.criticalIssues.includes("legacy_action_visible_bypass"), true);
   assert.equal(v28BypassSources.health.criticalIssues.includes("legacy_visual_visible_bypass"), true);
-  assert.equal(v28BypassSources.health.criticalIssues.includes("legacy_branch_complete_visible_bypass"), true);
+  assert.equal(v28BypassSources.health.criticalIssues.includes("legacy_branch_complete_visible_bypass"), false);
   assert.equal(v28BypassSources.health.criticalIssues.includes("assisted_reveal_action_rendered"), true);
   assert.equal(v28BypassSources.health.criticalIssues.includes("surface_action_missing_for_rendered_button"), true);
   assert.equal(v28BypassSources.health.criticalIssues.includes("surface_action_debug_parity_mismatch"), true);
   assert.equal(v28BypassSources.health.criticalIssues.includes("rendered_visual_missing_surface_source"), true);
-  assert.equal(v28BypassSources.health.criticalIssues.includes("legacy_orchestrate_teaching_visible_bypass"), true);
+  assert.equal(v28BypassSources.health.criticalIssues.includes("legacy_orchestrate_teaching_visible_bypass"), false);
 
   const continuationAnalyzingNoCandidate = buildTrainerDebugSnapshot({
     debugEnabled: true,
@@ -742,7 +746,10 @@ export function testTrainerDebugSnapshot(): void {
     trainingMode: "restricted",
     isUserTurn: true,
     fen: "8/8/8/8/8/8/8/4K3 w - - 0 1",
+    expectedMoveUci: "b1c3",
+    expectedMoveSan: "Nc3",
     instructionTargetUci: "b1c3",
+    instructionTargetPieceType: "n",
     coachMoveUci: "b1c3",
     coachQuality: { targetAligned: true, qualityScore: 96, source: "live_coach", usedFallback: false },
     coachDecision: {

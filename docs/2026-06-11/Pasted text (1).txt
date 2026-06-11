@@ -1,0 +1,169 @@
+Stage 2 Consolidation and Readiness Roadmap (Revised)
+Date: 2026-06-11
+Status: Planning Revision
+
+0. Scope Decision
+This roadmap is consolidation/readiness only. It is not an implementation plan for Stage 2 intelligence.
+
+Rules:
+- Do not pre-classify any module as canonical until audit evidence proves ownership.
+- Before Phase A audit completion, use the term: suspected canonical candidate.
+- Remove all implied implementation work from planning-only batches.
+- Separate work into Phase A, Phase B, Phase C, Phase D.
+
+1. Required Phase Split
+Phase A: audit and documentation only.
+Phase B: minimal code only after explicit audit approval.
+Phase C: later crawl/copy integration.
+Phase D: later Stage 2 coaching intelligence.
+
+2. Global Guardrails
+- Stage 1 behavior and safety contracts must not regress.
+- No new parallel systems during audit/readiness.
+- No Italian White mapping in this roadmap.
+- No final concept ranking in this roadmap.
+- No final coaching copy in this roadmap.
+- No visual recipe generation in this roadmap.
+
+3. Phase A — Audit and Documentation Only
+Goal: produce evidence-based ownership decisions before any new Stage 2 behavior is implemented.
+
+A1. Baseline Snapshot (documentation-only)
+Outputs:
+- Branch, HEAD commit, test command inventory.
+- Baseline test status log.
+
+A2. Legacy Module Inventory (documentation-only)
+Outputs:
+- Complete module table with: responsibility, consumers, runtime/test/type usage, overlap risks.
+- Candidate-owner map using suspected canonical candidate labels only.
+
+A3. Import and Runtime Consumer Audit (documentation-only)
+Outputs:
+- Runtime direct/indirect vs test-only vs type-only vs orphaned classification.
+- Evidence links to import locations.
+
+A4. Ownership Decision Matrix Draft (documentation-only)
+Outputs:
+- One row per responsibility with:
+  - suspected canonical candidate
+  - overlapping modules
+  - unresolved risks
+  - required proof to promote from suspected to approved owner.
+
+A5. Consolidation Readiness Report (documentation-only)
+Outputs:
+- Duplication risks list.
+- Gaps list.
+- Defer list for non-readiness work.
+
+A6. Audit Approval Gate (documentation-only decision)
+Exit criteria to enter Phase B:
+- Ownership matrix reviewed and approved.
+- No unreviewed duplication risk in active runtime paths.
+- Clear allow/deny list for minimal Phase B code.
+
+4. Phase B — Minimal Code After Audit Approval
+Goal: add only minimal infrastructure required for readiness enforcement.
+
+Allowed scope (only after A6 approval):
+- Deterministic validators for crawl and copy payload acceptance.
+- Readiness gate wiring that remains disabled by default.
+- Minimal debug/readiness reporting fields.
+- Guardrail tests for ownership and import boundaries.
+
+Not allowed in Phase B:
+- New tactical/strategic detectors.
+- New concept ranking logic.
+- New coaching text generation.
+- New visual recipe generation.
+- Opening-specific curriculum mapping (including Italian White).
+
+5. Phase C — Later Crawl and Copy Integration
+Goal: integrate external datasets only after validators and readiness gate are approved.
+
+C1. Crawl integration (later)
+Validation scope is raw/canonical Lichess crawl fields only.
+- Validate only deterministic schema and presence/format constraints for raw fields.
+- Do not assume crawl contains tactics, strategy, concepts, plans, or copy.
+- Do not derive instructional semantics during crawl acceptance.
+
+C2. Copy integration (later)
+Validation scope is deterministic schema/token/reference checks only.
+- Validate required keys, token limits, reference format, and ID consistency.
+- Do not ask validator to judge chess truth by language quality.
+- Chess-truth checking is allowed only when a copy entry includes explicit evidence IDs that can be deterministically checked.
+
+6. Phase D — Later Stage 2 Coaching Intelligence
+Goal: implement derived coaching intelligence after Phases A-C are complete and approved.
+
+Deferred to this phase:
+- Development, center, recapture, tactic, plan, piece-activity interpretation.
+- Concept scoring/ranking policies.
+- Curriculum mappings (including Italian White).
+- Final copy selection logic.
+- Visual recipe generation.
+
+All deferred features require:
+- Approved definitions.
+- Deterministic fixtures.
+- Explicit owner/module decisions from Phase A matrix.
+
+7. Board-Truth Move Facts Boundary (Current Approved Fact Set)
+Only the following move facts are in-scope for readiness:
+- legal
+- SAN
+- UCI
+- piece
+- from
+- to
+- capture
+- check
+- checkmate
+- castle
+- promotion
+- en passant
+- FEN before
+- FEN after
+
+Everything else is a future derived feature and must not be treated as board-truth in Phases A-B.
+
+8. Promotion Rules for Ownership Labels
+Before Batches/Workstreams equivalent to old B2-B4 are complete:
+- Use suspected canonical candidate only.
+
+Promotion to approved owner requires:
+- import/runtime audit proof
+- overlap resolution evidence
+- explicit approval in the decision matrix
+
+9. Deliverables by Phase
+Phase A deliverables:
+- Inventory doc
+- Import/runtime graph doc
+- Ownership matrix (suspected candidates)
+- Consolidation readiness report
+- Audit approval record
+
+Phase B deliverables:
+- Minimal validators
+- Disabled-by-default readiness gate
+- Minimal readiness debug fields
+- Guardrail tests
+
+Phase C deliverables:
+- Crawl acceptance report (raw/canonical fields only)
+- Copy acceptance report (schema/token/reference; optional evidence-ID checks)
+- Controlled enablement plan
+
+Phase D deliverables:
+- Separate implementation roadmap for coaching intelligence features.
+
+10. Out-of-Scope Statement for This Revision
+This document is a clean consolidation/readiness roadmap only.
+It intentionally excludes:
+- Italian White mapping
+- final concept ranking
+- final copy generation
+- visual recipe generation
+- tactical/strategic/planning inference implementation
