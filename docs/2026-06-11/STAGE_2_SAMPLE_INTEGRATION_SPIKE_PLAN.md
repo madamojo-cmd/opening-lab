@@ -1,26 +1,33 @@
-# Stage 2 Sample Integration Spike Plan (Plan Only)
+# Stage 2 Sample Integration Spike Plan (Plan Only, C.0-SAMPLE v2)
 
-## Goal of next safe spike
-- Run a one-opening, sample-only integration spike using already validated in-memory sample objects.
+## Next safe spike
+- Add a sample-only adapter that accepts already-provided in-memory sample crawl/copy objects.
 
-## Constraints for the spike
-- sample-only adapter over provided objects only
+## Guardrails
 - no filesystem auto-load
-- no `app/page.tsx` wiring yet
+- no `app/page.tsx` wiring
 - no global Stage 2 enablement
-- one-opening only (`colle-white`)
+- one opening only (`colle-white`)
 - feature flag disabled by default
 
-## Authority and policy invariants
-- `CurrentInstructionFrame` remains target authority.
-- `buildVisibleTeachingSurface` remains visible surface authority.
-- Plain View no-leak policy is preserved.
-- Assisted View and Show More parity is preserved.
-- sample copy may render only when safe and target-aligned.
+## Lookup strategy for sample content
+- Resolve content using `openingId + nodeKey/playKey + moveUci + conceptId`.
+- `lineId` in sample copy carries `playKey` reconciliation evidence.
+- sample adapter may filter/select copy, but it must not choose runtime move targets.
 
-## Reversibility
-- Any sample integration code path must be removable without affecting production data.
-- Sample fixtures remain isolated in test/sample locations and do not become runtime defaults.
+## Runtime authority invariants
+- `CurrentInstructionFrame.target` remains target authority.
+- `buildVisibleTeachingSurface` remains visible surface authority.
+- Plain View no-leak policy remains preserved.
+- Assisted View and Show More parity remain preserved.
+
+## Visual metadata policy
+- `visualRecipeRefs` remain metadata only in this spike.
+- No visual recipe rendering or runtime visual mapping in this lane.
+
+## Safety and reversibility
+- Sample copy may render only when target-aligned and safe.
+- Sample integration path must be deletable without affecting production data.
 
 ## Explicit non-goals
 - This does not replace final Phase C.

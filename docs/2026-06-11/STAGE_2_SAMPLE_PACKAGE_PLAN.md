@@ -1,60 +1,79 @@
-# Stage 2 Sample Package Plan (C.0-SAMPLE)
+# Stage 2 Sample Package Plan (C.0-SAMPLE v2)
 
 ## Selected openingId
 - `colle-white`
 
-## Source files inspected
-- `imports/stage2-sample/opening-nodes.stage2.canonical-all23.12ply.jsonl`
-- `imports/stage2-sample/candidate-moves.stage2.canonical-all23.12ply.top10-played.jsonl`
+## Source crawl files inspected
 - `imports/stage2-sample/blundr-sample-lane-source/canonical-all23-colle-white/sample-only.colle-white.opening-nodes.jsonl`
 - `imports/stage2-sample/blundr-sample-lane-source/canonical-all23-colle-white/sample-only.colle-white.candidate-moves.jsonl`
 - `imports/stage2-sample/blundr-sample-lane-source/canonical-all23-colle-white/sample-only.colle-white.summary.json`
 - `imports/stage2-sample/blundr-sample-lane-source/canonical-all23-colle-white/README_SAMPLE_ONLY.md`
 
+## Source content files inspected
+- `imports/stage2-sample/content-base/docs/content/stage2/openings/colle-white.md`
+- `imports/stage2-sample/content-base/docs/content/stage2/openings/colle-white.json-spec.md`
+- `imports/stage2-sample/content-base/docs/content/stage2/07_COPY_LIBRARY.md`
+- `imports/stage2-sample/content-base/docs/content/stage2/06_FEATURE_TO_CONCEPT_MAPPING.md`
+- `imports/stage2-sample/content-base/docs/content/stage2/08_VISUAL_RECIPE_LIBRARY.md`
+
 ## Source dataset description
-- Lane: imported older canonical 21-opening, 12-ply, top10-played source files.
-- Scope for this sample package: single opening (`colle-white`) only.
-- Selection policy used in sample source generation:
-  - target about 120 nodes
-  - up to 10 candidate moves per node
-  - prioritize nodes with candidate coverage
-  - deterministic ordering by `ply asc`, `totalGames desc`, `nodeId asc`
+- Crawl source is the previously prepared sample-only Colle lane from older canonical 21-opening, 12-ply, top10-played imports.
+- Content source is approved Stage 2 content-base Colle documentation and supporting concept/copy/visual mapping docs.
+- Output is a small sample-only package for validation and reconciliation testing; no runtime integration is included.
 
-## Sample source counts
-- Node count: `120`
+## Counts
+- Node count (sample source jsonl): `120`
 - Candidate count (sample source jsonl): `1177`
-- Candidate count (validator-shaped crawl fixture after dedupe): `1027`
+- Candidate count (validator-shaped crawl fixture): `1027`
 
-## Source field mapping to sample crawl fixture
-- Node mappings:
-  - `openingId -> openingId`
-  - `nodeId -> nodeKey`
-  - `ply -> ply`
-  - `playSequenceUci -> movePathUci` (split sequence)
-  - `parentNodeKey -> parentNodeKey` (when present)
-  - sample source metadata preserved as unknown-field metadata: `playKey`, `playSequenceUci`, `sideToMove`, `totalGames`, `source`, `profileId`, `nodeId`
-- Candidate mappings:
-  - `openingId -> openingId`
-  - `nodeId -> nodeKey`
-  - `uci -> moveUci`
-  - `san -> moveSan`
-  - `blundrTopPlayedRank -> rank`
-  - `totalGames -> games`
-  - `whiteWins -> white`
-  - `draws -> draws`
-  - `blackWins -> black`
-  - sample metadata preserved as unknown-field metadata: `blundrUse`, `profileId`, `playKey`, `totalGames`
+## Colle content sections found
+- Opening Identity
+- Opening Summary
+- Curriculum Goals
+- Core Plans
+- Main Line
+- Feature Detection Map
+- Feature-to-Concept Map
+- Copy Library
+- Visual Recipe Library
 
-## Missing fields (by validator schema)
-- Node-level optional fields not fully populated in every record: `fen`, `fen4`, `movePathSan`, `sourceGroup`.
-- Candidate-level optional fields not fully populated in every record: `childNodeKey`, `sourceGroup`.
-- No final Phase C crawl package metadata is implied by this sample fixture.
+## Colle concept IDs found
+- `colle-d4-claim-center`
+- `colle-nf3-develop-support-center`
+- `colle-e3-solid-structure`
+- `colle-bd3-kingside-aim`
+- `colle-c3-center-support`
+- `colle-nbd2-coordinate-break`
+- `colle-castle-king-safety`
+- `colle-re1-support-e4`
+- `colle-dxe5-clarify-center`
+- `colle-nxe5-central-recapture`
+
+## Copy/content field mapping
+- Content concept -> copy fixture `conceptId`
+- Colle sequence key (`playKey`) -> copy fixture `lineId` for reconciliation evidence
+- Crawl `nodeId` -> crawl fixture `nodeKey` -> copy fixture `nodeKey`
+- Crawl `uci` -> crawl fixture `moveUci` -> copy fixture `moveUci`
+- Colle visual recipe hints -> copy fixture `visualRecipeRefs` metadata only
+
+## Crawl/content reconciliation strategy
+- Reconcile each copy entry against crawl using `openingId + lineId(playKey) + moveUci`.
+- `nodeKey` in copy must resolve to a real crawl node.
+- `moveUci` in copy must resolve to a real candidate for that `nodeKey`.
+- Old markdown/spec draft node IDs (e.g., `colle-white-nX`) are not used as runtime authority.
+- Content does not choose moves; crawl references remain the move reference in this sample lane.
+
+## Missing fields
+- Crawl fixture intentionally omits some optional schema fields (`fen`, `fen4`, `movePathSan`) where source data did not provide them.
+- Copy fixture is intentionally small and does not attempt full concept coverage.
+- Visual recipes are metadata references only; no visual rendering mapping is implemented in this lane.
 
 ## Sample-only assumptions
-- Unknown-field warnings are acceptable in this sample lane because source metadata is intentionally preserved.
-- Copy fixture is intentionally tiny and product-safe, with sample IDs prefixed `sample_`.
-- No production IDs were synthesized.
+- Unknown-field warnings in crawl validation are expected and accepted for preserved source metadata (`playKey`, `profileId`, `totalGames`, `blundrUse`, etc.).
+- Sample copy text is normalized from Colle content and kept short/safe.
+- No production IDs were synthesized; all synthetic IDs use `sample_` prefix.
 
 ## Confirmations
-- This package is sample-only and does not replace final Phase C.
-- This package is not final 5/4/3/2 data.
+- This is not final Phase C.
+- This is not final 5/4/3/2 data.
+- This is not runtime integration.

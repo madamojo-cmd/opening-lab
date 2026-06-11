@@ -1,63 +1,126 @@
 {
-  "version": "sample_colle_white_copy_bundle_01",
-  "generatedAt": "2026-06-11T19:25:35.129Z",
+  "version": "sample_colle_white_copy_bundle_02",
+  "generatedAt": "2026-06-11T21:15:00.000Z",
   "locale": "en-US",
   "source": "stage2-copy-content-package",
   "entries": [
     {
-      "entryId": "sample_colle_assisted_001",
+      "entryId": "sample_colle_nf3_001",
       "openingId": "colle-white",
-      "nodeKey": "b8d754ad4cedc702d6deaa8369c60d23ea1b56fc",
-      "moveUci": "d7d5",
+      "lineId": "d2d4,d7d5",
+      "nodeKey": "8b67ae21160fe194d99c3002c756d8a726dff197",
+      "moveUci": "g1f3",
+      "conceptId": "colle-nf3-develop-support-center",
       "surface": "assisted",
       "status": "approved",
-      "title": "Build your Colle setup",
-      "body": "Continue your setup with a stable developing move that supports central structure.",
+      "title": "Develop with support",
+      "body": "Nf3 develops a knight and supports your d4 center setup.",
+      "visualRecipeRefs": [
+        "knightDevelop"
+      ],
       "evidenceIds": [
-        "sample_ev_001"
+        "sample_ev_colle_nf3_001"
       ]
     },
     {
-      "entryId": "sample_colle_hint_002",
+      "entryId": "sample_colle_e3_002",
       "openingId": "colle-white",
-      "nodeKey": "403b1641ad4de3a7c1ee6c9b15ba3f9413e4899e",
-      "moveUci": "d7d5",
+      "lineId": "d2d4,d7d5",
+      "nodeKey": "8b67ae21160fe194d99c3002c756d8a726dff197",
+      "moveUci": "e2e3",
+      "conceptId": "colle-e3-solid-structure",
       "surface": "plain_hint",
       "status": "approved",
-      "hint": "Look for a simple developing move that keeps your center coordinated.",
+      "hint": "e3 reinforces the d4 pawn chain and keeps your structure solid.",
+      "visualRecipeRefs": [
+        "pawnChain"
+      ],
       "evidenceIds": [
-        "sample_ev_002"
+        "sample_ev_colle_e3_002"
       ]
     },
     {
-      "entryId": "sample_colle_showmore_003",
+      "entryId": "sample_colle_bd3_003",
       "openingId": "colle-white",
-      "nodeKey": "d14fb324180cce815ff0126f4e15cdf766e948aa",
-      "moveUci": "g8f6",
+      "lineId": "d2d4,d7d5,e2e3,g8f6",
+      "nodeKey": "9d3737b23326a4fde524e9532e2c35e7133de1d8",
+      "moveUci": "f1d3",
+      "conceptId": "colle-bd3-kingside-aim",
       "surface": "plain_show_more",
       "status": "approved",
-      "title": "Why this move fits",
-      "body": "This move supports the Colle structure and keeps your pieces connected for the next step.",
+      "title": "Activate the bishop",
+      "body": "Bd3 develops your bishop to an active diagonal while supporting kingside plans.",
+      "visualRecipeRefs": [
+        "bishopAttack"
+      ],
       "evidenceIds": [
-        "sample_ev_003"
+        "sample_ev_colle_bd3_003"
       ]
     },
     {
-      "entryId": "sample_colle_review_004",
+      "entryId": "sample_colle_c3_004",
       "openingId": "colle-white",
-      "nodeKey": "0f8886a4016c0af3d03ab7236645e8086d89c000",
-      "moveUci": "d7d5",
+      "lineId": "d2d4,d7d5,g1f3,g8f6",
+      "nodeKey": "18b7943c8145495f9cc5cdb652ad16a44ea53da3",
+      "moveUci": "c2c3",
+      "conceptId": "colle-c3-center-support",
       "surface": "review",
-      "status": "draft",
-      "body": "Review this setup move and how it supports your opening structure."
+      "status": "approved",
+      "body": "c3 supports your center and helps keep the d4 structure coordinated.",
+      "visualRecipeRefs": [
+        "centralSupport"
+      ],
+      "evidenceIds": [
+        "sample_ev_colle_c3_004"
+      ]
     },
     {
-      "entryId": "sample_colle_disabled_005",
+      "entryId": "sample_colle_nbd2_005",
       "openingId": "colle-white",
-      "nodeKey": "b8d754ad4cedc702d6deaa8369c60d23ea1b56fc",
-      "moveUci": "g8f6",
+      "lineId": "d2d4,d7d5,g1f3,g8f6",
+      "nodeKey": "18b7943c8145495f9cc5cdb652ad16a44ea53da3",
+      "moveUci": "b1d2",
+      "conceptId": "colle-nbd2-coordinate-break",
       "surface": "assisted",
-      "status": "disabled"
+      "status": "draft",
+      "body": "Nbd2 connects your pieces and supports a later central break.",
+      "visualRecipeRefs": [
+        "knightSupport"
+      ],
+      "evidenceIds": [
+        "sample_ev_colle_nbd2_005"
+      ]
+    },
+    {
+      "entryId": "sample_colle_dxe5_006",
+      "openingId": "colle-white",
+      "lineId": "d2d4,e7e5",
+      "nodeKey": "d37dd41d005c5f7efcd023f48b919f2401d74113",
+      "moveUci": "d4e5",
+      "conceptId": "colle-dxe5-clarify-center",
+      "surface": "plain_show_more",
+      "status": "approved",
+      "title": "Clarify the center",
+      "body": "dxe5 resolves central tension and opens lines for your pieces.",
+      "visualRecipeRefs": [
+        "centralExchange"
+      ],
+      "evidenceIds": [
+        "sample_ev_colle_dxe5_006"
+      ]
+    },
+    {
+      "entryId": "sample_colle_disabled_007",
+      "openingId": "colle-white",
+      "lineId": "d2d4,d7d5,g1f3,g8f6",
+      "nodeKey": "18b7943c8145495f9cc5cdb652ad16a44ea53da3",
+      "moveUci": "c2c3",
+      "conceptId": "colle-c3-center-support",
+      "surface": "assisted",
+      "status": "disabled",
+      "visualRecipeRefs": [
+        "centralSupport"
+      ]
     }
   ]
 }
