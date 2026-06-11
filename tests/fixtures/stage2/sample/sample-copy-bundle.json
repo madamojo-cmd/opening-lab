@@ -1,0 +1,63 @@
+{
+  "version": "sample_colle_white_copy_bundle_01",
+  "generatedAt": "2026-06-11T19:25:35.129Z",
+  "locale": "en-US",
+  "source": "stage2-copy-content-package",
+  "entries": [
+    {
+      "entryId": "sample_colle_assisted_001",
+      "openingId": "colle-white",
+      "nodeKey": "b8d754ad4cedc702d6deaa8369c60d23ea1b56fc",
+      "moveUci": "d7d5",
+      "surface": "assisted",
+      "status": "approved",
+      "title": "Build your Colle setup",
+      "body": "Continue your setup with a stable developing move that supports central structure.",
+      "evidenceIds": [
+        "sample_ev_001"
+      ]
+    },
+    {
+      "entryId": "sample_colle_hint_002",
+      "openingId": "colle-white",
+      "nodeKey": "403b1641ad4de3a7c1ee6c9b15ba3f9413e4899e",
+      "moveUci": "d7d5",
+      "surface": "plain_hint",
+      "status": "approved",
+      "hint": "Look for a simple developing move that keeps your center coordinated.",
+      "evidenceIds": [
+        "sample_ev_002"
+      ]
+    },
+    {
+      "entryId": "sample_colle_showmore_003",
+      "openingId": "colle-white",
+      "nodeKey": "d14fb324180cce815ff0126f4e15cdf766e948aa",
+      "moveUci": "g8f6",
+      "surface": "plain_show_more",
+      "status": "approved",
+      "title": "Why this move fits",
+      "body": "This move supports the Colle structure and keeps your pieces connected for the next step.",
+      "evidenceIds": [
+        "sample_ev_003"
+      ]
+    },
+    {
+      "entryId": "sample_colle_review_004",
+      "openingId": "colle-white",
+      "nodeKey": "0f8886a4016c0af3d03ab7236645e8086d89c000",
+      "moveUci": "d7d5",
+      "surface": "review",
+      "status": "draft",
+      "body": "Review this setup move and how it supports your opening structure."
+    },
+    {
+      "entryId": "sample_colle_disabled_005",
+      "openingId": "colle-white",
+      "nodeKey": "b8d754ad4cedc702d6deaa8369c60d23ea1b56fc",
+      "moveUci": "g8f6",
+      "surface": "assisted",
+      "status": "disabled"
+    }
+  ]
+}

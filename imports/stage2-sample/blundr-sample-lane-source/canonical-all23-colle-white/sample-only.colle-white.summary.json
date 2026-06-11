@@ -1,0 +1,17 @@
+{
+  "sampleLane": true,
+  "openingId": "colle-white",
+  "sourceNodesFile": "imports/stage2-sample/opening-nodes.stage2.canonical-all23.12ply.jsonl",
+  "sourceCandidateFile": "imports/stage2-sample/candidate-moves.stage2.canonical-all23.12ply.top10-played.jsonl",
+  "nodeCount": 120,
+  "candidateMoveCount": 1177,
+  "uniqueNodeIdsWithCandidates": 120,
+  "maxCandidatesPerNode": 10,
+  "sort": "nodes: ply_asc,totalGames_desc,nodeId_asc; candidates: profile_match_first,totalGames_desc,blundrTopPlayedRank_asc,uci_asc",
+  "generatedAt": "2026-06-11T19:24:56.921Z",
+  "notes": [
+    "SAMPLE ONLY: not final Phase C dataset",
+    "SAMPLE ONLY: not final 5/4/3/2 package",
+    "SAMPLE ONLY: not production runtime data"
+  ]
+}
