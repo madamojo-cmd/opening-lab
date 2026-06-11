@@ -1,0 +1,32 @@
+# Stage 2 Legacy Runtime Isolation Plan (Phase B.4)
+Date: 2026-06-11
+Scope: Planning and static boundary preservation only. No runtime behavior changes.
+
+## Re-Audit Basis
+Runtime-direct legacy feeders re-audited from `app/page.tsx` import/call locations:
+- import lines: `16, 22, 23, 31, 36, 37, 38, 39, 43`
+- call/use lines: `1846, 1898, 1915, 2037, 2077, 2078, 2091, 2110, 2270`
+
+## Isolation Matrix
+| File path | app/page.tsx import name | Current call/use purpose | Runtime effect category | Current risk | Classification | Recommended future action | Earliest allowed phase | Required tests before action | Rollback plan | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `lib/blundr/coach/coachDecisionEngine.ts` | `decideCoachOutput` | Builds adaptive coach decision path (`rawCoachDecision`) that can feed visible coach card content/fallbacks | ranking-adjacent, copy-adjacent, target-authority-adjacent | Parallel decision chain can diverge from approved visible-surface ownership | WRAP_BEFORE_VISIBLE_STAGE2 | Introduce adapter boundary for future Stage 2 paths; keep existing call path untouched until adapter contract is validated | Phase D planning/execution | `stage2SurfaceOwnershipLock`, `stage2PlainAssistedShowMoreLock`, regression tests for visible coach parity | Revert adapter routing, restore direct call path in one patch, rerun baseline suite | Existing Stage 1 behavior relies on this path today |
+| `lib/blundr/liveCoach/pedagogicalOpportunityEngine.ts` | `rankPedagogicalOpportunities` | Produces live pedagogical opportunity ranking used before selected comment/copy | ranking-adjacent | Legacy ranking overlap with approved concept activation/ownership model | QUARANTINE_BEFORE_VISIBLE_STAGE2 | Future Stage 2-visible paths must be blocked from importing/calling this module directly | Phase D planning first, then execution | `stage2NoLegacyImportBoundary`, future quarantine import checks, baseline trio | Remove quarantine marker/guard and restore prior imports if regression occurs | Keep current runtime behavior unchanged in B.4 |
+| `lib/blundr/liveCoach/liveCoachCopyLibrary.ts` | `pickLiveCoachCopy` | Fallback copy text source when pipeline body is empty | copy-adjacent | Legacy fallback text can bypass future unified copy ownership | QUARANTINE_BEFORE_VISIBLE_STAGE2 | Disallow in future Stage 2-visible path; keep current runtime use until replacement is approved | Phase D | `stage2NoLegacyImportBoundary`, future copy-source ownership tests | Re-enable prior fallback usage if safety regression detected | Current call at line ~2110 is still active |
+| `lib/blundr/liveCoach/liveCoachIntentSelector.ts` | `selectIntentForOpportunity` | Assigns selected intent metadata in coach debug payload | ranking-adjacent, debug-only | Intent selection overlap with future unified concept/intent ownership | QUARANTINE_BEFORE_VISIBLE_STAGE2 | Restrict future Stage 2 imports; retain current debug/back-compat behavior now | Phase D | `stage2NoLegacyImportBoundary`, trainer-debug suite | Restore prior debug intent selection path if needed | Presently impacts debug + metadata, not sole target authority |
+| `lib/blundr/liveCoach/liveCoachCommentRanker.ts` | `selectBestLiveComment` | Chooses top live comment from ranked opportunities | ranking-adjacent, copy-adjacent | Competes with future single-owner selection path | QUARANTINE_BEFORE_VISIBLE_STAGE2 | Block new Stage 2-visible usage; defer replacement/isolation to later | Phase D | `stage2NoLegacyImportBoundary`, `stage2SurfaceOwnershipLock`, baseline trio | Revert isolation and reinstate current selector on failure | Still directly used in current runtime |
+| `lib/blundr/coachBrain/coachExplanationPipeline.ts` | `buildCoachExplanationPipeline` | Produces explanation packet + fallback utilities used in live coach path | copy-adjacent, claim-validation-adjacent | Legacy explanation chain overlaps with approved safety/visible-surface ownership | WRAP_BEFORE_VISIBLE_STAGE2 | Later wrap behind explicit adapter contract for visible Stage 2 use | Phase D | `stage2SurfaceOwnershipLock`, `stage2PlainAssistedShowMoreLock`, trainer-debug suite | Roll back wrapper and restore direct pipeline call | Active in both live state construction and debug fields |
+| `lib/blundr/teaching/teachingOrchestrator.ts` | `orchestrateTeaching` | Builds teaching orchestration context used by current training cues and downstream visual recipe path | visual-adjacent, provider-adjacent | Legacy orchestration remains runtime-direct and can influence visible educational context | KEEP_ACTIVE_UNTIL_D | Leave active until later integration replacement is fully approved; document as known risk | Keep through B/C; revisit in D | Baseline trio, `stage2SurfaceOwnershipLock`, `stage2LegacyRuntimeRiskRegistry` | Keep existing direct usage; if attempted isolation fails, revert to current call | Removing early would risk Stage 1 coaching behavior regressions |
+| `lib/blundr/visualRecipe/visualRecipeCompiler.ts` | `compileVisualRecipe` | Compiles visual recipe primitives from orchestration/trainer context | visual-adjacent | Parallel visual path overlaps with future Stage 2 visual ownership | KEEP_ACTIVE_UNTIL_D | Maintain current behavior; plan isolation when Stage D visible integration work starts | Keep through B/C; revisit in D | Baseline trio, `stage2BoardTruthBoundaryLock`, visual-related regression tests | Revert to current direct compiler usage | Directly affects board visual outputs today |
+| `lib/blundr/visualRecipe/visualRecipeAdapter.ts` | `adaptVisualRecipe` | Adapts compiled recipe into phase/view/board-safe overlay primitives | visual-adjacent | Legacy visual adapter remains in direct UI path | KEEP_ACTIVE_UNTIL_D | Preserve current adapter path until explicit Stage D replacement/isolation plan | Keep through B/C; revisit in D | Baseline trio, visual regression tests, `stage2SurfaceOwnershipLock` | Revert to direct adapter usage if overlay regressions appear | Changing early risks Plain/Assisted/Show More visual stability |
+
+## Classification Summary
+- KEEP_ACTIVE_UNTIL_D: 3
+- WRAP_BEFORE_VISIBLE_STAGE2: 2
+- QUARANTINE_BEFORE_VISIBLE_STAGE2: 4
+- DELETE_AFTER_IMPORT_PROOF: 0
+- DEBUG_ONLY_OR_TEST_ONLY_REVIEW: 0
+
+## Why Phase C/D Stay Blocked
+- Phase C remains blocked until final crawl + copy/content bundles are uploaded and explicitly approved.
+- Phase D visible integration remains blocked until legacy runtime isolation actions are explicitly approved and planned in implementation detail.
