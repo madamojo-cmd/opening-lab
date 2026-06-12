@@ -1,0 +1,27 @@
+{
+  "generatedAtUtc": "2026-06-12T17:27:47Z",
+  "sourceStates": {
+    "first8": "/home/codespace/blundr-crawl/blundr-lichess-stage2-filtered-followup-crawl/data/lichess/state/crawl-state.rds",
+    "other13": "/home/codespace/blundr-crawl/blundr-lichess-stage2-other13-stepdown-top2-crawl/data/lichess/state/crawl-state.rds"
+  },
+  "filters": {
+    "runtimeProfile": "all_blitz_rapid_classical_1200_plus",
+    "runtimeSource": "lichess when available",
+    "minTotalGames": 500,
+    "maxRuntimeMovesPerParent": 8
+  },
+  "outputs": {
+    "fullNodesJsonl": "normalized/opening-nodes.merged.stepdown.full.jsonl",
+    "fullCandidatesJsonl": "normalized/candidate-moves.merged.stepdown.full.jsonl",
+    "runtimeNodesJsonl": "runtime/opening-book.nodes.runtime.v1.jsonl",
+    "runtimeMovesJsonl": "runtime/opening-book.moves.runtime.v1.jsonl"
+  },
+  "summary": {
+    "queued": 0,
+    "uniqueNodes": 49232,
+    "nodeRows": 246160,
+    "candidateRows": 4380607,
+    "runtimeMoves": 116508,
+    "openingCount": 21
+  }
+}
