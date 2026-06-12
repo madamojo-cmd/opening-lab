@@ -79,3 +79,26 @@ export type Stage2RuntimeBookMoveQueryInput = {
   openingId: string;
   playKeyBefore: string;
 };
+
+export type Stage2RuntimeBookCandidate = {
+  uci: string;
+  san?: string;
+  source: "book";
+  supported: true;
+  runtimeBookSource: "stage2-runtime-book";
+  rank?: number;
+  totalGames?: number;
+  playPct?: number;
+  profile?: string;
+  profiles?: string;
+  sourceDetail?: string;
+  sources?: string;
+};
+
+export type Stage2RuntimeCandidatesForFrameResult = {
+  openingId: string;
+  playKeyBefore: string;
+  candidates: Stage2RuntimeBookCandidate[];
+  hasRuntimeBookCandidates: boolean;
+  bookExhausted: boolean;
+};

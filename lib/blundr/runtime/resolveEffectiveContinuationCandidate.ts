@@ -53,7 +53,12 @@ export type ResolveEffectiveContinuationCandidateOutput = {
   guard: EffectiveContinuationGuard;
 };
 
-const ALLOWED_STOCKFISH_SOURCES = new Set(["stockfish_top_move", "stockfish_safe_move", "engine_best"]);
+const ALLOWED_CONTINUATION_CANDIDATE_SOURCES = new Set([
+  "stockfish_top_move",
+  "stockfish_safe_move",
+  "engine_best",
+  "stage2-runtime-book",
+]);
 const PIECE_NAME_BY_CODE: Record<string, string> = {
   p: "pawn",
   n: "knight",
@@ -119,7 +124,7 @@ export function resolveEffectiveContinuationCandidate(
   const legalSet = new Set(input.legalMoveUcis.map((uci) => String(uci).toLowerCase()));
   const resolvedTargetUci = normalizeUci(input.continuationResolvedTargetUci);
   const resolvedTargetSource = String(input.continuationResolvedTargetSource ?? "").trim();
-  const sourceAllowed = resolvedTargetSource.length > 0 && ALLOWED_STOCKFISH_SOURCES.has(resolvedTargetSource);
+  const sourceAllowed = resolvedTargetSource.length > 0 && ALLOWED_CONTINUATION_CANDIDATE_SOURCES.has(resolvedTargetSource);
   const fenMatches =
     resolvedTargetUci != null &&
     normalizeFen4(input.continuationResolvedTargetFen4 ?? input.boardFen4) === normalizeFen4(input.boardFen4);
@@ -156,13 +161,17 @@ export function resolveEffectiveContinuationCandidate(
     else if (!fenMatches) blockedReason = "fen_mismatch";
     else if (!legal) blockedReason = "illegal_move";
     else {
+      const promotionReason =
+        resolvedTargetSource === "stage2-runtime-book"
+          ? "stage2_runtime_book_promoted"
+          : "stockfish_resolved_target_promoted";
       candidate = buildCandidateFromUci({
         boardFen: input.boardFen,
         boardFen4: normalizeFen4(input.boardFen4),
         uci: resolvedTargetUci,
         source: resolvedTargetSource,
         label: String(input.continuationResolvedTargetLabel ?? "Best"),
-        reason: "stockfish_resolved_target_promoted",
+        reason: promotionReason,
         fallbackSan: input.continuationResolvedTargetSan,
       });
       if (!candidate) blockedReason = "missing_san_or_piece";

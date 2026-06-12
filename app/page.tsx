@@ -148,6 +148,29 @@ type PendingOpponentRequest = {
   mode: TrainingMode;
   startedAt: number;
 };
+type RuntimeBookFrameCandidate = {
+  uci: string;
+  san?: string;
+  source: "book";
+  supported: true;
+  runtimeBookSource: "stage2-runtime-book";
+  rank?: number;
+  totalGames?: number;
+  playPct?: number;
+  profile?: string;
+  profiles?: string;
+  sourceDetail?: string;
+  sources?: string;
+};
+type RuntimeBookFrameQueryState = {
+  openingId: string | null;
+  playKeyBefore: string | null;
+  candidates: RuntimeBookFrameCandidate[];
+  hasRuntimeBookCandidates: boolean;
+  bookExhausted: boolean;
+  status: "idle" | "loading" | "ready" | "error";
+  error: string | null;
+};
 const HARD_CONTINUATION_BREAK_PLY = 22;
 const SUGGESTION_VALIDATION_MULTIPV = 10;
 const USER_MOVE_RATING_MULTIPV = 32;
@@ -276,6 +299,33 @@ const LOCAL_TELEMETRY_KEY = "blundr-v27-local-telemetry";
 const MAX_LOCAL_TELEMETRY_EVENTS = 120;
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
 const FILE_TO_INDEX: Record<string, number> = Object.fromEntries(FILES.map((f, i) => [f, i]));
+const STAGE2_RUNTIME_OPENING_ID_BY_REPERTOIRE_ID: Record<string, string> = {
+  "caro-black": "caro-kann-black",
+  "ruy-white": "ruy-lopez-white",
+};
+const STAGE2_RUNTIME_OPENING_IDS = new Set([
+  "caro-kann-black",
+  "colle-white",
+  "english-white",
+  "french-black",
+  "italian-black",
+  "italian-white",
+  "kings-indian-black",
+  "london-white",
+  "nimzo-indian-black",
+  "petroff-black",
+  "pirc-black",
+  "qgd-black",
+  "queens-gambit-white",
+  "queens-indian-black",
+  "reti-white",
+  "ruy-lopez-white",
+  "scandinavian-black",
+  "scotch-white",
+  "sicilian-black",
+  "slav-black",
+  "vienna-white",
+]);
 const RATING_PRESETS = [
   { label: "New", value: "1000", target: "<1000", skill: 800 },
   { label: "Beginner", value: "1000,1200", target: "1000–1200", skill: 1100 },
@@ -301,6 +351,25 @@ function classNames(...classes:Array<string|false|null|undefined>){return classe
 function normalizeFen(fen:string){return fen.split(" ").slice(0,4).join(" ")}
 function buildRuntimeFrameKey(input:{fen:string;trainerPhase:string;trainerView:TrainerView;trainingMode:TrainingMode;isUserTurn:boolean;instructionTargetUci:string|null}){return `${normalizeFen(input.fen)}|${input.trainerPhase}|${input.trainerView}|${input.trainingMode}|${input.isUserTurn?"user":"opp"}|${input.instructionTargetUci??"none"}`}
 function moveToUci(move:{from:string;to:string;promotion?:string}){return `${move.from}${move.to}${move.promotion??""}`}
+function resolveRuntimeOpeningId(repertoireId:string):string|null{
+  const mapped=STAGE2_RUNTIME_OPENING_ID_BY_REPERTOIRE_ID[repertoireId]??repertoireId;
+  return STAGE2_RUNTIME_OPENING_IDS.has(mapped)?mapped:null;
+}
+function buildRuntimePlayKeyBeforeFromSanHistory(historySan:string[]):string|null{
+  if(!historySan.length)return null;
+  try{
+    const game=new Chess();
+    const ucis:string[]=[];
+    for(const san of historySan){
+      const move=game.move(san);
+      if(!move)return null;
+      ucis.push(moveToUci(move));
+    }
+    return ucis.length?ucis.join(","):null;
+  }catch{
+    return null;
+  }
+}
 function isValidSquare(square:string){return /^[a-h][1-8]$/.test(square)}
 // v2.7.40 P1 Fix 3: shared reverse guard (also in continuedPlay policy) to break emergency legal fallback loops (Ra1<->Ra2 etc)
 function isImmediateReverseOf(prevUci:string|null|undefined, candidateUci:string):boolean{
@@ -951,6 +1020,15 @@ export default function App(){
   const [lastCoachRecords,setLastCoachRecords]=useState<LastCoachRecord[]>([]);
   const [coachTimeline,setCoachTimeline]=useState<CoachSessionLogEntry[]>([]);
   const [continuationAnalysisStatus,setContinuationAnalysisStatus]=useState<ContinuationRuntimeStatus>("idle");
+  const [runtimeBookFrameQuery,setRuntimeBookFrameQuery]=useState<RuntimeBookFrameQueryState>({
+    openingId:null,
+    playKeyBefore:null,
+    candidates:[],
+    hasRuntimeBookCandidates:false,
+    bookExhausted:true,
+    status:"idle",
+    error:null,
+  });
   const [lastContinuationUserMoveRating,setLastContinuationUserMoveRating]=useState<(ContinuationUserMoveRatingResult&{
     moveUci:string;
     moveSan:string;
@@ -1393,6 +1471,92 @@ export default function App(){
       debug:{lockId:lock.continuationCandidateLockId,requestId:lock.continuationCandidateLockRequestId},
     };
   },[trainingMode,isUserTurn,userExplicitlyEnteredContinuation,continuationCandidateLock,fen,game]);
+  const runtimeOpeningIdForFrame=useMemo(
+    ()=>resolveRuntimeOpeningId(repertoire.id),
+    [repertoire.id],
+  );
+  const runtimePlayKeyBeforeForFrame=useMemo(
+    ()=>buildRuntimePlayKeyBeforeFromSanHistory(moveHistory),
+    [moveHistory.join("|")],
+  );
+  useEffect(()=>{
+    if(
+      activeTab!=="train"||
+      trainingMode!=="continuation"||
+      trainerPhase!=="ready_for_user"||
+      !isUserTurn||
+      forceContinuationPause||
+      !userExplicitlyEnteredContinuation||
+      !runtimeOpeningIdForFrame||
+      !runtimePlayKeyBeforeForFrame
+    ){
+      setRuntimeBookFrameQuery({
+        openingId:runtimeOpeningIdForFrame??null,
+        playKeyBefore:runtimePlayKeyBeforeForFrame??null,
+        candidates:[],
+        hasRuntimeBookCandidates:false,
+        bookExhausted:true,
+        status:"idle",
+        error:null,
+      });
+      return;
+    }
+
+    const controller=new AbortController();
+    setRuntimeBookFrameQuery((prev)=>({
+      openingId:runtimeOpeningIdForFrame,
+      playKeyBefore:runtimePlayKeyBeforeForFrame,
+      candidates:prev.openingId===runtimeOpeningIdForFrame&&prev.playKeyBefore===runtimePlayKeyBeforeForFrame?prev.candidates:[],
+      hasRuntimeBookCandidates:prev.openingId===runtimeOpeningIdForFrame&&prev.playKeyBefore===runtimePlayKeyBeforeForFrame?prev.hasRuntimeBookCandidates:false,
+      bookExhausted:prev.openingId===runtimeOpeningIdForFrame&&prev.playKeyBefore===runtimePlayKeyBeforeForFrame?prev.bookExhausted:true,
+      status:"loading",
+      error:null,
+    }));
+
+    const params=new URLSearchParams({openingId:runtimeOpeningIdForFrame,playKeyBefore:runtimePlayKeyBeforeForFrame});
+    void fetch(`/api/runtime-book/candidates?${params.toString()}`,{signal:controller.signal})
+      .then(async(res)=>{
+        const payload=await res.json();
+        if(controller.signal.aborted)return;
+        const candidates=Array.isArray(payload?.candidates)?payload.candidates:[];
+        setRuntimeBookFrameQuery({
+          openingId:runtimeOpeningIdForFrame,
+          playKeyBefore:runtimePlayKeyBeforeForFrame,
+          candidates,
+          hasRuntimeBookCandidates:Boolean(payload?.hasRuntimeBookCandidates&&candidates.length>0),
+          bookExhausted:Boolean(payload?.bookExhausted??candidates.length===0),
+          status:"ready",
+          error:null,
+        });
+      })
+      .catch((error)=>{
+        if(controller.signal.aborted)return;
+        setRuntimeBookFrameQuery({
+          openingId:runtimeOpeningIdForFrame,
+          playKeyBefore:runtimePlayKeyBeforeForFrame,
+          candidates:[],
+          hasRuntimeBookCandidates:false,
+          bookExhausted:true,
+          status:"error",
+          error:error instanceof Error?error.message:String(error),
+        });
+      });
+
+    return()=>controller.abort();
+  },[
+    activeTab,
+    trainingMode,
+    trainerPhase,
+    isUserTurn,
+    forceContinuationPause,
+    userExplicitlyEnteredContinuation,
+    runtimeOpeningIdForFrame,
+    runtimePlayKeyBeforeForFrame,
+  ]);
+  const runtimeBookPreferredCandidate=useMemo(
+    ()=>runtimeBookFrameQuery.hasRuntimeBookCandidates?runtimeBookFrameQuery.candidates[0]??null:null,
+    [runtimeBookFrameQuery.hasRuntimeBookCandidates,runtimeBookFrameQuery.candidates],
+  );
   const stockfishTopMovesForContinuation=useMemo(()=>mapEngineLinesToStockfishTopMoves({
     fen,
     pvs:engineLines.map((line)=>({uci:line.uci,san:line.san,cp:line.cp})),
@@ -1401,12 +1565,22 @@ export default function App(){
     providerStatus:engineLines.length?"ready":"unavailable",
     errorReason:engineLines.length?undefined:"stockfish_provider_unavailable",
   }),[fen,engineLines]);
-  const continuationResolvedTargetUci=stockfishTopMovesForContinuation.bestMoveUci??null;
-  const continuationResolvedTargetSan=stockfishTopMovesForContinuation.bestMoveSan??null;
-  const continuationResolvedTargetSource=continuationResolvedTargetUci?"stockfish_top_move":null;
-  const continuationResolvedTargetLabel=continuationResolvedTargetUci?"Best":null;
+  const continuationResolvedTargetUci=runtimeBookPreferredCandidate?.uci??stockfishTopMovesForContinuation.bestMoveUci??null;
+  const continuationResolvedTargetSan=runtimeBookPreferredCandidate?.san??stockfishTopMovesForContinuation.bestMoveSan??null;
+  const continuationResolvedTargetSource=runtimeBookPreferredCandidate?.uci
+    ?"stage2-runtime-book"
+    :continuationResolvedTargetUci
+      ?"stockfish_top_move"
+      :null;
+  const continuationResolvedTargetLabel=runtimeBookPreferredCandidate?.uci
+    ?"Book"
+    :continuationResolvedTargetUci
+      ?"Best"
+      :null;
   const continuationTargetResolverStatus=trainingMode!=="continuation"
     ?"not_continuation_mode"
+    :runtimeBookPreferredCandidate?.uci
+      ?"runtime_book_ready"
     :stockfishTopMovesForContinuation.providerStatus==="ready"&&continuationResolvedTargetUci
       ?"stockfish_ready"
       :stockfishTopMovesForContinuation.providerStatus==="ready"
@@ -1448,6 +1622,8 @@ export default function App(){
     continuationResolvedTargetSource,
     continuationResolvedTargetLabel,
     stockfishTopMovesForContinuation.fen,
+    runtimeBookPreferredCandidate?.uci,
+    runtimeBookPreferredCandidate?.san,
   ]);
   const effectiveContinuationCandidate=continuationCandidateResolution.candidate?{
     uci:continuationCandidateResolution.candidate.uci,
