@@ -1,0 +1,63 @@
+
+=== MERGE COMPLETE ===
+# A tibble: 3 × 5
+  crawlSet              queued uniqueNodes nodeRows candidateRows
+  <chr>                  <int>       <int>    <int>         <int>
+1 first8-stepdown            0       16842    84210       1409668
+2 other13-stepdown-top2      0       32390   161950       2970939
+3 combined                   0       49232   246160       4380607
+
+=== OPENING NODE COVERAGE ===
+# A tibble: 21 × 3
+   openingId           uniqueNodes maxPly
+   <chr>                     <int>  <int>
+ 1 caro-kann-black             613     12
+ 2 colle-white               11083     12
+ 3 english-white             10324     12
+ 4 french-black                577     12
+ 5 italian-black               322     12
+ 6 italian-white               322     12
+ 7 kings-indian-black          175     12
+ 8 london-white              11083     12
+ 9 nimzo-indian-black          116     12
+10 petroff-black               668     12
+11 pirc-black                  326     12
+12 qgd-black                   441     12
+13 queens-gambit-white        2532     12
+14 queens-indian-black          90     12
+15 reti-white                 1676     12
+16 ruy-lopez-white             315     12
+17 scandinavian-black         2959     12
+18 scotch-white                101     12
+19 sicilian-black             3282     12
+20 slav-black                  679     12
+21 vienna-white               1548     12
+
+=== RUNTIME MOVE COVERAGE ===
+# A tibble: 21 × 5
+   openingId       runtimeMoves parentNodesWithMoves minTotalGames maxTotalGames
+   <chr>                  <int>                <int>         <dbl>         <dbl>
+ 1 caro-kann-black         1493                  612          1058      77405439
+ 2 colle-white            26899                11018          1005     406440662
+ 3 english-white          23154                10067          1000      39710847
+ 4 french-black            1326                  571          1046     105118582
+ 5 italian-black            874                  322          1077      61569824
+ 6 italian-white            874                  322          1077      61569824
+ 7 kings-indian-b…          421                  175          1528      21023059
+ 8 london-white           26899                11018          1005     406440662
+ 9 nimzo-indian-b…          300                  114          1011       2110744
+10 petroff-black           1740                  663          1015      22808723
+11 pirc-black               757                  322          1000      15787463
+12 qgd-black               1027                  438          1013      33372651
+13 queens-gambit-…         5996                 2519          1013      43850032
+14 queens-indian-…          180                   89          1128        794860
+15 reti-white              3420                 1571          1002       7499447
+16 ruy-lopez-white          739                  314          1109      24160450
+17 scandinavian-b…         6693                 2834          1006     144956750
+18 scotch-white             248                  101          3618      56330904
+19 sicilian-black          7972                 3263          1000     236365329
+20 slav-black              1705                  678          1031      22199595
+21 vienna-white            3791                 1525          1007      22983089
+
+Output directory:
+/home/codespace/blundr-crawl/stage2-stepdown-merged-runtime-20260612T172434Z
