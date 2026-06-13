@@ -17,23 +17,35 @@
 - `lib/blundr/stage2Coaching/buildStage2CoachContext.ts`
 - `lib/blundr/stage2Coaching/buildSafeStage2FallbackPacket.ts`
 - `lib/blundr/stage2Coaching/resolveStage2CoachingPacket.ts`
+- `lib/blundr/stage2Coaching/applyStage2CoachCopyEnrichment.ts`
 - `lib/blundr/stage2Coaching/index.ts`
 - `app/page.tsx`
 - `lib/blundr/debug/trainerDebugSnapshot.ts`
 - `components/debug/BlundrDiagnosticsPanel.tsx`
 - `tests/coach/stage2CoachingResolverShell.test.ts`
+- `tests/coach/stage2CoachingResolverSeamEnrichment.test.ts`
 
 ## Seam Chosen
 
-- Chosen seam: post-`CurrentInstructionFrame.target` data path in `app/page.tsx`, directly before diagnostics snapshot assembly.
-- Resolver input uses already-selected target and runtime-book frame context.
-- Resolver output is currently debug-only (no learner-facing rendering swap).
+- Chosen seam: immediately before `surfaceCoachCardDecision` materialization in `app/page.tsx`.
+- Seam location is after:
+  - `CurrentInstructionFrame.target` authority resolution
+  - visible mode resolution via `v28VisibleSurface.mode`
+  - Plain/Assisted/Show More gating
+  - continuation/runtime-book candidate authority selection
+- Resolver input at seam uses:
+  - `openingId`
+  - `playKeyBefore`
+  - `targetUci`
+  - `targetSan`
+  - surface mapped from `v28VisibleSurface.mode`
+  - runtime-book metadata (status/candidate/top rank/games/exhausted)
 
 ## Wiring Outcome
 
-- UI wiring status: **resolver shell wired, debug-only exposure**.
-- No CoachCard copy replacement was applied in D.7.
-- Existing CoachCard behavior remains unchanged when resolver returns `none` or `safe_fallback`.
+- UI wiring status: **optional enrichment wired at coach copy seam with strict gates**.
+- Stage 2 resolver output only enriches copy when packet is explicitly approved/safe/matched/surface-aligned.
+- Existing `v28CoachUiModel` copy is preserved unchanged for all non-approved outcomes.
 
 ## Feature Flags Added
 
@@ -47,17 +59,20 @@
   - `{ kind: "approved_packet"; packet }`
   - `{ kind: "safe_fallback"; packet }`
   - `{ kind: "none"; reason }`
-- With approved content disabled, resolver does not emit approved packets.
-- Safe fallback packet is conservative:
-  - title: `Book move`
-  - body/hint are generic and non-claim-heavy
-  - show-more may include runtime rank/game stats
-  - no visual recipes attached
+- With approved content disabled, resolver does not emit approved packets in runtime flow.
+- Safe fallback packets are **not** used to replace stronger existing coaching at the seam.
+- Sealed learner-facing enrichment gate:
+  - `packet.status === "approved"`
+  - `packet.safetyStatus === "safe"`
+  - `packet.runtimeReconciliation.status === "matched"`
+  - `packet.surface` matches current visible surface
+  - no plain pre-show-more target leak
 
 ## Plain View No-Leak Confirmation
 
-- Hidden/hint states do not expose target SAN/UCI in fallback body/hint strings.
-- Fallback still keeps `moveUci`/`moveSan` in packet metadata for alignment/debug, not for early plain reveal copy.
+- For `plain_before_show_more` (`plain_hint`), enrichment is rejected when packet text contains target SAN/UCI.
+- `plain_after_show_more` (`plain_show_more`) may apply approved packet `showMore` copy.
+- Existing reveal mechanics/buttons remain unchanged.
 
 ## No-Content-Import Confirmation
 
@@ -70,13 +85,15 @@
 ## No-Visual-Render Confirmation
 
 - Resolver shell emits `visualRecipeRefs: []`.
-- No Stage 2 visual systems are rendered or attached to board visuals.
+- Enrichment helper never writes visual primitives/recipes to board render models.
+- Board visuals remain sourced from existing visible-surface pipeline only.
 
 ## Target Authority Confirmation
 
 - Resolver consumes already-selected target context only.
 - Resolver does not select or mutate move authority.
 - Runtime-book and continuation/Stockfish authority remains unchanged.
+- `resolveEffectiveContinuationCandidate` and `buildCurrentInstructionFrame` were not modified.
 
 ## Debug Visibility Added
 
@@ -95,16 +112,20 @@
 - `npm run test:coach-quality` -> pass
 - `npm run test:trainer-debug` -> pass
 - `npm run test:multi-move-qa` -> pass
+- `npx tsx tests/coach/stage2FrameAuthorityLock.test.ts` -> pass
+- `npx tsx tests/coach/plainViewNoLeakBeforeShowMore.test.ts` -> pass
+- `npx tsx tests/coach/plainViewShowMoreParity.test.ts` -> pass
+- `npx tsx tests/coach/revealTargetSourceContract.test.ts` -> pass
 - `npx tsx tests/coach/runtimeBookBeforeContinuation.test.ts` -> pass
 - `npx tsx tests/coach/runtimeBookExhaustionContinuation.test.ts` -> pass
-- `npx tsx tests/coach/runtimeBookNoCopyOrVisualIntegration.test.ts` -> pass
-- `npx tsx tests/content/stage2Final21CoachingContentAcceptance.test.ts` -> pass
+- `npx tsx tests/coach/effectiveContinuationCandidateAuthority.test.ts` -> pass
 - `npx tsx tests/coach/stage2CoachingResolverShell.test.ts` -> pass (required unsandboxed rerun after sandbox EPERM)
+- `npx tsx tests/coach/stage2CoachingResolverSeamEnrichment.test.ts` -> pass (required unsandboxed rerun after sandbox EPERM)
 
 ## Pass/Fail Summary
 
 - Resolver shell infrastructure: pass
-- Debug visibility: pass
+- Optional seam enrichment gating: pass
 - Candidate authority regression checks: pass
 - Plain-view leak guard checks: pass
 - No-content-import guard checks: pass

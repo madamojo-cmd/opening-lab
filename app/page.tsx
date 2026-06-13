@@ -67,7 +67,9 @@ import {
   STAGE2_APPROVED_CONTENT_ENABLED,
   STAGE2_COACHING_RESOLVER_ENABLED,
   STAGE2_SAFE_FALLBACK_ENABLED,
+  applyStage2CoachCopyEnrichment,
   buildStage2CoachContext,
+  mapVisibleSurfaceModeToStage2CoachingSurface,
   resolveStage2CoachingPacket,
 } from "@/lib/blundr/stage2Coaching";
 import type { MaiaMoveCandidate, MaiaOpponentReplyResult, MaiaProviderStatus, MaiaSkillLevel } from "@/lib/blundr/maia/maiaTypes";
@@ -3293,17 +3295,49 @@ export default function App(){
       },
     } as any;
   }
+  const stage2CoachContext=buildStage2CoachContext({
+    openingId:runtimeBookFrameQuery.openingId??runtimeOpeningIdForFrame??undefined,
+    playKeyBefore:runtimeBookFrameQuery.playKeyBefore??runtimePlayKeyBeforeForFrame??undefined,
+    targetUci:instructionTarget?.uci??undefined,
+    targetSan:instructionTarget?.san??undefined,
+    targetPieceType:instructionTarget?.pieceType??undefined,
+    surface:mapVisibleSurfaceModeToStage2CoachingSurface(v28VisibleSurface?.mode??null),
+    runtimeBook:{
+      status:runtimeBookFrameQuery.status,
+      candidateCount:runtimeBookFrameQuery.candidates.length,
+      topCandidateUci:runtimeBookFrameQuery.candidates[0]?.uci,
+      topCandidateSan:runtimeBookFrameQuery.candidates[0]?.san,
+      topCandidateRank:runtimeBookFrameQuery.candidates[0]?.rank,
+      topCandidateTotalGames:runtimeBookFrameQuery.candidates[0]?.totalGames,
+      bookExhausted:runtimeBookFrameQuery.bookExhausted,
+    },
+    plainRevealState:v28VisibleSurface?.mode==="plain_before_show_more"?(plainHintShown?"hint":"hidden"):(
+      v28VisibleSurface?.mode==="plain_after_show_more"?"show_more":"revealed"
+    ),
+  });
+  const stage2CoachingPacketResolution=resolveStage2CoachingPacket(stage2CoachContext);
+  const stage2CoachCopyEnrichment=applyStage2CoachCopyEnrichment({
+    currentMode:v28VisibleSurface?.mode??null,
+    targetUci:instructionTarget?.uci??null,
+    targetSan:instructionTarget?.san??null,
+    baseCopy:{
+      title:v28CoachUiModel?.title ?? convergedVisibleSurface.coach.title ?? "Training move",
+      body:v28CoachUiModel?.body ?? convergedVisibleSurface.coach.body ?? convergedVisibleSurface.hint.text ?? "",
+      bullets:v28CoachUiModel?.bullets ?? [],
+    },
+    resolution:stage2CoachingPacketResolution,
+  });
   const coachCardTitleFromSurface = plainBeforeShowMore && !plainHintShown
     ? "Find the next move"
-    : (v28CoachUiModel?.title ?? convergedVisibleSurface.coach.title ?? "Training move");
+    : stage2CoachCopyEnrichment.copy.title;
   const coachCardBodyFromSurface = plainBeforeShowMore
-    ? (plainHintShown ? (v28CoachUiModel?.body ?? convergedVisibleSurface.hint.text ?? "") : "")
-    : (v28CoachUiModel?.body ?? convergedVisibleSurface.coach.body ?? convergedVisibleSurface.hint.text ?? "");
+    ? (plainHintShown ? stage2CoachCopyEnrichment.copy.body : "")
+    : stage2CoachCopyEnrichment.copy.body;
   const visibleSurfaceActionKinds = (v28CoachUiModel?.actions ?? [])
     .filter((action) => action.visible)
     .map((action) => action.kind);
   const coachCardButtonsFromSurface = (visibleSurfaceActionKinds.length > 0 ? visibleSurfaceActionKinds : convergedVisibleSurface.actions) as any;
-  const coachCardBulletsFromSurface = v28CoachUiModel?.bullets ?? [];
+  const coachCardBulletsFromSurface = stage2CoachCopyEnrichment.copy.bullets;
   const surfaceCoachCardDecision = convergedVisibleSurface.coach.shouldRender ? ({
     shouldShowCoachCard: true,
     title: coachCardTitleFromSurface,
@@ -5290,25 +5324,6 @@ export default function App(){
   const legacyAnswerCardActuallyRendered=false;
   const legacyMoveImpactActuallyRendered=false;
   const legacyNextTextActuallyRendered=false;
-  const stage2CoachContext=buildStage2CoachContext({
-    openingId:runtimeBookFrameQuery.openingId??runtimeOpeningIdForFrame??undefined,
-    playKeyBefore:runtimeBookFrameQuery.playKeyBefore??runtimePlayKeyBeforeForFrame??undefined,
-    targetUci:instructionTarget?.uci??undefined,
-    targetSan:instructionTarget?.san??undefined,
-    targetPieceType:instructionTarget?.pieceType??undefined,
-    surface:trainerView==="assisted"?"assisted":(showMoreShown?"plain_show_more":"plain_hint"),
-    runtimeBook:{
-      status:runtimeBookFrameQuery.status,
-      candidateCount:runtimeBookFrameQuery.candidates.length,
-      topCandidateUci:runtimeBookFrameQuery.candidates[0]?.uci,
-      topCandidateSan:runtimeBookFrameQuery.candidates[0]?.san,
-      topCandidateRank:runtimeBookFrameQuery.candidates[0]?.rank,
-      topCandidateTotalGames:runtimeBookFrameQuery.candidates[0]?.totalGames,
-      bookExhausted:runtimeBookFrameQuery.bookExhausted,
-    },
-    plainRevealState:trainerView==="assisted"?"revealed":(showMoreShown?"show_more":(coachHintRequestCount>0?"hint":"hidden")),
-  });
-  const stage2CoachingPacketResolution=resolveStage2CoachingPacket(stage2CoachContext);
   const diagnosticsSnapshot=blundrDebugEnabled?collectTrainerDebugSnapshot({
     debugEnabled:blundrDebugEnabled,
     trainerFrameId,
