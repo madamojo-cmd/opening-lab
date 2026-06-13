@@ -17,10 +17,10 @@ type Props = {
   onClearEvents: () => void;
 };
 
-export function buildDebugCopyEverythingPayload(snapshot: TrainerDebugSnapshot): Record<string, unknown> {
+export function buildDebugCopyEverythingPayload(snapshot: TrainerDebugSnapshot | null | undefined): Record<string, unknown> {
   return {
-    generatedAt: snapshot.generatedAt ?? null,
-    frame: snapshot.frame ?? null,
+    generatedAt: snapshot?.generatedAt ?? null,
+    frame: snapshot?.frame ?? null,
     coachCard: {
       title: snapshot?.coach?.visibleTitle ?? null,
       body: snapshot?.coach?.visibleBody ?? null,

@@ -6,6 +6,13 @@ import { buildTrainerDebugSnapshot } from "../trainerDebugSnapshot";
 import { BlundrDiagnosticsPanel, buildDebugCopyEverythingPayload } from "../../../../components/debug/BlundrDiagnosticsPanel";
 
 export function testStage2ContentDebugVisibility(): void {
+  assert.doesNotThrow(() => buildDebugCopyEverythingPayload(null));
+  assert.doesNotThrow(() => buildDebugCopyEverythingPayload(undefined));
+
+  const nullPayload = buildDebugCopyEverythingPayload(null);
+  assert.equal(nullPayload.generatedAt, null);
+  assert.equal(nullPayload.frame, null);
+
   const snapshot = buildTrainerDebugSnapshot({
     debugEnabled: true,
     trainerFrameId: 901,
@@ -26,6 +33,14 @@ export function testStage2ContentDebugVisibility(): void {
     runtimeBookBookExhausted: false,
     runtimeBookFallbackUsed: false,
     runtimeBookFallbackAuthority: null,
+    stage2CoachingResolverEnabled: true,
+    stage2ApprovedContentEnabled: false,
+    stage2SafeFallbackEnabled: true,
+    stage2CoachingPacketKind: "safe_fallback",
+    stage2CoachingSafetyStatus: "safe",
+    stage2CoachingSurface: "assisted",
+    stage2CoachingSourceFile: "stage2://safe-fallback",
+    stage2CoachingRuntimeMatched: true,
     presentationFrame: { visual: { shouldRender: true, source: "continuation_candidate" }, coach: { owner: "intent_first_coach" }, legacy: {} },
     eventLog: [],
   });
@@ -40,6 +55,8 @@ export function testStage2ContentDebugVisibility(): void {
   assert.equal(payloadString.includes("\"runtimeBook\""), true);
   assert.equal(payloadString.includes("\"openingId\":\"italian-white\""), true);
   assert.equal(payloadString.includes("\"topCandidateUci\":\"e4d5\""), true);
+  assert.equal(payloadString.includes("\"stage2Coaching\""), true);
+  assert.equal(payloadString.includes("\"packetKind\":\"safe_fallback\""), true);
 
   const html = renderToStaticMarkup(
     React.createElement(BlundrDiagnosticsPanel, {
