@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { buildTrainerDebugSnapshot } from "../trainerDebugSnapshot";
 import { BlundrDiagnosticsPanel, buildDebugCopyEverythingPayload } from "../../../../components/debug/BlundrDiagnosticsPanel";
 
-export function testRuntimeBookDebugVisibility(): void {
+export function testStage2ContentDebugVisibility(): void {
   const snapshot = buildTrainerDebugSnapshot({
     debugEnabled: true,
     trainerFrameId: 901,
