@@ -5384,6 +5384,33 @@ export default function App(){
     continuationPolicyDebug:continuationPolicyCandidate?.debug??null,
     continuationSelectionSource:validatedContinuationCandidate?.source??null,
     continuationSelectionReason:validatedContinuationCandidate?.reason??null,
+    runtimeBookQueried:Boolean(
+      activeTab==="train"&&
+      trainingMode==="continuation"&&
+      trainerPhase==="ready_for_user"&&
+      isUserTurn&&
+      userExplicitlyEnteredContinuation&&
+      !forceContinuationPause&&
+      runtimeOpeningIdForFrame&&
+      runtimePlayKeyBeforeForFrame
+    ),
+    runtimeBookOpeningId:runtimeBookFrameQuery.openingId??runtimeOpeningIdForFrame??null,
+    runtimeBookPlayKeyBefore:runtimeBookFrameQuery.playKeyBefore??runtimePlayKeyBeforeForFrame??null,
+    runtimeBookStatus:runtimeBookFrameQuery.status,
+    runtimeBookCandidateCount:runtimeBookFrameQuery.candidates.length,
+    runtimeBookTopCandidateUci:runtimeBookFrameQuery.candidates[0]?.uci??null,
+    runtimeBookTopCandidateSan:runtimeBookFrameQuery.candidates[0]?.san??null,
+    runtimeBookTopCandidateRank:runtimeBookFrameQuery.candidates[0]?.rank??null,
+    runtimeBookTopCandidateGames:runtimeBookFrameQuery.candidates[0]?.totalGames??null,
+    runtimeBookTopCandidatePlayPct:runtimeBookFrameQuery.candidates[0]?.playPct??null,
+    runtimeBookBookExhausted:runtimeBookFrameQuery.bookExhausted,
+    runtimeBookFallbackUsed:Boolean(
+      runtimeBookFrameQuery.bookExhausted&&
+      continuationResolvedTargetSource==="stockfish_top_move"
+    ),
+    runtimeBookFallbackAuthority:runtimeBookFrameQuery.bookExhausted?(
+      continuationResolvedTargetSource==="stockfish_top_move"?"stockfish":"none"
+    ):null,
     continuationTargetResolverStatus,
     continuationResolvedTargetUci,
     continuationResolvedTargetSource,

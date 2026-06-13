@@ -17,6 +17,47 @@ type Props = {
   onClearEvents: () => void;
 };
 
+export function buildDebugCopyEverythingPayload(snapshot: TrainerDebugSnapshot): Record<string, unknown> {
+  return {
+    generatedAt: snapshot.generatedAt ?? null,
+    frame: snapshot.frame ?? null,
+    coachCard: {
+      title: snapshot?.coach?.visibleTitle ?? null,
+      body: snapshot?.coach?.visibleBody ?? null,
+      buttons: snapshot?.coach?.visibleButtons ?? [],
+      owner: snapshot?.coach?.visibleCoachOwner ?? null,
+      intent: snapshot?.coach?.coachIntent ?? null,
+      source: snapshot?.coach?.coachDecisionSource ?? null,
+      mode: (snapshot?.presentation as any)?.visibleSurfaceMode ?? null,
+    },
+    runtimeBook: {
+      queried: (snapshot?.continuation as any)?.runtimeBookQueried ?? false,
+      openingId: (snapshot?.continuation as any)?.runtimeBookOpeningId ?? null,
+      playKeyBefore: (snapshot?.continuation as any)?.runtimeBookPlayKeyBefore ?? null,
+      status: (snapshot?.continuation as any)?.runtimeBookStatus ?? null,
+      candidateCount: (snapshot?.continuation as any)?.runtimeBookCandidateCount ?? null,
+      topCandidateUci: (snapshot?.continuation as any)?.runtimeBookTopCandidateUci ?? null,
+      topCandidateSan: (snapshot?.continuation as any)?.runtimeBookTopCandidateSan ?? null,
+      topCandidateRank: (snapshot?.continuation as any)?.runtimeBookTopCandidateRank ?? null,
+      topCandidateGames: (snapshot?.continuation as any)?.runtimeBookTopCandidateGames ?? null,
+      topCandidatePlayPct: (snapshot?.continuation as any)?.runtimeBookTopCandidatePlayPct ?? null,
+      bookExhausted: (snapshot?.continuation as any)?.runtimeBookBookExhausted ?? null,
+      fallbackUsed: (snapshot?.continuation as any)?.runtimeBookFallbackUsed ?? null,
+      fallbackAuthority: (snapshot?.continuation as any)?.runtimeBookFallbackAuthority ?? null,
+    },
+    coachCardRenderTimeline: Array.isArray(snapshot?.coachCardRenderTimeline) ? snapshot.coachCardRenderTimeline : [],
+    coachPipelineTimeline: Array.isArray(snapshot?.coachTimeline) ? snapshot.coachTimeline : [],
+    visualTimeline: Array.isArray(snapshot?.visualRenderTimeline) ? snapshot.visualRenderTimeline : [],
+    actionTimeline: Array.isArray(snapshot?.actionTimeline) ? snapshot.actionTimeline : [],
+    surfaceModeTransitionTimeline: Array.isArray(snapshot?.surfaceModeTransitionTimeline) ? snapshot.surfaceModeTransitionTimeline : [],
+    plainLeakTimeline: Array.isArray(snapshot?.plainLeakTimeline) ? snapshot.plainLeakTimeline : [],
+    maiaTimeline: Array.isArray((snapshot as any)?.maiaTimeline) ? (snapshot as any).maiaTimeline : [],
+    health: snapshot?.health ?? null,
+    criticalIssues: snapshot?.health?.criticalIssues ?? [],
+    warnings: snapshot?.health?.warnings ?? [],
+  };
+}
+
 function status(hasFail: boolean, hasWarn: boolean) {
   return hasFail ? "fail" : hasWarn ? "warn" : "pass";
 }
@@ -52,6 +93,17 @@ allowedThisFrame: ${(snapshot as any).maia?.maiaAllowedThisFrame ?? false}
 blockedReason: ${(snapshot as any).maia?.maiaBlockedReason ?? "none"}
 fallbackUsed: ${(snapshot as any).maia?.maiaFallbackUsed ?? false}
 fallbackReason: ${(snapshot as any).maia?.maiaFallbackReason ?? "none"}
+
+runtimeBook:
+queried: ${(snapshot.continuation as any)?.runtimeBookQueried ?? false}
+openingId: ${(snapshot.continuation as any)?.runtimeBookOpeningId ?? "none"}
+playKeyBefore: ${(snapshot.continuation as any)?.runtimeBookPlayKeyBefore ?? "none"}
+status: ${(snapshot.continuation as any)?.runtimeBookStatus ?? "none"}
+candidateCount: ${(snapshot.continuation as any)?.runtimeBookCandidateCount ?? 0}
+topCandidateUci: ${(snapshot.continuation as any)?.runtimeBookTopCandidateUci ?? "none"}
+bookExhausted: ${(snapshot.continuation as any)?.runtimeBookBookExhausted ?? false}
+fallbackUsed: ${(snapshot.continuation as any)?.runtimeBookFallbackUsed ?? false}
+fallbackAuthority: ${(snapshot.continuation as any)?.runtimeBookFallbackAuthority ?? "none"}
 
 coach:
 owner: ${snapshot.coach.visibleCoachOwner}
@@ -163,21 +215,7 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
     source: snapshot?.coach?.coachDecisionSource ?? null,
     mode: snapshot ? (snapshot.presentation as any)?.visibleSurfaceMode ?? null : null,
   }), [snapshot]);
-  const fullDebugSession = useMemo(() => ({
-    generatedAt: snapshot?.generatedAt ?? null,
-    frame: snapshot?.frame ?? null,
-    coachCard: currentCoachCard,
-    coachCardRenderTimeline,
-    coachPipelineTimeline: coachTimeline,
-    visualTimeline: visualRenderTimeline,
-    actionTimeline,
-    surfaceModeTransitionTimeline,
-    plainLeakTimeline,
-    maiaTimeline,
-    health: snapshot?.health ?? null,
-    criticalIssues: snapshot?.health?.criticalIssues ?? [],
-    warnings: snapshot?.health?.warnings ?? [],
-  }), [snapshot, currentCoachCard, coachCardRenderTimeline, coachTimeline, visualRenderTimeline, actionTimeline, surfaceModeTransitionTimeline, plainLeakTimeline, maiaTimeline]);
+  const fullDebugSession = useMemo(() => buildDebugCopyEverythingPayload(snapshot), [snapshot]);
 
   if (!enabled && !snapshot?.build.debugEnabled) return null;
   if (!snapshot) return null;
@@ -227,7 +265,7 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
             <DebugCopyButton label="Copy Plain Leak Timeline JSON" getText={() => JSON.stringify(plainLeakTimeline, null, 2)} />
             <DebugCopyButton label="Copy Maia Timeline JSON" getText={() => JSON.stringify(maiaTimeline, null, 2)} />
             <DebugCopyButton label="Copy Maia Runtime Health JSON" getText={() => JSON.stringify((snapshot as any).maia ?? {}, null, 2)} />
-            <DebugCopyButton label="Copy Full Debug Session JSON" getText={() => JSON.stringify(fullDebugSession, null, 2)} />
+            <DebugCopyButton label="Copy Everything" getText={() => JSON.stringify(fullDebugSession, null, 2)} />
             <DebugCopyButton label="Copy Coach QA Summary" getText={() => JSON.stringify(coachQaSummary, null, 2)} />
             <button type="button" onClick={onClearEvents} className="rounded-full bg-stone-100 px-3 py-1 text-[11px] font-black text-stone-900">Clear Events</button>
             <button type="button" onClick={() => { setBlundrDebugEnabled(!enabled); onEnabledChange(!enabled); }} className="rounded-full bg-stone-100 px-3 py-1 text-[11px] font-black text-stone-900">{enabled ? "Disable" : "Enable"}</button>

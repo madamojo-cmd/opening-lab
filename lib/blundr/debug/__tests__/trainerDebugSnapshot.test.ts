@@ -196,6 +196,19 @@ export function testTrainerDebugSnapshot(): void {
     coachPieceType: "p",
     visualMoveUci: "e4d5",
     revealTargetUci: "e4d5",
+    runtimeBookQueried: true,
+    runtimeBookOpeningId: "italian-white",
+    runtimeBookPlayKeyBefore: "e2e4,e7e5,g1f3,b8c6,f1c4",
+    runtimeBookStatus: "ready",
+    runtimeBookCandidateCount: 3,
+    runtimeBookTopCandidateUci: "e4d5",
+    runtimeBookTopCandidateSan: "exd5",
+    runtimeBookTopCandidateRank: 1,
+    runtimeBookTopCandidateGames: 12034,
+    runtimeBookTopCandidatePlayPct: 0.42,
+    runtimeBookBookExhausted: false,
+    runtimeBookFallbackUsed: false,
+    runtimeBookFallbackAuthority: null,
     presentationFrame: { visual: { shouldRender: true, source: "continuation_candidate", lines: [{ from: "e4", to: "d5" }] }, coach: { owner: "intent_first_coach" }, legacy: {} },
     eventLog: [],
   });
@@ -213,6 +226,35 @@ export function testTrainerDebugSnapshot(): void {
   assert.equal((continuationHealthy.actions as any).revealTargetMatchesInstructionTarget, true);
   assert.equal((continuationHealthy.visual as any).visualTargetMatchesInstructionTarget, true);
   assert.equal((continuationHealthy.health.passFail as any).instructionTargetAligned, true);
+  assert.equal((continuationHealthy.continuation as any).runtimeBookQueried, true);
+  assert.equal((continuationHealthy.continuation as any).runtimeBookOpeningId, "italian-white");
+  assert.equal((continuationHealthy.continuation as any).runtimeBookCandidateCount, 3);
+  assert.equal((continuationHealthy.continuation as any).runtimeBookTopCandidateUci, "e4d5");
+  assert.equal((continuationHealthy.continuation as any).runtimeBookBookExhausted, false);
+
+  const runtimeFallback = buildTrainerDebugSnapshot({
+    debugEnabled: true,
+    trainerFrameId: 11,
+    trainerPhase: "ready_for_user",
+    trainerView: "assisted",
+    trainingMode: "continuation",
+    isUserTurn: true,
+    fen: "rnbqkbnr/pp2pppp/8/2pp4/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3",
+    runtimeBookQueried: true,
+    runtimeBookOpeningId: "italian-white",
+    runtimeBookPlayKeyBefore: "e2e4,e7e5,g1f3,b8c6,f1c4",
+    runtimeBookStatus: "ready",
+    runtimeBookCandidateCount: 0,
+    runtimeBookBookExhausted: true,
+    runtimeBookFallbackUsed: true,
+    runtimeBookFallbackAuthority: "stockfish",
+    continuationResolvedTargetSource: "stockfish_top_move",
+    presentationFrame: { visual: { shouldRender: false, source: "none" }, coach: { owner: "none" }, legacy: {} },
+    eventLog: [],
+  });
+  assert.equal((runtimeFallback.continuation as any).runtimeBookBookExhausted, true);
+  assert.equal((runtimeFallback.continuation as any).runtimeBookFallbackUsed, true);
+  assert.equal((runtimeFallback.continuation as any).runtimeBookFallbackAuthority, "stockfish");
 
   const idempotentReveal = buildTrainerDebugSnapshot({
     debugEnabled: true,

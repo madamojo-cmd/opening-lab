@@ -2,6 +2,7 @@ import { testTrainerDebugEventLog } from "./__tests__/trainerDebugEventLog.test"
 import { testFallbackCopyGuard } from "./__tests__/fallbackCopyGuard.test";
 import { testTrainerDebugSanitizer } from "./__tests__/trainerDebugSanitizer.test";
 import { testTrainerDebugSnapshot } from "./__tests__/trainerDebugSnapshot.test";
+import { testRuntimeBookDebugVisibility } from "./__tests__/runtimeBookDebugVisibility.test";
 import { testMultiMoveTrainingQa } from "./testMultiMoveTrainingQa";
 import { testCurrentInstructionFrame } from "../runtime/__tests__/currentInstructionFrame.test";
 import { testOpponentReplyGuard } from "../runtime/__tests__/opponentReplyGuard.test";
@@ -12,6 +13,8 @@ export function testTrainerDebug(): void {
   console.log("Running Blundr trainer debug QA...");
   testTrainerDebugSnapshot();
   console.log("✓ trainer debug snapshot passed");
+  testRuntimeBookDebugVisibility();
+  console.log("✓ runtime book debug visibility passed");
   testTrainerDebugSanitizer();
   console.log("✓ trainer debug sanitizer passed");
   testTrainerDebugEventLog();
