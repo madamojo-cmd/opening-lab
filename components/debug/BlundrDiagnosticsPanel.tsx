@@ -45,6 +45,16 @@ export function buildDebugCopyEverythingPayload(snapshot: TrainerDebugSnapshot):
       fallbackUsed: (snapshot?.continuation as any)?.runtimeBookFallbackUsed ?? null,
       fallbackAuthority: (snapshot?.continuation as any)?.runtimeBookFallbackAuthority ?? null,
     },
+    stage2Coaching: {
+      resolverEnabled: (snapshot?.continuation as any)?.stage2CoachingResolverEnabled ?? false,
+      approvedContentEnabled: (snapshot?.continuation as any)?.stage2ApprovedContentEnabled ?? false,
+      safeFallbackEnabled: (snapshot?.continuation as any)?.stage2SafeFallbackEnabled ?? false,
+      packetKind: (snapshot?.continuation as any)?.stage2CoachingPacketKind ?? "none",
+      safetyStatus: (snapshot?.continuation as any)?.stage2CoachingSafetyStatus ?? null,
+      surface: (snapshot?.continuation as any)?.stage2CoachingSurface ?? null,
+      sourceFile: (snapshot?.continuation as any)?.stage2CoachingSourceFile ?? null,
+      runtimeMatched: (snapshot?.continuation as any)?.stage2CoachingRuntimeMatched ?? null,
+    },
     coachCardRenderTimeline: Array.isArray(snapshot?.coachCardRenderTimeline) ? snapshot.coachCardRenderTimeline : [],
     coachPipelineTimeline: Array.isArray(snapshot?.coachTimeline) ? snapshot.coachTimeline : [],
     visualTimeline: Array.isArray(snapshot?.visualRenderTimeline) ? snapshot.visualRenderTimeline : [],
@@ -104,6 +114,16 @@ topCandidateUci: ${(snapshot.continuation as any)?.runtimeBookTopCandidateUci ??
 bookExhausted: ${(snapshot.continuation as any)?.runtimeBookBookExhausted ?? false}
 fallbackUsed: ${(snapshot.continuation as any)?.runtimeBookFallbackUsed ?? false}
 fallbackAuthority: ${(snapshot.continuation as any)?.runtimeBookFallbackAuthority ?? "none"}
+
+stage2Coaching:
+resolverEnabled: ${(snapshot.continuation as any)?.stage2CoachingResolverEnabled ?? false}
+approvedContentEnabled: ${(snapshot.continuation as any)?.stage2ApprovedContentEnabled ?? false}
+safeFallbackEnabled: ${(snapshot.continuation as any)?.stage2SafeFallbackEnabled ?? false}
+packetKind: ${(snapshot.continuation as any)?.stage2CoachingPacketKind ?? "none"}
+safetyStatus: ${(snapshot.continuation as any)?.stage2CoachingSafetyStatus ?? "none"}
+surface: ${(snapshot.continuation as any)?.stage2CoachingSurface ?? "none"}
+sourceFile: ${(snapshot.continuation as any)?.stage2CoachingSourceFile ?? "none"}
+runtimeMatched: ${(snapshot.continuation as any)?.stage2CoachingRuntimeMatched ?? "unknown"}
 
 coach:
 owner: ${snapshot.coach.visibleCoachOwner}

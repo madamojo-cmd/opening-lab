@@ -63,6 +63,13 @@ import { resolveContinuationFlowContract } from "@/lib/blundr/runtime/continuati
 import { shouldFlagStaleOpponentReplyCommit } from "@/lib/blundr/runtime/opponentReplyGuard";
 import { classifyContinuationRuntimeState, type ContinuationRuntimeStatus } from "@/lib/blundr/runtime/continuationRuntimeState";
 import { resolveEffectiveContinuationCandidate } from "@/lib/blundr/runtime/resolveEffectiveContinuationCandidate";
+import {
+  STAGE2_APPROVED_CONTENT_ENABLED,
+  STAGE2_COACHING_RESOLVER_ENABLED,
+  STAGE2_SAFE_FALLBACK_ENABLED,
+  buildStage2CoachContext,
+  resolveStage2CoachingPacket,
+} from "@/lib/blundr/stage2Coaching";
 import type { MaiaMoveCandidate, MaiaOpponentReplyResult, MaiaProviderStatus, MaiaSkillLevel } from "@/lib/blundr/maia/maiaTypes";
 import { unavailableMaiaProvider } from "@/lib/blundr/maia/maiaProvider";
 import { MaiaApiClientProvider } from "@/lib/blundr/maia/maiaApiClientProvider";
@@ -5283,6 +5290,25 @@ export default function App(){
   const legacyAnswerCardActuallyRendered=false;
   const legacyMoveImpactActuallyRendered=false;
   const legacyNextTextActuallyRendered=false;
+  const stage2CoachContext=buildStage2CoachContext({
+    openingId:runtimeBookFrameQuery.openingId??runtimeOpeningIdForFrame??undefined,
+    playKeyBefore:runtimeBookFrameQuery.playKeyBefore??runtimePlayKeyBeforeForFrame??undefined,
+    targetUci:instructionTarget?.uci??undefined,
+    targetSan:instructionTarget?.san??undefined,
+    targetPieceType:instructionTarget?.pieceType??undefined,
+    surface:trainerView==="assisted"?"assisted":(showMoreShown?"plain_show_more":"plain_hint"),
+    runtimeBook:{
+      status:runtimeBookFrameQuery.status,
+      candidateCount:runtimeBookFrameQuery.candidates.length,
+      topCandidateUci:runtimeBookFrameQuery.candidates[0]?.uci,
+      topCandidateSan:runtimeBookFrameQuery.candidates[0]?.san,
+      topCandidateRank:runtimeBookFrameQuery.candidates[0]?.rank,
+      topCandidateTotalGames:runtimeBookFrameQuery.candidates[0]?.totalGames,
+      bookExhausted:runtimeBookFrameQuery.bookExhausted,
+    },
+    plainRevealState:trainerView==="assisted"?"revealed":(showMoreShown?"show_more":(coachHintRequestCount>0?"hint":"hidden")),
+  });
+  const stage2CoachingPacketResolution=resolveStage2CoachingPacket(stage2CoachContext);
   const diagnosticsSnapshot=blundrDebugEnabled?collectTrainerDebugSnapshot({
     debugEnabled:blundrDebugEnabled,
     trainerFrameId,
@@ -5411,6 +5437,14 @@ export default function App(){
     runtimeBookFallbackAuthority:runtimeBookFrameQuery.bookExhausted?(
       continuationResolvedTargetSource==="stockfish_top_move"?"stockfish":"none"
     ):null,
+    stage2CoachingResolverEnabled:STAGE2_COACHING_RESOLVER_ENABLED,
+    stage2ApprovedContentEnabled:STAGE2_APPROVED_CONTENT_ENABLED,
+    stage2SafeFallbackEnabled:STAGE2_SAFE_FALLBACK_ENABLED,
+    stage2CoachingPacketKind:stage2CoachingPacketResolution.kind,
+    stage2CoachingSafetyStatus:stage2CoachingPacketResolution.kind==="none"?null:stage2CoachingPacketResolution.packet.safetyStatus,
+    stage2CoachingSurface:stage2CoachContext.surface,
+    stage2CoachingSourceFile:stage2CoachingPacketResolution.kind==="none"?null:stage2CoachingPacketResolution.packet.sourceFile,
+    stage2CoachingRuntimeMatched:stage2CoachingPacketResolution.kind==="none"?null:stage2CoachingPacketResolution.packet.runtimeReconciliation.status==="matched",
     continuationTargetResolverStatus,
     continuationResolvedTargetUci,
     continuationResolvedTargetSource,
