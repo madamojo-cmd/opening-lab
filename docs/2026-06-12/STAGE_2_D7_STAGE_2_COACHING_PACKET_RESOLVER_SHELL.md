@@ -132,6 +132,6 @@
 
 ## Next Recommended Step
 
-- D.8 canonical content source stabilization execution.
+- NEXT_STEP: D.8_STAGE_2_FINAL_QA_AND_ACCEPTANCE
 
 D7_STAGE_2_COACHING_PACKET_RESOLVER_SHELL_STATUS: ACCEPTED
