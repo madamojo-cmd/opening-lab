@@ -1293,6 +1293,14 @@ export default function App(){
     () => expectedMovesForValidation.map((move) => `${move.uci}:${move.san ?? ""}`).join("|"),
     [expectedMovesForValidation]
   );
+  const runtimeOpeningIdForFrame=useMemo(
+    ()=>resolveRuntimeOpeningId(repertoire.id),
+    [repertoire.id],
+  );
+  const runtimePlayKeyBeforeForFrame=useMemo(
+    ()=>buildRuntimePlayKeyBeforeFromSanHistory(moveHistory),
+    [moveHistory.join("|")],
+  );
 
   // v2.7.41 HOTFIX: Strict confirmed End-of-Book using real lineCursor/lineLength from resolver
   // Never infer from temporary expectedMovesForValidation.length === 0 or source includes("curated"/"terminal")
@@ -1633,14 +1641,6 @@ export default function App(){
       debug:{lockId:lock.continuationCandidateLockId,requestId:lock.continuationCandidateLockRequestId},
     };
   },[trainingMode,isUserTurn,userExplicitlyEnteredContinuation,continuationCandidateLock,fen,game]);
-  const runtimeOpeningIdForFrame=useMemo(
-    ()=>resolveRuntimeOpeningId(repertoire.id),
-    [repertoire.id],
-  );
-  const runtimePlayKeyBeforeForFrame=useMemo(
-    ()=>buildRuntimePlayKeyBeforeFromSanHistory(moveHistory),
-    [moveHistory.join("|")],
-  );
   const runtimeBookFrameShouldQuery = useMemo(() => {
     if (activeTab !== "train") return false;
     if (!runtimeOpeningIdForFrame || !runtimePlayKeyBeforeForFrame) return false;
