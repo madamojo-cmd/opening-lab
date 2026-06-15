@@ -39,6 +39,8 @@ export function testCoachExplanationPipeline(): void {
   assert.equal(nc3.coachExplanation.coachMoveUci, "b1c3");
   assert.equal(nc3.coachExplanation.coachPieceType, "n");
   assert.equal(nc3.coachQuality.qualityScore >= 80, true);
+  assert.equal(nc3.coachExplanation.usedFallback, false);
+  assert.equal(nc3.coachExplanation.fallbackReason, null);
   assert.equal(nc3.coachExplanation.selectedTheme, "minor_piece_development");
   assert.equal(nc3.coachExplanation.selectedOpportunityId, "minor_piece_development");
   assert.equal(nc3.coachExplanation.selectedOpportunityLayer, "development");
@@ -79,6 +81,8 @@ export function testCoachExplanationPipeline(): void {
   assert.equal(Number(nxa8.coachExplanation.selectedOpportunityScore) >= 450, true);
   assert.equal(String(nxa8.coachExplanation.selectedTemplateId).includes("capture_or_recapture"), true);
   assert.equal(/\binitiative\b/i.test(nxa8.coachExplanation.body), false);
+  assert.equal(nxa8.coachExplanation.usedFallback, false);
+  assert.equal(nxa8.coachExplanation.fallbackReason, null);
 
   const bc4Fen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1";
   const bc4Target = makeTarget(bc4Fen, "f1c4");
@@ -92,6 +96,8 @@ export function testCoachExplanationPipeline(): void {
   assert.equal(/bishop|diagonal/i.test(bc4.coachExplanation.body), true);
   assert.equal(bc4.coachExplanation.selectedTheme, "bishop_activation");
   assert.equal(/knight from|pawn from/i.test(bc4.coachExplanation.body), false);
+  assert.equal(bc4.coachExplanation.usedFallback, false);
+  assert.equal(bc4.coachExplanation.fallbackReason, null);
 
   // Step 3 required tests: Bc4 includes SAN and bishop (no generic)
   assert.equal(/Bc4/i.test(bc4.coachExplanation.title), true);
@@ -111,6 +117,8 @@ export function testCoachExplanationPipeline(): void {
   assert.equal(/Nf3/i.test(nf3.coachExplanation.title), true);
   assert.equal(/knight/i.test(nf3.coachExplanation.title + " " + nf3.coachExplanation.body), true);
   assert.equal(/Focus on development|repositioning|generic copy/i.test(nf3.coachExplanation.title + " " + nf3.coachExplanation.body), false);
+  assert.equal(nf3.coachExplanation.usedFallback, false);
+  assert.equal(nf3.coachExplanation.fallbackReason, null);
 
   // Pawn move (d4)
   const d4StartFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -138,6 +146,7 @@ export function testCoachExplanationPipeline(): void {
   assert.equal(/checkmate/i.test(mate.coachExplanation.body), true);
   assert.equal(mate.coachExplanation.selectedTheme, "checkmate");
   assert.equal(mate.coachExplanation.usedFallback, false);
+  assert.equal(mate.coachExplanation.fallbackReason, null);
 
   const hallucinationCheck = lintCoachExplanation(
     {

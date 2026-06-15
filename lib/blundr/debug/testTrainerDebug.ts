@@ -6,6 +6,7 @@ import { testStage2ContentDebugVisibility } from "./__tests__/stage2ContentDebug
 import { testMultiMoveTrainingQa } from "./testMultiMoveTrainingQa";
 import { testCurrentInstructionFrame } from "../runtime/__tests__/currentInstructionFrame.test";
 import { testOpponentReplyGuard } from "../runtime/__tests__/opponentReplyGuard.test";
+import { testRestrictedLineExhaustionContract } from "../runtime/__tests__/restrictedLineExhaustionContract.test";
 import { testContinuationCandidateVisual } from "../visual/__tests__/continuationCandidateVisual.test";
 import { testCoachActionStylePolicy } from "../presentation/__tests__/coachActionStylePolicy.test";
 import { testRenderedCoachCopyAuthority } from "../presentation/__tests__/renderedCoachCopyAuthority.test";
@@ -24,6 +25,8 @@ export function testTrainerDebug(): void {
   console.log("✓ current instruction frame passed");
   testOpponentReplyGuard();
   console.log("✓ opponent reply guard passed");
+  testRestrictedLineExhaustionContract();
+  console.log("✓ restricted line exhaustion contract passed");
   testContinuationCandidateVisual();
   console.log("✓ continuation candidate visual passed");
   testCoachActionStylePolicy();

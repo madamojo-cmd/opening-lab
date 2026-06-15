@@ -303,6 +303,10 @@ type CoachCardRenderTimelineEntry = {
   pipelineCopyRejectedReason?: string | null;
   renderedCopyAuthority?: string | null;
   pipelineCopyAuthority?: string | null;
+  preAuthoritySurfaceTitle?: string | null;
+  preAuthoritySurfaceBody?: string | null;
+  preAuthoritySurfaceOwner?: string | null;
+  preAuthoritySurfaceReason?: string | null;
 };
 type BoardTheme = "classic" | "slate" | "blue" | "walnut";
 type PieceStyle = "unicode" | "letters" | "neo";
@@ -1318,6 +1322,15 @@ export default function App(){
     const sideToMove = game.turn();
     return exactSelectedLineNodes.some((node) => node.terminal && node.sideToMove === sideToMove);
   }, [exactSelectedLineNodes, game]);
+  const restrictedLineExhaustedOnOpponentTurnAfterUserMove = Boolean(
+    trainingMode === "restricted" &&
+    !userExplicitlyEnteredContinuation &&
+    !isUserTurn &&
+    lastMoveColor === userColor &&
+    lastMove &&
+    exactSelectedLineNodeFound &&
+    hasNextOpponentMoveInSelectedLine === false
+  );
 
   const lichessTotalGames = useMemo(() => {
     if (!explorerMoves || explorerMoves.length === 0) return null;
@@ -1820,7 +1833,7 @@ export default function App(){
     expectedMoveSource:expectedMoveResolution.source,
     expectedMoveReason:expectedMoveResolution.reason,
     expectedMoveUci:expectedMoveResolution.expectedMoveUci,
-    lineExhaustedByCursor:selectedLineCompleteConfirmed,
+    lineExhaustedByCursor:selectedLineCompleteConfirmed||restrictedLineExhaustedOnOpponentTurnAfterUserMove,
     lineExhaustedByLichess:lichessEndConfirmed,
     afterFinalUserMove:!isUserTurn&&lastMoveColor===userColor,
     selectedLineId:selectedRepertoireId,
@@ -1857,9 +1870,12 @@ export default function App(){
     explicitCuratedTerminalNode,
     branchCompleteLatch.active,
     branchCompleteLatch.lineId,
+    restrictedLineExhaustedOnOpponentTurnAfterUserMove,
   ]);
-  const branchCompleteEligibleNow=branchCompleteContract.branchCompleteEligible;
-  const branchCompleteReasonNow=branchCompleteContract.reason??"line_complete";
+  const branchCompleteEligibleNow=branchCompleteContract.branchCompleteEligible||restrictedLineExhaustedOnOpponentTurnAfterUserMove;
+  const branchCompleteReasonNow=restrictedLineExhaustedOnOpponentTurnAfterUserMove
+    ?"restricted_book_exhausted_on_opponent_turn_after_user_move"
+    :branchCompleteContract.reason??"line_complete";
   const branchCompleteShouldCancelPending=branchCompleteContract.shouldCancelPendingOpponent||(
     branchCompleteEligibleNow&&Boolean(pendingOpponentRequest)
   );
@@ -2800,6 +2816,15 @@ export default function App(){
     const transitionTitle = "Line complete";
     const transitionBody = "You finished this training line. Continue from this position or train the line again.";
     const transitionButtons = ["continue_from_here","restart_line"] as const;
+    if (restrictedLineExhaustedOnOpponentTurnAfterUserMove) {
+      return {
+        render: true,
+        title: transitionTitle,
+        body: transitionBody,
+        buttons: transitionButtons,
+        reason: "restricted_book_exhausted_on_opponent_turn_after_user_move",
+      } as const;
+    }
     if (isUserTurn&&forceContinuationPause&&!userExplicitlyEnteredContinuation) {
       const reason = continuationPauseDecision.pauseReason==="move_11_hard_stop"?"hard_stop_backup":(continuationPauseDecision.pauseReason ?? "line_complete");
       return {
@@ -2829,7 +2854,7 @@ export default function App(){
       buttons: transitionButtons,
       reason: selectedLineCompleteConfirmed ? "curated_line_complete" : "lichess_below_500_games",
     } as const;
-  }, [hardEndOfBookGate, selectedLineCompleteConfirmed, trainingMode, isUserTurn, forceContinuationPause, continuationPauseDecision.pauseReason, userExplicitlyEnteredContinuation, game]);
+  }, [hardEndOfBookGate, selectedLineCompleteConfirmed, trainingMode, isUserTurn, forceContinuationPause, continuationPauseDecision.pauseReason, userExplicitlyEnteredContinuation, game, restrictedLineExhaustedOnOpponentTurnAfterUserMove]);
   const moveImpactPresentation=useMemo(()=>presentMoveImpact({
     exactMoveAllowed:Boolean(coachDecision?.exactMoveAllowed),
     engineStatus:(coachDecision?.debug as any)?.coachEngineStatus??(enginePreview?.pvs?.length?"ready":"idle"),
@@ -3714,7 +3739,8 @@ export default function App(){
     });
   }
   function scheduleOpponentReply(input:{mode:TrainingMode;delayMs?:number;baseFen?:string}){
-    if(branchCompleteEligibleNow&&input.mode==="restricted"){
+    if((branchCompleteEligibleNow||restrictedLineExhaustedOnOpponentTurnAfterUserMove)&&input.mode==="restricted"){
+      clearPendingOpponentReplyRequest({clearStaleIssue:true});
       return null;
     }
     const baseFenNormalized=normalizeFen(input.baseFen??fenRef.current??fen);
@@ -5115,6 +5141,15 @@ export default function App(){
     const nextHasNextOpponentMove=nextExactSelectedLineNodes.length?nextExactSelectedLineNodes.some((node)=>node.continuations.some((move)=>move.color===opponentColor)):"unknown";
     const nextHasNextUserMove=nextExactSelectedLineNodes.length?nextExactSelectedLineNodes.some((node)=>node.continuations.some((move)=>move.color===userColor)):"unknown";
     const nextExplicitCuratedTerminalNode=nextExactSelectedLineNodes.some((node)=>node.terminal&&node.sideToMove===nextGame.turn());
+    const nextRestrictedLineExhaustedOnOpponentTurnAfterUserMove=Boolean(
+      trainingMode==="restricted"&&
+      !userExplicitlyEnteredContinuation&&
+      !nextIsUserTurn&&
+      legal.color===userColor&&
+      playedUci&&
+      nextExactSelectedLineNodes.length>0&&
+      nextHasNextOpponentMove===false
+    );
     const nextBranchCompleteContract=resolveBranchCompleteContract({
       trainingMode,
       trainerPhase:nextGame.isGameOver()?"terminal":(nextIsUserTurn?"ready_for_user":"opponent_replying"),
@@ -5127,7 +5162,7 @@ export default function App(){
       expectedMoveSource:nextExpectedMoveResolution.source,
       expectedMoveReason:nextExpectedMoveResolution.reason,
       expectedMoveUci:nextExpectedMoveResolution.expectedMoveUci,
-      lineExhaustedByCursor:nextLineCompleteConfirmed,
+      lineExhaustedByCursor:nextLineCompleteConfirmed||nextRestrictedLineExhaustedOnOpponentTurnAfterUserMove,
       lineExhaustedByLichess:false,
       afterFinalUserMove:!nextIsUserTurn&&legal.color===userColor,
       selectedLineId:selectedRepertoireId,
@@ -5140,7 +5175,7 @@ export default function App(){
       explicitCuratedTerminalNode:nextExplicitCuratedTerminalNode,
       validBranchCompleteLatch:false,
     });
-    const needsOpponentReply=!nextGame.isGameOver()&&nextGame.turn()!==userColor&&!nextBranchCompleteContract.shouldPreventOpponentScheduling;
+    const needsOpponentReply=!nextGame.isGameOver()&&nextGame.turn()!==userColor&&!nextBranchCompleteContract.shouldPreventOpponentScheduling&&!nextRestrictedLineExhaustedOnOpponentTurnAfterUserMove;
     commitRuntimeFrame({
       nextFen,
       nextPhase:nextGame.isGameOver()?"terminal":(needsOpponentReply?"opponent_selecting":"ready_for_user"),
@@ -5155,10 +5190,10 @@ export default function App(){
     setOpponentCue(null);
     setOpponentVariationDebug(null);
     setShowAnswer(false);
-    if(nextBranchCompleteContract.branchCompleteEligible){
+    if(nextBranchCompleteContract.branchCompleteEligible||nextRestrictedLineExhaustedOnOpponentTurnAfterUserMove){
       setBranchCompleteLatch({
         active:true,
-        reason:nextBranchCompleteContract.reason??"line_complete",
+        reason:nextRestrictedLineExhaustedOnOpponentTurnAfterUserMove?"restricted_book_exhausted_on_opponent_turn_after_user_move":nextBranchCompleteContract.reason??"line_complete",
         fen4:normalizeFen(nextFen),
         lineId:selectedRepertoireId,
         ply:moveHistory.length+1,
@@ -5265,8 +5300,10 @@ export default function App(){
     const pipelineTitle = displayedCoachDecision?.shouldShowCoachCard ? String(displayedCoachDecision.title ?? "").trim() : null;
     const pipelineBody = displayedCoachDecision?.shouldShowCoachCard ? String(displayedCoachDecision.body ?? "").trim() : null;
     const pipelineSource = String((displayedCoachDecision?.debug as any)?.coachDecisionSource ?? "").trim() || null;
-    const debugVisibleTitle = visibleTeachingSurface?.coach?.shouldRender ? String(visibleTeachingSurface.coach.title ?? "").trim() : null;
-    const debugVisibleBody = visibleTeachingSurface?.coach?.shouldRender ? String(visibleTeachingSurface.coach.body ?? "").trim() : null;
+    const preAuthoritySurfaceTitle = visibleTeachingSurface?.coach?.shouldRender ? String(visibleTeachingSurface.coach.title ?? "").trim() : null;
+    const preAuthoritySurfaceBody = visibleTeachingSurface?.coach?.shouldRender ? String(visibleTeachingSurface.coach.body ?? "").trim() : null;
+    const debugVisibleTitle = actualTitle;
+    const debugVisibleBody = actualBody;
     const debugVisibleButtons = Array.isArray(visibleTeachingSurface?.actions) ? visibleTeachingSurface.actions.map(String) : [];
     const visualCount = Array.isArray(boardLinesToRender) ? boardLinesToRender.length : 0;
     const revealTargetUci = instructionTarget?.uci ?? null;
@@ -5346,6 +5383,12 @@ export default function App(){
       pipelineCopyRejectedReason: pipelineCopyAuthorityDecision.pipelineCopyRejectedReason,
       renderedCopyAuthority: pipelineCopyAuthorityDecision.renderedCopyAuthority,
       pipelineCopyAuthority: pipelineCopyAuthorityDecision.pipelineCopyAuthority,
+      preAuthoritySurfaceTitle,
+      preAuthoritySurfaceBody,
+      preAuthoritySurfaceOwner: visibleTeachingSurface?.owner ?? null,
+      preAuthoritySurfaceReason: preAuthoritySurfaceTitle !== actualTitle || preAuthoritySurfaceBody !== actualBody
+        ? "surface_candidate_replaced_by_rendered_authority"
+        : null,
     };
     const coachCardRenderEntryKey=[
       String(trainerFrameId),
@@ -5838,6 +5881,9 @@ export default function App(){
     branchCompleteBlockedReason: branchCompleteContract.branchCompleteBlockedReason,
     branchCompleteLineExhaustedEvidence: branchCompleteContract.lineExhaustedEvidence,
     branchCompleteAfterFinalUserMove: branchCompleteContract.afterFinalUserMove,
+    restrictedLineExhaustedOnOpponentTurn: restrictedLineExhaustedOnOpponentTurnAfterUserMove,
+    branchCompleteRecoveredFromOpponentTurn: restrictedLineExhaustedOnOpponentTurnAfterUserMove&&branchCompleteEligibleNow,
+    blockedOpponentRequestInRestrictedExhaustedLine: restrictedLineExhaustedOnOpponentTurnAfterUserMove&&!pendingOpponentRequest,
     selectedLineExhausted: branchCompleteContract.selectedLineExhausted,
     selectedLineExhaustionReason: branchCompleteContract.selectedLineExhaustionReason,
     selectedLineExhaustionBlockedReason: branchCompleteContract.selectedLineExhaustionBlockedReason,

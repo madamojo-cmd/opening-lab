@@ -157,6 +157,8 @@ function buildDerivedAudit(
   const plainLeakFrames = new Set<number>();
   const criticalIssueFrames: Array<{ frameId: number | null; issues: string[] }> = [];
   const warningFrames: Array<{ frameId: number | null; warnings: string[] }> = [];
+  const restrictedLineExhaustedFrames: Array<{ frameId: number | null; reason: string | null; pendingOpponentRequest: boolean; branchCompleteRecovered: boolean }> = [];
+  const pendingOpponentRequestStallFrames: Array<{ frameId: number | null; ageMs: number | null; trainerPhase: string | null; trainingMode: string | null }> = [];
   const renderedVsPipelineCopyMismatches: Array<{
     frameId: number | null;
     moveSan: string | null;
@@ -188,6 +190,7 @@ function buildDerivedAudit(
     const coach = (snapshot as any)?.coach ?? {};
     const coachPipeline = (snapshot as any)?.coachPipeline ?? {};
     const continuation = (snapshot as any)?.continuation ?? {};
+    const frame = (snapshot as any)?.frame ?? {};
     const features = (snapshot as any)?.features ?? {};
     const visual = (snapshot as any)?.visual ?? {};
     const actions = (snapshot as any)?.actions ?? {};
@@ -317,6 +320,24 @@ function buildDerivedAudit(
     if (issues.length) criticalIssueFrames.push({ frameId, issues });
     const warnings = asArray(health?.warnings).map((warning) => String(warning));
     if (warnings.length) warningFrames.push({ frameId, warnings });
+    if (continuation?.restrictedLineExhaustedOnOpponentTurn === true || continuation?.branchCompleteRecoveredFromOpponentTurn === true) {
+      restrictedLineExhaustedFrames.push({
+        frameId,
+        reason: asText(frame?.branchTransitionReason ?? continuation?.restrictedLineExhaustedReason) ?? "restricted_book_exhausted_on_opponent_turn_after_user_move",
+        pendingOpponentRequest: Boolean(continuation?.pendingOpponentRequest ?? frame?.pendingOpponentRequest),
+        branchCompleteRecovered: Boolean(continuation?.branchCompleteRecoveredFromOpponentTurn),
+      });
+    }
+    const pending = continuation?.pendingOpponentRequest ?? frame?.pendingOpponentRequest;
+    const pendingAgeMs = pending?.startedAt ? Date.now() - Number(pending.startedAt) : null;
+    if (pending && (Number(pendingAgeMs ?? 0) > 5000 || String(frame?.trainerPhase ?? "") === "opponent_replying")) {
+      pendingOpponentRequestStallFrames.push({
+        frameId,
+        ageMs: Number.isFinite(Number(pendingAgeMs)) ? Number(pendingAgeMs) : null,
+        trainerPhase: asText(frame?.trainerPhase),
+        trainingMode: asText(frame?.trainingMode),
+      });
+    }
   }
 
   for (const entry of asArray(coachCardRenderTimeline)) {
@@ -440,6 +461,8 @@ function buildDerivedAudit(
     revealMismatchFrames: Array.from(revealMismatchFrames.values()).sort((a, b) => a - b),
     plainLeakFrames: Array.from(plainLeakFrames.values()).sort((a, b) => a - b),
     criticalIssueFrames,
+    restrictedLineExhaustedFrames,
+    pendingOpponentRequestStallFrames,
     warningFrames: identicalRenderedQualityDetected
       ? [...warningFrames, { frameId: null, warnings: ["identical_rendered_quality_scores_detected"] }]
       : warningFrames,

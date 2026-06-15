@@ -679,11 +679,13 @@ export function testTrainerDebugSnapshot(): void {
   assert.equal(Array.isArray(timelineSnapshot.coachCardRenderTimeline), true);
   assert.equal((timelineSnapshot.coachCardRenderTimeline as any[]).length, 2);
   assert.equal((timelineSnapshot.actionTimeline as any[]).length, 2);
-  assert.equal(timelineSnapshot.health.criticalIssues.includes("coach_card_debug_parity_mismatch"), true);
+  assert.equal(timelineSnapshot.health.criticalIssues.includes("coach_card_debug_parity_mismatch"), false);
   assert.equal(timelineSnapshot.health.criticalIssues.includes("action_debug_parity_mismatch"), true);
   assert.equal(timelineSnapshot.health.criticalIssues.includes("visual_debug_parity_mismatch"), true);
   assert.equal(timelineSnapshot.health.criticalIssues.includes("plain_pre_show_more_leak_at_frame"), true);
   assert.equal((timelineSnapshot.debugParity as any)?.actualCoachCardTitle, "Safety Blocked");
+  assert.equal((timelineSnapshot.coach as any)?.visibleTitle, "Safety Blocked");
+  assert.equal((timelineSnapshot.coach as any)?.preAuthoritySurfaceTitle, "Find the next move");
   assert.equal(((timelineSnapshot.actionTimeline as any[])[1]?.clickedActionPayload as any)?.continueFromHereClicked, true);
 
   const v28HealthySources = buildTrainerDebugSnapshot({

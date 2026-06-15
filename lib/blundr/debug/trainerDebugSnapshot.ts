@@ -114,11 +114,17 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   const surfaceCoach = input.visibleTeachingSurface?.coach ?? null;
   const surfaceActionsRaw = Array.isArray(input.visibleTeachingSurface?.actions) ? input.visibleTeachingSurface.actions : [];
   const surfaceActionKinds = surfaceActionsRaw.map((action: any) => (typeof action === "string" ? action : String(action?.kind ?? ""))).filter(Boolean);
+  const actualCoachCardTitle = input.actualCoachCardTitle == null ? null : String(input.actualCoachCardTitle);
+  const actualCoachCardBody = input.actualCoachCardBody == null ? null : String(input.actualCoachCardBody);
+  const actualCoachCardButtons = Array.isArray(input.actualCoachCardButtons) ? input.actualCoachCardButtons.map(String) : [];
+  const actualCoachCardSource = input.actualCoachCardSource == null ? null : String(input.actualCoachCardSource);
+  const preAuthoritySurfaceTitle = surfaceCoach?.title ?? input.visibleTeachingSurface?.copy?.title ?? null;
+  const preAuthoritySurfaceBody = surfaceCoach?.body ?? input.visibleTeachingSurface?.copy?.body ?? null;
   const visibleTitle = v28OwnerActive
-    ? (surfaceCoach?.title ?? input.visibleTeachingSurface?.copy?.title ?? null)
+    ? (actualCoachCardTitle ?? preAuthoritySurfaceTitle)
     : (presentationCoach.shouldRender ? presentationCoach.title ?? null : input.coachDecision?.shouldShowCoachCard ? input.coachDecision?.title ?? null : null);
   const visibleBody = v28OwnerActive
-    ? (surfaceCoach?.body ?? input.visibleTeachingSurface?.copy?.body ?? null)
+    ? (actualCoachCardBody ?? preAuthoritySurfaceBody)
     : (presentationCoach.shouldRender ? presentationCoach.body ?? null : input.coachDecision?.shouldShowCoachCard ? input.coachDecision?.body ?? null : null);
   const visibleBodyText = String(visibleBody ?? "");
   const visibleButtons = v28OwnerActive
@@ -157,10 +163,6 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   const visualRenderTimeline = Array.isArray(input.visualRenderTimeline) ? input.visualRenderTimeline.slice(-75) : [];
   const plainLeakTimeline = Array.isArray(input.plainLeakTimeline) ? input.plainLeakTimeline.slice(-75) : [];
   const maiaTimeline = Array.isArray(input.maiaTimeline) ? input.maiaTimeline.slice(-75) : [];
-  const actualCoachCardTitle = input.actualCoachCardTitle == null ? null : String(input.actualCoachCardTitle);
-  const actualCoachCardBody = input.actualCoachCardBody == null ? null : String(input.actualCoachCardBody);
-  const actualCoachCardButtons = Array.isArray(input.actualCoachCardButtons) ? input.actualCoachCardButtons.map(String) : [];
-  const actualCoachCardSource = input.actualCoachCardSource == null ? null : String(input.actualCoachCardSource);
   const actualActionSource = input.actualActionSource == null ? null : String(input.actualActionSource);
   const actualVisualSource = input.actualVisualSource == null ? null : String(input.actualVisualSource);
   const renderedActionIds = Array.isArray(input.renderedActionIds) ? input.renderedActionIds.map(String) : [];
@@ -983,6 +985,9 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       continuationPauseRequired: input.continuationPauseRequired ?? false,
       continuationPauseReason: input.continuationPauseReason ?? "none",
       continuationPauseAlreadyConsumed: input.continuationPauseAlreadyConsumed ?? false,
+      restrictedLineExhaustedOnOpponentTurn: Boolean(input.restrictedLineExhaustedOnOpponentTurn),
+      branchCompleteRecoveredFromOpponentTurn: Boolean(input.branchCompleteRecoveredFromOpponentTurn),
+      blockedOpponentRequestInRestrictedExhaustedLine: Boolean(input.blockedOpponentRequestInRestrictedExhaustedLine),
       hardStopBackupEligible: input.hardStopBackupEligible ?? false,
       hardStopBackupBlockedReason: input.hardStopBackupBlockedReason ?? null,
       hardStopPlyLimit: input.hardStopPlyLimit ?? null,
@@ -1094,6 +1099,12 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       visibleTitle,
       visibleBody,
       visibleButtons,
+      preAuthoritySurfaceTitle,
+      preAuthoritySurfaceBody,
+      preAuthoritySurfaceOwner: v28OwnerActive ? input.visibleTeachingSurface?.owner ?? "v28_visible_surface" : null,
+      preAuthoritySurfaceReason: v28OwnerActive && (preAuthoritySurfaceTitle !== visibleTitle || preAuthoritySurfaceBody !== visibleBody)
+        ? "surface_candidate_replaced_by_rendered_authority"
+        : null,
       visibleCoachOwner,
       coachDecisionSource: coachSource,
       coachIntent: visibleCoachIntent,

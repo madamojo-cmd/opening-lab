@@ -198,6 +198,8 @@ export function testStage2ContentDebugVisibility(): void {
   assert.equal(Array.isArray((fullPayload as any).derivedAudit?.stage2PacketUsage), true);
   assert.equal(Array.isArray((fullPayload as any).derivedAudit?.featureExposureGaps), true);
   assert.equal(Array.isArray((fullPayload as any).derivedAudit?.renderedVsPipelineCopyMismatches), true);
+  assert.equal(Array.isArray((fullPayload as any).derivedAudit?.restrictedLineExhaustedFrames), true);
+  assert.equal(Array.isArray((fullPayload as any).derivedAudit?.pendingOpponentRequestStallFrames), true);
   assert.equal((fullPayload as any).derivedAudit?.qualityScoreDistribution?.["88"], 3);
   assert.equal(
     ((fullPayload as any).derivedAudit?.repeatedTitles ?? []).some((entry: any) => entry.title === "Active Piece Development"),
@@ -225,6 +227,36 @@ export function testStage2ContentDebugVisibility(): void {
   );
   assert.equal(Array.isArray((fullPayload as any).history?.snapshots), true);
   assert.equal(((fullPayload as any).history?.snapshots ?? []).length, 3);
+
+  const cleanAuthorityPayload = buildFullSessionDebugPayload({
+    currentSnapshot: null,
+    historySnapshots: [],
+    coachTimeline: [],
+    coachPipelineTimeline: [],
+    coachCardRenderTimeline: [
+      {
+        frameId: 4,
+        trainerFrameId: 4,
+        trainerPhase: "ready_for_user",
+        trainingMode: "restricted",
+        isUserTurn: true,
+        instructionTargetUci: "e2e4",
+        instructionTargetSan: "e4",
+        actualCoachCardTitle: "e4 — Challenge the center",
+        actualCoachCardBody: "Move the pawn to e4. This contests central space and opens lines for your pieces.",
+        visibleTitle: "e4 — Challenge the center",
+        visibleBody: "Move the pawn to e4. This contests central space and opens lines for your pieces.",
+        preAuthoritySurfaceTitle: "Active Piece Development",
+        preAuthoritySurfaceBody: "Play e4 with the pawn; it improves central control through Active Piece Development.",
+        pipelineCoachCardTitle: "e4 — Challenge the center",
+        pipelineCoachCardBody: "Move the pawn to e4. This contests central space and opens lines for your pieces.",
+        pipelineQualityScore: 88,
+        renderedQualityScore: 88,
+      },
+    ],
+  });
+  assert.equal((cleanAuthorityPayload as any).derivedAudit?.renderedVsPipelineMismatchCount, 0);
+  assert.equal((cleanAuthorityPayload as any).derivedAudit?.renderedRawConceptLabelCount, 0);
 
   const panelSource = fs.readFileSync("components/debug/BlundrDiagnosticsPanel.tsx", "utf8");
   assert.equal(panelSource.includes("Copy ALL Session Debug"), true);
