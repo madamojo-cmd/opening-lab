@@ -188,7 +188,10 @@ export function testStage2ContentDebugVisibility(): void {
   assert.equal(Array.isArray((fullPayload as any).history?.coachCardRenderTimeline), true);
   assert.equal(Array.isArray((fullPayload as any).history?.coachPipelineTimeline), true);
   assert.equal(Array.isArray((fullPayload as any).history?.visualTimeline), true);
+  assert.equal(Array.isArray((fullPayload as any).history?.surfaceModeTransitionTimeline), true);
   assert.equal(typeof (fullPayload as any).derivedAudit?.qualityScoreDistribution, "object");
+  assert.equal(typeof (fullPayload as any).derivedAudit?.pipelineQualityScoreDistribution, "object");
+  assert.equal(typeof (fullPayload as any).derivedAudit?.renderedQualityScoreDistribution, "object");
   assert.equal(Array.isArray((fullPayload as any).derivedAudit?.repeatedTitles), true);
   assert.equal(Array.isArray((fullPayload as any).derivedAudit?.fallbackFrames), true);
   assert.equal(Array.isArray((fullPayload as any).derivedAudit?.claimValidationFailedFrames), true);
@@ -210,6 +213,10 @@ export function testStage2ContentDebugVisibility(): void {
   );
   assert.equal(
     ((fullPayload as any).derivedAudit?.renderedVsPipelineCopyMismatches ?? []).some((entry: any) => entry.frameId === 3),
+    true,
+  );
+  assert.equal(
+    ((fullPayload as any).derivedAudit?.renderedVsPipelineCopyMismatches ?? []).some((entry: any) => entry.reason === "raw_or_generic_rendered_copy_overrode_move_specific_pipeline_copy"),
     true,
   );
   assert.equal(

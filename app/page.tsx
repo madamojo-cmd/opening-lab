@@ -50,6 +50,7 @@ import { attributeLastMove, decideTrainerPhaseActionGate } from "@/lib/blundr/pr
 import { buildVisibleTeachingSurface } from "@/lib/blundr/presentation/buildVisibleTeachingSurface"; // v2.7.40 Agent 3: single visible owner surface
 import { buildLiveVisibleTeachingSurface } from "@/lib/blundr/presentation/buildLiveVisibleTeachingSurface";
 import { adaptVisibleSurfaceToBoardVisuals, adaptVisibleSurfaceToCoachUi } from "@/lib/blundr/presentation/uiSurfaceAdapter";
+import { selectRenderedCoachCardCopyAuthority } from "@/lib/blundr/presentation/renderedCoachCopyAuthority";
 import { isV28VisibleSurfaceEnabled } from "@/lib/blundr/presentation/featureFlags";
 import { buildContinuationCandidateVisual } from "@/lib/blundr/visual/continuationCandidateVisual";
 import { buildOpeningTree } from "@/lib/blundr/openings/openingTree";
@@ -298,6 +299,10 @@ type CoachCardRenderTimelineEntry = {
   renderedQualityScore?: number | null;
   qualityScoreSource?: string | null;
   qualityScoreReasonCodes?: string[];
+  pipelineCopyRejected?: boolean;
+  pipelineCopyRejectedReason?: string | null;
+  renderedCopyAuthority?: string | null;
+  pipelineCopyAuthority?: string | null;
 };
 type BoardTheme = "classic" | "slate" | "blue" | "walnut";
 type PieceStyle = "unicode" | "letters" | "neo";
@@ -3462,15 +3467,41 @@ export default function App(){
     ),
   });
   const stage2CoachingPacketResolution=resolveStage2CoachingPacket(stage2CoachContext);
+  const pipelineCoachTitle = displayedCoachDecision?.shouldShowCoachCard
+    ? String(displayedCoachDecision.title ?? "").trim()
+    : "";
+  const pipelineCoachBody = displayedCoachDecision?.shouldShowCoachCard
+    ? String(displayedCoachDecision.body ?? "").trim()
+    : "";
+  const pipelineCoachQuality = (displayedCoachDecision?.debug as any)?.coachQuality ?? {};
+  const pipelineSafetyPassed = !Array.isArray((displayedCoachDecision?.debug as any)?.unverifiedClaims)
+    || ((displayedCoachDecision?.debug as any)?.unverifiedClaims as unknown[]).length === 0;
+  const pipelineCopyAuthorityDecision = selectRenderedCoachCardCopyAuthority({
+    trainerPhase,
+    isUserTurn,
+    visibleSurfaceMode: v28VisibleSurface?.mode ?? null,
+    instructionTargetUci: instructionTarget?.uci ?? null,
+    surfaceSafetyBlocked: Boolean(visibleTeachingSurface?.safety?.blocked),
+    surfaceCopy: {
+      title: v28CoachUiModel?.title ?? convergedVisibleSurface.coach.title ?? "Training move",
+      body: v28CoachUiModel?.body ?? convergedVisibleSurface.coach.body ?? convergedVisibleSurface.hint.text ?? "",
+      bullets: v28CoachUiModel?.bullets ?? [],
+    },
+    pipelineCopy: {
+      title: pipelineCoachTitle,
+      body: pipelineCoachBody,
+      bullets: [],
+    },
+    pipelineTargetAligned: pipelineCoachQuality?.targetAligned,
+    pipelinePieceAligned: pipelineCoachQuality?.pieceAligned,
+    pipelineContainsDebugLeak: Boolean(pipelineCoachQuality?.containsDebugLeak || isDebugLeakText(pipelineCoachBody)),
+    pipelinePassedSafety: pipelineSafetyPassed,
+  });
   const stage2CoachCopyEnrichment=applyStage2CoachCopyEnrichment({
     currentMode:v28VisibleSurface?.mode??null,
     targetUci:instructionTarget?.uci??null,
     targetSan:instructionTarget?.san??null,
-    baseCopy:{
-      title:v28CoachUiModel?.title ?? convergedVisibleSurface.coach.title ?? "Training move",
-      body:v28CoachUiModel?.body ?? convergedVisibleSurface.coach.body ?? convergedVisibleSurface.hint.text ?? "",
-      bullets:v28CoachUiModel?.bullets ?? [],
-    },
+    baseCopy:pipelineCopyAuthorityDecision.copy,
     resolution:stage2CoachingPacketResolution,
   });
   const coachCardTitleFromSurface = plainBeforeShowMore && !plainHintShown
@@ -5311,6 +5342,10 @@ export default function App(){
       qualityScoreReasonCodes: Array.isArray((renderedCoachQualityForDebug as any)?.qualityScoreReasonCodes)
         ? (renderedCoachQualityForDebug as any).qualityScoreReasonCodes.map(String)
         : [],
+      pipelineCopyRejected: pipelineCopyAuthorityDecision.pipelineCopyRejected,
+      pipelineCopyRejectedReason: pipelineCopyAuthorityDecision.pipelineCopyRejectedReason,
+      renderedCopyAuthority: pipelineCopyAuthorityDecision.renderedCopyAuthority,
+      pipelineCopyAuthority: pipelineCopyAuthorityDecision.pipelineCopyAuthority,
     };
     const coachCardRenderEntryKey=[
       String(trainerFrameId),
@@ -5352,6 +5387,7 @@ export default function App(){
     visibleTeachingSurface?.safety?.blocked,visibleTeachingSurface?.safety?.reason,visibleTeachingSurface?.safety?.blockedReason,visibleTeachingSurface?.safety?.blockedSeverity,visibleTeachingSurface?.safety?.recoveredBySafeTeachingCopy,visibleTeachingSurface?.safety?.plainLeakDetected,
     displayedCoachDecision?.debug?.coachIntent,displayedCoachDecision?.debug?.coachDecisionSource,displayedCoachDecision?.debug?.verifiedFallbackUsed,displayedCoachDecision?.debug?.fallbackReason,displayedCoachDecision?.debug?.coachQuality?.targetAligned,displayedCoachDecision?.debug?.coachQuality?.pieceAligned,
     displayedCoachDecision?.title,displayedCoachDecision?.body,renderedCoachQualityForDebug?.qualityScore,JSON.stringify((renderedCoachQualityForDebug as any)?.qualityScoreReasonCodes??[]),
+    pipelineCopyAuthorityDecision.pipelineCopyRejected,pipelineCopyAuthorityDecision.pipelineCopyRejectedReason,pipelineCopyAuthorityDecision.renderedCopyAuthority,pipelineCopyAuthorityDecision.pipelineCopyAuthority,
     boardLinesToRender.map((line)=>`${line.from}${line.to}`).join("|"),runtimeCriticalIssues.join("|"),
   ]);
   useEffect(()=>{

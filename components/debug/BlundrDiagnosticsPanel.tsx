@@ -134,6 +134,8 @@ function buildDerivedAudit(
   coachPipelineTimeline: unknown[],
 ): Record<string, unknown> {
   const qualityScoreDistribution: Record<string, number> = {};
+  const pipelineQualityScoreDistribution: Record<string, number> = {};
+  const renderedQualityScoreDistribution: Record<string, number> = {};
   const titleFrames = new Map<string, number[]>();
   const bodyFrames = new Map<string, number[]>();
   const templateUsageMap = new Map<string, { templateId: string | null; count: number; frames: number[] }>();
@@ -174,6 +176,12 @@ function buildDerivedAudit(
   let safeFallbackPacketFrameCount = 0;
   let approvedContentEnabledFrameCount = 0;
   const renderedQualityScores: number[] = [];
+  const bumpDistribution = (distribution: Record<string, number>, value: unknown) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return;
+    const key = String(numeric);
+    distribution[key] = (distribution[key] ?? 0) + 1;
+  };
 
   for (const snapshot of sessionSnapshots) {
     const frameId = getFrameId(snapshot);
@@ -194,6 +202,8 @@ function buildDerivedAudit(
       qualityScoreDistribution[key] = (qualityScoreDistribution[key] ?? 0) + 1;
       renderedQualityScores.push(qualityScore);
     }
+    bumpDistribution(pipelineQualityScoreDistribution, coachPipeline?.pipelineQualityScore ?? coachPipeline?.qualityScore);
+    bumpDistribution(renderedQualityScoreDistribution, coachPipeline?.renderedQualityScore ?? coachPipeline?.qualityScore ?? coach?.qualityScore);
 
     if (title && frameId != null) {
       const frames = titleFrames.get(title) ?? [];
@@ -322,6 +332,8 @@ function buildDerivedAudit(
     const genericContinuation = renderedTitle ? renderedTitle.toLowerCase().includes("continue the position") : false;
     if (rawLabel) renderedRawConceptLabelCount += 1;
     if (genericContinuation || (renderedBody ? renderedBody.toLowerCase().includes("keeps the position moving") : false)) renderedGenericContinuationCount += 1;
+    bumpDistribution(pipelineQualityScoreDistribution, (entry as any)?.pipelineQualityScore);
+    bumpDistribution(renderedQualityScoreDistribution, (entry as any)?.renderedQualityScore);
 
     const pipelineEntry = asArray(coachPipelineTimeline).find((candidate: any) => matchesFrameContext(entry, candidate)) as any;
     const timelinePipelineTitle = asText(pipelineEntry?.visibleTitle);
@@ -404,6 +416,8 @@ function buildDerivedAudit(
     frameCount: sessionSnapshots.length,
     instructionalFrameCount: asArray(coachTimeline).filter((entry: any) => entry?.entryKind === "instructional").length,
     qualityScoreDistribution,
+    pipelineQualityScoreDistribution,
+    renderedQualityScoreDistribution,
     repeatedTitles,
     repeatedBodies,
     repeatedBodyStems,
@@ -438,6 +452,7 @@ export function buildFullSessionDebugPayload(args: {
   coachTimeline?: unknown[];
   coachPipelineTimeline?: unknown[];
   coachCardRenderTimeline?: unknown[];
+  surfaceModeTransitionTimeline?: unknown[];
   surfaceTimeline?: unknown[];
   actionTimeline?: unknown[];
   visualTimeline?: unknown[];
@@ -452,7 +467,7 @@ export function buildFullSessionDebugPayload(args: {
   const coachTimeline = asArray(args.coachTimeline);
   const coachPipelineTimeline = asArray(args.coachPipelineTimeline);
   const coachCardRenderTimeline = asArray(args.coachCardRenderTimeline);
-  const surfaceTimeline = asArray(args.surfaceTimeline);
+  const surfaceModeTransitionTimeline = asArray(args.surfaceModeTransitionTimeline ?? args.surfaceTimeline);
   const actionTimeline = asArray(args.actionTimeline);
   const visualTimeline = asArray(args.visualTimeline);
   const plainLeakTimeline = asArray(args.plainLeakTimeline);
@@ -468,7 +483,8 @@ export function buildFullSessionDebugPayload(args: {
       coachTimeline,
       coachPipelineTimeline,
       coachCardRenderTimeline,
-      surfaceTimeline,
+      surfaceModeTransitionTimeline,
+      surfaceTimeline: surfaceModeTransitionTimeline,
       actionTimeline,
       visualTimeline,
       plainLeakTimeline,
@@ -718,7 +734,7 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
         coachTimeline,
         coachPipelineTimeline: coachTimeline,
         coachCardRenderTimeline,
-        surfaceTimeline: surfaceModeTransitionTimeline,
+        surfaceModeTransitionTimeline,
         actionTimeline,
         visualTimeline: visualRenderTimeline,
         plainLeakTimeline,

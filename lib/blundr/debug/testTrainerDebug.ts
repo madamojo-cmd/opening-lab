@@ -8,6 +8,7 @@ import { testCurrentInstructionFrame } from "../runtime/__tests__/currentInstruc
 import { testOpponentReplyGuard } from "../runtime/__tests__/opponentReplyGuard.test";
 import { testContinuationCandidateVisual } from "../visual/__tests__/continuationCandidateVisual.test";
 import { testCoachActionStylePolicy } from "../presentation/__tests__/coachActionStylePolicy.test";
+import { testRenderedCoachCopyAuthority } from "../presentation/__tests__/renderedCoachCopyAuthority.test";
 
 export function testTrainerDebug(): void {
   console.log("Running Blundr trainer debug QA...");
@@ -27,6 +28,8 @@ export function testTrainerDebug(): void {
   console.log("✓ continuation candidate visual passed");
   testCoachActionStylePolicy();
   console.log("✓ coach action style policy passed");
+  testRenderedCoachCopyAuthority();
+  console.log("✓ rendered coach copy authority passed");
   testFallbackCopyGuard();
   console.log("✓ fallback copy guard passed");
   if (process.env.RUN_MULTI_MOVE_QA === "1") {
