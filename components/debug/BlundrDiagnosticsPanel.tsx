@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import type { TrainerDebugSnapshot } from "@/lib/blundr/debug/trainerDebugTypes";
 import { setBlundrDebugEnabled } from "@/lib/blundr/debug/trainerDebugGuards";
-import { stringifyDebugJson } from "@/lib/blundr/debug/trainerDebugSanitizer";
+import { sanitizeForDebugJson, stringifyDebugJson } from "@/lib/blundr/debug/trainerDebugSanitizer";
 import { DebugBadge } from "./DebugBadge";
 import { DebugCopyButton } from "./DebugCopyButton";
 import { DebugEventTimeline } from "./DebugEventTimeline";
@@ -16,6 +16,332 @@ type Props = {
   onEnabledChange: (enabled: boolean) => void;
   onClearEvents: () => void;
 };
+
+const MAX_DEBUG_SNAPSHOTS = 250;
+const GENERIC_TITLE_MARKERS = [
+  "active piece development",
+  "avoid blocking center pawn",
+  "improve your position",
+  "continue the position",
+  "status",
+  "opening pattern",
+  "opening idea",
+];
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function asText(value: unknown): string | null {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text.length > 0 ? text : null;
+}
+
+function asFrameId(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getFrameId(snapshot: unknown): number | null {
+  const frame = (snapshot as any)?.frame;
+  return asFrameId(frame?.trainerFrameId ?? frame?.frameId ?? frame?.id);
+}
+
+function getSnapshotKey(snapshot: TrainerDebugSnapshot): string {
+  const frame = snapshot?.frame as any;
+  const trainerFrameId = frame?.trainerFrameId ?? frame?.frameId ?? null;
+  const instructionFrameKey = frame?.instructionFrameKey ?? null;
+  const instructionTargetUci = frame?.instructionTargetUci ?? null;
+  const trainerPhase = frame?.trainerPhase ?? null;
+  const trainingMode = frame?.trainingMode ?? null;
+  return [
+    String(trainerFrameId ?? ""),
+    String(instructionFrameKey ?? ""),
+    String(instructionTargetUci ?? ""),
+    String(trainerPhase ?? ""),
+    String(trainingMode ?? ""),
+  ].join("|");
+}
+
+function sanitizeSnapshotForHistory(snapshot: TrainerDebugSnapshot | null | undefined): Record<string, unknown> | null {
+  if (!snapshot) return null;
+  return sanitizeForDebugJson({
+    generatedAt: snapshot.generatedAt ?? null,
+    build: snapshot.build ?? null,
+    health: snapshot.health ?? null,
+    frame: snapshot.frame ?? null,
+    board: snapshot.board ?? null,
+    visual: snapshot.visual ?? null,
+    continuation: snapshot.continuation ?? null,
+    maia: (snapshot as any).maia ?? null,
+    coach: snapshot.coach ?? null,
+    coachPipeline: snapshot.coachPipeline ?? null,
+    actions: snapshot.actions ?? null,
+    features: snapshot.features ?? null,
+    plans: snapshot.plans ?? null,
+    opportunities: snapshot.opportunities ?? null,
+    templates: snapshot.explanation ?? null,
+    presentation: snapshot.presentation ?? null,
+    legacy: snapshot.legacy ?? null,
+    cachePerformance: {
+      cache: snapshot.cache ?? null,
+      performance: snapshot.performance ?? null,
+    },
+    raw: snapshot,
+  }) as Record<string, unknown>;
+}
+
+function includesNeedle(value: unknown, needle: string): boolean {
+  return JSON.stringify(sanitizeForDebugJson(value)).toLowerCase().includes(needle);
+}
+
+function getMoveSan(snapshot: unknown): string | null {
+  const frame = (snapshot as any)?.frame;
+  const coach = (snapshot as any)?.coach;
+  const continuation = (snapshot as any)?.continuation;
+  return asText(frame?.expectedMoveSan ?? coach?.selectedOpportunityMoveSan ?? continuation?.selectedCandidateSan);
+}
+
+function getMoveUci(snapshot: unknown): string | null {
+  const frame = (snapshot as any)?.frame;
+  const continuation = (snapshot as any)?.continuation;
+  const coach = (snapshot as any)?.coach;
+  return asText(frame?.expectedMoveUci ?? continuation?.selectedCandidateUci ?? coach?.selectedOpportunityMoveUci);
+}
+
+function buildDerivedAudit(sessionSnapshots: Record<string, unknown>[], coachTimeline: unknown[], plainLeakTimeline: unknown[]): Record<string, unknown> {
+  const qualityScoreDistribution: Record<string, number> = {};
+  const titleFrames = new Map<string, number[]>();
+  const bodyFrames = new Map<string, number[]>();
+  const templateUsageMap = new Map<string, { templateId: string | null; count: number; frames: number[] }>();
+  const stage2UsageMap = new Map<string, { kind: string | null; safetyStatus: string | null; sourceFile: string | null; count: number; frames: number[] }>();
+  const genericTitleHits: Array<{ title: string; frames: number[] }> = [];
+  const fallbackFrames: Array<{ frameId: number | null; moveSan: string | null; moveUci: string | null; source: string | null; reason: string | null }> = [];
+  const claimValidationFailedFrames: Array<{ frameId: number | null; moveSan: string | null; moveUci: string | null; title: string | null; body: string | null }> = [];
+  const featureExposureGaps: Array<{
+    frameId: number | null;
+    featurePacketExists: boolean | null;
+    tacticalMotifSummary: string | null;
+    whyVisualRecipeOpportunityLost: string | null;
+    whyContinuationCandidateOpportunityLost: string | null;
+  }> = [];
+  const targetMismatchFrames = new Set<number>();
+  const pieceMismatchFrames = new Set<number>();
+  const visualMismatchFrames = new Set<number>();
+  const revealMismatchFrames = new Set<number>();
+  const plainLeakFrames = new Set<number>();
+  const criticalIssueFrames: Array<{ frameId: number | null; issues: string[] }> = [];
+  const warningFrames: Array<{ frameId: number | null; warnings: string[] }> = [];
+
+  for (const snapshot of sessionSnapshots) {
+    const frameId = getFrameId(snapshot);
+    const coach = (snapshot as any)?.coach ?? {};
+    const coachPipeline = (snapshot as any)?.coachPipeline ?? {};
+    const continuation = (snapshot as any)?.continuation ?? {};
+    const features = (snapshot as any)?.features ?? {};
+    const visual = (snapshot as any)?.visual ?? {};
+    const actions = (snapshot as any)?.actions ?? {};
+    const health = (snapshot as any)?.health ?? {};
+    const title = asText(coach?.visibleTitle);
+    const body = asText(coach?.visibleBody);
+
+    const qualityScoreRaw = coachPipeline?.qualityScore ?? coach?.qualityScore;
+    const qualityScore = Number(qualityScoreRaw);
+    if (Number.isFinite(qualityScore)) {
+      const key = String(qualityScore);
+      qualityScoreDistribution[key] = (qualityScoreDistribution[key] ?? 0) + 1;
+    }
+
+    if (title && frameId != null) {
+      const frames = titleFrames.get(title) ?? [];
+      frames.push(frameId);
+      titleFrames.set(title, frames);
+    }
+    if (body && frameId != null) {
+      const frames = bodyFrames.get(body) ?? [];
+      frames.push(frameId);
+      bodyFrames.set(body, frames);
+    }
+
+    if (title && frameId != null) {
+      const lowered = title.toLowerCase();
+      if (GENERIC_TITLE_MARKERS.some((marker) => lowered.includes(marker))) {
+        const existing = genericTitleHits.find((entry) => entry.title === title);
+        if (existing) existing.frames.push(frameId);
+        else genericTitleHits.push({ title, frames: [frameId] });
+      }
+    }
+
+    const fallbackUsed =
+      includesNeedle(coach?.coachDecisionSource, "fallback")
+      || continuation?.runtimeSafeFallbackUsed === true
+      || continuation?.genericFallbackUsed === true
+      || continuation?.stage2CoachingPacketKind === "safe_fallback";
+    if (fallbackUsed) {
+      fallbackFrames.push({
+        frameId,
+        moveSan: getMoveSan(snapshot),
+        moveUci: getMoveUci(snapshot),
+        source: asText(coach?.coachDecisionSource),
+        reason: asText(continuation?.runtimeSafeFallbackReason ?? coachPipeline?.fallbackReason),
+      });
+    }
+
+    if (
+      continuation?.runtimeSafeFallbackReason === "claim_validation_failed"
+      || includesNeedle(snapshot, "claim_validation_failed")
+    ) {
+      claimValidationFailedFrames.push({
+        frameId,
+        moveSan: getMoveSan(snapshot),
+        moveUci: getMoveUci(snapshot),
+        title,
+        body,
+      });
+    }
+
+    const templateId = asText(coachPipeline?.selectedTemplateId ?? coach?.selectedTemplateId);
+    if (templateId) {
+      const existing = templateUsageMap.get(templateId) ?? { templateId, count: 0, frames: [] };
+      existing.count += 1;
+      if (frameId != null) existing.frames.push(frameId);
+      templateUsageMap.set(templateId, existing);
+    }
+
+    const packetKind = asText(continuation?.stage2CoachingPacketKind) ?? null;
+    const safetyStatus = asText(continuation?.stage2CoachingSafetyStatus) ?? null;
+    const sourceFile = asText(continuation?.stage2CoachingSourceFile) ?? null;
+    const packetKey = [packetKind, safetyStatus, sourceFile].join("|");
+    const packetUsage = stage2UsageMap.get(packetKey) ?? { kind: packetKind, safetyStatus, sourceFile, count: 0, frames: [] };
+    packetUsage.count += 1;
+    if (frameId != null) packetUsage.frames.push(frameId);
+    stage2UsageMap.set(packetKey, packetUsage);
+
+    const featurePacketExists =
+      features?.featurePacketExists == null
+        ? (features?.featurePacket != null || features?.moduleFeaturePacket != null || null)
+        : Boolean(features.featurePacketExists);
+    const tacticalMotifSummary = asText(features?.tacticalMotifSummary);
+    const whyVisualRecipeOpportunityLost = asText(features?.whyVisualRecipeOpportunityLost);
+    const whyContinuationCandidateOpportunityLost = asText(features?.whyContinuationCandidateOpportunityLost);
+    if (
+      featurePacketExists === true
+      && (
+        tacticalMotifSummary === "blocked_debug_only"
+        || whyVisualRecipeOpportunityLost === "not_exposed_from_module"
+        || whyContinuationCandidateOpportunityLost === "not_exposed_from_module"
+      )
+    ) {
+      featureExposureGaps.push({
+        frameId,
+        featurePacketExists,
+        tacticalMotifSummary,
+        whyVisualRecipeOpportunityLost,
+        whyContinuationCandidateOpportunityLost,
+      });
+    }
+
+    if (coach?.targetAligned === false) {
+      if (frameId != null) targetMismatchFrames.add(frameId);
+    }
+    if (coach?.pieceAligned === false) {
+      if (frameId != null) pieceMismatchFrames.add(frameId);
+    }
+    if (visual?.visualTargetMatchesInstructionTarget === false || visual?.visualRecipeTargetMatchesInstructionTarget === false) {
+      if (frameId != null) visualMismatchFrames.add(frameId);
+    }
+    if (actions?.revealTargetMatchesInstructionTarget === false || actions?.revealTargetMismatchDetected === true) {
+      if (frameId != null) revealMismatchFrames.add(frameId);
+    }
+    if (features?.plainLeakDetected === true) {
+      if (frameId != null) plainLeakFrames.add(frameId);
+    }
+
+    const issues = asArray(health?.criticalIssues).map((issue) => String(issue));
+    if (issues.length) criticalIssueFrames.push({ frameId, issues });
+    const warnings = asArray(health?.warnings).map((warning) => String(warning));
+    if (warnings.length) warningFrames.push({ frameId, warnings });
+  }
+
+  for (const entry of asArray(plainLeakTimeline)) {
+    if ((entry as any)?.preShowMoreLeak || (entry as any)?.plainLeakDetected) {
+      const frameId = asFrameId((entry as any)?.frameId);
+      if (frameId != null) plainLeakFrames.add(frameId);
+    }
+  }
+
+  const repeatedTitles = Array.from(titleFrames.entries())
+    .filter(([, frames]) => frames.length > 1)
+    .map(([title, frames]) => ({ title, count: frames.length, frames }));
+  const repeatedBodies = Array.from(bodyFrames.entries())
+    .filter(([, frames]) => frames.length > 1)
+    .map(([body, frames]) => ({ body, count: frames.length, frames }));
+
+  return {
+    frameCount: sessionSnapshots.length,
+    instructionalFrameCount: asArray(coachTimeline).filter((entry: any) => entry?.entryKind === "instructional").length,
+    qualityScoreDistribution,
+    repeatedTitles,
+    repeatedBodies,
+    genericTitleHits,
+    fallbackFrames,
+    claimValidationFailedFrames,
+    templateUsage: Array.from(templateUsageMap.values()),
+    stage2PacketUsage: Array.from(stage2UsageMap.values()),
+    featureExposureGaps,
+    targetMismatchFrames: Array.from(targetMismatchFrames.values()).sort((a, b) => a - b),
+    pieceMismatchFrames: Array.from(pieceMismatchFrames.values()).sort((a, b) => a - b),
+    visualMismatchFrames: Array.from(visualMismatchFrames.values()).sort((a, b) => a - b),
+    revealMismatchFrames: Array.from(revealMismatchFrames.values()).sort((a, b) => a - b),
+    plainLeakFrames: Array.from(plainLeakFrames.values()).sort((a, b) => a - b),
+    criticalIssueFrames,
+    warningFrames,
+  };
+}
+
+export function buildFullSessionDebugPayload(args: {
+  currentSnapshot: TrainerDebugSnapshot | null | undefined;
+  historySnapshots: Array<Record<string, unknown> | null | undefined>;
+  coachTimeline?: unknown[];
+  coachCardRenderTimeline?: unknown[];
+  surfaceTimeline?: unknown[];
+  actionTimeline?: unknown[];
+  visualTimeline?: unknown[];
+  plainLeakTimeline?: unknown[];
+  maiaTimeline?: unknown[];
+  eventLog?: unknown[];
+}): Record<string, unknown> {
+  const current = sanitizeSnapshotForHistory(args.currentSnapshot);
+  const snapshots = args.historySnapshots
+    .map((entry) => sanitizeForDebugJson(entry))
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry && typeof entry === "object"));
+  const coachTimeline = asArray(args.coachTimeline);
+  const coachCardRenderTimeline = asArray(args.coachCardRenderTimeline);
+  const surfaceTimeline = asArray(args.surfaceTimeline);
+  const actionTimeline = asArray(args.actionTimeline);
+  const visualTimeline = asArray(args.visualTimeline);
+  const plainLeakTimeline = asArray(args.plainLeakTimeline);
+  const maiaTimeline = asArray(args.maiaTimeline);
+  const eventLog = asArray(args.eventLog);
+  const latest = snapshots.at(-1) ?? current ?? null;
+  return {
+    generatedAt: (args.currentSnapshot?.generatedAt ?? (latest as any)?.generatedAt ?? null) as number | string | null,
+    debugBuild: sanitizeForDebugJson(args.currentSnapshot?.build ?? (latest as any)?.build ?? null),
+    current,
+    history: {
+      snapshots,
+      coachTimeline,
+      coachCardRenderTimeline,
+      surfaceTimeline,
+      actionTimeline,
+      visualTimeline,
+      plainLeakTimeline,
+      maiaTimeline,
+      eventLog,
+    },
+    derivedAudit: buildDerivedAudit(snapshots, coachTimeline, plainLeakTimeline),
+  };
+}
 
 export function buildDebugCopyEverythingPayload(snapshot: TrainerDebugSnapshot | null | undefined): Record<string, unknown> {
   return {
@@ -150,6 +476,7 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
   const [pinned, setPinned] = useState(false);
   const [expanded, setExpanded] = useState(true);
   const [timelineFilter, setTimelineFilter] = useState<"all" | "instructional" | "status" | "fallback" | "low_quality" | "debug_leak" | "mismatch" | "critical">("all");
+  const sessionHistoryRef = useRef<Array<{ key: string; snapshot: Record<string, unknown> }>>([]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -226,6 +553,7 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
   const visualRenderTimeline = useMemo(() => (Array.isArray(snapshot?.visualRenderTimeline) ? snapshot.visualRenderTimeline : []), [snapshot]);
   const plainLeakTimeline = useMemo(() => (Array.isArray(snapshot?.plainLeakTimeline) ? snapshot.plainLeakTimeline : []), [snapshot]);
   const maiaTimeline = useMemo(() => (Array.isArray((snapshot as any)?.maiaTimeline) ? (snapshot as any).maiaTimeline : []), [snapshot]);
+  const eventLog = useMemo(() => (Array.isArray(snapshot?.eventLog) ? snapshot.eventLog : []), [snapshot]);
   const currentCoachCard = useMemo(() => ({
     title: snapshot?.coach?.visibleTitle ?? null,
     body: snapshot?.coach?.visibleBody ?? null,
@@ -236,6 +564,42 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
     mode: snapshot ? (snapshot.presentation as any)?.visibleSurfaceMode ?? null : null,
   }), [snapshot]);
   const fullDebugSession = useMemo(() => buildDebugCopyEverythingPayload(snapshot), [snapshot]);
+  useEffect(() => {
+    if (!snapshot) return;
+    const key = getSnapshotKey(snapshot);
+    const current = sessionHistoryRef.current;
+    if (current.some((entry) => entry.key === key)) return;
+    const sanitized = sanitizeSnapshotForHistory(snapshot);
+    if (!sanitized) return;
+    const next = [...current, { key, snapshot: sanitized }];
+    sessionHistoryRef.current = next.length > MAX_DEBUG_SNAPSHOTS ? next.slice(next.length - MAX_DEBUG_SNAPSHOTS) : next;
+  }, [snapshot]);
+  const fullSessionDebug = useMemo(
+    () =>
+      buildFullSessionDebugPayload({
+        currentSnapshot: snapshot,
+        historySnapshots: sessionHistoryRef.current.map((entry) => entry.snapshot),
+        coachTimeline,
+        coachCardRenderTimeline,
+        surfaceTimeline: surfaceModeTransitionTimeline,
+        actionTimeline,
+        visualTimeline: visualRenderTimeline,
+        plainLeakTimeline,
+        maiaTimeline,
+        eventLog,
+      }),
+    [
+      snapshot,
+      coachTimeline,
+      coachCardRenderTimeline,
+      surfaceModeTransitionTimeline,
+      actionTimeline,
+      visualRenderTimeline,
+      plainLeakTimeline,
+      maiaTimeline,
+      eventLog,
+    ],
+  );
 
   if (!enabled && !snapshot?.build.debugEnabled) return null;
   if (!snapshot) return null;
@@ -286,6 +650,7 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
             <DebugCopyButton label="Copy Maia Timeline JSON" getText={() => JSON.stringify(maiaTimeline, null, 2)} />
             <DebugCopyButton label="Copy Maia Runtime Health JSON" getText={() => JSON.stringify((snapshot as any).maia ?? {}, null, 2)} />
             <DebugCopyButton label="Copy Everything" getText={() => JSON.stringify(fullDebugSession, null, 2)} />
+            <DebugCopyButton label="Copy ALL Session Debug" getText={() => JSON.stringify(fullSessionDebug, null, 2)} />
             <DebugCopyButton label="Copy Coach QA Summary" getText={() => JSON.stringify(coachQaSummary, null, 2)} />
             <button type="button" onClick={onClearEvents} className="rounded-full bg-stone-100 px-3 py-1 text-[11px] font-black text-stone-900">Clear Events</button>
             <button type="button" onClick={() => { setBlundrDebugEnabled(!enabled); onEnabledChange(!enabled); }} className="rounded-full bg-stone-100 px-3 py-1 text-[11px] font-black text-stone-900">{enabled ? "Disable" : "Enable"}</button>
