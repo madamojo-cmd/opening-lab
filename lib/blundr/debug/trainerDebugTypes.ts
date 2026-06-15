@@ -39,6 +39,7 @@ export interface TrainerDebugSnapshot {
   board: Record<string, unknown>;
   visual: Record<string, unknown>;
   continuation: Record<string, unknown>;
+  promotion?: Record<string, unknown>;
   maia?: Record<string, unknown>;
   coach: Record<string, unknown>;
   actions: Record<string, unknown>;

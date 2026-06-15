@@ -64,6 +64,7 @@ import { resolveContinuationFlowContract } from "@/lib/blundr/runtime/continuati
 import { shouldFlagStaleOpponentReplyCommit } from "@/lib/blundr/runtime/opponentReplyGuard";
 import { DEFAULT_GUIDED_COVERAGE_THRESHOLDS } from "@/lib/blundr/openings/guidedCoveragePolicy";
 import { resolveRestrictedRuntimeBookHandoff } from "@/lib/blundr/runtime/restrictedRuntimeBookHandoff";
+import { getPendingPromotionFromAttempt, resolvePromotionAuthority, type PendingPromotion, type PromotionPiece } from "@/lib/blundr/runtime/promotionAuthority";
 import { classifyContinuationRuntimeState, type ContinuationRuntimeStatus } from "@/lib/blundr/runtime/continuationRuntimeState";
 import { resolveEffectiveContinuationCandidate } from "@/lib/blundr/runtime/resolveEffectiveContinuationCandidate";
 import {
@@ -417,7 +418,7 @@ function repertoireLineInputs(rep:Repertoire):RepertoireLineInput[]{return rep.l
 function countPositions(rep:Repertoire){return buildOpeningTree(repertoireLineInputs(rep)).nodeCount}
 function getAccuracy(progress:Progress){return progress.attempts?Math.round((progress.correct/progress.attempts)*100):0}
 function parseExplorerMoves(payload:any):ExplorerMove[]{const moves=Array.isArray(payload?.moves)?payload.moves:[];const denom=moves.reduce((s:number,m:any)=>s+(m.white??0)+(m.draws??0)+(m.black??0),0)||1;return moves.map((m:any)=>{const total=(m.white??0)+(m.draws??0)+(m.black??0);return{uci:m.uci,san:m.san,total,pct:Math.round((total/denom)*100),averageRating:m.averageRating}}).filter((m:ExplorerMove)=>m.uci&&m.total>0)}
-function applyUci(fen:string,uci:string){try{const game=new Chess(fen);const move=game.move({from:uci.slice(0,2),to:uci.slice(2,4),promotion:uci.length>4?uci.slice(4,5):"q"});if(!move)return null;return{san:move.san,uci:moveToUci(move),fen:game.fen(),color:move.color as ChessColor}}catch{return null}}
+function applyUci(fen:string,uci:string){try{const game=new Chess(fen);const move=game.move({from:uci.slice(0,2),to:uci.slice(2,4),promotion:uci.length>4?uci.slice(4,5):undefined});if(!move)return null;return{san:move.san,uci:moveToUci(move),fen:game.fen(),color:move.color as ChessColor}}catch{return null}}
 function blankAnnotation():BrainAnnotation{return{source:"initial",fallback:true,selectedView:"plan",headline:"Ready",mainExplanation:"Make a move or tap Reveal Next Move.",visualExplanation:"The board can now show a fast local cue immediately while Brain refines the coaching text.",planExplanation:"Restricted mode keeps you inside the selected opening.",nextPlan:"Play the highlighted training move when available.",keySquares:[],planArrows:[],attack:{title:"Your attack",message:"Fast local visuals will appear as soon as training starts.",lines:[],cues:[]},defense:{title:"Your defense",message:"Fast local visuals will appear as soon as training starts.",lines:[],cues:[]},plan:{title:"Plan",message:"Fast local visuals will appear as soon as training starts.",lines:[],cues:[]},confidence:"initial"}}
 function isKnightGeometry(from:string,to:string){if(!isValidSquare(from)||!isValidSquare(to))return false;const df=Math.abs(FILE_TO_INDEX[from[0]]-FILE_TO_INDEX[to[0]]);const dr=Math.abs(Number(from[1])-Number(to[1]));return(df===1&&dr===2)||(df===2&&dr===1)}
 function lineFromContinuation(move:Continuation,kind:LineKind="plan"):ActiveLine{return{from:move.uci.slice(0,2),to:move.uci.slice(2,4),kind,label:move.san}}
@@ -933,7 +934,7 @@ function gameEndingInfo(game:Chess){
 function uciToSan(fen:string,uci:string){
   try{
     const g=new Chess(fen);
-    const move=g.move({from:uci.slice(0,2),to:uci.slice(2,4),promotion:uci.length>4?uci.slice(4,5):"q"});
+    const move=g.move({from:uci.slice(0,2),to:uci.slice(2,4),promotion:uci.length>4?uci.slice(4,5):undefined});
     return move?.san??uci;
   }catch{return uci}
 }
@@ -1068,6 +1069,14 @@ export default function App(){
   const [positionHistory,setPositionHistory]=useState<string[]>([initialFen]);
   const [historyIndex,setHistoryIndex]=useState(0);
   const [selectedSquare,setSelectedSquare]=useState<string|null>(null);
+  const [pendingPromotion,setPendingPromotion]=useState<PendingPromotion|null>(null);
+  const [promotionAuthorityDebug,setPromotionAuthorityDebug]=useState<{
+    selectedPromotionPiece: PromotionPiece | null;
+    attemptedPromotionUci: string | null;
+    acceptedPromotionUci: string | null;
+    promotionAuthorityMatched: boolean | null;
+    promotionAuthorityMismatchReason: string | null;
+  } | null>(null);
   const [feedback,setFeedback]=useState("Choose an opening and begin training.");
   const [lastMove,setLastMove]=useState<string|null>(null);
   const [lastMoveSan,setLastMoveSan]=useState("");
@@ -4443,10 +4452,10 @@ export default function App(){
     maiaOpponentRequestSeqRef.current=0;
     maiaTimelineSeqRef.current=0;
   }
-  function selectRepertoire(id:string){const startFen=new Chess().fen();setSelectedRepertoireId(id);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
-  function resetBoard(){const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveTab("train");bumpRuntimeFrame()}
+  function selectRepertoire(id:string){const startFen=new Chess().fen();setSelectedRepertoireId(id);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
+  function resetBoard(){const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveTab("train");bumpRuntimeFrame()}
   function recordPosition(nextFen:string){const nextIndex=historyIndex+1;setPositionHistory(prev=>[...prev.slice(0,nextIndex),nextFen]);setHistoryIndex(nextIndex)}
-  function jumpHistory(direction:-1|1){const next=Math.max(0,Math.min(positionHistory.length-1,historyIndex+direction));if(next===historyIndex)return;setHistoryIndex(next);setFen(positionHistory[next]);setSelectedSquare(null);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);clearPendingOpponentReplyRequest({clearStaleIssue:true});setOpponentCue(null);setOpponentVariationDebug(null);setBookComplete(false);setFeedback(next===positionHistory.length-1?"Returned to the live position.":`Reviewing previous position ${next} of ${positionHistory.length-1}. Use the arrows to return to live play.`);bumpRuntimeFrame()}
+  function jumpHistory(direction:-1|1){const next=Math.max(0,Math.min(positionHistory.length-1,historyIndex+direction));if(next===historyIndex)return;setHistoryIndex(next);setFen(positionHistory[next]);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);clearPendingOpponentReplyRequest({clearStaleIssue:true});setOpponentCue(null);setOpponentVariationDebug(null);setBookComplete(false);setFeedback(next===positionHistory.length-1?"Returned to the live position.":`Reviewing previous position ${next} of ${positionHistory.length-1}. Use the arrows to return to live play.`);bumpRuntimeFrame()}
   async function playOpponentMove(request:PendingOpponentRequest){
     const liveFenRaw=fenRef.current;
     const currentRequest=pendingOpponentRequestRef.current;
@@ -4869,7 +4878,7 @@ export default function App(){
           return;
         }
         const move=legal[0];
-        current.move({from:move.from,to:move.to,promotion:move.promotion??"q"});
+        current.move({from:move.from,to:move.to,promotion:move.promotion??undefined});
         chosen={san:move.san,uci:moveToUci(move),fen:current.fen()};
         source="Emergency legal fallback";
         variationDebug.fallbackUsed=true;
@@ -5033,19 +5042,39 @@ export default function App(){
     void attemptMove(selectedSquare,square)
   }
   function logMistake(positionFen:string,expected:string,played:string){const k=normalizeFen(positionFen);setProgress(prev=>{const old=prev.mistakes[k];return{...prev,attempts:prev.attempts+1,incorrect:prev.incorrect+1,streak:0,mistakes:{...prev.mistakes,[k]:{fen:positionFen,expectedMove:expected,playedMove:played,count:old?old.count+1:1,opening:repertoire.name,repertoireId:repertoire.id}}}})}
-  async function attemptMove(from:string,to:string){
+  async function attemptMove(from:string,to:string,promotionPiece?:PromotionPiece | null){
     const current=new Chess(fen);
     const beforeFen=fen;
     const currentKey=normalizeFen(current.fen());
     const timeToMoveMs=Math.max(0,Date.now()-positionStartedAtRef.current);
+    const promotionAttempt = promotionPiece ? null : getPendingPromotionFromAttempt({ fen: beforeFen, from, to, color: userColor });
+    if (promotionAttempt) {
+      setPendingPromotion(promotionAttempt);
+      setPromotionAuthorityDebug(null);
+      setFeedback("Choose a promotion piece.");
+      return;
+    }
     let legal:any=null;
-    try{legal=current.move({from,to,promotion:"q"})}catch{}
+    try{
+      const moveInput: { from: string; to: string; promotion?: PromotionPiece } = { from, to };
+      if (promotionPiece) moveInput.promotion = promotionPiece;
+      legal=current.move(moveInput);
+    }catch{}
     setSelectedSquare(null);
+    setPendingPromotion(null);
     if(!legal){
-      setFeedback("Illegal move. Try another move.");
+      setPromotionAuthorityDebug(null);
+      setFeedback(promotionPiece ? "Illegal promotion move. Try another piece." : "Illegal move. Try another move.");
       return;
     }
     const playedUci=moveToUci(legal);
+    if (promotionPiece) {
+      setPromotionAuthorityDebug(resolvePromotionAuthority({
+        attemptedPromotionUci: playedUci,
+        acceptedPromotionUci: playedUci,
+        authorityPromotionUci: expectedUserOptions[0]?.uci ?? instructionTarget?.uci ?? null,
+      }));
+    }
     if(trainingMode==="continuation"){
       let ratingSource=mapEngineLinesToStockfishTopMoves({
         fen:beforeFen,
@@ -5289,7 +5318,16 @@ export default function App(){
     });
     setReviewingFen(null);
   }
-  function practiceMistake(m:Mistake){const rep=repertoires.find(r=>r.id===m.repertoireId);if(rep)setSelectedRepertoireId(rep.id);setFen(m.fen);resetHistory(m.fen);setReviewingFen(normalizeFen(m.fen));setFeedback("Review this opening position. Play the expected move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setActiveTab("train");bumpRuntimeFrame()}
+  function cancelPromotionSelection(){
+    setPendingPromotion(null);
+    setPromotionAuthorityDebug(null);
+    setFeedback("Promotion cancelled.");
+  }
+  function handlePromotionPieceSelection(promotionPiece:PromotionPiece){
+    if(!pendingPromotion)return;
+    void attemptMove(pendingPromotion.from,pendingPromotion.to,promotionPiece);
+  }
+  function practiceMistake(m:Mistake){const rep=repertoires.find(r=>r.id===m.repertoireId);if(rep)setSelectedRepertoireId(rep.id);setFen(m.fen);resetHistory(m.fen);setReviewingFen(normalizeFen(m.fen));setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Review this opening position. Play the expected move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setActiveTab("train");bumpRuntimeFrame()}
   function createCustomRepertoire(){const moves=newLineText.replace(/\d+\./g," ").replace(/\s+/g," ").trim().split(" ").filter(Boolean);if(!moves.length)return;const test=new Chess();for(const move of moves){try{if(!test.move(move)){setFeedback(`Could not parse move: ${move}`);return}}catch{setFeedback(`Could not parse move: ${move}`);return}}const rep:Repertoire={id:`custom-${Date.now()}`,name:newRepName.trim()||"My Custom Repertoire",color:newRepColor,description:"Custom line saved on this device.",lines:[moves],custom:true};setCustomRepertoires(prev=>[...prev,rep]);setSelectedRepertoireId(rep.id);setShowAddLine(false);const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setTrainingMode("restricted");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setFeedback("Custom repertoire saved. Restricted training is active.");setActiveTab("train");bumpRuntimeFrame()}
   const squareStyles:Record<string,CSSProperties>={};
   if(lastMove&&lastMove.length>=4){
@@ -5681,6 +5719,8 @@ export default function App(){
   const legacyAnswerCardActuallyRendered=false;
   const legacyMoveImpactActuallyRendered=false;
   const legacyNextTextActuallyRendered=false;
+  const promotionAuthorityTargetUci=expectedUserOptions[0]?.uci??instructionTarget?.uci??null;
+  const promotionPickerRendered=Boolean(pendingPromotion);
   const diagnosticsSnapshot=blundrDebugEnabled?collectTrainerDebugSnapshot({
     debugEnabled:blundrDebugEnabled,
     trainerFrameId,
@@ -5746,6 +5786,15 @@ export default function App(){
     selectedCandidateSan:selectedContinuationCandidate?.san,
     selectedCandidateUci:selectedContinuationCandidate?.uci,
     selectedCandidateSource:currentSelectedCandidateSource,
+    pendingPromotion,
+    promotionPickerRendered,
+    promotionOptions:pendingPromotion?.legalPromotionUcis??[],
+    selectedPromotionPiece:promotionAuthorityDebug?.selectedPromotionPiece??null,
+    attemptedPromotionUci:promotionAuthorityDebug?.attemptedPromotionUci??null,
+    acceptedPromotionUci:promotionAuthorityDebug?.acceptedPromotionUci??null,
+    promotionAuthorityMatched:promotionAuthorityDebug?.promotionAuthorityMatched??null,
+    promotionAuthorityMismatchReason:promotionAuthorityDebug?.promotionAuthorityMismatchReason??null,
+    promotionAuthorityTargetUci,
     visualMoveUci:visualMoveUciForDebug,
     visualRecipeMoveUci,
     visualRecipeTargetMatchesInstructionTarget,
@@ -6082,7 +6131,7 @@ export default function App(){
           <p className="mt-2 text-[11px] font-semibold text-stone-500">{trainerView==="assisted"?"Shows the visual pattern cue before the move.":"Hides pre-move hints for independent recall."}</p>
         </div>
         {blundrDebugEnabled && activeBoard && enabledViews.length>0 && <div className="mb-3 grid gap-2" style={{gridTemplateColumns:`repeat(${enabledViews.length}, minmax(0,1fr))`}}>{enabledViews.map(v=><button key={v} onClick={()=>setActiveBoardView(v)} className={classNames("rounded-full px-4 py-2 text-sm font-black capitalize",safeBoardView===v?"bg-green-700 text-white shadow-sm":"bg-white text-stone-500 ring-1 ring-stone-200")}>{v}</button>)}</div>}
-        <TapChessboard game={game} orientation={repertoire.color} selectedSquare={selectedSquare} squareStyles={squareStyles} lines={boardLinesToRender} transientLines={transientLinesToRender} onSquareTap={handleSquareTap} whitePct={whitePct} evalText={evalText} settings={boardSettings} captured={captured} userColor={userColor} animationName={visualAnimationName}/>
+        <TapChessboard game={game} orientation={repertoire.color} selectedSquare={selectedSquare} squareStyles={squareStyles} lines={boardLinesToRender} transientLines={transientLinesToRender} onSquareTap={handleSquareTap} whitePct={whitePct} evalText={evalText} settings={boardSettings} captured={captured} userColor={userColor} animationName={visualAnimationName} pendingPromotion={pendingPromotion} onPromotionSelect={handlePromotionPieceSelection} onPromotionCancel={cancelPromotionSelection}/>
         <HistoryControls index={historyIndex} total={positionHistory.length} onBack={()=>jumpHistory(-1)} onForward={()=>jumpHistory(1)}/>
       </div>
       {showDetails&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Coach Debug</div><div className="mt-2">coachMode: {coachDecision.mode}</div><div>coachAction: {coachDecision.action}</div><div>coachUtteranceId: {coachDecision.utteranceId??"none"}</div><div>coachUtteranceFamily: {coachDecision.utteranceFamily??"none"}</div><div>coachVariationReason: {String((coachDecision.debug as any)?.coachVariationReason??"n/a")}</div><div>coachHintStrength: {String((coachDecision.debug as any)?.coachHintStrength??"none")}</div><div>coachRevealRisk: {coachDecision.revealRisk}</div><div>coachGivesAnswer: {coachDecision.givesAnswer?"true":"false"}</div><div>coachButtons: {displayedCoachDecision.buttons.join(", ")||"none"}</div><div>coachShouldMarkReviewWorthy: {coachDecision.shouldMarkReviewWorthy?"true":"false"}</div><div>coachSuppressedReason: {coachDecision.suppressedReason??"none"}</div><div>coachFrameMatchesBoard: {coachContextResult.context?.recipeFrameMatchesBoard?"true":"false"}</div><div>coachFenMatchesBoard: {coachContextResult.context?.recipeFenMatchesBoard?"true":"false"}</div><div>recentCoachUtteranceIds: {coachUtteranceMemory.slice(-5).map((entry:any)=>entry.utteranceId).join(", ")||"none"}</div><div>coachSafetyWarnings: {JSON.stringify((coachDecision.debug as any)?.coachSafetyWarnings??[])}</div><div>coachReviewMarked: {coachReviewMarked?"true":"false"}</div><div>selectedOpportunity: {String((coachDecision.debug as any)?.selectedOpportunity??liveCoachState?.selected?.opportunity??"none")}</div><div>selectedIntent: {String((coachDecision.debug as any)?.selectedIntent??liveCoachState?.selected?.intent??"none")}</div><div>exactMoveAllowed: {coachContextResult.context?.exactMoveAllowed?"true":"false"}</div><div>claimTypes: {coachDecision.claimTypes.join(", ")||"none"}</div><div>blockedClaims: {String((coachDecision.debug as any)?.blockedClaims??"none")}</div><div>silenceReason: {String((coachDecision.debug as any)?.silenceReason??liveCoachState?.debug?.silenceReason??"none")}</div><div>branchTransitionSurfaceRendered: {branchTransitionSurface?.render?"true":"false"}</div><div>branchTransitionReason: {branchTransitionSurface?.reason??"none"}</div><div>continueFromHereAvailable: {branchTransitionSurface?.render?"true":"false"}</div><div>continueFromHereClicked: {continueFromHereClicked?"true":"false"}</div><div>coachSurfaceOwner: {coachSurfacePolicy.owner}</div><div>allowLegacyTrainingCard: {coachSurfacePolicy.allowLegacyTrainingCard?"true":"false"}</div><div>allowMoveImpactCard: {coachSurfacePolicy.allowMoveImpactCard?"true":"false"}</div><div>allowNextMoveText: {coachSurfacePolicy.allowNextMoveText?"true":"false"}</div><div>legacyCueSuppressedReason: {coachSurfacePolicy.reason}</div><div>moveImpactPresenterReason: {moveImpactPresentation.reason}</div></div>}
@@ -6150,7 +6199,7 @@ function coordTone(theme:BoardTheme,isDark:boolean){
   return isDark?"text-white/70":"text-stone-600/70";
 }
 
-function TapChessboard({game,orientation,selectedSquare,squareStyles,lines,transientLines,onSquareTap,whitePct,evalText,settings,captured,userColor,animationName}:{game:Chess;orientation:RepertoireColor;selectedSquare:string|null;squareStyles:Record<string,CSSProperties>;lines:ActiveLine[];transientLines:ActiveLine[];onSquareTap:(s:string)=>void;whitePct:number;evalText:string;settings:BoardSettings;captured:CapturedSummary;userColor:ChessColor;animationName?:string}){
+function TapChessboard({game,orientation,selectedSquare,squareStyles,lines,transientLines,onSquareTap,whitePct,evalText,settings,captured,userColor,animationName,pendingPromotion,onPromotionSelect,onPromotionCancel}:{game:Chess;orientation:RepertoireColor;selectedSquare:string|null;squareStyles:Record<string,CSSProperties>;lines:ActiveLine[];transientLines:ActiveLine[];onSquareTap:(s:string)=>void;whitePct:number;evalText:string;settings:BoardSettings;captured:CapturedSummary;userColor:ChessColor;animationName?:string;pendingPromotion:PendingPromotion | null;onPromotionSelect:(piece:PromotionPiece)=>void;onPromotionCancel:()=>void;}){
   const ranks=orientation==="white"?[8,7,6,5,4,3,2,1]:[1,2,3,4,5,6,7,8];
   const files=orientation==="white"?FILES:[...FILES].reverse();
   const centerFor=(sq:string)=>{
@@ -6183,6 +6232,37 @@ function TapChessboard({game,orientation,selectedSquare,squareStyles,lines,trans
               </button>
             }))}
           </div>
+          {pendingPromotion&&<div className="absolute inset-0 z-30 flex items-center justify-center bg-black/25 p-4" onClick={onPromotionCancel}>
+            <div className="w-full max-w-[250px] rounded-[24px] border border-stone-200 bg-white p-3 shadow-2xl" onClick={(event)=>event.stopPropagation()}>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">Promotion</div>
+                  <div className="text-sm font-black text-stone-900">{pendingPromotion.from} → {pendingPromotion.to}</div>
+                </div>
+                <button type="button" onClick={onPromotionCancel} className="rounded-full bg-stone-100 px-2 py-1 text-[10px] font-black text-stone-600">Cancel</button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {(["q","r","b","n"] as PromotionPiece[]).map((piece) => {
+                  const enabled = pendingPromotion.legalPromotionUcis.some((uci) => uci.endsWith(piece));
+                  return (
+                    <button
+                      key={piece}
+                      type="button"
+                      disabled={!enabled}
+                      onClick={() => onPromotionSelect(piece)}
+                      className={classNames(
+                        "flex items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-sm font-black shadow-sm transition",
+                        enabled ? "border-stone-200 bg-stone-50 text-stone-900 hover:bg-white" : "cursor-not-allowed border-stone-100 bg-stone-50 text-stone-300",
+                      )}
+                    >
+                      <span className={classNames("text-lg leading-none", pendingPromotion.color === "w" ? "text-stone-950" : "text-stone-950")}>{pieceGlyph(pendingPromotion.color, piece, settings.pieceStyle)}</span>
+                      <span>{piece.toUpperCase()}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>}
         </div>
       </div>
     </div>

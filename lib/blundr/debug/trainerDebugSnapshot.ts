@@ -1039,6 +1039,17 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       selectedMoveInCandidateList: input.opponentVariationDebug?.continuedPlaySelectedMoveInCandidateList ?? null,
       candidateDebugList: input.opponentVariationDebug?.candidateOpponentBranches ?? [],
     },
+    promotion: {
+      pendingPromotion: input.pendingPromotion ?? null,
+      promotionPickerRendered: Boolean(input.promotionPickerRendered),
+      promotionOptions: Array.isArray(input.promotionOptions) ? input.promotionOptions.map(String) : [],
+      selectedPromotionPiece: input.selectedPromotionPiece ?? null,
+      attemptedPromotionUci: input.attemptedPromotionUci ?? null,
+      acceptedPromotionUci: input.acceptedPromotionUci ?? null,
+      promotionAuthorityMatched: input.promotionAuthorityMatched ?? null,
+      promotionAuthorityMismatchReason: input.promotionAuthorityMismatchReason ?? null,
+      promotionAuthorityTargetUci: input.promotionAuthorityTargetUci ?? null,
+    },
     maia: {
       maiaEnabled: Boolean(input.maiaEnabled),
       maiaRuntimeEnabled: Boolean(input.maiaRuntimeEnabled),

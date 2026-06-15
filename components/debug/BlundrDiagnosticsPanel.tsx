@@ -546,6 +546,17 @@ export function buildDebugCopyEverythingPayload(snapshot: TrainerDebugSnapshot |
       fallbackUsed: (snapshot?.continuation as any)?.runtimeBookFallbackUsed ?? null,
       fallbackAuthority: (snapshot?.continuation as any)?.runtimeBookFallbackAuthority ?? null,
     },
+    promotion: {
+      pendingPromotion: (snapshot as any)?.promotion?.pendingPromotion ?? null,
+      promotionPickerRendered: (snapshot as any)?.promotion?.promotionPickerRendered ?? false,
+      promotionOptions: (snapshot as any)?.promotion?.promotionOptions ?? [],
+      selectedPromotionPiece: (snapshot as any)?.promotion?.selectedPromotionPiece ?? null,
+      attemptedPromotionUci: (snapshot as any)?.promotion?.attemptedPromotionUci ?? null,
+      acceptedPromotionUci: (snapshot as any)?.promotion?.acceptedPromotionUci ?? null,
+      promotionAuthorityMatched: (snapshot as any)?.promotion?.promotionAuthorityMatched ?? null,
+      promotionAuthorityMismatchReason: (snapshot as any)?.promotion?.promotionAuthorityMismatchReason ?? null,
+      promotionAuthorityTargetUci: (snapshot as any)?.promotion?.promotionAuthorityTargetUci ?? null,
+    },
     stage2Coaching: {
       resolverEnabled: (snapshot?.continuation as any)?.stage2CoachingResolverEnabled ?? false,
       approvedContentEnabled: (snapshot?.continuation as any)?.stage2ApprovedContentEnabled ?? false,
@@ -615,6 +626,17 @@ topCandidateUci: ${(snapshot.continuation as any)?.runtimeBookTopCandidateUci ??
 bookExhausted: ${(snapshot.continuation as any)?.runtimeBookBookExhausted ?? false}
 fallbackUsed: ${(snapshot.continuation as any)?.runtimeBookFallbackUsed ?? false}
 fallbackAuthority: ${(snapshot.continuation as any)?.runtimeBookFallbackAuthority ?? "none"}
+
+promotion:
+pendingPromotion: ${JSON.stringify((snapshot as any)?.promotion?.pendingPromotion ?? null)}
+promotionPickerRendered: ${(snapshot as any)?.promotion?.promotionPickerRendered ?? false}
+promotionOptions: ${JSON.stringify((snapshot as any)?.promotion?.promotionOptions ?? [])}
+selectedPromotionPiece: ${(snapshot as any)?.promotion?.selectedPromotionPiece ?? "none"}
+attemptedPromotionUci: ${(snapshot as any)?.promotion?.attemptedPromotionUci ?? "none"}
+acceptedPromotionUci: ${(snapshot as any)?.promotion?.acceptedPromotionUci ?? "none"}
+promotionAuthorityMatched: ${(snapshot as any)?.promotion?.promotionAuthorityMatched ?? "unknown"}
+promotionAuthorityMismatchReason: ${(snapshot as any)?.promotion?.promotionAuthorityMismatchReason ?? "none"}
+promotionAuthorityTargetUci: ${(snapshot as any)?.promotion?.promotionAuthorityTargetUci ?? "none"}
 
 stage2Coaching:
 resolverEnabled: ${(snapshot.continuation as any)?.stage2CoachingResolverEnabled ?? false}
@@ -836,6 +858,7 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
           <DebugSection title="Board/FEN"><DebugJsonViewer value={snapshot.board} /></DebugSection>
           <DebugSection title="Visuals"><DebugJsonViewer value={snapshot.visual} /></DebugSection>
           <DebugSection title="Continuation"><DebugJsonViewer value={snapshot.continuation} /></DebugSection>
+          <DebugSection title="Promotion"><DebugJsonViewer value={(snapshot as any).promotion ?? { pendingPromotion: null, promotionPickerRendered: false, promotionOptions: [] }} /></DebugSection>
           <DebugSection title="Maia Opponent"><DebugJsonViewer value={(snapshot as any).maia ?? { summary: "not_available" }} /></DebugSection>
           <DebugSection title="Coach"><DebugJsonViewer value={snapshot.coach} /></DebugSection>
           <DebugSection title="Coach Pipeline"><DebugJsonViewer value={snapshot.coachPipeline} /></DebugSection>
