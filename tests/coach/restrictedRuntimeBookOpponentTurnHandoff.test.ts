@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { buildTrainerDebugSnapshot } from "../../lib/blundr/debug/trainerDebugSnapshot";
 import { buildCurrentInstructionFrame } from "../../lib/blundr/runtime/currentInstructionFrame";
 import { resolveBranchCompleteContract } from "../../lib/blundr/runtime/branchCompleteContract";
+import { resolveRestrictedRuntimeBookHandoff } from "../../lib/blundr/runtime/restrictedRuntimeBookHandoff";
 import { buildStage2RuntimeBookIndex, getStage2RuntimeCandidatesForFrame, loadStage2RuntimeBook } from "../../lib/blundr/runtimeBook";
 import { adaptVisibleSurfaceToCoachUi } from "../../lib/blundr/presentation/uiSurfaceAdapter";
 import { buildLiveVisibleTeachingSurface } from "../../lib/blundr/presentation/buildLiveVisibleTeachingSurface";
@@ -18,6 +19,23 @@ const BRANCH_COMPLETE_BODY = "You finished this training line. Continue from thi
 export async function testRestrictedRuntimeBookOpponentTurnHandoff(): Promise<void> {
   const loaded = await loadStage2RuntimeBook();
   const index = buildStage2RuntimeBookIndex(loaded);
+
+  const earlyHandoff = resolveRestrictedRuntimeBookHandoff({
+    trainingMode: "restricted",
+    isUserTurn: false,
+    userExplicitlyEnteredContinuation: false,
+    lastUserMoveUci: "e2e4",
+    currentPly: 1,
+    minimumGuidedDepthPly: 8,
+    runtimeBookMatchesFrame: true,
+    runtimeBookStatus: "ready",
+    runtimeBookBookExhausted: true,
+    runtimeBookCandidateCount: 0,
+    explicitCuratedTerminalNode: false,
+    selectedLineCompleteConfirmed: false,
+  });
+  assert.equal(earlyHandoff.restrictedRuntimeBookExhaustedOnOpponentTurnAfterUserMove, true);
+  assert.equal(earlyHandoff.restrictedRuntimeBookExhaustedEligibleForBranchComplete, false);
 
   const exhausted = getStage2RuntimeCandidatesForFrame({
     index,

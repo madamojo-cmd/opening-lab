@@ -62,6 +62,8 @@ import { buildCurrentInstructionFrame, isBookLikeInstructionTarget } from "@/lib
 import { resolveBranchCompleteContract } from "@/lib/blundr/runtime/branchCompleteContract";
 import { resolveContinuationFlowContract } from "@/lib/blundr/runtime/continuationFlowContract";
 import { shouldFlagStaleOpponentReplyCommit } from "@/lib/blundr/runtime/opponentReplyGuard";
+import { DEFAULT_GUIDED_COVERAGE_THRESHOLDS } from "@/lib/blundr/openings/guidedCoveragePolicy";
+import { resolveRestrictedRuntimeBookHandoff } from "@/lib/blundr/runtime/restrictedRuntimeBookHandoff";
 import { classifyContinuationRuntimeState, type ContinuationRuntimeStatus } from "@/lib/blundr/runtime/continuationRuntimeState";
 import { resolveEffectiveContinuationCandidate } from "@/lib/blundr/runtime/resolveEffectiveContinuationCandidate";
 import {
@@ -1330,26 +1332,46 @@ export default function App(){
     const sideToMove = game.turn();
     return exactSelectedLineNodes.some((node) => node.terminal && node.sideToMove === sideToMove);
   }, [exactSelectedLineNodes, game]);
-  const restrictedLineExhaustedOnOpponentTurnAfterUserMove = Boolean(
-    trainingMode === "restricted" &&
-    !userExplicitlyEnteredContinuation &&
-    !isUserTurn &&
-    lastMoveColor === userColor &&
-    lastMove &&
-    (
-      (
+  const restrictedRuntimeBookHandoff = useMemo(
+    () => resolveRestrictedRuntimeBookHandoff({
+      trainingMode,
+      isUserTurn,
+      userExplicitlyEnteredContinuation,
+      lastUserMoveUci: lastMoveColor === userColor ? lastMove : null,
+      currentPly: moveHistory.length,
+      minimumGuidedDepthPly: DEFAULT_GUIDED_COVERAGE_THRESHOLDS.minimumGuidedDepthPly,
+      runtimeBookMatchesFrame:
         runtimeBookFrameQuery.status === "ready" &&
         runtimeBookFrameQuery.openingId === runtimeOpeningIdForFrame &&
-        runtimeBookFrameQuery.playKeyBefore === runtimePlayKeyBeforeForFrame &&
-        runtimeBookFrameQuery.bookExhausted &&
-        runtimeBookFrameQuery.candidates.length === 0
-      ) ||
-      (
-        exactSelectedLineNodeFound &&
-        hasNextOpponentMoveInSelectedLine === false
-      )
-    )
+        runtimeBookFrameQuery.playKeyBefore === runtimePlayKeyBeforeForFrame,
+      runtimeBookStatus: runtimeBookFrameQuery.status,
+      runtimeBookBookExhausted: runtimeBookFrameQuery.bookExhausted,
+      runtimeBookCandidateCount: runtimeBookFrameQuery.candidates.length,
+      explicitCuratedTerminalNode,
+      selectedLineCompleteConfirmed,
+    }),
+    [
+      trainingMode,
+      isUserTurn,
+      userExplicitlyEnteredContinuation,
+      lastMoveColor,
+      userColor,
+      lastMove,
+      moveHistory.length,
+      DEFAULT_GUIDED_COVERAGE_THRESHOLDS.minimumGuidedDepthPly,
+      runtimeBookFrameQuery.status,
+      runtimeBookFrameQuery.openingId,
+      runtimeBookFrameQuery.playKeyBefore,
+      runtimeBookFrameQuery.bookExhausted,
+      runtimeBookFrameQuery.candidates.length,
+      runtimeOpeningIdForFrame,
+      runtimePlayKeyBeforeForFrame,
+      explicitCuratedTerminalNode,
+      selectedLineCompleteConfirmed,
+    ],
   );
+  const restrictedLineExhaustedOnOpponentTurnAfterUserMove = restrictedRuntimeBookHandoff.restrictedRuntimeBookExhaustedOnOpponentTurnAfterUserMove;
+  const restrictedRuntimeBookExhaustedEligibleForBranchComplete = restrictedRuntimeBookHandoff.restrictedRuntimeBookExhaustedEligibleForBranchComplete;
 
   const lichessTotalGames = useMemo(() => {
     if (!explorerMoves || explorerMoves.length === 0) return null;
@@ -1860,7 +1882,7 @@ export default function App(){
     expectedMoveSource:expectedMoveResolution.source,
     expectedMoveReason:expectedMoveResolution.reason,
     expectedMoveUci:expectedMoveResolution.expectedMoveUci,
-    lineExhaustedByCursor:selectedLineCompleteConfirmed||restrictedLineExhaustedOnOpponentTurnAfterUserMove,
+    lineExhaustedByCursor:selectedLineCompleteConfirmed||restrictedRuntimeBookExhaustedEligibleForBranchComplete,
     lineExhaustedByLichess:lichessEndConfirmed,
     afterFinalUserMove:!isUserTurn&&lastMoveColor===userColor,
     selectedLineId:selectedRepertoireId,
@@ -1899,8 +1921,8 @@ export default function App(){
     branchCompleteLatch.lineId,
     restrictedLineExhaustedOnOpponentTurnAfterUserMove,
   ]);
-  const branchCompleteEligibleNow=branchCompleteContract.branchCompleteEligible||restrictedLineExhaustedOnOpponentTurnAfterUserMove;
-  const branchCompleteReasonNow=restrictedLineExhaustedOnOpponentTurnAfterUserMove
+  const branchCompleteEligibleNow=branchCompleteContract.branchCompleteEligible||restrictedRuntimeBookExhaustedEligibleForBranchComplete;
+  const branchCompleteReasonNow=restrictedRuntimeBookExhaustedEligibleForBranchComplete
     ?"restricted_book_exhausted_on_opponent_turn_after_user_move"
     :branchCompleteContract.reason??"line_complete";
   const branchCompleteShouldCancelPending=branchCompleteContract.shouldCancelPendingOpponent||(
@@ -2843,7 +2865,7 @@ export default function App(){
     const transitionTitle = "Line complete";
     const transitionBody = "You finished this training line. Continue from this position or train the line again.";
     const transitionButtons = ["continue_from_here","restart_line"] as const;
-    if (restrictedLineExhaustedOnOpponentTurnAfterUserMove) {
+    if (restrictedRuntimeBookExhaustedEligibleForBranchComplete) {
       return {
         render: true,
         title: transitionTitle,
@@ -2881,7 +2903,7 @@ export default function App(){
       buttons: transitionButtons,
       reason: selectedLineCompleteConfirmed ? "curated_line_complete" : "lichess_below_500_games",
     } as const;
-  }, [hardEndOfBookGate, selectedLineCompleteConfirmed, trainingMode, isUserTurn, forceContinuationPause, continuationPauseDecision.pauseReason, userExplicitlyEnteredContinuation, game, restrictedLineExhaustedOnOpponentTurnAfterUserMove]);
+  }, [hardEndOfBookGate, selectedLineCompleteConfirmed, trainingMode, isUserTurn, forceContinuationPause, continuationPauseDecision.pauseReason, userExplicitlyEnteredContinuation, game, restrictedRuntimeBookExhaustedEligibleForBranchComplete]);
   const moveImpactPresentation=useMemo(()=>presentMoveImpact({
     exactMoveAllowed:Boolean(coachDecision?.exactMoveAllowed),
     engineStatus:(coachDecision?.debug as any)?.coachEngineStatus??(enginePreview?.pvs?.length?"ready":"idle"),
@@ -3766,7 +3788,7 @@ export default function App(){
     });
   }
   function scheduleOpponentReply(input:{mode:TrainingMode;delayMs?:number;baseFen?:string}){
-    if((branchCompleteEligibleNow||restrictedLineExhaustedOnOpponentTurnAfterUserMove)&&input.mode==="restricted"){
+    if((branchCompleteEligibleNow||restrictedRuntimeBookExhaustedEligibleForBranchComplete)&&input.mode==="restricted"){
       clearPendingOpponentReplyRequest({clearStaleIssue:true});
       return null;
     }
@@ -5175,7 +5197,7 @@ export default function App(){
     const nextHasNextOpponentMove=nextExactSelectedLineNodes.length?nextExactSelectedLineNodes.some((node)=>node.continuations.some((move)=>move.color===opponentColor)):"unknown";
     const nextHasNextUserMove=nextExactSelectedLineNodes.length?nextExactSelectedLineNodes.some((node)=>node.continuations.some((move)=>move.color===userColor)):"unknown";
     const nextExplicitCuratedTerminalNode=nextExactSelectedLineNodes.some((node)=>node.terminal&&node.sideToMove===nextGame.turn());
-    const nextRestrictedLineExhaustedOnOpponentTurnAfterUserMove=Boolean(
+    const nextRestrictedRuntimeBookExhaustedOnOpponentTurnAfterUserMove=Boolean(
       trainingMode==="restricted"&&
       !userExplicitlyEnteredContinuation&&
       !nextIsUserTurn&&
@@ -5183,6 +5205,14 @@ export default function App(){
       playedUci&&
       nextExactSelectedLineNodes.length>0&&
       nextHasNextOpponentMove===false
+    );
+    const nextRestrictedRuntimeBookExhaustedEligibleForBranchComplete=Boolean(
+      nextRestrictedRuntimeBookExhaustedOnOpponentTurnAfterUserMove&&
+      (
+        nextExplicitCuratedTerminalNode ||
+        nextLineCompleteConfirmed ||
+        moveHistory.length + 1 >= DEFAULT_GUIDED_COVERAGE_THRESHOLDS.minimumGuidedDepthPly
+      )
     );
     const nextBranchCompleteContract=resolveBranchCompleteContract({
       trainingMode,
@@ -5196,7 +5226,7 @@ export default function App(){
       expectedMoveSource:nextExpectedMoveResolution.source,
       expectedMoveReason:nextExpectedMoveResolution.reason,
       expectedMoveUci:nextExpectedMoveResolution.expectedMoveUci,
-      lineExhaustedByCursor:nextLineCompleteConfirmed||nextRestrictedLineExhaustedOnOpponentTurnAfterUserMove,
+      lineExhaustedByCursor:nextLineCompleteConfirmed||nextRestrictedRuntimeBookExhaustedEligibleForBranchComplete,
       lineExhaustedByLichess:false,
       afterFinalUserMove:!nextIsUserTurn&&legal.color===userColor,
       selectedLineId:selectedRepertoireId,
@@ -5209,7 +5239,7 @@ export default function App(){
       explicitCuratedTerminalNode:nextExplicitCuratedTerminalNode,
       validBranchCompleteLatch:false,
     });
-    const needsOpponentReply=!nextGame.isGameOver()&&nextGame.turn()!==userColor&&!nextBranchCompleteContract.shouldPreventOpponentScheduling&&!nextRestrictedLineExhaustedOnOpponentTurnAfterUserMove;
+    const needsOpponentReply=!nextGame.isGameOver()&&nextGame.turn()!==userColor&&!nextBranchCompleteContract.shouldPreventOpponentScheduling&&!nextRestrictedRuntimeBookExhaustedEligibleForBranchComplete;
     commitRuntimeFrame({
       nextFen,
       nextPhase:nextGame.isGameOver()?"terminal":(needsOpponentReply?"opponent_selecting":"ready_for_user"),
@@ -5224,10 +5254,10 @@ export default function App(){
     setOpponentCue(null);
     setOpponentVariationDebug(null);
     setShowAnswer(false);
-    if(nextBranchCompleteContract.branchCompleteEligible||nextRestrictedLineExhaustedOnOpponentTurnAfterUserMove){
+    if(nextBranchCompleteContract.branchCompleteEligible||nextRestrictedRuntimeBookExhaustedEligibleForBranchComplete){
       setBranchCompleteLatch({
         active:true,
-        reason:nextRestrictedLineExhaustedOnOpponentTurnAfterUserMove?"restricted_book_exhausted_on_opponent_turn_after_user_move":nextBranchCompleteContract.reason??"line_complete",
+        reason:nextRestrictedRuntimeBookExhaustedEligibleForBranchComplete?"restricted_book_exhausted_on_opponent_turn_after_user_move":nextBranchCompleteContract.reason??"line_complete",
         fen4:normalizeFen(nextFen),
         lineId:selectedRepertoireId,
         ply:moveHistory.length+1,
