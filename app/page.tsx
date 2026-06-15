@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Chess } from "chess.js";
 import { BarChart3, Beaker, BookOpen, CheckCircle2, ChevronRight, Cloud, Eye, Flame, Home, Plus, RotateCcw, Search, Settings, Target, Trophy, X, XCircle, Zap } from "lucide-react";
@@ -1328,8 +1328,19 @@ export default function App(){
     !isUserTurn &&
     lastMoveColor === userColor &&
     lastMove &&
-    exactSelectedLineNodeFound &&
-    hasNextOpponentMoveInSelectedLine === false
+    (
+      (
+        runtimeBookFrameQuery.status === "ready" &&
+        runtimeBookFrameQuery.openingId === runtimeOpeningIdForFrame &&
+        runtimeBookFrameQuery.playKeyBefore === runtimePlayKeyBeforeForFrame &&
+        runtimeBookFrameQuery.bookExhausted &&
+        runtimeBookFrameQuery.candidates.length === 0
+      ) ||
+      (
+        exactSelectedLineNodeFound &&
+        hasNextOpponentMoveInSelectedLine === false
+      )
+    )
   );
 
   const lichessTotalGames = useMemo(() => {
@@ -1630,17 +1641,38 @@ export default function App(){
     ()=>buildRuntimePlayKeyBeforeFromSanHistory(moveHistory),
     [moveHistory.join("|")],
   );
-  useEffect(()=>{
-    if(
-      activeTab!=="train"||
-      trainingMode!=="continuation"||
-      trainerPhase!=="ready_for_user"||
-      !isUserTurn||
-      forceContinuationPause||
-      !userExplicitlyEnteredContinuation||
-      !runtimeOpeningIdForFrame||
-      !runtimePlayKeyBeforeForFrame
-    ){
+  const runtimeBookFrameShouldQuery = useMemo(() => {
+    if (activeTab !== "train") return false;
+    if (!runtimeOpeningIdForFrame || !runtimePlayKeyBeforeForFrame) return false;
+    if (forceContinuationPause) return false;
+    if (trainingMode === "continuation") {
+      return trainerPhase === "ready_for_user" && isUserTurn && userExplicitlyEnteredContinuation;
+    }
+    if (
+      trainingMode === "restricted" &&
+      !isUserTurn &&
+      !userExplicitlyEnteredContinuation &&
+      Boolean(lastMove) &&
+      lastMoveColor === userColor
+    ) {
+      return true;
+    }
+    return false;
+  }, [
+    activeTab,
+    runtimeOpeningIdForFrame,
+    runtimePlayKeyBeforeForFrame,
+    forceContinuationPause,
+    trainingMode,
+    trainerPhase,
+    isUserTurn,
+    userExplicitlyEnteredContinuation,
+    lastMove,
+    lastMoveColor,
+    userColor,
+  ]);
+  useLayoutEffect(()=>{
+    if(!runtimeBookFrameShouldQuery){
       setRuntimeBookFrameQuery({
         openingId:runtimeOpeningIdForFrame??null,
         playKeyBefore:runtimePlayKeyBeforeForFrame??null,
@@ -1695,12 +1727,7 @@ export default function App(){
 
     return()=>controller.abort();
   },[
-    activeTab,
-    trainingMode,
-    trainerPhase,
-    isUserTurn,
-    forceContinuationPause,
-    userExplicitlyEnteredContinuation,
+    runtimeBookFrameShouldQuery,
     runtimeOpeningIdForFrame,
     runtimePlayKeyBeforeForFrame,
   ]);
@@ -4260,12 +4287,19 @@ export default function App(){
       return;
     }
     if(!isUserTurn){
+      if(
+        runtimeBookFrameShouldQuery &&
+        runtimeBookFrameQuery.status!=="ready" &&
+        runtimeBookFrameQuery.status!=="error"
+      ) {
+        return;
+      }
       if(pendingOpponentRequest)return;
       scheduleOpponentReply({mode:trainingMode,delayMs:900,baseFen:fen});
       return;
     }
     if(pendingOpponentRequest) clearPendingOpponentReplyRequest({clearStaleIssue:true});
-  },[activeTab,fen,bookComplete,isUserTurn,isReviewingHistory,selectedRepertoireId,trainingMode,ratingFilter,game,endingInfo?.title,trainerPhase,pendingOpponentRequest,branchCompleteEligibleNow]);
+  },[activeTab,fen,bookComplete,isUserTurn,isReviewingHistory,selectedRepertoireId,trainingMode,ratingFilter,game,endingInfo?.title,trainerPhase,pendingOpponentRequest,branchCompleteEligibleNow,runtimeBookFrameShouldQuery,runtimeBookFrameQuery.status]);
   async function loadExplorer(positionFen:string){const cacheKey=`${normalizeFen(positionFen)}|${ratingFilter}|${speedFilter}`;if(explorerCache.current[cacheKey]){const parsed=parseExplorerMoves(explorerCache.current[cacheKey]);setExplorerMoves(parsed);setBrain(p=>({...p,lichess:"cached"}));return parsed}setBrain(p=>({...p,lichess:"loading"}));const start=performance.now();try{const params=new URLSearchParams({fen:positionFen,source:"lichess",moves:"25",ratings:ratingFilter,speeds:speedFilter});const res=await fetch(`/api/explorer?${params.toString()}`);const payload=await res.json();explorerCache.current[cacheKey]=payload;const parsed=parseExplorerMoves(payload);setExplorerMoves(parsed);setBrain(p=>({...p,lichess:payload.fallback?"fallback":"active",latency:Math.round(performance.now()-start),note:payload.reason??`${parsed.length} Lichess moves`}));return parsed}catch(e){setBrain(p=>({...p,lichess:"error",note:e instanceof Error?e.message:"Explorer failed"}));return[]}}
   async function runBrain(eventType:string,extra:Record<string,any>={}){
     if(activeTab!=="train")return null;
@@ -5718,16 +5752,7 @@ export default function App(){
     continuationPolicyDebug:continuationPolicyCandidate?.debug??null,
     continuationSelectionSource:validatedContinuationCandidate?.source??null,
     continuationSelectionReason:validatedContinuationCandidate?.reason??null,
-    runtimeBookQueried:Boolean(
-      activeTab==="train"&&
-      trainingMode==="continuation"&&
-      trainerPhase==="ready_for_user"&&
-      isUserTurn&&
-      userExplicitlyEnteredContinuation&&
-      !forceContinuationPause&&
-      runtimeOpeningIdForFrame&&
-      runtimePlayKeyBeforeForFrame
-    ),
+    runtimeBookQueried:Boolean(runtimeBookFrameShouldQuery),
     runtimeBookOpeningId:runtimeBookFrameQuery.openingId??runtimeOpeningIdForFrame??null,
     runtimeBookPlayKeyBefore:runtimeBookFrameQuery.playKeyBefore??runtimePlayKeyBeforeForFrame??null,
     runtimeBookStatus:runtimeBookFrameQuery.status,
