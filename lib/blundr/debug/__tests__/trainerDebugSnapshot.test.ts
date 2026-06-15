@@ -232,6 +232,40 @@ export function testTrainerDebugSnapshot(): void {
   assert.equal((continuationHealthy.continuation as any).runtimeBookTopCandidateUci, "e4d5");
   assert.equal((continuationHealthy.continuation as any).runtimeBookBookExhausted, false);
 
+  const promotionAligned = buildTrainerDebugSnapshot({
+    debugEnabled: true,
+    trainerFrameId: 11,
+    trainerPhase: "ready_for_user",
+    trainerView: "assisted",
+    trainingMode: "continuation",
+    isUserTurn: true,
+    fen: "3Q4/8/8/8/8/8/8/4k2K w - - 0 1",
+    instructionTargetUci: "c7d8q",
+    instructionTargetPieceType: "p",
+    expectedMoveUci: "c7d8q",
+    expectedMoveSan: "cxd8=Q",
+    coachMoveUci: "c7d8q",
+    coachPieceType: "p",
+    visualMoveUci: "c7d8q",
+    revealTargetUci: "c7d8q",
+    visualTargetMatchesInstructionTarget: true,
+    boardLines: [{ from: "c7", to: "d8" }],
+    coachDecision: {
+      shouldShowCoachCard: true,
+      title: "cxd8=Q — Promote with tempo",
+      body: "Move the pawn to d8 and promote to a queen.",
+      debug: { coachDecisionSource: "live_coach", coachMoveUci: "c7d8q", coachPieceType: "p" },
+    },
+    presentationFrame: { visual: { shouldRender: true, source: "continuation_candidate", lines: [{ from: "c7", to: "d8" }] }, coach: { owner: "intent_first_coach" }, legacy: {} },
+    eventLog: [],
+  });
+  assert.equal((promotionAligned.frame as any).instructionTargetUci, "c7d8q");
+  assert.equal((promotionAligned.coach as any).coachMoveUci, "c7d8q");
+  assert.equal((promotionAligned.continuation as any).visualMoveUci, "c7d8q");
+  assert.equal((promotionAligned.actions as any).revealTargetUci, "c7d8q");
+  assert.equal((promotionAligned.health as any).criticalIssues.includes("instruction_target_visual_mismatch"), false);
+  assert.equal((promotionAligned.health as any).criticalIssues.includes("instruction_target_reveal_mismatch"), false);
+
   const runtimeFallback = buildTrainerDebugSnapshot({
     debugEnabled: true,
     trainerFrameId: 11,

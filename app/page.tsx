@@ -291,6 +291,13 @@ type CoachCardRenderTimelineEntry = {
   renderedRevealTargetUci: string | null;
   criticalIssuesAtFrame: string[];
   warningsAtFrame: string[];
+  pipelineCoachCardTitle?: string | null;
+  pipelineCoachCardBody?: string | null;
+  pipelineCoachCardSource?: string | null;
+  pipelineQualityScore?: number | null;
+  renderedQualityScore?: number | null;
+  qualityScoreSource?: string | null;
+  qualityScoreReasonCodes?: string[];
 };
 type BoardTheme = "classic" | "slate" | "blue" | "walnut";
 type PieceStyle = "unicode" | "letters" | "neo";
@@ -455,6 +462,123 @@ function normalizeCoachBody(body:string){
     .replace(/\b(pawn|knight|bishop|rook|queen|king)\b/g," {PIECE} ")
     .replace(/\s+/g," ")
     .trim();
+}
+
+const GENERIC_COACH_TITLE_MARKERS = [
+  "active piece development",
+  "avoid blocking center pawn",
+  "improve your position",
+  "continue the position",
+  "status",
+];
+
+const GENERIC_COACH_BODY_MARKERS = [
+  "improve your position",
+  "keeps the position moving",
+  "continue the position",
+  "develops play and keeps the position moving",
+];
+
+function looksGenericCoachTitle(title:string){
+  const lower=title.toLowerCase();
+  return GENERIC_COACH_TITLE_MARKERS.some((token)=>lower.includes(token));
+}
+
+function looksGenericCoachBody(body:string){
+  const lower=body.toLowerCase();
+  return GENERIC_COACH_BODY_MARKERS.some((token)=>lower.includes(token));
+}
+
+function moveSpecificityHint(text:string,moveSan:string|null,moveUci:string|null){
+  const lower=text.toLowerCase();
+  if(moveSan&&lower.includes(moveSan.toLowerCase()))return true;
+  if(moveUci&&lower.includes(moveUci.toLowerCase()))return true;
+  return /\b[a-h][1-8]\b/.test(text);
+}
+
+function computeRenderedCoachQuality(input:{
+  renderedTitle:string|null;
+  renderedBody:string|null;
+  pipelineTitle:string|null;
+  pipelineBody:string|null;
+  pipelineSource:string|null;
+  pipelineQualityScore:number|null;
+  moveSan:string|null;
+  moveUci:string|null;
+  runtimeSafeFallbackUsed:boolean;
+  runtimeSafeFallbackReason:string|null;
+  recentRenderedBodies:string[];
+}){
+  const reasons:string[]=[];
+  const renderedTitle=String(input.renderedTitle??"").trim();
+  const renderedBody=String(input.renderedBody??"").trim();
+  const pipelineTitle=String(input.pipelineTitle??"").trim();
+  const pipelineBody=String(input.pipelineBody??"").trim();
+  const pipelineSource=String(input.pipelineSource??"").trim()||null;
+  const hasRenderedCopy=Boolean(renderedTitle||renderedBody);
+  const renderedBodyStem=normalizeCoachBody(renderedBody);
+  const repeatedStemCount=input.recentRenderedBodies.filter((entry)=>normalizeCoachBody(String(entry))===renderedBodyStem).length;
+  let renderedQualityScore=88;
+  if(!hasRenderedCopy){
+    renderedQualityScore=0;
+    reasons.push("missing_rendered_copy");
+  }
+  if(renderedTitle&&looksGenericCoachTitle(renderedTitle)){
+    renderedQualityScore-=35;
+    reasons.push("raw_or_generic_title");
+  }
+  if(renderedBody&&looksGenericCoachBody(renderedBody)){
+    renderedQualityScore-=20;
+    reasons.push("generic_body_template");
+  }
+  if(renderedBodyStem&&repeatedStemCount>=2){
+    renderedQualityScore-=18;
+    reasons.push("repeated_body_stem");
+  }
+  if(!moveSpecificityHint(renderedBody,input.moveSan,input.moveUci)){
+    renderedQualityScore-=10;
+    reasons.push("missing_move_specific_reason");
+  }
+  if(input.runtimeSafeFallbackUsed){
+    renderedQualityScore-=8;
+    reasons.push(input.runtimeSafeFallbackReason==="claim_validation_failed"?"claim_validation_fallback":"runtime_safe_fallback");
+  }
+  const renderedVsPipelineMismatch=Boolean(
+    pipelineTitle&&pipelineBody&&
+    (pipelineTitle!==renderedTitle||pipelineBody!==renderedBody)
+  );
+  const pipelineLooksBetter=Boolean(
+    renderedVsPipelineMismatch &&
+    !looksGenericCoachTitle(pipelineTitle) &&
+    moveSpecificityHint(pipelineBody,input.moveSan,input.moveUci) &&
+    (looksGenericCoachTitle(renderedTitle)||looksGenericCoachBody(renderedBody))
+  );
+  if(pipelineLooksBetter){
+    renderedQualityScore-=20;
+    reasons.push("rendered_vs_pipeline_mismatch");
+  }
+  renderedQualityScore=Math.max(0,Math.min(100,renderedQualityScore));
+  const pipelineQualityScore=Number.isFinite(Number(input.pipelineQualityScore))?Number(input.pipelineQualityScore):null;
+  return {
+    hasVisibleCoach:hasRenderedCopy,
+    userFacingCopy:true,
+    containsDebugLeak:false,
+    targetAligned:true,
+    pieceAligned:true,
+    hasPedagogicalReason:renderedQualityScore>=70,
+    hasVerifiedTheme:true,
+    selectedTheme:null,
+    evidenceTags:[],
+    usedFallback:Boolean(input.runtimeSafeFallbackUsed),
+    fallbackReason:input.runtimeSafeFallbackReason??null,
+    repeatedGeneric:repeatedStemCount>=2||looksGenericCoachTitle(renderedTitle)||looksGenericCoachBody(renderedBody),
+    qualityScore:renderedQualityScore,
+    pipelineQualityScore,
+    renderedQualityScore,
+    qualityScoreSource:"rendered_coach_card",
+    qualityScoreReasonCodes:reasons,
+    pipelineSource,
+  };
 }
 
 function getRecentInstructionalCoachRecords(records:LastCoachRecord[],limit=5){
@@ -2903,7 +3027,31 @@ export default function App(){
     const entryKind=normalizeCoachEntryKind({trainerPhase,isUserTurn,instructionTargetUci,runtimeCriticalIssues});
     const shouldLog=Boolean(visibleTitle||visibleBody||visibleButtons.length||["opponent_status","terminal","line_complete","error"].includes(entryKind));
     if(!shouldLog)return;
-    const normalizedDebug=normalizeCoachDebugMetadata((displayedCoachDecision?.debug as any)??{});
+    const baseQuality=(displayedCoachDecision?.debug as any)?.coachQuality??{};
+    const renderedCoachQualityAtFrame=computeRenderedCoachQuality({
+      renderedTitle: visibleTitle || null,
+      renderedBody: visibleBody || null,
+      pipelineTitle: displayedCoachDecision?.shouldShowCoachCard ? String(displayedCoachDecision?.title ?? "").trim() : null,
+      pipelineBody: displayedCoachDecision?.shouldShowCoachCard ? String(displayedCoachDecision?.body ?? "").trim() : null,
+      pipelineSource: String((displayedCoachDecision?.debug as any)?.coachDecisionSource ?? baseQuality?.source ?? "").trim() || null,
+      pipelineQualityScore: Number.isFinite(Number(baseQuality?.qualityScore)) ? Number(baseQuality.qualityScore) : null,
+      moveSan: instructionTarget?.san ?? null,
+      moveUci: instructionTargetUci,
+      runtimeSafeFallbackUsed: Boolean((displayedCoachDecision?.debug as any)?.verifiedFallbackUsed ?? baseQuality?.usedFallback),
+      runtimeSafeFallbackReason: String((displayedCoachDecision?.debug as any)?.fallbackReason ?? baseQuality?.fallbackReason ?? "").trim() || null,
+      recentRenderedBodies: coachTimeline.slice(-8).map((entry:any)=>String(entry?.visibleBody ?? "")),
+    });
+    const normalizedDebug=normalizeCoachDebugMetadata({
+      ...((displayedCoachDecision?.debug as any)??{}),
+      coachQuality: {
+        ...baseQuality,
+        ...renderedCoachQualityAtFrame,
+        targetAligned: baseQuality?.targetAligned,
+        pieceAligned: baseQuality?.pieceAligned,
+        selectedTheme: baseQuality?.selectedTheme ?? (displayedCoachDecision?.debug as any)?.selectedTheme ?? null,
+        evidenceTags: Array.isArray(baseQuality?.evidenceTags) ? baseQuality.evidenceTags : [],
+      },
+    });
     const runtimeCriticalIssuesKey=runtimeCriticalIssues.join("|");
     const visibleButtonsKey=visibleButtons.map(String).join("|");
     const coachTimelineEntryKey=[
@@ -2996,9 +3144,7 @@ export default function App(){
     (displayedCoachDecision?.debug as any)?.selectedTemplateId,
     (displayedCoachDecision?.debug as any)?.verifiedFallbackUsed,
     (displayedCoachDecision?.debug as any)?.fallbackReason,
-    (displayedCoachDecision?.debug as any)?.coachQuality?.qualityScore,
-    (displayedCoachDecision?.debug as any)?.coachQuality?.targetAligned,
-    (displayedCoachDecision?.debug as any)?.coachQuality?.pieceAligned,
+    coachTimeline.map((entry)=>String((entry as any)?.visibleBody ?? "")).join("|"),
     runtimeCriticalIssues.join("|"),
   ]);
   function currentDebugActionState(){
@@ -3353,6 +3499,54 @@ export default function App(){
     hint: visibleTeachingSurface.hint.text,
     showMoreContent: visibleTeachingSurface.showMore.content,
   } as any) : null;
+  const renderedCoachQualityForDebug=useMemo(()=>{
+    const baseQuality=(displayedCoachDecision?.debug as any)?.coachQuality??{};
+    const renderedTitle=surfaceCoachCardDecision?.shouldShowCoachCard?String(surfaceCoachCardDecision.title??"").trim()||null:null;
+    const renderedBody=surfaceCoachCardDecision?.shouldShowCoachCard?String(surfaceCoachCardDecision.body??"").trim()||null:null;
+    const pipelineTitle=displayedCoachDecision?.shouldShowCoachCard?String(displayedCoachDecision.title??"").trim()||null:null;
+    const pipelineBody=displayedCoachDecision?.shouldShowCoachCard?String(displayedCoachDecision.body??"").trim()||null:null;
+    const recentRenderedBodies=coachCardRenderTimeline
+      .filter((entry)=>entry.trainerPhase==="ready_for_user"&&entry.isUserTurn&&Boolean(entry.instructionTargetUci))
+      .slice(-8)
+      .map((entry)=>String(entry.actualCoachCardBody??entry.visibleBody??""));
+    const scored=computeRenderedCoachQuality({
+      renderedTitle,
+      renderedBody,
+      pipelineTitle,
+      pipelineBody,
+      pipelineSource:String((displayedCoachDecision?.debug as any)?.coachDecisionSource??baseQuality?.source??"").trim()||null,
+      pipelineQualityScore:Number.isFinite(Number(baseQuality?.qualityScore))?Number(baseQuality.qualityScore):null,
+      moveSan:instructionTarget?.san??expectedUserOptions[0]?.san??null,
+      moveUci:instructionTarget?.uci??expectedUserOptions[0]?.uci??null,
+      runtimeSafeFallbackUsed:Boolean((displayedCoachDecision?.debug as any)?.verifiedFallbackUsed??baseQuality?.usedFallback),
+      runtimeSafeFallbackReason:String((displayedCoachDecision?.debug as any)?.fallbackReason??baseQuality?.fallbackReason??"").trim()||null,
+      recentRenderedBodies,
+    }) as any;
+    return {
+      ...baseQuality,
+      ...scored,
+      targetAligned:baseQuality?.targetAligned,
+      pieceAligned:baseQuality?.pieceAligned,
+      selectedTheme:baseQuality?.selectedTheme??(displayedCoachDecision?.debug as any)?.selectedTheme??null,
+      evidenceTags:Array.isArray(baseQuality?.evidenceTags)?baseQuality.evidenceTags:[],
+    };
+  },[
+    surfaceCoachCardDecision?.shouldShowCoachCard,
+    surfaceCoachCardDecision?.title,
+    surfaceCoachCardDecision?.body,
+    displayedCoachDecision?.shouldShowCoachCard,
+    displayedCoachDecision?.title,
+    displayedCoachDecision?.body,
+    (displayedCoachDecision?.debug as any)?.coachDecisionSource,
+    (displayedCoachDecision?.debug as any)?.verifiedFallbackUsed,
+    (displayedCoachDecision?.debug as any)?.fallbackReason,
+    (displayedCoachDecision?.debug as any)?.coachQuality,
+    instructionTarget?.san,
+    instructionTarget?.uci,
+    expectedUserOptions[0]?.san,
+    expectedUserOptions[0]?.uci,
+    coachCardRenderTimeline,
+  ]);
   const continuationRatingBadgeVisible=Boolean(
     trainingMode==="continuation"&&
     userExplicitlyEnteredContinuation&&
@@ -5037,6 +5231,9 @@ export default function App(){
     const actualTitle = surfaceCoachCardDecision?.shouldShowCoachCard ? String(surfaceCoachCardDecision.title ?? "").trim() : null;
     const actualBody = surfaceCoachCardDecision?.shouldShowCoachCard ? String(surfaceCoachCardDecision.body ?? "").trim() : null;
     const actualButtons = surfaceCoachCardDecision?.shouldShowCoachCard ? ((surfaceCoachCardDecision.buttons ?? []) as any[]).map(String) : [];
+    const pipelineTitle = displayedCoachDecision?.shouldShowCoachCard ? String(displayedCoachDecision.title ?? "").trim() : null;
+    const pipelineBody = displayedCoachDecision?.shouldShowCoachCard ? String(displayedCoachDecision.body ?? "").trim() : null;
+    const pipelineSource = String((displayedCoachDecision?.debug as any)?.coachDecisionSource ?? "").trim() || null;
     const debugVisibleTitle = visibleTeachingSurface?.coach?.shouldRender ? String(visibleTeachingSurface.coach.title ?? "").trim() : null;
     const debugVisibleBody = visibleTeachingSurface?.coach?.shouldRender ? String(visibleTeachingSurface.coach.body ?? "").trim() : null;
     const debugVisibleButtons = Array.isArray(visibleTeachingSurface?.actions) ? visibleTeachingSurface.actions.map(String) : [];
@@ -5101,6 +5298,19 @@ export default function App(){
       renderedRevealTargetUci: revealTargetUci,
       criticalIssuesAtFrame,
       warningsAtFrame: [],
+      pipelineCoachCardTitle: pipelineTitle,
+      pipelineCoachCardBody: pipelineBody,
+      pipelineCoachCardSource: pipelineSource,
+      pipelineQualityScore: Number.isFinite(Number((displayedCoachDecision?.debug as any)?.coachQuality?.qualityScore))
+        ? Number((displayedCoachDecision?.debug as any)?.coachQuality?.qualityScore)
+        : null,
+      renderedQualityScore: Number.isFinite(Number(renderedCoachQualityForDebug?.qualityScore))
+        ? Number(renderedCoachQualityForDebug?.qualityScore)
+        : null,
+      qualityScoreSource: String((renderedCoachQualityForDebug as any)?.qualityScoreSource ?? "") || null,
+      qualityScoreReasonCodes: Array.isArray((renderedCoachQualityForDebug as any)?.qualityScoreReasonCodes)
+        ? (renderedCoachQualityForDebug as any).qualityScoreReasonCodes.map(String)
+        : [],
     };
     const coachCardRenderEntryKey=[
       String(trainerFrameId),
@@ -5117,6 +5327,9 @@ export default function App(){
       debugVisibleButtons.join("|")||"none",
       String(actualTitle??"none"),
       String(actualBody??"none"),
+      String(pipelineTitle??"none"),
+      String(pipelineBody??"none"),
+      String(pipelineSource??"none"),
       actualButtons.join("|")||"none",
       String(visibleTeachingSurface?.mode??"none"),
       String(displayedCoachDecision?.debug?.coachIntent??visibleTeachingSurface?.mode??"none"),
@@ -5138,6 +5351,7 @@ export default function App(){
     visibleTeachingSurface?.mode,visibleTeachingSurface?.owner,visibleTeachingSurface?.coach?.title,visibleTeachingSurface?.coach?.body,(visibleTeachingSurface?.actions??[]).map(String).join("|"),
     visibleTeachingSurface?.safety?.blocked,visibleTeachingSurface?.safety?.reason,visibleTeachingSurface?.safety?.blockedReason,visibleTeachingSurface?.safety?.blockedSeverity,visibleTeachingSurface?.safety?.recoveredBySafeTeachingCopy,visibleTeachingSurface?.safety?.plainLeakDetected,
     displayedCoachDecision?.debug?.coachIntent,displayedCoachDecision?.debug?.coachDecisionSource,displayedCoachDecision?.debug?.verifiedFallbackUsed,displayedCoachDecision?.debug?.fallbackReason,displayedCoachDecision?.debug?.coachQuality?.targetAligned,displayedCoachDecision?.debug?.coachQuality?.pieceAligned,
+    displayedCoachDecision?.title,displayedCoachDecision?.body,renderedCoachQualityForDebug?.qualityScore,JSON.stringify((renderedCoachQualityForDebug as any)?.qualityScoreReasonCodes??[]),
     boardLinesToRender.map((line)=>`${line.from}${line.to}`).join("|"),runtimeCriticalIssues.join("|"),
   ]);
   useEffect(()=>{
@@ -5604,7 +5818,10 @@ export default function App(){
     continueFromHereClicked,
     opportunityCount:(displayedCoachDecision?.debug as any)?.opportunityCount??liveCoachState?.opportunities?.length,
     renderableOpportunityCount:(displayedCoachDecision?.debug as any)?.renderableOpportunityCount??liveCoachState?.opportunities?.length,
-    coachQuality:(displayedCoachDecision?.debug as any)?.coachQuality??null,
+    coachQuality:renderedCoachQualityForDebug??(displayedCoachDecision?.debug as any)?.coachQuality??null,
+    pipelineCoachCardTitle:displayedCoachDecision?.shouldShowCoachCard?String(displayedCoachDecision?.title??"").trim()||null:null,
+    pipelineCoachCardBody:displayedCoachDecision?.shouldShowCoachCard?String(displayedCoachDecision?.body??"").trim()||null:null,
+    pipelineCoachCardSource:String((displayedCoachDecision?.debug as any)?.coachDecisionSource??"").trim()||null,
     moveFactPacket:(displayedCoachDecision?.debug as any)?.moveFactPacket??null,
     positionDeltaPacket:(displayedCoachDecision?.debug as any)?.positionDeltaPacket??null,
     featurePacket:(displayedCoachDecision?.debug as any)?.featurePacket??null,

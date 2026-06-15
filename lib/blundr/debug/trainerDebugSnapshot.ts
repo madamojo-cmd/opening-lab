@@ -180,6 +180,11 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   const coachSource = String(coachDebug.coachDecisionSource ?? coachQuality.source ?? "live_coach");
   const qualityScoreRaw = Number(coachQuality.qualityScore ?? Number.NaN);
   const qualityScore = Number.isFinite(qualityScoreRaw) ? qualityScoreRaw : null;
+  const pipelineQualityScoreRaw = Number(coachQuality.pipelineQualityScore ?? Number.NaN);
+  const pipelineQualityScore = Number.isFinite(pipelineQualityScoreRaw) ? pipelineQualityScoreRaw : qualityScore;
+  const renderedQualityScoreRaw = Number(coachQuality.renderedQualityScore ?? Number.NaN);
+  const renderedQualityScore = Number.isFinite(renderedQualityScoreRaw) ? renderedQualityScoreRaw : qualityScore;
+  const qualityScoreSource = String(coachQuality.qualityScoreSource ?? "pipeline_explanation");
   const expectedMoveResolution = input.expectedMoveResolution ?? {};
   const guidedCoveragePolicy = input.guidedCoveragePolicy ?? {};
   const branchTransitionSurfaceRendered = Boolean(input.branchTransitionSurfaceRendered);
@@ -1108,6 +1113,10 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       runtimeSafeFallbackUsed,
       runtimeSafeFallbackReason,
       coachQuality,
+      pipelineQualityScore,
+      renderedQualityScore,
+      qualityScoreSource,
+      qualityScoreReasonCodes: Array.isArray(coachQuality.qualityScoreReasonCodes) ? coachQuality.qualityScoreReasonCodes.map(String) : [],
       containsDebugLeak,
       expectedMoveAlignment: expectedMoveAlignment(input),
       coachMismatchReason: coachFailureKind === "none" ? null : coachFailureKind,
@@ -1296,11 +1305,17 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       selectedOpportunityLayer,
       selectedOpportunityScore,
       selectedTemplateId,
+      title: input.pipelineCoachCardTitle ?? input.coachDecision?.title ?? null,
+      body: input.pipelineCoachCardBody ?? input.coachDecision?.body ?? null,
       source: coachSource,
       usedFallback: runtimeSafeFallbackUsed,
       fallbackReason: runtimeSafeFallbackReason,
       evidenceTags: Array.isArray(coachQuality.evidenceTags) ? coachQuality.evidenceTags.map(String) : [],
       qualityScore,
+      pipelineQualityScore,
+      renderedQualityScore,
+      qualityScoreSource,
+      qualityScoreReasonCodes: Array.isArray(coachQuality.qualityScoreReasonCodes) ? coachQuality.qualityScoreReasonCodes.map(String) : [],
       provenanceConsistent: provenanceIssues.length === 0,
       provenanceIssues,
     },

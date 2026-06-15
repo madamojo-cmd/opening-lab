@@ -42,6 +42,11 @@ function asFrameId(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function looksGenericTitle(title: string): boolean {
+  const lower = title.toLowerCase();
+  return GENERIC_TITLE_MARKERS.some((marker) => lower.includes(marker));
+}
+
 function getFrameId(snapshot: unknown): number | null {
   const frame = (snapshot as any)?.frame;
   return asFrameId(frame?.trainerFrameId ?? frame?.frameId ?? frame?.id);
@@ -109,7 +114,25 @@ function getMoveUci(snapshot: unknown): string | null {
   return asText(frame?.expectedMoveUci ?? continuation?.selectedCandidateUci ?? coach?.selectedOpportunityMoveUci);
 }
 
-function buildDerivedAudit(sessionSnapshots: Record<string, unknown>[], coachTimeline: unknown[], plainLeakTimeline: unknown[]): Record<string, unknown> {
+function matchesFrameContext(left: any, right: any): boolean {
+  const fields: Array<[unknown, unknown]> = [
+    [left?.frameId ?? left?.trainerFrameId, right?.frameId ?? right?.trainerFrameId],
+    [left?.instructionTargetUci, right?.instructionTargetUci],
+    [left?.instructionTargetSan, right?.instructionTargetSan],
+    [left?.instructionTargetPieceType, right?.instructionTargetPieceType],
+    [left?.trainingMode, right?.trainingMode],
+    [left?.trainerPhase, right?.trainerPhase],
+  ];
+  return fields.every(([a, b]) => (a == null && b == null) || String(a ?? "") === String(b ?? ""));
+}
+
+function buildDerivedAudit(
+  sessionSnapshots: Record<string, unknown>[],
+  coachTimeline: unknown[],
+  plainLeakTimeline: unknown[],
+  coachCardRenderTimeline: unknown[],
+  coachPipelineTimeline: unknown[],
+): Record<string, unknown> {
   const qualityScoreDistribution: Record<string, number> = {};
   const titleFrames = new Map<string, number[]>();
   const bodyFrames = new Map<string, number[]>();
@@ -132,6 +155,25 @@ function buildDerivedAudit(sessionSnapshots: Record<string, unknown>[], coachTim
   const plainLeakFrames = new Set<number>();
   const criticalIssueFrames: Array<{ frameId: number | null; issues: string[] }> = [];
   const warningFrames: Array<{ frameId: number | null; warnings: string[] }> = [];
+  const renderedVsPipelineCopyMismatches: Array<{
+    frameId: number | null;
+    moveSan: string | null;
+    moveUci: string | null;
+    renderedTitle: string | null;
+    renderedBody: string | null;
+    pipelineTitle: string | null;
+    pipelineBody: string | null;
+    renderedSource: string | null;
+    pipelineSource: string | null;
+    severity: "info" | "warn" | "blocker";
+    reason: string;
+  }> = [];
+  let renderedRawConceptLabelCount = 0;
+  let renderedGenericContinuationCount = 0;
+  let approvedPacketFrameCount = 0;
+  let safeFallbackPacketFrameCount = 0;
+  let approvedContentEnabledFrameCount = 0;
+  const renderedQualityScores: number[] = [];
 
   for (const snapshot of sessionSnapshots) {
     const frameId = getFrameId(snapshot);
@@ -150,6 +192,7 @@ function buildDerivedAudit(sessionSnapshots: Record<string, unknown>[], coachTim
     if (Number.isFinite(qualityScore)) {
       const key = String(qualityScore);
       qualityScoreDistribution[key] = (qualityScoreDistribution[key] ?? 0) + 1;
+      renderedQualityScores.push(qualityScore);
     }
 
     if (title && frameId != null) {
@@ -216,6 +259,9 @@ function buildDerivedAudit(sessionSnapshots: Record<string, unknown>[], coachTim
     packetUsage.count += 1;
     if (frameId != null) packetUsage.frames.push(frameId);
     stage2UsageMap.set(packetKey, packetUsage);
+    if (packetKind === "approved_packet") approvedPacketFrameCount += 1;
+    if (packetKind === "safe_fallback") safeFallbackPacketFrameCount += 1;
+    if (continuation?.stage2ApprovedContentEnabled === true) approvedContentEnabledFrameCount += 1;
 
     const featurePacketExists =
       features?.featurePacketExists == null
@@ -263,6 +309,53 @@ function buildDerivedAudit(sessionSnapshots: Record<string, unknown>[], coachTim
     if (warnings.length) warningFrames.push({ frameId, warnings });
   }
 
+  for (const entry of asArray(coachCardRenderTimeline)) {
+    if (String((entry as any)?.trainerPhase ?? "") !== "ready_for_user") continue;
+    if ((entry as any)?.isUserTurn !== true) continue;
+    const renderedTitle = asText((entry as any)?.actualCoachCardTitle ?? (entry as any)?.visibleTitle);
+    const renderedBody = asText((entry as any)?.actualCoachCardBody ?? (entry as any)?.visibleBody);
+    const renderedSource = asText((entry as any)?.actualCoachCardSource);
+    const pipelineTitle = asText((entry as any)?.pipelineCoachCardTitle);
+    const pipelineBody = asText((entry as any)?.pipelineCoachCardBody);
+    const pipelineSource = asText((entry as any)?.pipelineCoachCardSource ?? (entry as any)?.coachDecisionSource);
+    const rawLabel = renderedTitle ? looksGenericTitle(renderedTitle) : false;
+    const genericContinuation = renderedTitle ? renderedTitle.toLowerCase().includes("continue the position") : false;
+    if (rawLabel) renderedRawConceptLabelCount += 1;
+    if (genericContinuation || (renderedBody ? renderedBody.toLowerCase().includes("keeps the position moving") : false)) renderedGenericContinuationCount += 1;
+
+    const pipelineEntry = asArray(coachPipelineTimeline).find((candidate: any) => matchesFrameContext(entry, candidate)) as any;
+    const timelinePipelineTitle = asText(pipelineEntry?.visibleTitle);
+    const timelinePipelineBody = asText(pipelineEntry?.visibleBody);
+    const effectivePipelineTitle = pipelineTitle ?? timelinePipelineTitle;
+    const effectivePipelineBody = pipelineBody ?? timelinePipelineBody;
+    const mismatch = effectivePipelineTitle && effectivePipelineBody && (effectivePipelineTitle !== renderedTitle || effectivePipelineBody !== renderedBody);
+    if (!mismatch) continue;
+    const pipelineMoveSpecific = Boolean((entry as any)?.instructionTargetSan && effectivePipelineTitle.toLowerCase().includes(String((entry as any).instructionTargetSan).toLowerCase()));
+    const renderedGeneric = Boolean(rawLabel || (renderedBody && renderedBody.toLowerCase().includes("improve your position")));
+    let severity: "info" | "warn" | "blocker" = "info";
+    let reason = "rendered_copy_differs_from_pipeline";
+    if (renderedGeneric && pipelineMoveSpecific) {
+      severity = "blocker";
+      reason = "raw_or_generic_rendered_copy_overrode_move_specific_pipeline_copy";
+    } else if (renderedGeneric) {
+      severity = "warn";
+      reason = "generic_rendered_copy_overrode_pipeline_copy";
+    }
+    renderedVsPipelineCopyMismatches.push({
+      frameId: asFrameId((entry as any)?.frameId),
+      moveSan: asText((entry as any)?.instructionTargetSan ?? (entry as any)?.expectedMoveSan),
+      moveUci: asText((entry as any)?.instructionTargetUci ?? (entry as any)?.expectedMoveUci),
+      renderedTitle,
+      renderedBody,
+      pipelineTitle: effectivePipelineTitle,
+      pipelineBody: effectivePipelineBody,
+      renderedSource,
+      pipelineSource,
+      severity,
+      reason,
+    });
+  }
+
   for (const entry of asArray(plainLeakTimeline)) {
     if ((entry as any)?.preShowMoreLeak || (entry as any)?.plainLeakDetected) {
       const frameId = asFrameId((entry as any)?.frameId);
@@ -276,6 +369,36 @@ function buildDerivedAudit(sessionSnapshots: Record<string, unknown>[], coachTim
   const repeatedBodies = Array.from(bodyFrames.entries())
     .filter(([, frames]) => frames.length > 1)
     .map(([body, frames]) => ({ body, count: frames.length, frames }));
+  const repeatedBodyStems = Array.from(
+    sessionSnapshots.reduce((map, snapshot) => {
+      const body = asText((snapshot as any)?.coach?.visibleBody);
+      const frameId = getFrameId(snapshot);
+      if (!body || frameId == null) return map;
+      const stem = body
+        .toLowerCase()
+        .replace(/\b[a-h][1-8][a-h][1-8][qrbn]?\b/g, "{move}")
+        .replace(/\b[a-h][1-8]\b/g, "{square}")
+        .replace(/\b(pawn|knight|bishop|rook|queen|king)\b/g, "{piece}")
+        .replace(/\s+/g, " ")
+        .trim();
+      const item = map.get(stem) ?? { stem, count: 0, frames: [] as number[] };
+      item.count += 1;
+      item.frames.push(frameId);
+      map.set(stem, item);
+      return map;
+    }, new Map<string, { stem: string; count: number; frames: number[] }>())
+      .values(),
+  ).filter((entry) => entry.count > 1);
+  const uniqueRenderedScores = Array.from(new Set(renderedQualityScores.map((score) => Number(score.toFixed(2)))));
+  const identicalRenderedQualityDetected = renderedQualityScores.length >= 3 && uniqueRenderedScores.length === 1;
+  const approvedContentInactiveReason =
+    approvedPacketFrameCount > 0
+      ? null
+      : approvedContentEnabledFrameCount === 0
+        ? "approvedContentEnabled false and safe_fallback active"
+        : safeFallbackPacketFrameCount > 0
+          ? "no approved packet source wired; safe fallback packets used"
+          : "no approved packet source wired";
 
   return {
     frameCount: sessionSnapshots.length,
@@ -283,19 +406,29 @@ function buildDerivedAudit(sessionSnapshots: Record<string, unknown>[], coachTim
     qualityScoreDistribution,
     repeatedTitles,
     repeatedBodies,
+    repeatedBodyStems,
     genericTitleHits,
     fallbackFrames,
     claimValidationFailedFrames,
     templateUsage: Array.from(templateUsageMap.values()),
     stage2PacketUsage: Array.from(stage2UsageMap.values()),
+    approvedPacketFrameCount,
+    safeFallbackPacketFrameCount,
+    approvedContentInactiveReason,
     featureExposureGaps,
+    renderedVsPipelineCopyMismatches,
+    renderedVsPipelineMismatchCount: renderedVsPipelineCopyMismatches.length,
+    renderedRawConceptLabelCount,
+    renderedGenericContinuationCount,
     targetMismatchFrames: Array.from(targetMismatchFrames.values()).sort((a, b) => a - b),
     pieceMismatchFrames: Array.from(pieceMismatchFrames.values()).sort((a, b) => a - b),
     visualMismatchFrames: Array.from(visualMismatchFrames.values()).sort((a, b) => a - b),
     revealMismatchFrames: Array.from(revealMismatchFrames.values()).sort((a, b) => a - b),
     plainLeakFrames: Array.from(plainLeakFrames.values()).sort((a, b) => a - b),
     criticalIssueFrames,
-    warningFrames,
+    warningFrames: identicalRenderedQualityDetected
+      ? [...warningFrames, { frameId: null, warnings: ["identical_rendered_quality_scores_detected"] }]
+      : warningFrames,
   };
 }
 
@@ -303,6 +436,7 @@ export function buildFullSessionDebugPayload(args: {
   currentSnapshot: TrainerDebugSnapshot | null | undefined;
   historySnapshots: Array<Record<string, unknown> | null | undefined>;
   coachTimeline?: unknown[];
+  coachPipelineTimeline?: unknown[];
   coachCardRenderTimeline?: unknown[];
   surfaceTimeline?: unknown[];
   actionTimeline?: unknown[];
@@ -316,6 +450,7 @@ export function buildFullSessionDebugPayload(args: {
     .map((entry) => sanitizeForDebugJson(entry))
     .filter((entry): entry is Record<string, unknown> => Boolean(entry && typeof entry === "object"));
   const coachTimeline = asArray(args.coachTimeline);
+  const coachPipelineTimeline = asArray(args.coachPipelineTimeline);
   const coachCardRenderTimeline = asArray(args.coachCardRenderTimeline);
   const surfaceTimeline = asArray(args.surfaceTimeline);
   const actionTimeline = asArray(args.actionTimeline);
@@ -331,6 +466,7 @@ export function buildFullSessionDebugPayload(args: {
     history: {
       snapshots,
       coachTimeline,
+      coachPipelineTimeline,
       coachCardRenderTimeline,
       surfaceTimeline,
       actionTimeline,
@@ -339,7 +475,7 @@ export function buildFullSessionDebugPayload(args: {
       maiaTimeline,
       eventLog,
     },
-    derivedAudit: buildDerivedAudit(snapshots, coachTimeline, plainLeakTimeline),
+    derivedAudit: buildDerivedAudit(snapshots, coachTimeline, plainLeakTimeline, coachCardRenderTimeline, coachPipelineTimeline),
   };
 }
 
@@ -580,6 +716,7 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
         currentSnapshot: snapshot,
         historySnapshots: sessionHistoryRef.current.map((entry) => entry.snapshot),
         coachTimeline,
+        coachPipelineTimeline: coachTimeline,
         coachCardRenderTimeline,
         surfaceTimeline: surfaceModeTransitionTimeline,
         actionTimeline,

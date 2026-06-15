@@ -86,6 +86,10 @@ function cleanLines(lines?: Line[] | null) {
   return (Array.isArray(lines) ? lines : []).filter((line) => /^[a-h][1-8]$/.test(String(line.from)) && /^[a-h][1-8]$/.test(String(line.to))).slice(0, 4);
 }
 
+function isNonEmptyText(value: unknown): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
 export function computeTrainerPresentationFrame(input: ComputeTrainerPresentationFrameInput) {
   const canShowTeachingVisual = Boolean(
     input.activeBoard &&
@@ -183,9 +187,11 @@ export function computeTrainerPresentationFrame(input: ComputeTrainerPresentatio
   // CurrentInstructionFrame.target -> BlundrBrainAnalysis.safeFallbackCopy (piece-matched, evidence-backed, no halluc) -> TrainerPresentationFrame -> VisibleTeachingSurface
   // Legacy coachDecision / liveCoach text remains input-only for debug/bypass; brain copy used for visible coach title/body on teaching frames.
   const brainCopy = input.brainAnalysis?.safeFallbackCopy;
+  const coachDecisionHasVisibleCopy = isNonEmptyText(coach.title) && isNonEmptyText(coach.body);
   const useBrainForCoach = Boolean(
     brainCopy &&
     brainCopy.isSafe &&
+    !coachDecisionHasVisibleCopy &&
     input.trainerPhase === "ready_for_user" &&
     input.isUserTurn &&
     !input.branchTransitionSurface

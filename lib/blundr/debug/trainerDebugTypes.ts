@@ -56,11 +56,17 @@ export interface TrainerDebugSnapshot {
     selectedOpportunityLayer: string | null;
     selectedOpportunityScore: number | null;
     selectedTemplateId: string | null;
+    title?: string | null;
+    body?: string | null;
     source: string | null;
     usedFallback: boolean;
     fallbackReason: string | null;
     evidenceTags: string[];
     qualityScore: number | null;
+    pipelineQualityScore?: number | null;
+    renderedQualityScore?: number | null;
+    qualityScoreSource?: string | null;
+    qualityScoreReasonCodes?: string[];
     provenanceConsistent: boolean;
     provenanceIssues: string[];
   };

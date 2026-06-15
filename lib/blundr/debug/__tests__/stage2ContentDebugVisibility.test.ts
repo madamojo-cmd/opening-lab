@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -61,6 +62,8 @@ export function testStage2ContentDebugVisibility(): void {
   assert.equal(payloadString.includes("\"topCandidateUci\":\"e4d5\""), true);
   assert.equal(payloadString.includes("\"stage2Coaching\""), true);
   assert.equal(payloadString.includes("\"packetKind\":\"safe_fallback\""), true);
+  assert.equal(Object.prototype.hasOwnProperty.call(copyEverythingPayload, "history"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(copyEverythingPayload, "derivedAudit"), false);
 
   assert.doesNotThrow(() =>
     buildFullSessionDebugPayload({
@@ -142,7 +145,36 @@ export function testStage2ContentDebugVisibility(): void {
       coachDecisionSource: entry.coach.coachDecisionSource,
       runtimeSafeFallbackUsed: entry.continuation.runtimeSafeFallbackUsed,
     })),
-    coachCardRenderTimeline: [{ frameId: 1, title: "Active Piece Development" }],
+    coachPipelineTimeline: fakeHistory.map((entry) => ({
+      trainerFrameId: entry.frame.trainerFrameId,
+      entryKind: "instructional",
+      visibleTitle: entry.frame.trainerFrameId === 3 ? "e4 — Challenge the center" : entry.coach.visibleTitle,
+      visibleBody: entry.frame.trainerFrameId === 3 ? "Move the pawn to e4. This contests central space." : entry.coach.visibleBody,
+      instructionTargetUci: entry.frame.expectedMoveUci,
+      instructionTargetSan: entry.frame.expectedMoveSan,
+      instructionTargetPieceType: "p",
+      trainingMode: "continuation",
+      trainerPhase: "ready_for_user",
+      coachDecisionSource: entry.coach.coachDecisionSource,
+    })),
+    coachCardRenderTimeline: [
+      {
+        frameId: 3,
+        trainerFrameId: 3,
+        trainerPhase: "ready_for_user",
+        trainingMode: "continuation",
+        isUserTurn: true,
+        instructionTargetUci: "g1f3",
+        instructionTargetSan: "Nf3",
+        instructionTargetPieceType: "n",
+        actualCoachCardTitle: "Active Piece Development",
+        actualCoachCardBody: "Improve your position and keep the position moving.",
+        actualCoachCardSource: "surfaceCoachCardDecision",
+        pipelineCoachCardTitle: "Nf3 — Develop and prepare castling",
+        pipelineCoachCardBody: "Move the knight to f3. This supports central control and king safety.",
+        pipelineCoachCardSource: "live_coach",
+      },
+    ],
     surfaceTimeline: [{ frameId: 1, mode: "assisted" }],
     actionTimeline: [{ frameId: 2, action: "show_more" }],
     visualTimeline: [{ frameId: 2, rendered: true }],
@@ -154,6 +186,7 @@ export function testStage2ContentDebugVisibility(): void {
   assert.equal(fullPayload.current != null, true);
   assert.equal(Array.isArray((fullPayload as any).history?.snapshots), true);
   assert.equal(Array.isArray((fullPayload as any).history?.coachCardRenderTimeline), true);
+  assert.equal(Array.isArray((fullPayload as any).history?.coachPipelineTimeline), true);
   assert.equal(Array.isArray((fullPayload as any).history?.visualTimeline), true);
   assert.equal(typeof (fullPayload as any).derivedAudit?.qualityScoreDistribution, "object");
   assert.equal(Array.isArray((fullPayload as any).derivedAudit?.repeatedTitles), true);
@@ -161,6 +194,7 @@ export function testStage2ContentDebugVisibility(): void {
   assert.equal(Array.isArray((fullPayload as any).derivedAudit?.claimValidationFailedFrames), true);
   assert.equal(Array.isArray((fullPayload as any).derivedAudit?.stage2PacketUsage), true);
   assert.equal(Array.isArray((fullPayload as any).derivedAudit?.featureExposureGaps), true);
+  assert.equal(Array.isArray((fullPayload as any).derivedAudit?.renderedVsPipelineCopyMismatches), true);
   assert.equal((fullPayload as any).derivedAudit?.qualityScoreDistribution?.["88"], 3);
   assert.equal(
     ((fullPayload as any).derivedAudit?.repeatedTitles ?? []).some((entry: any) => entry.title === "Active Piece Development"),
@@ -174,6 +208,20 @@ export function testStage2ContentDebugVisibility(): void {
     ((fullPayload as any).derivedAudit?.claimValidationFailedFrames ?? []).some((entry: any) => entry.frameId === 3),
     true,
   );
+  assert.equal(
+    ((fullPayload as any).derivedAudit?.renderedVsPipelineCopyMismatches ?? []).some((entry: any) => entry.frameId === 3),
+    true,
+  );
+  assert.equal(
+    ((fullPayload as any).derivedAudit?.warningFrames ?? []).some((entry: any) => String(entry?.warnings ?? []).includes("identical_rendered_quality_scores_detected")),
+    true,
+  );
+  assert.equal(Array.isArray((fullPayload as any).history?.snapshots), true);
+  assert.equal(((fullPayload as any).history?.snapshots ?? []).length, 3);
+
+  const panelSource = fs.readFileSync("components/debug/BlundrDiagnosticsPanel.tsx", "utf8");
+  assert.equal(panelSource.includes("Copy ALL Session Debug"), true);
+  assert.equal(panelSource.includes("JSON.stringify(fullSessionDebug, null, 2)"), true);
 
   const html = renderToStaticMarkup(
     React.createElement(BlundrDiagnosticsPanel, {

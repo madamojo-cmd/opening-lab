@@ -149,6 +149,10 @@ type CoachQuality = {
   fallbackReason: string | null;
   repeatedGeneric: boolean;
   qualityScore: number;
+  pipelineQualityScore?: number;
+  renderedQualityScore?: number | null;
+  qualityScoreSource?: string;
+  qualityScoreReasonCodes?: string[];
 };
 
 const CENTER = new Set(["d4", "e4", "d5", "e5"]);
@@ -605,11 +609,31 @@ export function scoreCoachQuality(input: {
 }): CoachQuality {
   const text = `${input.explanation.title} ${input.explanation.body}`.trim();
   const repeatedGeneric = (input.context.recentCoachBodies ?? []).slice(-4).filter((body) => body.trim() === input.explanation.body.trim()).length >= 2;
-  let qualityScore = 88;
+  const reasons: string[] = [];
+  let qualityScore = 86;
+  const title = String(input.explanation.title ?? "").trim();
+  const body = String(input.explanation.body ?? "").trim();
+  if (/active piece development|avoid blocking center pawn|improve your position|continue the position|status/i.test(title)) {
+    qualityScore -= 30;
+    reasons.push("generic_or_internal_title");
+  }
+  if (/improve your position|keeps the position moving|continue the position/i.test(body)) {
+    qualityScore -= 14;
+    reasons.push("generic_body_template");
+  }
   if (input.explanation.usedFallback) qualityScore = 72;
   if (repeatedGeneric) qualityScore -= 12;
+  if (input.explanation.selectedTheme === "stable_continuation") {
+    qualityScore -= 8;
+    reasons.push("stable_continuation_theme");
+  }
+  if (!/\b[a-h][1-8]\b/.test(body)) {
+    qualityScore -= 6;
+    reasons.push("missing_square_specific_detail");
+  }
   if (!input.safety.safe) qualityScore = 0;
   if (input.safety.containsDebugLeak) qualityScore = 0;
+  qualityScore = Math.max(0, Math.min(100, qualityScore));
   return {
     hasVisibleCoach: Boolean(text),
     userFacingCopy: !input.safety.containsDebugLeak,
@@ -624,6 +648,10 @@ export function scoreCoachQuality(input: {
     fallbackReason: input.explanation.fallbackReason,
     repeatedGeneric,
     qualityScore,
+    pipelineQualityScore: qualityScore,
+    renderedQualityScore: null,
+    qualityScoreSource: "pipeline_explanation",
+    qualityScoreReasonCodes: reasons,
   };
 }
 
