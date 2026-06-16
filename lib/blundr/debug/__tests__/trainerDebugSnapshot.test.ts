@@ -167,6 +167,53 @@ export function testTrainerDebugSnapshot(): void {
   assert.equal((v28Parity.coach as any).visibleTitle, "Challenge the center");
   assert.equal((v28Parity.coach as any).visibleBody, "Play e4 to challenge central squares.");
   assert.equal((v28Parity.coach as any).visibleBody.includes("safest improving move"), false);
+  assert.equal((v28Parity as any).trainerFrameResolution?.coachCard?.finalRendered?.title, (v28Parity.coach as any).visibleTitle);
+  assert.equal((v28Parity as any).trainerFrameResolution?.coachCard?.finalRendered?.body, (v28Parity.coach as any).visibleBody);
+
+  const finalQuality = buildTrainerDebugSnapshot({
+    debugEnabled: true,
+    trainerFrameId: 12,
+    trainerPhase: "ready_for_user",
+    trainerView: "assisted",
+    trainingMode: "restricted",
+    isUserTurn: true,
+    fen: "8/8/8/8/8/8/8/4K3 w - - 0 1",
+    instructionTargetUci: "e2e4",
+    instructionTargetSan: "e4",
+    expectedMoveUci: "e2e4",
+    expectedMoveSan: "e4",
+    coachQuality: { qualityScore: 40, renderedQualityScore: 92, source: "live_coach", usedFallback: false },
+    actualCoachCardTitle: "Final rendered title",
+    actualCoachCardBody: "Final rendered body",
+    actualCoachCardButtons: ["why"],
+    actualCoachCardSource: "surfaceCoachCardDecision",
+    visibleSurfaceOwner: "v28_visible_surface",
+    visibleCoachOwner: "visible_surface_v28",
+    visibleVisualOwner: "visible_surface_v28",
+    visibleActionOwner: "visible_surface_v28",
+    visibleTeachingSurface: {
+      owner: "v28_visible_surface",
+      mode: "assisted",
+      coach: { shouldRender: true, title: "Pre authority title", body: "Pre authority body" },
+      actions: [{ kind: "why" }],
+      safety: { blocked: false },
+    },
+    coachDecision: {
+      shouldShowCoachCard: true,
+      title: "Pipeline title",
+      body: "Pipeline body",
+      buttons: ["why"],
+      debug: { coachDecisionSource: "live_coach", coachMoveUci: "e2e4", coachPieceType: "p", coachSafetyWarnings: [] },
+    },
+    presentationFrame: {
+      visual: { shouldRender: true, source: "visible_surface_v28" },
+      coach: { shouldRender: true, owner: "intent_first_coach", title: "Final rendered title", body: "Final rendered body" },
+      legacy: {},
+    },
+    eventLog: [],
+  } as any);
+  assert.equal(finalQuality.health.criticalIssues.includes("coach_low_quality"), false);
+  assert.equal((finalQuality as any).trainerFrameResolution?.coachQuality?.lowQualityTriggered, false);
 
   const continuationHealthy = buildTrainerDebugSnapshot({
     debugEnabled: true,

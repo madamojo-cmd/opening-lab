@@ -4,6 +4,8 @@ import type { DebugEvent, TrainerDebugSnapshot } from "./trainerDebugTypes";
 import { sanitizeForDebugJson } from "./trainerDebugSanitizer";
 import { computeInstructionFrameKey } from "../runtime/currentInstructionFrame";  // v2.7.39.1 target locking
 import { analyzeBlundrPosition } from "../brain/analyzeBlundrPosition";  // v2.7.39.2+ Brain facade exposure (debug only for now)
+import { buildStage2FeatureTrace } from "./buildStage2FeatureTrace";
+import { buildTrainerFrameResolution } from "./buildTrainerFrameResolution";
 
 function len(value: unknown): number {
   return Array.isArray(value) ? value.length : value && typeof value === "object" ? Object.keys(value as Record<string, unknown>).length : 0;
@@ -101,6 +103,7 @@ function hasDebugLeakText(text: string): boolean {
 
 export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDebugSnapshot {
   const started = Date.now();
+  const trainerFrameResolution = buildTrainerFrameResolution(input);
   const boardFen4 = normalizeVisualFen(input.fen);
   const overlayFen4 = normalizeVisualFen(input.overlayFen ?? input.visualRecipe?.fen ?? input.fen);
   const recipeFen4 = normalizeVisualFen(input.visualRecipe?.fen);
@@ -121,20 +124,25 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   const preAuthoritySurfaceTitle = surfaceCoach?.title ?? input.visibleTeachingSurface?.copy?.title ?? null;
   const preAuthoritySurfaceBody = surfaceCoach?.body ?? input.visibleTeachingSurface?.copy?.body ?? null;
   const visibleTitle = v28OwnerActive
-    ? (actualCoachCardTitle ?? preAuthoritySurfaceTitle)
+    ? (trainerFrameResolution.coachCard.finalRendered.title ?? actualCoachCardTitle ?? preAuthoritySurfaceTitle)
     : (presentationCoach.shouldRender ? presentationCoach.title ?? null : input.coachDecision?.shouldShowCoachCard ? input.coachDecision?.title ?? null : null);
   const visibleBody = v28OwnerActive
-    ? (actualCoachCardBody ?? preAuthoritySurfaceBody)
+    ? (trainerFrameResolution.coachCard.finalRendered.body ?? actualCoachCardBody ?? preAuthoritySurfaceBody)
     : (presentationCoach.shouldRender ? presentationCoach.body ?? null : input.coachDecision?.shouldShowCoachCard ? input.coachDecision?.body ?? null : null);
   const visibleBodyText = String(visibleBody ?? "");
   const visibleButtons = v28OwnerActive
-    ? surfaceActionKinds
+    ? (trainerFrameResolution.coachCard.finalRendered.buttons.length ? trainerFrameResolution.coachCard.finalRendered.buttons : surfaceActionKinds)
     : (presentationCoach.shouldRender ? presentationCoach.buttons ?? [] : input.coachDecision?.shouldShowCoachCard ? input.coachDecision?.buttons ?? [] : []);
   const visibleCoachOwner = v28OwnerActive ? "visible_surface_v28" : (presentationCoach.owner ?? "none");
   const visibleCoachIntent = v28OwnerActive
     ? (input.visibleTeachingSurface?.mode ?? presentationCoach.intent ?? input.coachDecision?.debug?.coachIntent ?? input.coachDecision?.debug?.selectedIntent ?? null)
     : (presentationCoach.intent ?? input.coachDecision?.debug?.coachIntent ?? input.coachDecision?.debug?.selectedIntent ?? null);
-  const visualFailureKind = inferVisualFailure(input);
+  const visualFailureKind =
+    trainerFrameResolution.visual.approvedRecipeRendered ||
+    trainerFrameResolution.visual.generatedRecipeRendered ||
+    trainerFrameResolution.visual.fallbackCurrentSurfaceRendered
+      ? "none"
+      : inferVisualFailure(input);
   const coachFailureKind = inferCoachFailure({ ...input, coachDebug });
   const continuationLinesPassedToBoard = input.trainingMode === "continuation" ? len(input.boardLines) : 0;
   const instructionTargetUci = input.instructionTargetUci ?? null;
@@ -151,6 +159,7 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   const criticalIssues: string[] = [];
   const warnings: string[] = [];
   const coachQuality = (input.coachQuality ?? coachDebug.coachQuality ?? {}) as any;
+  const stage2FeatureTraceBundle = isTeachingFrame(input) ? buildStage2FeatureTrace(input) : { featureTrace: null, featureTraceTimeline: [] };
   const containsDebugLeak = Boolean(coachQuality.containsDebugLeak) || hasDebugLeakText(visibleBodyText);
   const instructionalCoachRecords = Array.isArray(input.lastCoachRecords)
     ? input.lastCoachRecords.filter((record: any) => record?.trainerPhase === "ready_for_user" && record?.instructionTargetUci).slice(-5)
@@ -180,7 +189,7 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   const selectedOpportunityScoreRaw = Number(coachDebug.selectedOpportunityScore ?? Number.NaN);
   const selectedOpportunityScore = Number.isFinite(selectedOpportunityScoreRaw) ? selectedOpportunityScoreRaw : null;
   const coachSource = String(coachDebug.coachDecisionSource ?? coachQuality.source ?? "live_coach");
-  const qualityScoreRaw = Number(coachQuality.qualityScore ?? Number.NaN);
+  const qualityScoreRaw = Number(trainerFrameResolution.coachQuality.qualityScore ?? coachQuality.qualityScore ?? Number.NaN);
   const qualityScore = Number.isFinite(qualityScoreRaw) ? qualityScoreRaw : null;
   const pipelineQualityScoreRaw = Number(coachQuality.pipelineQualityScore ?? Number.NaN);
   const pipelineQualityScore = Number.isFinite(pipelineQualityScoreRaw) ? pipelineQualityScoreRaw : qualityScore;
@@ -428,7 +437,7 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
     if (oppStatus === "not_exposed_from_module") criticalIssues.push("missing_opportunity_pipeline");
     if ((coachQuality.targetAligned ?? (coachMoveUci === instructionTargetUci)) !== true) criticalIssues.push("coach_target_mismatch");
     if ((coachQuality.pieceAligned ?? (!instructionTargetPieceType || !coachPieceType || instructionTargetPieceType === coachPieceType)) !== true) criticalIssues.push("coach_piece_mismatch");
-    const score = Number(coachQuality.qualityScore ?? 0);
+    const score = Number(trainerFrameResolution.coachQuality.qualityScore ?? coachQuality.qualityScore ?? 0);
     if (score > 0) {
       const source = String(coachDebug.coachDecisionSource ?? coachQuality.source ?? "live_coach");
       const required = source === "verified_safe_fallback" ? 65 : 80;
@@ -1218,6 +1227,9 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       whyVisualRecipeOpportunityLost: coachDebug.whyVisualRecipeOpportunityLost ?? "not_exposed_from_module",
       whyContinuationCandidateOpportunityLost: coachDebug.whyContinuationCandidateOpportunityLost ?? "not_exposed_from_module",
     },
+    featureTrace: stage2FeatureTraceBundle.featureTrace ?? undefined,
+    featureTraceTimeline: stage2FeatureTraceBundle.featureTraceTimeline ?? [],
+    trainerFrameResolution,
     explanation: {
       selectedTemplateId,
       selectedTemplateCategory: input.coachDecision?.utteranceFamily ?? null,

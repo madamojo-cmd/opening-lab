@@ -13,7 +13,7 @@ type Stage2VisibleSurfaceMode =
 export type Stage2CoachCopy = {
   title: string;
   body: string;
-  bullets: string[];
+  bullets?: string[];
 };
 
 type Stage2CoachCopyEnrichmentInput = {
@@ -100,7 +100,7 @@ export function applyStage2CoachCopyEnrichment(input: Stage2CoachCopyEnrichmentI
     copy: {
       title: nextTitle,
       body: nextBody,
-      bullets: base.bullets,
+      bullets: base.bullets ?? [],
     },
     applied: true,
     reason: "approved_packet_applied",

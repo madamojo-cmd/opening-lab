@@ -567,6 +567,9 @@ export function buildDebugCopyEverythingPayload(snapshot: TrainerDebugSnapshot |
       sourceFile: (snapshot?.continuation as any)?.stage2CoachingSourceFile ?? null,
       runtimeMatched: (snapshot?.continuation as any)?.stage2CoachingRuntimeMatched ?? null,
     },
+    featureTrace: snapshot?.featureTrace ?? null,
+    featureTraceTimeline: snapshot?.featureTraceTimeline ?? [],
+    trainerFrameResolution: snapshot?.trainerFrameResolution ?? null,
     coachCardRenderTimeline: Array.isArray(snapshot?.coachCardRenderTimeline) ? snapshot.coachCardRenderTimeline : [],
     coachPipelineTimeline: Array.isArray(snapshot?.coachTimeline) ? snapshot.coachTimeline : [],
     visualTimeline: Array.isArray(snapshot?.visualRenderTimeline) ? snapshot.visualRenderTimeline : [],
@@ -866,6 +869,8 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
           <DebugSection title="Features"><DebugJsonViewer value={snapshot.features} /></DebugSection>
           <DebugSection title="Plans"><DebugJsonViewer value={snapshot.plans} /></DebugSection>
           <DebugSection title="Opportunities"><DebugJsonViewer value={snapshot.opportunities} /></DebugSection>
+          <DebugSection title="Feature Trace"><DebugJsonViewer value={snapshot.featureTrace} /></DebugSection>
+          <DebugSection title="Feature Trace Timeline"><DebugJsonViewer value={snapshot.featureTraceTimeline ?? []} /></DebugSection>
           <DebugSection title="Templates"><DebugJsonViewer value={snapshot.explanation} /></DebugSection>
           <DebugSection title="Presentation"><DebugJsonViewer value={snapshot.presentation} /></DebugSection>
           <DebugSection title="Legacy"><DebugJsonViewer value={snapshot.legacy} /></DebugSection>

@@ -1,3 +1,6 @@
+import type { Stage2FeatureTrace, Stage2FeatureTraceTimelineEntry } from "./stage2FeatureTraceTypes";
+import type { TrainerFrameResolution } from "./trainerFrameResolutionTypes";
+
 export type DebugStatus = "pass" | "warn" | "fail";
 
 export interface DebugEvent {
@@ -46,6 +49,9 @@ export interface TrainerDebugSnapshot {
   features: Record<string, unknown>;
   plans: Record<string, unknown>;
   opportunities: Record<string, unknown>;
+  featureTrace?: Stage2FeatureTrace | Record<string, unknown>;
+  featureTraceTimeline?: Stage2FeatureTraceTimelineEntry[] | Array<Record<string, unknown>>;
+  trainerFrameResolution?: TrainerFrameResolution | Record<string, unknown>;
   explanation: Record<string, unknown>;
   presentation: Record<string, unknown>;
   legacy: Record<string, unknown>;
