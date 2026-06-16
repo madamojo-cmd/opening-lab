@@ -1,3 +1,4 @@
+import type { PendingPromotion, PromotionPiece } from "../runtime/promotionAuthority";
 import type { TrainerFrameResolution, TrainerFrameCoachCardCopy, TrainerFrameCoachCardAuthority } from "./trainerFrameResolutionTypes";
 
 type Input = Record<string, any>;
@@ -40,6 +41,16 @@ function buildCoachCopy(
 function toNumberOrNull(value: unknown): number | null {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
+}
+
+function normalizePromotionPiece(value: unknown): PromotionPiece | null {
+  const text = String(value ?? "").trim().toLowerCase();
+  return text === "q" || text === "r" || text === "b" || text === "n" ? text : null;
+}
+
+function normalizeString(value: unknown): string | null {
+  const text = String(value ?? "").trim();
+  return text.length > 0 ? text : null;
 }
 
 export function buildTrainerFrameResolution(input: Input): TrainerFrameResolution {
@@ -107,6 +118,19 @@ export function buildTrainerFrameResolution(input: Input): TrainerFrameResolutio
   const qualityScoreSource = normalizeText(input.coachQuality?.qualityScoreSource ?? input.renderedQualityScoreSource ?? input.coachQuality?.source ?? null);
   const lowQualityThreshold = qualityScoreSource === "verified_safe_fallback" ? 65 : 80;
   const lowQualityTriggered = finalCoachScore != null && finalCoachScore > 0 && finalCoachScore < lowQualityThreshold;
+  const acceptedTargetUci = normalizeText(input.acceptedTargetUci ?? input.acceptedPromotionUci ?? input.instructionTargetUci ?? null);
+  const promotion: TrainerFrameResolution["promotion"] = {
+    pendingPromotion: (input.pendingPromotion as PendingPromotion | null | undefined) ?? null,
+    promotionPickerRendered: Boolean(input.promotionPickerRendered),
+    promotionOptions: Array.isArray(input.promotionOptions) ? input.promotionOptions.map(String) : [],
+    selectedPromotionPiece: normalizePromotionPiece(input.selectedPromotionPiece),
+    attemptedPromotionUci: normalizeString(input.attemptedPromotionUci),
+    acceptedPromotionUci: normalizeString(input.acceptedPromotionUci),
+    acceptedTargetUci,
+    promotionAuthorityMatched: typeof input.promotionAuthorityMatched === "boolean" ? input.promotionAuthorityMatched : null,
+    promotionAuthorityMismatchReason: normalizeString(input.promotionAuthorityMismatchReason),
+    promotionAuthorityTargetUci: normalizeString(input.promotionAuthorityTargetUci),
+  };
 
   return {
     frameId: input.trainerFrameId ?? input.frameId ?? input.debugFrameId ?? null,
@@ -119,6 +143,7 @@ export function buildTrainerFrameResolution(input: Input): TrainerFrameResolutio
     instructionTargetPieceType: normalizeText(input.instructionTargetPieceType),
     coachMoveUci: normalizeText(input.coachMoveUci ?? input.coachDecision?.debug?.coachMoveUci ?? input.displayedCoachDecision?.debug?.coachMoveUci ?? null),
     coachPieceType: normalizeText(input.coachPieceType ?? input.coachDecision?.debug?.coachPieceType ?? input.displayedCoachDecision?.debug?.coachPieceType ?? null),
+    acceptedTargetUci,
     coachCard: {
       preAuthority,
       pipeline,
@@ -150,5 +175,6 @@ export function buildTrainerFrameResolution(input: Input): TrainerFrameResolutio
       lowQualityThreshold,
       lowQualityBasedOn: renderedQualityScore != null ? "final_rendered" : pipelineQualityScore != null ? "fallback" : "none",
     },
+    promotion,
   };
 }

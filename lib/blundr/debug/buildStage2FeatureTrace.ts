@@ -34,6 +34,8 @@ type DerivedMoveFacts = {
   from: string | null;
   to: string | null;
   pieceType: string | null;
+  isPromotion: boolean;
+  promotionPiece: string | null;
   isCentralPawnAdvance: boolean;
   isMinorPieceDevelopment: boolean;
   isKingSafetyMove: boolean;
@@ -137,6 +139,8 @@ function buildDerivedMoveFacts(input: FeatureTraceInput): DerivedMoveFacts {
       from: null,
       to: null,
       pieceType: null,
+      isPromotion: false,
+      promotionPiece: null,
       isCentralPawnAdvance: false,
       isMinorPieceDevelopment: false,
       isKingSafetyMove: false,
@@ -167,6 +171,8 @@ function buildDerivedMoveFacts(input: FeatureTraceInput): DerivedMoveFacts {
         from,
         to,
         pieceType: null,
+        isPromotion: false,
+        promotionPiece: null,
         isCentralPawnAdvance: false,
         isMinorPieceDevelopment: false,
         isKingSafetyMove: false,
@@ -280,9 +286,12 @@ function buildDerivedMoveFacts(input: FeatureTraceInput): DerivedMoveFacts {
       targetLegal: true,
       moveSan,
       moveUci: requestedMoveUci,
+      acceptedTargetUci: requestedMoveUci,
       from,
       to,
       pieceType,
+      isPromotion: Boolean(move.promotion),
+      promotionPiece: normalizeText(move.promotion) || null,
       isCentralPawnAdvance,
       isMinorPieceDevelopment,
       isKingSafetyMove,
@@ -300,6 +309,8 @@ function buildDerivedMoveFacts(input: FeatureTraceInput): DerivedMoveFacts {
       from,
       to,
       pieceType,
+      isPromotion: Boolean(move.promotion),
+      promotionPiece: normalizeText(move.promotion) || null,
       isCentralPawnAdvance,
       isMinorPieceDevelopment,
       isKingSafetyMove,
@@ -319,6 +330,8 @@ function buildDerivedMoveFacts(input: FeatureTraceInput): DerivedMoveFacts {
       from: null,
       to: null,
       pieceType: null,
+      isPromotion: false,
+      promotionPiece: null,
       isCentralPawnAdvance: false,
       isMinorPieceDevelopment: false,
       isKingSafetyMove: false,
@@ -604,11 +617,11 @@ function buildPseudoFrame(input: FeatureTraceInput, moveFacts: DerivedMoveFacts)
           pieceType: moveFacts.pieceType ?? "p",
           flags: {
             isCapture: moveFacts.isCapture,
-            isCheck: moveFacts.isCheck,
-            isCheckmate: false,
-            isCastle: moveFacts.isCastle,
-            isPromotion: false,
-            isEnPassant: false,
+          isCheck: moveFacts.isCheck,
+          isCheckmate: false,
+          isCastle: moveFacts.isCastle,
+          isPromotion: moveFacts.isPromotion,
+          isEnPassant: false,
           },
           provenance: {
             source: "opening_tree",
@@ -629,7 +642,7 @@ function buildPseudoFrame(input: FeatureTraceInput, moveFacts: DerivedMoveFacts)
           isCentralPawnAdvance: moveFacts.isCentralPawnAdvance,
           isCastle: moveFacts.isCastle,
           isEnPassant: false,
-          promotionPiece: null,
+          promotionPiece: moveFacts.promotionPiece,
           fenBefore: fen,
         }
       : null,
@@ -905,6 +918,24 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
           : "revealed",
   });
   const stage2Resolution = resolveStage2CoachingPacket(stage2Context);
+  const promotionSource = (input.trainerFrameResolution as TrainerFrameResolution | undefined)?.promotion;
+  const promotion: Stage2FeatureTrace["promotion"] = {
+    pendingPromotion: (promotionSource?.pendingPromotion ?? input.pendingPromotion ?? null) as Record<string, unknown> | null,
+    promotionPickerRendered: Boolean(promotionSource?.promotionPickerRendered ?? input.promotionPickerRendered),
+    promotionOptions: Array.isArray(promotionSource?.promotionOptions)
+      ? promotionSource.promotionOptions.map(String)
+      : Array.isArray(input.promotionOptions) ? input.promotionOptions.map(String) : [],
+    selectedPromotionPiece: normalizeText(promotionSource?.selectedPromotionPiece ?? input.selectedPromotionPiece ?? "") || null,
+    attemptedPromotionUci: normalizeText(promotionSource?.attemptedPromotionUci ?? input.attemptedPromotionUci ?? "") || null,
+    acceptedPromotionUci: normalizeText(promotionSource?.acceptedPromotionUci ?? input.acceptedPromotionUci ?? "") || null,
+    acceptedTargetUci: normalizeText(promotionSource?.acceptedTargetUci ?? input.acceptedTargetUci ?? input.acceptedPromotionUci ?? moveFacts.moveUci ?? "") || null,
+    promotionAuthorityMatched: typeof (promotionSource?.promotionAuthorityMatched ?? input.promotionAuthorityMatched) === "boolean"
+      ? Boolean(promotionSource?.promotionAuthorityMatched ?? input.promotionAuthorityMatched)
+      : null,
+    promotionAuthorityMismatchReason: normalizeText(promotionSource?.promotionAuthorityMismatchReason ?? input.promotionAuthorityMismatchReason ?? "") || null,
+    promotionAuthorityTargetUci: normalizeText(promotionSource?.promotionAuthorityTargetUci ?? input.promotionAuthorityTargetUci ?? "") || null,
+  };
+  const acceptedTargetUci = normalizeText((input.trainerFrameResolution as TrainerFrameResolution | undefined)?.acceptedTargetUci ?? input.acceptedTargetUci ?? input.acceptedPromotionUci ?? moveFacts.moveUci ?? "") || null;
 
   const missingReasons: Stage2FeatureTraceMissingReason[] = [];
   const instructionalFrame = Boolean(input.trainerPhase === "ready_for_user" && input.isUserTurn === true);
@@ -936,6 +967,7 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
     lineId,
     moveUci: moveFacts.moveUci,
     moveSan: moveFacts.moveSan,
+    acceptedTargetUci,
     boardFacts: {
       ...moveFacts.boardFacts,
       sideToMove: fen4.split(" ")[1] ?? null,
@@ -967,6 +999,7 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
     selectedOpportunity,
     coachCardResult,
     visualRecipeResult,
+    promotion,
     finalRenderedTitle: coachCardResult.finalRenderedTitle,
     finalRenderedBody: coachCardResult.finalRenderedBody,
     traceStatus: determineTraceStatus(input, {
@@ -976,6 +1009,7 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
       lineId,
       moveUci: moveFacts.moveUci,
       moveSan: moveFacts.moveSan,
+      acceptedTargetUci,
       boardFacts: {},
       detectedFeatures,
       detectedConcepts,
@@ -983,6 +1017,7 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
       selectedOpportunity,
       coachCardResult,
       visualRecipeResult,
+      promotion,
       finalRenderedTitle: coachCardResult.finalRenderedTitle,
       finalRenderedBody: coachCardResult.finalRenderedBody,
       traceStatus: "partial",

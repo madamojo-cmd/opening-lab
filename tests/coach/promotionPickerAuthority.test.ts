@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 
 import { buildDebugCopyEverythingPayload } from "../../components/debug/BlundrDiagnosticsPanel";
+import { buildStage2FeatureTrace } from "../../lib/blundr/debug/buildStage2FeatureTrace";
 import { buildTrainerDebugSnapshot } from "../../lib/blundr/debug/trainerDebugSnapshot";
+import { buildTrainerFrameResolution } from "../../lib/blundr/debug/buildTrainerFrameResolution";
 import { getPendingPromotionFromAttempt, resolvePromotionAuthority } from "../../lib/blundr/runtime/promotionAuthority";
 
 const WHITE_PROMOTION_FEN = "8/2P1k3/8/8/8/8/8/4K3 w - - 0 1";
@@ -103,13 +105,103 @@ export function testPromotionPickerAuthority(): void {
   assert.equal((snapshot as any).promotion.acceptedPromotionUci, "c7c8q");
   assert.equal((snapshot as any).promotion.promotionAuthorityMatched, true);
   assert.equal((snapshot as any).promotion.promotionAuthorityMismatchReason, null);
+  assert.equal((snapshot as any).promotion.acceptedTargetUci, "c7c8q");
 
   const copyEverything = buildDebugCopyEverythingPayload(snapshot);
   assert.equal((copyEverything as any).promotion.attemptedPromotionUci, "c7c8q");
   assert.equal((copyEverything as any).promotion.acceptedPromotionUci, "c7c8q");
+  assert.equal((copyEverything as any).promotion.acceptedTargetUci, "c7c8q");
   assert.equal((copyEverything as any).promotion.promotionPickerRendered, true);
   assert.doesNotThrow(() => buildDebugCopyEverythingPayload(null));
   assert.doesNotThrow(() => buildDebugCopyEverythingPayload(undefined));
+
+  const frameResolution = buildTrainerFrameResolution({
+    trainerFrameId: 7,
+    trainerPhase: "ready_for_user",
+    trainerView: "assisted",
+    trainingMode: "continuation",
+    isUserTurn: true,
+    instructionTargetUci: "c7c8q",
+    coachMoveUci: "c7c8q",
+    coachPieceType: "p",
+    acceptedTargetUci: "c7c8q",
+    pendingPromotion: whitePending,
+    promotionPickerRendered: true,
+    promotionOptions: whitePending?.legalPromotionUcis ?? [],
+    selectedPromotionPiece: "q",
+    attemptedPromotionUci: "c7c8q",
+    acceptedPromotionUci: "c7c8q",
+    promotionAuthorityMatched: true,
+    promotionAuthorityMismatchReason: null,
+    promotionAuthorityTargetUci: "c7c8q",
+    actualCoachCardTitle: "Promote",
+    actualCoachCardBody: "Choose a promotion piece.",
+    actualCoachCardButtons: ["hint"],
+    actualCoachCardSource: "surfaceCoachCardDecision",
+    actualActionSource: "visible_surface_v28",
+    actualVisualSource: "visible_surface_v28",
+    coachQuality: { qualityScore: 92, qualityScoreSource: "final_rendered", lowQualityTriggered: false },
+    renderedVisualPrimitiveCount: 1,
+    surfaceVisualPrimitiveCount: 1,
+  } as any);
+  assert.equal(frameResolution.acceptedTargetUci, "c7c8q");
+  assert.equal(frameResolution.promotion.acceptedPromotionUci, "c7c8q");
+  assert.equal(frameResolution.promotion.promotionAuthorityMatched, true);
+
+  const promotedTrace = buildStage2FeatureTrace({
+    debugEnabled: true,
+    trainerFrameId: 7,
+    trainerPhase: "ready_for_user",
+    trainerView: "assisted",
+    trainingMode: "continuation",
+    isUserTurn: true,
+    fen: WHITE_PROMOTION_FEN,
+    instructionTargetUci: "c7c8q",
+    expectedMoveUci: "c7c8q",
+    expectedMoveSan: "c8=Q",
+    coachMoveUci: "c7c8q",
+    visualMoveUci: "c7c8q",
+    revealTargetUci: "c7c8q",
+    acceptedTargetUci: "c7c8q",
+    pendingPromotion: whitePending,
+    promotionPickerRendered: true,
+    promotionOptions: whitePending?.legalPromotionUcis ?? [],
+    selectedPromotionPiece: "q",
+    attemptedPromotionUci: "c7c8q",
+    acceptedPromotionUci: "c7c8q",
+    promotionAuthorityMatched: true,
+    promotionAuthorityMismatchReason: null,
+    promotionAuthorityTargetUci: "c7c8q",
+    runtimeBookQueried: true,
+    runtimeBookOpeningId: "promotion-test",
+    runtimeBookPlayKeyBefore: "c7c8",
+    runtimeBookStatus: "ready",
+    runtimeBookCandidateCount: 1,
+    runtimeBookTopCandidateUci: "c7c8q",
+    runtimeBookBookExhausted: false,
+    coachDecision: {
+      shouldShowCoachCard: true,
+      title: "Promote",
+      body: "Choose a promotion piece.",
+      debug: { coachDecisionSource: "live_coach", coachMoveUci: "c7c8q" },
+    },
+    presentationFrame: { visual: { shouldRender: true, source: "continuation_candidate", lines: [{ from: "c7", to: "c8" }] }, coach: { shouldRender: true, owner: "intent_first_coach" }, legacy: {} },
+    visibleTeachingSurface: {
+      owner: "v28_visible_surface",
+      mode: "assisted",
+      coach: { shouldRender: true, title: "Promote", body: "Choose a promotion piece." },
+      visual: { lines: [{ from: "c7", to: "c8" }] },
+      actions: [{ kind: "hint" }],
+    },
+    boardLines: [{ from: "c7", to: "c8" }],
+    visualRecipe: { fen: WHITE_PROMOTION_FEN, moveUci: "c7c8q" },
+    visualRecipeOverlay: { visibleSurfaceMode: "assisted", recipeFrameMatchesBoard: true, recipeFenMatchesBoard: true, adapterAllowed: true } as any,
+    visualRecipePlayback: { playbackKey: "promo", animationState: "idle", lines: [], squares: [], replayAvailable: false, animationReducedMotion: false, animationSkippedToEnd: false, animationClearedReason: null, animationSuppressedReason: null, recipeFrameMatchesBoard: true, recipeFenMatchesBoard: true, tacticalPrimitivesRendered: false } as any,
+    eventLog: [],
+  } as any);
+  assert.equal((promotedTrace as any).featureTrace.acceptedTargetUci, "c7c8q");
+  assert.equal((promotedTrace as any).featureTrace.promotion.acceptedPromotionUci, "c7c8q");
+  assert.equal((promotedTrace as any).featureTrace.promotion.promotionAuthorityMatched, true);
 
   const blackSnapshot = buildTrainerDebugSnapshot({
     debugEnabled: true,
@@ -128,6 +220,7 @@ export function testPromotionPickerAuthority(): void {
     promotionAuthorityMatched: true,
     promotionAuthorityMismatchReason: null,
     promotionAuthorityTargetUci: "c2c1n",
+    acceptedTargetUci: "c2c1n",
     presentationFrame: { visual: { shouldRender: false, source: "none" }, coach: { shouldRender: true, owner: "intent_first_coach" }, legacy: {} },
     visibleTeachingSurface: {
       owner: "v28_visible_surface",
@@ -140,6 +233,45 @@ export function testPromotionPickerAuthority(): void {
   } as any);
   assert.equal((blackSnapshot as any).promotion.pendingPromotion.to, "c1");
   assert.equal((blackSnapshot as any).promotion.selectedPromotionPiece, "n");
+
+  const rejectedSnapshot = buildTrainerDebugSnapshot({
+    debugEnabled: true,
+    trainerFrameId: 9,
+    trainerPhase: "ready_for_user",
+    trainerView: "assisted",
+    trainingMode: "restricted",
+    isUserTurn: true,
+    fen: WHITE_PROMOTION_FEN,
+    instructionTargetUci: "c7c8r",
+    expectedMoveUci: "c7c8r",
+    expectedMoveSan: "c8=R",
+    coachMoveUci: "c7c8r",
+    visualMoveUci: "c7c8r",
+    revealTargetUci: "c7c8r",
+    acceptedTargetUci: "c7c8r",
+    pendingPromotion: whitePending,
+    promotionPickerRendered: true,
+    promotionOptions: whitePending?.legalPromotionUcis ?? [],
+    selectedPromotionPiece: "q",
+    attemptedPromotionUci: "c7c8q",
+    acceptedPromotionUci: null,
+    promotionAuthorityMatched: false,
+    promotionAuthorityMismatchReason: "promotion_suffix_mismatch",
+    promotionAuthorityTargetUci: "c7c8r",
+    presentationFrame: { visual: { shouldRender: false, source: "none" }, coach: { shouldRender: true, owner: "intent_first_coach" }, legacy: {} },
+    visibleTeachingSurface: {
+      owner: "v28_visible_surface",
+      mode: "assisted",
+      coach: { shouldRender: true, title: "Promote", body: "Pick the promotion piece." },
+      visual: { lines: [] },
+      actions: [{ kind: "hint" }],
+    },
+    eventLog: [],
+  } as any);
+  assert.equal((rejectedSnapshot as any).promotion.attemptedPromotionUci, "c7c8q");
+  assert.equal((rejectedSnapshot as any).promotion.acceptedPromotionUci, null);
+  assert.equal((rejectedSnapshot as any).promotion.acceptedTargetUci, "c7c8r");
+  assert.equal((rejectedSnapshot as any).promotion.promotionAuthorityMatched, false);
 }
 
 testPromotionPickerAuthority();

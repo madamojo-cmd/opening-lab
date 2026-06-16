@@ -167,8 +167,8 @@ export function testTrainerDebugSnapshot(): void {
   assert.equal((v28Parity.coach as any).visibleTitle, "Challenge the center");
   assert.equal((v28Parity.coach as any).visibleBody, "Play e4 to challenge central squares.");
   assert.equal((v28Parity.coach as any).visibleBody.includes("safest improving move"), false);
-  assert.equal((v28Parity as any).trainerFrameResolution?.coachCard?.finalRendered?.title, (v28Parity.coach as any).visibleTitle);
-  assert.equal((v28Parity as any).trainerFrameResolution?.coachCard?.finalRendered?.body, (v28Parity.coach as any).visibleBody);
+  assert.equal((v28Parity as any).featureTrace?.finalRenderedTitle, (v28Parity.coach as any).visibleTitle);
+  assert.equal((v28Parity as any).featureTrace?.finalRenderedBody, (v28Parity.coach as any).visibleBody);
 
   const finalQuality = buildTrainerDebugSnapshot({
     debugEnabled: true,

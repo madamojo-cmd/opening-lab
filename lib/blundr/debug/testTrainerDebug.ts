@@ -5,6 +5,7 @@ import { testTrainerDebugSanitizer } from "./__tests__/trainerDebugSanitizer.tes
 import { testTrainerDebugSnapshot } from "./__tests__/trainerDebugSnapshot.test";
 import { testTrainerFrameResolutionPageParity } from "../../../tests/coach/trainerFrameResolutionPageParity.test";
 import { testStage2ContentDebugVisibility } from "./__tests__/stage2ContentDebugVisibility.test";
+import { testRuntimeDataSourceDebug } from "../../../tests/coach/runtimeDataSourceDebug.test";
 import { testMultiMoveTrainingQa } from "./testMultiMoveTrainingQa";
 import { testCurrentInstructionFrame } from "../runtime/__tests__/currentInstructionFrame.test";
 import { testOpponentReplyGuard } from "../runtime/__tests__/opponentReplyGuard.test";
@@ -12,6 +13,7 @@ import { testRestrictedLineExhaustionContract } from "../runtime/__tests__/restr
 import { testContinuationCandidateVisual } from "../visual/__tests__/continuationCandidateVisual.test";
 import { testCoachActionStylePolicy } from "../presentation/__tests__/coachActionStylePolicy.test";
 import { testRenderedCoachCopyAuthority } from "../presentation/__tests__/renderedCoachCopyAuthority.test";
+import { testPromotionPickerAuthority } from "../../../tests/coach/promotionPickerAuthority.test";
 
 export function testTrainerDebug(): void {
   console.log("Running Blundr trainer debug QA...");
@@ -19,8 +21,12 @@ export function testTrainerDebug(): void {
   console.log("✓ trainer debug snapshot passed");
   testStage2ContentDebugVisibility();
   console.log("✓ stage2 content debug visibility passed");
+  testRuntimeDataSourceDebug();
+  console.log("✓ runtime data source debug passed");
   testStage2FeatureTrace();
   console.log("✓ stage2 feature trace passed");
+  testPromotionPickerAuthority();
+  console.log("✓ promotion picker authority passed");
   testTrainerFrameResolutionPageParity();
   console.log("✓ trainer frame resolution page parity passed");
   testTrainerDebugSanitizer();

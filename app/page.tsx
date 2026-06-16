@@ -56,6 +56,8 @@ import { buildContinuationCandidateVisual } from "@/lib/blundr/visual/continuati
 import { buildOpeningTree } from "@/lib/blundr/openings/openingTree";
 import { resolveExpectedMoveForFrame } from "@/lib/blundr/openings/expectedMoveResolver";
 import { buildOpeningResolverDebug } from "@/lib/blundr/openings/openingResolverDebug";
+import { STAGE2_OPENING_AVAILABILITY_MATRIX, getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
+import { STAGE2_RUNTIME_TRAINABLE_REPERTOIRES } from "@/lib/blundr/openings/runtimeTrainableRepertoires";
 import { decideGuidedCoveragePolicy } from "@/lib/blundr/openings/guidedCoveragePolicy";
 import type { RepertoireLineInput } from "@/lib/blundr/openings/openingTypes";
 import { buildCurrentInstructionFrame, isBookLikeInstructionTarget } from "@/lib/blundr/runtime/currentInstructionFrame";
@@ -1072,6 +1074,7 @@ export default function App(){
   const [selectedSquare,setSelectedSquare]=useState<string|null>(null);
   const [pendingPromotion,setPendingPromotion]=useState<PendingPromotion|null>(null);
   const [promotionAuthorityDebug,setPromotionAuthorityDebug]=useState<{
+    frameId: number;
     selectedPromotionPiece: PromotionPiece | null;
     attemptedPromotionUci: string | null;
     acceptedPromotionUci: string | null;
@@ -1260,7 +1263,13 @@ export default function App(){
   const brainAbortRef=useRef<AbortController|null>(null);
   const visualAbortRef=useRef<AbortController|null>(null);
   useEffect(()=>{setBlundrDebugEnabled(isBlundrDebugEnabled())},[]);
-  const repertoires=useMemo(()=>[...OPENINGS,...customRepertoires],[customRepertoires]);
+  const repertoires=useMemo(()=>{
+    const merged=new Map<string,Repertoire>();
+    for(const repertoire of OPENINGS) merged.set(repertoire.id,repertoire);
+    for(const repertoire of STAGE2_RUNTIME_TRAINABLE_REPERTOIRES) merged.set(repertoire.id,repertoire);
+    for(const repertoire of customRepertoires) merged.set(repertoire.id,repertoire);
+    return [...merged.values()];
+  },[customRepertoires]);
   const repertoire=repertoires.find(r=>r.id===selectedRepertoireId)??repertoires[0];
   const openingTree=useMemo(()=>buildOpeningTree(repertoireLineInputs(repertoire)),[repertoire]);
   const game=useMemo(()=>new Chess(fen),[fen]);
@@ -1308,6 +1317,10 @@ export default function App(){
   const runtimeOpeningIdForFrame=useMemo(
     ()=>resolveRuntimeOpeningId(repertoire.id),
     [repertoire.id],
+  );
+  const selectedOpeningAvailability=useMemo(
+    ()=>getStage2OpeningAvailability(selectedRepertoireId),
+    [selectedRepertoireId],
   );
   const runtimePlayKeyBeforeForFrame=useMemo(
     ()=>buildRuntimePlayKeyBeforeFromSanHistory(moveHistory),
@@ -4332,7 +4345,52 @@ export default function App(){
     }
     if(pendingOpponentRequest) clearPendingOpponentReplyRequest({clearStaleIssue:true});
   },[activeTab,fen,bookComplete,isUserTurn,isReviewingHistory,selectedRepertoireId,trainingMode,ratingFilter,game,endingInfo?.title,trainerPhase,pendingOpponentRequest,branchCompleteEligibleNow,runtimeBookFrameShouldQuery,runtimeBookFrameQuery.status]);
-  async function loadExplorer(positionFen:string){const cacheKey=`${normalizeFen(positionFen)}|${ratingFilter}|${speedFilter}`;if(explorerCache.current[cacheKey]){const parsed=parseExplorerMoves(explorerCache.current[cacheKey]);setExplorerMoves(parsed);setBrain(p=>({...p,lichess:"cached"}));return parsed}setBrain(p=>({...p,lichess:"loading"}));const start=performance.now();try{const params=new URLSearchParams({fen:positionFen,source:"lichess",moves:"25",ratings:ratingFilter,speeds:speedFilter});const res=await fetch(`/api/explorer?${params.toString()}`);const payload=await res.json();explorerCache.current[cacheKey]=payload;const parsed=parseExplorerMoves(payload);setExplorerMoves(parsed);setBrain(p=>({...p,lichess:payload.fallback?"fallback":"active",latency:Math.round(performance.now()-start),note:payload.reason??`${parsed.length} Lichess moves`}));return parsed}catch(e){setBrain(p=>({...p,lichess:"error",note:e instanceof Error?e.message:"Explorer failed"}));return[]}}
+  async function loadExplorer(positionFen:string){
+    const cacheKey=`${normalizeFen(positionFen)}|${ratingFilter}|${speedFilter}`;
+    if(explorerCache.current[cacheKey]){
+      const parsed=parseExplorerMoves(explorerCache.current[cacheKey]);
+      setExplorerMoves(parsed);
+      setBrain(p=>({...p,lichess:"cached",note:"Local runtime package cache"}));
+      return parsed;
+    }
+    const currentFen4=normalizeFen(positionFen);
+    const currentOpeningNodes=openingTree.nodesByFen4[currentFen4]??[];
+    const seenUcis=new Set<string>();
+    const localRows=currentOpeningNodes.flatMap((node)=>node.continuations).flatMap((move)=>{
+      if(seenUcis.has(move.uci)) return [];
+      seenUcis.add(move.uci);
+      const total=currentOpeningNodes.filter((openingNode)=>openingNode.continuations.some((continuation)=>continuation.uci===move.uci)).length;
+      return [{
+        uci:move.uci,
+        san:move.san,
+        white:move.color==="w"?Math.max(1,total):0,
+        draws:0,
+        black:move.color==="b"?Math.max(1,total):0,
+        averageRating:undefined,
+      }];
+    });
+    const source = localRows.length ? "local_crawled_package" : "local_legal_fallback";
+    const payload = {
+      source,
+      fallback: source === "local_legal_fallback",
+      reason: source === "local_crawled_package" ? `${localRows.length} local runtime moves` : "Local legal-move fallback",
+      moves: localRows.length
+        ? localRows
+        : (new Chess(positionFen).moves({ verbose: true }) as any[]).map((move) => ({
+            uci: moveToUci(move),
+            san: move.san,
+            white: 1,
+            draws: 0,
+            black: 0,
+            averageRating: undefined,
+          })),
+    };
+    explorerCache.current[cacheKey]=payload;
+    const parsed=parseExplorerMoves(payload);
+    setExplorerMoves(parsed);
+    setBrain(p=>({...p,lichess:source==="local_crawled_package"?"active":"fallback",latency:0,note:payload.reason}));
+    return parsed;
+  }
   async function runBrain(eventType:string,extra:Record<string,any>={}){
     if(activeTab!=="train")return null;
     const requestFen=fen;
@@ -5070,11 +5128,15 @@ export default function App(){
     }
     const playedUci=moveToUci(legal);
     if (promotionPiece) {
-      setPromotionAuthorityDebug(resolvePromotionAuthority({
+      const promotionAuthorityResult=resolvePromotionAuthority({
         attemptedPromotionUci: playedUci,
-        acceptedPromotionUci: playedUci,
         authorityPromotionUci: expectedUserOptions[0]?.uci ?? instructionTarget?.uci ?? null,
-      }));
+      });
+      setPromotionAuthorityDebug({
+        frameId: trainerFrameId,
+        ...promotionAuthorityResult,
+        acceptedPromotionUci: promotionAuthorityResult.promotionAuthorityMatched ? playedUci : null,
+      });
     }
     if(trainingMode==="continuation"){
       let ratingSource=mapEngineLinesToStockfishTopMoves({
@@ -5714,6 +5776,11 @@ export default function App(){
   ]);
   const visualMoveUciForDebug=boardLinesToRender[0]?`${boardLinesToRender[0].from}${boardLinesToRender[0].to}`:null;
   const visualTargetMatchesInstructionTarget=instructionTarget?.uci?visualMoveUciForDebug===instructionTarget.uci:"unknown";
+  const promotionDebugActive=promotionAuthorityDebug?.frameId===trainerFrameId?promotionAuthorityDebug:null;
+  const acceptedTargetUci=promotionDebugActive
+    ? promotionDebugActive.acceptedPromotionUci??instructionTarget?.uci??null
+    : instructionTarget?.uci??null;
+  const promotionAuthorityTargetUci=expectedUserOptions[0]?.uci??instructionTarget?.uci??null;
   const trainerFrameResolution=buildTrainerFrameResolution({
     trainerFrameId,
     trainerPhase,
@@ -5725,6 +5792,16 @@ export default function App(){
     instructionTargetPieceType: instructionTarget?.pieceType ?? null,
     coachMoveUci: (displayedCoachDecision?.debug as any)?.coachMoveUci ?? instructionTarget?.uci ?? null,
     coachPieceType: (displayedCoachDecision?.debug as any)?.coachPieceType ?? instructionTarget?.pieceType ?? null,
+    acceptedTargetUci,
+    pendingPromotion,
+    promotionPickerRendered: Boolean(pendingPromotion),
+    promotionOptions: pendingPromotion?.legalPromotionUcis ?? [],
+    selectedPromotionPiece: promotionDebugActive?.selectedPromotionPiece ?? null,
+    attemptedPromotionUci: promotionDebugActive?.attemptedPromotionUci ?? null,
+    acceptedPromotionUci: promotionDebugActive?.acceptedPromotionUci ?? null,
+    promotionAuthorityMatched: promotionDebugActive?.promotionAuthorityMatched ?? null,
+    promotionAuthorityMismatchReason: promotionDebugActive?.promotionAuthorityMismatchReason ?? null,
+    promotionAuthorityTargetUci,
     visibleTeachingSurface,
     visibleSurfaceOwner: visibleTeachingSurface?.owner ?? null,
     visibleSurfaceMode: v28VisibleSurface?.mode ?? visibleTeachingSurface?.mode ?? null,
@@ -5762,7 +5839,6 @@ export default function App(){
   const legacyAnswerCardActuallyRendered=false;
   const legacyMoveImpactActuallyRendered=false;
   const legacyNextTextActuallyRendered=false;
-  const promotionAuthorityTargetUci=expectedUserOptions[0]?.uci??instructionTarget?.uci??null;
   const promotionPickerRendered=Boolean(pendingPromotion);
   const diagnosticsSnapshot=blundrDebugEnabled?collectTrainerDebugSnapshot({
     debugEnabled:blundrDebugEnabled,
@@ -5832,11 +5908,12 @@ export default function App(){
     pendingPromotion,
     promotionPickerRendered,
     promotionOptions:pendingPromotion?.legalPromotionUcis??[],
-    selectedPromotionPiece:promotionAuthorityDebug?.selectedPromotionPiece??null,
-    attemptedPromotionUci:promotionAuthorityDebug?.attemptedPromotionUci??null,
-    acceptedPromotionUci:promotionAuthorityDebug?.acceptedPromotionUci??null,
-    promotionAuthorityMatched:promotionAuthorityDebug?.promotionAuthorityMatched??null,
-    promotionAuthorityMismatchReason:promotionAuthorityDebug?.promotionAuthorityMismatchReason??null,
+    selectedPromotionPiece:promotionDebugActive?.selectedPromotionPiece??null,
+    attemptedPromotionUci:promotionDebugActive?.attemptedPromotionUci??null,
+    acceptedPromotionUci:promotionDebugActive?.acceptedPromotionUci??null,
+    acceptedTargetUci,
+    promotionAuthorityMatched:promotionDebugActive?.promotionAuthorityMatched??null,
+    promotionAuthorityMismatchReason:promotionDebugActive?.promotionAuthorityMismatchReason??null,
     promotionAuthorityTargetUci,
     visualMoveUci:visualMoveUciForDebug,
     visualRecipeMoveUci,
@@ -5892,6 +5969,15 @@ export default function App(){
     runtimeBookFallbackAuthority:runtimeBookFrameQuery.bookExhausted?(
       continuationResolvedTargetSource==="stockfish_top_move"?"stockfish":"none"
     ):null,
+    runtimeDataSource:"local_crawled_package",
+    runtimePackageId:"stage2-21-opening-stepdown-runtime-v1",
+    openingCount:STAGE2_OPENING_AVAILABILITY_MATRIX.length,
+    visibleOpeningCount:STAGE2_OPENING_AVAILABILITY_MATRIX.filter((opening)=>opening.userVisible).length,
+    selectedOpeningRuntimeAvailable:selectedOpeningAvailability?.runtimeAvailable ?? null,
+    selectedOpeningContentStatus:selectedOpeningAvailability?.contentStatus ?? null,
+    candidateSource:selectedOpeningAvailability?.runtimeAvailable ? "local_runtime_package" : "curated_repertoire",
+    liveLichessCalled:false,
+    openingAvailabilityStatus:selectedOpeningAvailability?.runtimeAvailable ? "runtime_available" : (selectedOpeningAvailability?.qaStatus ?? "smoke_pass"),
     stage2CoachingResolverEnabled:STAGE2_COACHING_RESOLVER_ENABLED,
     stage2ApprovedContentEnabled:STAGE2_APPROVED_CONTENT_ENABLED,
     stage2SafeFallbackEnabled:STAGE2_SAFE_FALLBACK_ENABLED,
@@ -6124,8 +6210,8 @@ export default function App(){
     surfaceTwoPieceMismatch: visibleTeachingSurface?.debug?.twoPieceTypeMismatch ?? false,
   }):null;
   return <main className="min-h-screen bg-[#f7f7f4] text-stone-950"><div className="mx-auto flex min-h-screen max-w-md flex-col px-4 pb-24 pt-5">
-    {activeTab==="home"&&<section className="space-y-6"><header className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-green-700 text-white shadow-sm"><Beaker size={20}/></div><div><h1 className="text-2xl font-bold tracking-tight">Blundr</h1><p className="text-sm text-stone-500">Visual opening training with a controlled trainer.</p></div></div><button onClick={()=>setShowSettings(true)} className="rounded-2xl bg-white p-3 shadow-sm"><Settings className="text-stone-500" size={20}/></button></header><div className="grid grid-cols-2 gap-3"><MetricCard label="Accuracy" value={`${accuracy}%`} sub="all time" icon={<Trophy size={19}/>}/><MetricCard label="Streak" value={String(progress.streak)} sub="correct" icon={<Flame size={19}/>}/><MetricCard label="Review" value={String(mistakes.length)} sub="mistakes" icon={<XCircle size={19}/>} warning/><MetricCard label="Openings" value={String(repertoires.length)} sub="available" icon={<BookOpen size={19}/>}/></div><div className="rounded-3xl bg-stone-900 p-4 text-white shadow-sm"><div className="flex items-center gap-2 text-sm font-bold text-green-300"><Cloud size={17}/> v2.7.33</div><p className="mt-2 text-sm leading-6 text-stone-300">Training now uses rule-only visual cues by default. Blundr Brain is reserved for manual reveal/debug, so normal practice stays fast, deterministic, and inexpensive.</p></div><div className="space-y-3">{repertoires.slice(0,5).map(r=><button key={r.id} onClick={()=>selectRepertoire(r.id)} className="flex w-full items-center gap-3 rounded-3xl border border-stone-200 bg-white p-3 text-left shadow-sm"><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {countPositions(r)} positions</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>)}</div></section>}
-    {activeTab==="repertoire"&&<section className="space-y-5"><header className="flex items-start justify-between gap-3"><div><h1 className="text-2xl font-bold tracking-tight">Repertoires</h1><p className="text-sm text-stone-500">Reliable openings included in the app.</p></div><button onClick={()=>setShowAddLine(true)} className="rounded-2xl bg-green-700 px-4 py-2 text-sm font-black text-white">Add</button></header><div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-sm"><Search size={18} className="text-stone-400"/><span className="text-sm text-stone-400">Search repertoires</span></div><div className="space-y-3">{repertoires.map(r=><button key={r.id} onClick={()=>selectRepertoire(r.id)} className={classNames("flex w-full items-center gap-3 rounded-3xl border bg-white p-3 text-left shadow-sm",r.id===selectedRepertoireId?"border-green-700":"border-stone-200")}><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {countPositions(r)} positions • {r.color}</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>)}</div></section>}
+    {activeTab==="home"&&<section className="space-y-6"><header className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-green-700 text-white shadow-sm"><Beaker size={20}/></div><div><h1 className="text-2xl font-bold tracking-tight">Blundr</h1><p className="text-sm text-stone-500">Visual opening training with a controlled trainer.</p></div></div><button onClick={()=>setShowSettings(true)} className="rounded-2xl bg-white p-3 shadow-sm"><Settings className="text-stone-500" size={20}/></button></header><div className="grid grid-cols-2 gap-3"><MetricCard label="Accuracy" value={`${accuracy}%`} sub="all time" icon={<Trophy size={19}/>}/><MetricCard label="Streak" value={String(progress.streak)} sub="correct" icon={<Flame size={19}/>}/><MetricCard label="Review" value={String(mistakes.length)} sub="mistakes" icon={<XCircle size={19}/>} warning/><MetricCard label="Runtime openings" value={String(STAGE2_OPENING_AVAILABILITY_MATRIX.length)} sub="local crawled" icon={<BookOpen size={19}/>}/></div><div className="rounded-3xl bg-stone-900 p-4 text-white shadow-sm"><div className="flex items-center gap-2 text-sm font-bold text-green-300"><Cloud size={17}/> v2.7.33</div><p className="mt-2 text-sm leading-6 text-stone-300">Training now uses rule-only visual cues by default. Blundr Brain is reserved for manual reveal/debug, so normal practice stays fast, deterministic, and inexpensive.</p></div><div className="space-y-3">{repertoires.slice(0,5).map(r=><button key={r.id} onClick={()=>selectRepertoire(r.id)} className="flex w-full items-center gap-3 rounded-3xl border border-stone-200 bg-white p-3 text-left shadow-sm"><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {countPositions(r)} positions</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>)}</div></section>}
+    {activeTab==="repertoire"&&<section className="space-y-5"><header className="flex items-start justify-between gap-3"><div><h1 className="text-2xl font-bold tracking-tight">Repertoires</h1><p className="text-sm text-stone-500">Reliable openings included in the app.</p></div><button onClick={()=>setShowAddLine(true)} className="rounded-2xl bg-green-700 px-4 py-2 text-sm font-black text-white">Add</button></header><div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-sm"><Search size={18} className="text-stone-400"/><span className="text-sm text-stone-400">Search repertoires</span></div><div className="space-y-3">{repertoires.map(r=><button key={r.id} onClick={()=>selectRepertoire(r.id)} className={classNames("flex w-full items-center gap-3 rounded-3xl border bg-white p-3 text-left shadow-sm",r.id===selectedRepertoireId?"border-green-700":"border-stone-200")}><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {countPositions(r)} positions • {r.color}</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>)}</div><div className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm"><div className="mb-3 flex items-center justify-between gap-3"><div><h2 className="text-lg font-black tracking-tight">Runtime catalog</h2><p className="text-sm text-stone-500">Local crawled runtime package training lines for all 21 openings.</p></div><div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-600">{STAGE2_OPENING_AVAILABILITY_MATRIX.length} visible</div></div><div className="grid gap-2">{STAGE2_OPENING_AVAILABILITY_MATRIX.map((opening)=>{const trainable=repertoires.some((rep)=>rep.id===opening.openingId);return <button key={opening.openingId} onClick={()=>selectRepertoire(opening.openingId)} className={classNames("flex items-center justify-between gap-3 rounded-2xl border p-3 text-left shadow-sm",trainable?"border-green-200 bg-green-50":"border-stone-200 bg-stone-50 opacity-90")}><div className="min-w-0"><div className="font-bold">{opening.displayName}</div><div className="text-xs text-stone-500">{opening.openingId} • {opening.learnerPerspective} • {opening.runtimeNodeCount.toLocaleString()} nodes • {opening.runtimeCandidateMoveCount.toLocaleString()} moves</div></div><div className="text-right text-xs font-black text-stone-500"><div>{opening.contentStatus}</div><div>{opening.qaStatus}</div></div></button>})}</div></div></section>}
     {activeTab==="train"&&<section className="space-y-4">
       <header className="flex items-start justify-between gap-3">
         <div>

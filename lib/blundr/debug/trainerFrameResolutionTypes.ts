@@ -1,3 +1,5 @@
+import type { PendingPromotion, PromotionPiece } from "../runtime/promotionAuthority";
+
 export type TrainerFrameCoachCardAuthority = "pipeline_coach_decision" | "visible_surface_v28" | "unknown";
 
 export type TrainerFrameCoachCardCopy = {
@@ -44,6 +46,19 @@ export type TrainerFrameCoachQualityResolution = {
   lowQualityBasedOn: "final_rendered" | "fallback" | "none";
 };
 
+export type TrainerFramePromotionResolution = {
+  pendingPromotion: PendingPromotion | null;
+  promotionPickerRendered: boolean;
+  promotionOptions: string[];
+  selectedPromotionPiece: PromotionPiece | null;
+  attemptedPromotionUci: string | null;
+  acceptedPromotionUci: string | null;
+  acceptedTargetUci: string | null;
+  promotionAuthorityMatched: boolean | null;
+  promotionAuthorityMismatchReason: string | null;
+  promotionAuthorityTargetUci: string | null;
+};
+
 export type TrainerFrameResolution = {
   frameId: string | number | null;
   trainerPhase: string | null;
@@ -55,7 +70,9 @@ export type TrainerFrameResolution = {
   instructionTargetPieceType: string | null;
   coachMoveUci: string | null;
   coachPieceType: string | null;
+  acceptedTargetUci: string | null;
   coachCard: TrainerFrameCoachCardResolution;
   visual: TrainerFrameVisualResolution;
   coachQuality: TrainerFrameCoachQualityResolution;
+  promotion: TrainerFramePromotionResolution;
 };

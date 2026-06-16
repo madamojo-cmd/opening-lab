@@ -6,6 +6,10 @@ import { computeInstructionFrameKey } from "../runtime/currentInstructionFrame";
 import { analyzeBlundrPosition } from "../brain/analyzeBlundrPosition";  // v2.7.39.2+ Brain facade exposure (debug only for now)
 import { buildStage2FeatureTrace } from "./buildStage2FeatureTrace";
 import { buildTrainerFrameResolution } from "./buildTrainerFrameResolution";
+import {
+  getStage2OpeningAvailability,
+  getStage2OpeningAvailabilitySummary,
+} from "../openings/openingAvailability";
 
 function len(value: unknown): number {
   return Array.isArray(value) ? value.length : value && typeof value === "object" ? Object.keys(value as Record<string, unknown>).length : 0;
@@ -153,13 +157,18 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   const revealTargetUci = input.revealTargetUci ?? input.lastActionDebug?.revealTargetUci ?? null;
   const revealTargetSource = input.revealTargetSource ?? input.lastActionDebug?.revealTargetSource ?? null;
   const visualRecipeMoveUci = input.visualRecipeMoveUci ?? input.visualRecipe?.moveUci ?? null;
+  const acceptedTargetUci = input.trainerFrameResolution?.promotion?.acceptedTargetUci ?? input.acceptedTargetUci ?? input.promotionAuthorityTargetUci ?? instructionTargetUci;
   const visualRecipeTargetMatchesInstructionTarget =
     input.visualRecipeTargetMatchesInstructionTarget ??
     (instructionTargetUci && visualRecipeMoveUci ? visualRecipeMoveUci === instructionTargetUci : "unknown");
   const criticalIssues: string[] = [];
   const warnings: string[] = [];
   const coachQuality = (input.coachQuality ?? coachDebug.coachQuality ?? {}) as any;
-  const stage2FeatureTraceBundle = isTeachingFrame(input) ? buildStage2FeatureTrace(input) : { featureTrace: null, featureTraceTimeline: [] };
+  const stage2FeatureTraceBundle = isTeachingFrame(input)
+    ? buildStage2FeatureTrace({ ...input, trainerFrameResolution })
+    : { featureTrace: null, featureTraceTimeline: [] };
+  const runtimeAvailabilitySummary = getStage2OpeningAvailabilitySummary();
+  const selectedOpeningAvailability = getStage2OpeningAvailability(String(input.selectedOpeningId ?? input.selectedRepertoireId ?? ""));
   const containsDebugLeak = Boolean(coachQuality.containsDebugLeak) || hasDebugLeakText(visibleBodyText);
   const instructionalCoachRecords = Array.isArray(input.lastCoachRecords)
     ? input.lastCoachRecords.filter((record: any) => record?.trainerPhase === "ready_for_user" && record?.instructionTargetUci).slice(-5)
@@ -1049,15 +1058,37 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       candidateDebugList: input.opponentVariationDebug?.candidateOpponentBranches ?? [],
     },
     promotion: {
-      pendingPromotion: input.pendingPromotion ?? null,
-      promotionPickerRendered: Boolean(input.promotionPickerRendered),
-      promotionOptions: Array.isArray(input.promotionOptions) ? input.promotionOptions.map(String) : [],
-      selectedPromotionPiece: input.selectedPromotionPiece ?? null,
-      attemptedPromotionUci: input.attemptedPromotionUci ?? null,
-      acceptedPromotionUci: input.acceptedPromotionUci ?? null,
-      promotionAuthorityMatched: input.promotionAuthorityMatched ?? null,
-      promotionAuthorityMismatchReason: input.promotionAuthorityMismatchReason ?? null,
-      promotionAuthorityTargetUci: input.promotionAuthorityTargetUci ?? null,
+      pendingPromotion: input.trainerFrameResolution?.promotion?.pendingPromotion ?? input.pendingPromotion ?? null,
+      promotionPickerRendered: Boolean(input.trainerFrameResolution?.promotion?.promotionPickerRendered ?? input.promotionPickerRendered),
+      promotionOptions: Array.isArray(input.trainerFrameResolution?.promotion?.promotionOptions)
+        ? input.trainerFrameResolution.promotion.promotionOptions.map(String)
+        : Array.isArray(input.promotionOptions) ? input.promotionOptions.map(String) : [],
+      selectedPromotionPiece: input.trainerFrameResolution?.promotion?.selectedPromotionPiece ?? input.selectedPromotionPiece ?? null,
+      attemptedPromotionUci: input.trainerFrameResolution?.promotion?.attemptedPromotionUci ?? input.attemptedPromotionUci ?? null,
+      acceptedPromotionUci: input.trainerFrameResolution?.promotion?.acceptedPromotionUci ?? input.acceptedPromotionUci ?? null,
+      acceptedTargetUci: input.trainerFrameResolution?.promotion?.acceptedTargetUci ?? input.acceptedTargetUci ?? input.promotionAuthorityTargetUci ?? input.instructionTargetUci ?? null,
+      promotionAuthorityMatched: input.trainerFrameResolution?.promotion?.promotionAuthorityMatched ?? input.promotionAuthorityMatched ?? null,
+      promotionAuthorityMismatchReason: input.trainerFrameResolution?.promotion?.promotionAuthorityMismatchReason ?? input.promotionAuthorityMismatchReason ?? null,
+      promotionAuthorityTargetUci: input.trainerFrameResolution?.promotion?.promotionAuthorityTargetUci ?? input.promotionAuthorityTargetUci ?? null,
+    },
+    runtime: {
+      runtimeDataSource: runtimeAvailabilitySummary.runtimeDataSource,
+      runtimePackageId: runtimeAvailabilitySummary.runtimePackageId,
+      openingCount: runtimeAvailabilitySummary.openingCount,
+      visibleOpeningCount: runtimeAvailabilitySummary.visibleOpeningCount,
+      runtimeAvailableCount: runtimeAvailabilitySummary.runtimeAvailableCount,
+      approvedContentAvailableCount: runtimeAvailabilitySummary.approvedContentAvailableCount,
+      selectedOpeningId: input.selectedOpeningId ?? input.selectedRepertoireId ?? null,
+      selectedOpeningRuntimeAvailable: Boolean(selectedOpeningAvailability?.runtimeAvailable),
+      selectedOpeningContentStatus: selectedOpeningAvailability?.contentStatus ?? "none",
+      candidateSource: input.candidateSource ?? (input.runtimeBookQueried ? "local_crawled_package" : null),
+      liveLichessCalled: false,
+      openingAvailabilityStatus: selectedOpeningAvailability?.runtimeAvailable
+        ? "runtime_available"
+        : (selectedOpeningAvailability?.qaStatus ?? runtimeAvailabilitySummary.openingAvailabilityStatus),
+      selectedOpeningDisplayName: selectedOpeningAvailability?.displayName ?? null,
+      selectedOpeningPerspective: selectedOpeningAvailability?.learnerPerspective ?? null,
+      selectedOpeningUserVisible: selectedOpeningAvailability?.userVisible ?? null,
     },
     maia: {
       maiaEnabled: Boolean(input.maiaEnabled),
@@ -1367,10 +1398,10 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       passFail: {
         visualRecipeIndependent: !criticalIssues.some((issue) => issue.includes("VisualRecipe exists")),
         coachMatchesExpectedMove: expectedMoveExists ? coachFailureKind === "none" : "unknown",
-      revealButtonFunctional: input.lastActionDebug?.lastClickedAction?.includes("reveal") ? Boolean(input.lastActionDebug?.stateChanged) : "unknown",
+        revealButtonFunctional: input.lastActionDebug?.lastClickedAction?.includes("reveal") ? Boolean(input.lastActionDebug?.stateChanged) : "unknown",
         instructionTargetAligned:
           instructionTargetUci
-            ? coachMoveUci === instructionTargetUci && visualMoveUci === instructionTargetUci && revealTargetUci === instructionTargetUci
+            ? coachMoveUci === instructionTargetUci && visualMoveUci === instructionTargetUci && revealTargetUci === instructionTargetUci && acceptedTargetUci === instructionTargetUci
             : "unknown",
         continuationLinesAvailable: input.trainingMode === "continuation" ? continuationLinesPassedToBoard > 0 || !input.selectedCandidateUci : "unknown",
         noLegacyBypass: !input.legacyBypassDetected && !(input.visibleTeachingSurface?.safety?.legacyBypassDetected),

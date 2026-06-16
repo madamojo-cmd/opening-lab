@@ -105,6 +105,19 @@ export interface Stage2FeatureTraceVisualRecipeResult {
   source: string | null;
 }
 
+export interface Stage2FeatureTracePromotionResult {
+  pendingPromotion: Record<string, unknown> | null;
+  promotionPickerRendered: boolean;
+  promotionOptions: string[];
+  selectedPromotionPiece: string | null;
+  attemptedPromotionUci: string | null;
+  acceptedPromotionUci: string | null;
+  acceptedTargetUci: string | null;
+  promotionAuthorityMatched: boolean | null;
+  promotionAuthorityMismatchReason: string | null;
+  promotionAuthorityTargetUci: string | null;
+}
+
 export interface Stage2FeatureTraceTimelineEntry {
   stage: "detected" | "ranked" | "rendered";
   frameId: string | number | null;
@@ -118,6 +131,7 @@ export interface Stage2FeatureTrace {
   lineId: string | null;
   moveUci: string | null;
   moveSan: string | null;
+  acceptedTargetUci: string | null;
   boardFacts: Record<string, unknown>;
   detectedFeatures: Stage2FeatureTraceDetectedFeature[];
   detectedConcepts: Stage2FeatureTraceDetectedConcept[];
@@ -125,6 +139,7 @@ export interface Stage2FeatureTrace {
   selectedOpportunity: Stage2FeatureTraceRankedOpportunity | null;
   coachCardResult: Stage2FeatureTraceCoachCardResult;
   visualRecipeResult: Stage2FeatureTraceVisualRecipeResult;
+  promotion: Stage2FeatureTracePromotionResult;
   finalRenderedTitle: string | null;
   finalRenderedBody: string | null;
   traceStatus: Stage2FeatureTraceStatus;

@@ -43,6 +43,7 @@ export interface TrainerDebugSnapshot {
   visual: Record<string, unknown>;
   continuation: Record<string, unknown>;
   promotion?: Record<string, unknown>;
+  runtime: Record<string, unknown>;
   maia?: Record<string, unknown>;
   coach: Record<string, unknown>;
   actions: Record<string, unknown>;

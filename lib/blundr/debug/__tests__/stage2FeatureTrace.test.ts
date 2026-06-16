@@ -398,7 +398,7 @@ export function testStage2FeatureTrace(): void {
   assert.equal((snapshot as any).featureTrace?.moveUci, "e2e4");
   assert.equal((snapshot as any).featureTrace?.coachCardResult?.moveUci, "e2e4");
   assert.equal((snapshot as any).featureTrace?.visualRecipeResult?.moveUci, "e2e4");
-  assert.equal((snapshot as any).trainerFrameResolution?.coachCard?.finalRendered?.title, (snapshot as any).coach?.visibleTitle, "trainer frame resolution should match final coach title");
+  assert.equal((snapshot as any).featureTrace?.finalRenderedTitle, (snapshot as any).coach?.visibleTitle, "feature trace should match final coach title");
 
   const copyEverything = buildDebugCopyEverythingPayload(snapshot as any);
   assert.equal(Boolean((copyEverything as any).featureTrace), true, "copy everything should include featureTrace");
