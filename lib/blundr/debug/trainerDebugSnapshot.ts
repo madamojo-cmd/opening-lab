@@ -10,6 +10,10 @@ import {
   getStage2OpeningAvailability,
   getStage2OpeningAvailabilitySummary,
 } from "../openings/openingAvailability";
+import {
+  getStage2ApprovedContentInventoryEntry,
+  getStage2ApprovedContentInventorySummary,
+} from "../stage2Coaching/stage2ApprovedContentInventory";
 
 function len(value: unknown): number {
   return Array.isArray(value) ? value.length : value && typeof value === "object" ? Object.keys(value as Record<string, unknown>).length : 0;
@@ -169,6 +173,15 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
     : { featureTrace: null, featureTraceTimeline: [] };
   const runtimeAvailabilitySummary = getStage2OpeningAvailabilitySummary();
   const selectedOpeningAvailability = getStage2OpeningAvailability(String(input.selectedOpeningId ?? input.selectedRepertoireId ?? ""));
+  const selectedApprovedContentInventory = getStage2ApprovedContentInventoryEntry(String(input.selectedOpeningId ?? input.selectedRepertoireId ?? ""));
+  const approvedContentInventorySummary = getStage2ApprovedContentInventorySummary();
+  const selectedOpeningApprovedContentAvailable = Boolean(selectedApprovedContentInventory?.approvedContentAvailable);
+  const selectedOpeningApprovedContentReasonRejected =
+    selectedOpeningApprovedContentAvailable
+      ? null
+      : selectedApprovedContentInventory?.reasonNotApproved ?? (Boolean(input.stage2ApprovedContentEnabled) ? "approved_content_unavailable" : "approved_content_disabled");
+  const selectedOpeningApprovedContentTargetMatched = Boolean(selectedApprovedContentInventory?.targetMatched && selectedOpeningApprovedContentAvailable);
+  const selectedOpeningApprovedContentPlainViewSafe = Boolean(selectedApprovedContentInventory?.plainViewSafe && selectedOpeningApprovedContentAvailable);
   const containsDebugLeak = Boolean(coachQuality.containsDebugLeak) || hasDebugLeakText(visibleBodyText);
   const instructionalCoachRecords = Array.isArray(input.lastCoachRecords)
     ? input.lastCoachRecords.filter((record: any) => record?.trainerPhase === "ready_for_user" && record?.instructionTargetUci).slice(-5)
@@ -1041,6 +1054,9 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       stage2CoachingSurface: input.stage2CoachingSurface ?? null,
       stage2CoachingSourceFile: input.stage2CoachingSourceFile ?? null,
       stage2CoachingRuntimeMatched: input.stage2CoachingRuntimeMatched ?? null,
+      stage2CoachingTargetMatched: selectedOpeningApprovedContentTargetMatched,
+      stage2CoachingPlainViewSafe: selectedOpeningApprovedContentPlainViewSafe,
+      stage2CoachingReasonRejected: selectedOpeningApprovedContentReasonRejected,
       effectiveContinuationCandidateUci: input.effectiveContinuationCandidateUci ?? null,
       effectiveContinuationCandidateSan: input.effectiveContinuationCandidateSan ?? null,
       effectiveContinuationCandidateSource: input.effectiveContinuationCandidateSource ?? null,
@@ -1077,10 +1093,13 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       openingCount: runtimeAvailabilitySummary.openingCount,
       visibleOpeningCount: runtimeAvailabilitySummary.visibleOpeningCount,
       runtimeAvailableCount: runtimeAvailabilitySummary.runtimeAvailableCount,
+      approvedContentInventoryCount: approvedContentInventorySummary.approvedContentInventoryCount,
+      approvedContentMatchedCount: approvedContentInventorySummary.approvedContentMatchedCount,
       approvedContentAvailableCount: runtimeAvailabilitySummary.approvedContentAvailableCount,
       selectedOpeningId: input.selectedOpeningId ?? input.selectedRepertoireId ?? null,
       selectedOpeningRuntimeAvailable: Boolean(selectedOpeningAvailability?.runtimeAvailable),
       selectedOpeningContentStatus: selectedOpeningAvailability?.contentStatus ?? "none",
+      selectedOpeningApprovedContentAvailable: Boolean(selectedApprovedContentInventory?.approvedContentAvailable),
       candidateSource: input.candidateSource ?? (input.runtimeBookQueried ? "local_crawled_package" : null),
       liveLichessCalled: false,
       openingAvailabilityStatus: selectedOpeningAvailability?.runtimeAvailable

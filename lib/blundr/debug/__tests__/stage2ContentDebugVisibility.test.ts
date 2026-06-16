@@ -26,6 +26,7 @@ export function testStage2ContentDebugVisibility(): void {
     trainingMode: "continuation",
     isUserTurn: true,
     fen: "rnbqkbnr/pp2pppp/8/2pp4/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3",
+    selectedOpeningId: "italian-white",
     runtimeBookQueried: true,
     runtimeBookOpeningId: "italian-white",
     runtimeBookPlayKeyBefore: "e2e4,e7e5,g1f3,b8c6,f1c4",
@@ -54,12 +55,20 @@ export function testStage2ContentDebugVisibility(): void {
   assert.equal((snapshot.continuation as any).runtimeBookOpeningId, "italian-white");
   assert.equal((snapshot.continuation as any).runtimeBookCandidateCount, 2);
   assert.equal((snapshot.continuation as any).runtimeBookTopCandidateUci, "e4d5");
+  assert.equal((snapshot as any).runtime.approvedContentInventoryCount, 21);
+  assert.equal((snapshot as any).runtime.approvedContentMatchedCount, 0);
+  assert.equal((snapshot as any).runtime.selectedOpeningContentStatus, "sample");
+  assert.equal((snapshot as any).runtime.selectedOpeningApprovedContentAvailable, false);
+  assert.equal((snapshot.continuation as any).stage2CoachingTargetMatched, false);
+  assert.equal((snapshot.continuation as any).stage2CoachingPlainViewSafe, false);
+  assert.equal((snapshot.continuation as any).stage2CoachingReasonRejected, "reconciled_partial_source_not_approved:italian-white");
 
   const copyEverythingPayload = buildDebugCopyEverythingPayload(snapshot);
   const payloadString = JSON.stringify(copyEverythingPayload);
   assert.equal(payloadString.includes("\"runtimeBook\""), true);
   assert.equal(payloadString.includes("\"openingId\":\"italian-white\""), true);
   assert.equal(payloadString.includes("\"topCandidateUci\":\"e4d5\""), true);
+  assert.equal(payloadString.includes("\"approvedContentInventoryCount\":21"), true);
   assert.equal(payloadString.includes("\"stage2Coaching\""), true);
   assert.equal(payloadString.includes("\"packetKind\":\"safe_fallback\""), true);
   assert.equal(Object.prototype.hasOwnProperty.call(copyEverythingPayload, "history"), false);

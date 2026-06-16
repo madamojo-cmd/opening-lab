@@ -3,16 +3,18 @@ import assert from "node:assert/strict";
 import { buildDebugCopyEverythingPayload } from "../../components/debug/BlundrDiagnosticsPanel";
 import { buildTrainerDebugSnapshot } from "../../lib/blundr/debug/trainerDebugSnapshot";
 
-export function testRuntimeDataSourceDebug(): void {
+export function testStage2RuntimeVsApprovedContentSeparation(): void {
   const snapshot = buildTrainerDebugSnapshot({
     debugEnabled: true,
-    trainerFrameId: 21,
+    trainerFrameId: 811,
     trainerPhase: "ready_for_user",
     trainerView: "assisted",
     trainingMode: "restricted",
     isUserTurn: true,
-    fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    fen: "rnbqkb1r/pppppppp/5n2/8/8/5N2/PPPPPPPP/RNBQKB1R w KQkq - 2 2",
     selectedOpeningId: "caro-kann-black",
+    selectedRepertoireId: "caro-kann-black",
+    candidateSource: "local_runtime_package",
     runtimeBookQueried: true,
     runtimeBookOpeningId: "caro-kann-black",
     runtimeBookPlayKeyBefore: "e2e4,c7c6",
@@ -25,22 +27,19 @@ export function testRuntimeDataSourceDebug(): void {
     runtimeBookBookExhausted: false,
     runtimeBookFallbackUsed: false,
     runtimeBookFallbackAuthority: null,
-    candidateSource: "local_runtime_package",
-    coachDecision: {
-      shouldShowCoachCard: true,
-      title: "London System",
-      body: "Build a stable setup.",
-      debug: { coachDecisionSource: "live_coach", coachMoveUci: "d2d4" },
-    },
-    presentationFrame: {
-      visual: { shouldRender: true, source: "continuation_candidate" },
-      coach: { shouldRender: true, owner: "intent_first_coach", title: "London System", body: "Build a stable setup." },
-      legacy: {},
-    },
+    stage2CoachingResolverEnabled: true,
+    stage2ApprovedContentEnabled: false,
+    stage2SafeFallbackEnabled: true,
+    stage2CoachingPacketKind: "safe_fallback",
+    stage2CoachingSafetyStatus: "safe",
+    stage2CoachingSurface: "assisted",
+    stage2CoachingSourceFile: "stage2://safe-fallback",
+    stage2CoachingRuntimeMatched: true,
+    presentationFrame: { visual: { shouldRender: true, source: "continuation_candidate" }, coach: { owner: "intent_first_coach" }, legacy: {} },
     visibleTeachingSurface: {
       owner: "v28_visible_surface",
       mode: "assisted",
-      coach: { shouldRender: true, title: "London System", body: "Build a stable setup." },
+      coach: { shouldRender: true, title: "Caro-Kann", body: "Build the structure." },
       visual: { lines: [] },
       actions: [],
     },
@@ -51,6 +50,7 @@ export function testRuntimeDataSourceDebug(): void {
   assert.equal((snapshot as any).runtime.runtimePackageId, "stage2-21-opening-stepdown-runtime-v1");
   assert.equal((snapshot as any).runtime.openingCount, 21);
   assert.equal((snapshot as any).runtime.visibleOpeningCount, 21);
+  assert.equal((snapshot as any).runtime.runtimeAvailableCount, 21);
   assert.equal((snapshot as any).runtime.approvedContentInventoryCount, 21);
   assert.equal((snapshot as any).runtime.approvedContentMatchedCount, 0);
   assert.equal((snapshot as any).runtime.selectedOpeningId, "caro-kann-black");
@@ -61,19 +61,20 @@ export function testRuntimeDataSourceDebug(): void {
   assert.equal((snapshot as any).runtime.liveLichessCalled, false);
   assert.equal((snapshot as any).runtime.openingAvailabilityStatus, "runtime_available");
 
+  assert.equal((snapshot as any).continuation.stage2ApprovedContentEnabled, false);
+  assert.equal((snapshot as any).continuation.stage2CoachingTargetMatched, false);
+  assert.equal((snapshot as any).continuation.stage2CoachingPlainViewSafe, false);
+  assert.equal((snapshot as any).continuation.stage2CoachingReasonRejected, "draft_source_not_approved:caro-kann-black");
+
   const copyEverything = buildDebugCopyEverythingPayload(snapshot);
-  assert.equal((copyEverything as any).runtime.runtimeDataSource, "local_crawled_package");
-  assert.equal((copyEverything as any).runtime.runtimePackageId, "stage2-21-opening-stepdown-runtime-v1");
-  assert.equal((copyEverything as any).runtime.openingCount, 21);
-  assert.equal((copyEverything as any).runtime.visibleOpeningCount, 21);
   assert.equal((copyEverything as any).runtime.approvedContentInventoryCount, 21);
   assert.equal((copyEverything as any).runtime.approvedContentMatchedCount, 0);
-  assert.equal((copyEverything as any).runtime.selectedOpeningRuntimeAvailable, true);
   assert.equal((copyEverything as any).runtime.selectedOpeningApprovedContentAvailable, false);
-  assert.equal((copyEverything as any).runtime.liveLichessCalled, false);
-  assert.equal((copyEverything as any).runtime.candidateSource, "local_runtime_package");
-  assert.equal((copyEverything as any).runtime.openingAvailabilityStatus, "runtime_available");
+  assert.equal((copyEverything as any).stage2Coaching.approvedContentEnabled, false);
+  assert.equal((copyEverything as any).stage2Coaching.targetMatched, false);
+  assert.equal((copyEverything as any).stage2Coaching.plainViewSafe, false);
+  assert.equal((copyEverything as any).stage2Coaching.reasonRejected, "draft_source_not_approved:caro-kann-black");
 }
 
-testRuntimeDataSourceDebug();
-console.log("runtimeDataSourceDebug ok");
+testStage2RuntimeVsApprovedContentSeparation();
+console.log("stage2RuntimeVsApprovedContentSeparation ok");

@@ -1,3 +1,8 @@
+import {
+  getStage2ApprovedContentInventoryEntry,
+  getStage2ApprovedContentInventorySummary,
+} from "../stage2Coaching/stage2ApprovedContentInventory";
+
 export type OpeningContentStatus = "none" | "fallback_only" | "sample" | "approved_partial" | "approved";
 export type OpeningAvailabilityStage = "hidden" | "dev" | "beta" | "public";
 export type OpeningQaStatus = "untested" | "smoke_pass" | "browser_pass" | "blocked";
@@ -24,6 +29,8 @@ export type OpeningAvailabilitySummary = {
   openingCount: number;
   visibleOpeningCount: number;
   runtimeAvailableCount: number;
+  approvedContentInventoryCount: number;
+  approvedContentMatchedCount: number;
   approvedContentAvailableCount: number;
   openingAvailabilityStatus: OpeningQaStatus | "blocked";
   liveLichessCalled: false;
@@ -107,6 +114,15 @@ const OPENING_RUNTIME_COUNTS: Record<string, { runtimeNodeCount: number; runtime
 export const STAGE2_OPENING_AVAILABILITY_MATRIX: OpeningAvailability[] = STAGE2_RUNTIME_OPENING_IDS.map((openingId) => {
   const label = OPENING_LABELS[openingId];
   const counts = OPENING_RUNTIME_COUNTS[openingId];
+  const approvedContentInventoryEntry = getStage2ApprovedContentInventoryEntry(openingId);
+  const contentStatus: OpeningContentStatus =
+    approvedContentInventoryEntry?.status === "sample"
+      ? "sample"
+      : approvedContentInventoryEntry?.status === "approved"
+        ? "approved"
+        : approvedContentInventoryEntry?.status === "fallback_only"
+          ? "fallback_only"
+          : "fallback_only";
   return {
     openingId,
     displayName: label.displayName,
@@ -116,7 +132,7 @@ export const STAGE2_OPENING_AVAILABILITY_MATRIX: OpeningAvailability[] = STAGE2_
     runtimeNodeCount: counts.runtimeNodeCount,
     runtimeCandidateMoveCount: counts.runtimeCandidateMoveCount,
     userVisible: true,
-    contentStatus: "fallback_only",
+    contentStatus,
     approvedContentAvailable: false,
     stage: "dev",
     qaStatus: "smoke_pass",
@@ -128,14 +144,17 @@ export function getStage2OpeningAvailability(openingId: string): OpeningAvailabi
 }
 
 export function getStage2OpeningAvailabilitySummary(): OpeningAvailabilitySummary {
+  const approvedContentInventorySummary = getStage2ApprovedContentInventorySummary();
   const runtimeAvailableCount = STAGE2_OPENING_AVAILABILITY_MATRIX.filter((entry) => entry.runtimeAvailable).length;
   const approvedContentAvailableCount = STAGE2_OPENING_AVAILABILITY_MATRIX.filter((entry) => entry.approvedContentAvailable).length;
   return {
     runtimeDataSource: "local_crawled_package",
     runtimePackageId: STAGE2_RUNTIME_PACKAGE_ID,
-    openingCount: STAGE2_OPENING_AVAILABILITY_MATRIX.length,
+    openingCount: approvedContentInventorySummary.approvedContentInventoryCount,
     visibleOpeningCount: STAGE2_OPENING_AVAILABILITY_MATRIX.filter((entry) => entry.userVisible).length,
     runtimeAvailableCount,
+    approvedContentInventoryCount: approvedContentInventorySummary.approvedContentInventoryCount,
+    approvedContentMatchedCount: approvedContentInventorySummary.approvedContentMatchedCount,
     approvedContentAvailableCount,
     openingAvailabilityStatus: "smoke_pass",
     liveLichessCalled: false,
