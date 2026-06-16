@@ -817,7 +817,7 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
   const fen4 = normalizeVisualFen(String(input.fen ?? ""));
   const openingId = normalizeText(input.selectedOpeningId ?? input.openingId ?? input.repertoireId ?? "") || null;
   const lineId = normalizeText(input.selectedLineId ?? input.lineId ?? input.activeLineId ?? "") || null;
-  const trainerFrameResolution = buildTrainerFrameResolution(input);
+  const trainerFrameResolution = (input.trainerFrameResolution as TrainerFrameResolution | undefined) ?? buildTrainerFrameResolution(input);
   const moveFacts = buildDerivedMoveFacts(input);
   const features = extractAdvancedFeatures(String(input.fen ?? ""));
   const pseudoFrame = buildPseudoFrame(input, moveFacts);

@@ -84,6 +84,7 @@ import { applyMaiaMoveOnRequestFen } from "@/lib/blundr/maia/maiaLegalityRequest
 import { appendMaiaTimeline, createMaiaTimelineEvent, type MaiaTimelineEvent } from "@/lib/blundr/debug/maiaTimeline";
 import { BlundrDiagnosticsPanel } from "@/components/debug/BlundrDiagnosticsPanel";
 import { collectTrainerDebugSnapshot } from "@/lib/blundr/debug/trainerDebugCollector";
+import { buildTrainerFrameResolution } from "@/lib/blundr/debug/buildTrainerFrameResolution";
 import { computeInstructionFrameKey } from "@/lib/blundr/runtime/currentInstructionFrame";  // v2.7.39.1 Target Locking (Coach Perfection Gate)
 import { analyzeBlundrPosition } from "@/lib/blundr/brain/analyzeBlundrPosition";  // v2.7.39.2+ Brain facade for 2.7.39.3 coach migration
 import { appendDebugEvent } from "@/lib/blundr/debug/trainerDebugEventLog";
@@ -5713,6 +5714,48 @@ export default function App(){
   ]);
   const visualMoveUciForDebug=boardLinesToRender[0]?`${boardLinesToRender[0].from}${boardLinesToRender[0].to}`:null;
   const visualTargetMatchesInstructionTarget=instructionTarget?.uci?visualMoveUciForDebug===instructionTarget.uci:"unknown";
+  const trainerFrameResolution=buildTrainerFrameResolution({
+    trainerFrameId,
+    trainerPhase,
+    trainerView,
+    trainingMode,
+    isUserTurn,
+    instructionTargetUci: instructionTarget?.uci ?? null,
+    instructionTargetSan: instructionTarget?.san ?? null,
+    instructionTargetPieceType: instructionTarget?.pieceType ?? null,
+    coachMoveUci: (displayedCoachDecision?.debug as any)?.coachMoveUci ?? instructionTarget?.uci ?? null,
+    coachPieceType: (displayedCoachDecision?.debug as any)?.coachPieceType ?? instructionTarget?.pieceType ?? null,
+    visibleTeachingSurface,
+    visibleSurfaceOwner: visibleTeachingSurface?.owner ?? null,
+    visibleSurfaceMode: v28VisibleSurface?.mode ?? visibleTeachingSurface?.mode ?? null,
+    displayedCoachDecision,
+    actualCoachCardTitle: surfaceCoachCardDecision?.title ?? null,
+    actualCoachCardBody: surfaceCoachCardDecision?.body ?? null,
+    actualCoachCardButtons: (surfaceCoachCardDecision?.buttons ?? []).map(String),
+    actualCoachCardSource: surfaceCoachCardDecision ? "surfaceCoachCardDecision" : null,
+    actualActionSource: v28SurfaceActive ? "visible_surface_v28" : "legacy_or_presentation",
+    actualVisualSource: v28SurfaceActive ? "visible_surface_v28" : String(presentationFrame?.visual?.source ?? "none"),
+    renderedQualityScore: renderedCoachQualityForDebug?.qualityScore ?? null,
+    renderedQualityScoreSource: renderedCoachQualityForDebug?.qualityScoreSource ?? null,
+    coachQuality: renderedCoachQualityForDebug,
+    visualRecipe,
+    visualRecipeMoveUci: visualRecipe?.moveUci ?? null,
+    visualRecipeMoveSan: visualRecipe?.moveSan ?? null,
+    visualRecipeTargetMatchesInstructionTarget: visualMoveUciForDebug ? visualMoveUciForDebug === instructionTarget?.uci : "unknown",
+    visualRecipeBlockedByTargetMismatch: Boolean(visualRecipeBlockedByTargetMismatch),
+    visualRecipeOverlay,
+    renderedVisualPrimitiveCount: boardLinesToRender.length,
+    surfaceVisualPrimitiveCount: (v28BoardVisualUiModel?.visualRecipes ?? []).length,
+    stage2CoachingPacketKind: stage2CoachingPacketResolution.kind,
+    stage2CoachingSafetyStatus: stage2CoachingPacketResolution.kind === "none" ? null : stage2CoachingPacketResolution.packet.safetyStatus,
+    stage2CoachingSurface: stage2CoachContext.surface,
+    stage2CoachingSourceFile: stage2CoachingPacketResolution.kind === "none" ? null : stage2CoachingPacketResolution.packet.sourceFile,
+    stage2CoachingRuntimeMatched: stage2CoachingPacketResolution.kind === "none" ? null : stage2CoachingPacketResolution.packet.runtimeReconciliation.status === "matched",
+    presentationFrame,
+    v28VisibleSurface,
+    expectedMoveUci: expectedUserOptions[0]?.uci ?? null,
+    expectedMoveSan: expectedUserOptions[0]?.san ?? null,
+  });
   const selectedContinuationCandidate=trainingMode==="continuation"&&currentSelectedCandidateUci?{uci:currentSelectedCandidateUci,san:currentSelectedCandidateSan??currentSelectedCandidateUci}:null;
   const lastMoveAttribution=attributeLastMove({lastMoveSan,lastMoveUci:lastMove,lastMoveColor,userColor});
   const legacyTrainingCardActuallyRendered=false;
@@ -6027,20 +6070,17 @@ export default function App(){
     visualRenderTimeline,
     plainLeakTimeline,
     maiaTimeline,
-    actualCoachCardTitle: surfaceCoachCardDecision?.title ?? null,
-    actualCoachCardBody: surfaceCoachCardDecision?.body ?? null,
-    actualCoachCardButtons: (v28SurfaceActive
-      ? visibleSurfaceActionKinds
-      : ((surfaceCoachCardDecision?.buttons as any[] | undefined) ?? [])).map(String),
-    actualCoachCardSource: surfaceCoachCardDecision ? "surfaceCoachCardDecision" : null,
-    actualActionSource: v28SurfaceActive ? "visible_surface_v28" : "legacy_or_presentation",
-    actualVisualSource: v28SurfaceActive ? "visible_surface_v28" : String(presentationFrame?.visual?.source ?? "none"),
-    renderedActionIds: (v28SurfaceActive
-      ? visibleSurfaceActionKinds
-      : ((surfaceCoachCardDecision?.buttons as any[] | undefined) ?? [])).map(String),
+    trainerFrameResolution,
+    actualCoachCardTitle: trainerFrameResolution.coachCard.finalRendered.title,
+    actualCoachCardBody: trainerFrameResolution.coachCard.finalRendered.body,
+    actualCoachCardButtons: trainerFrameResolution.coachCard.finalRendered.buttons,
+    actualCoachCardSource: trainerFrameResolution.coachCard.finalRendered.source ?? null,
+    actualActionSource: trainerFrameResolution.visual.renderedSource ?? (v28SurfaceActive ? "visible_surface_v28" : "legacy_or_presentation"),
+    actualVisualSource: trainerFrameResolution.visual.renderedSource ?? (v28SurfaceActive ? "visible_surface_v28" : String(presentationFrame?.visual?.source ?? "none")),
+    renderedActionIds: trainerFrameResolution.coachCard.finalRendered.buttons,
     surfaceActionIds: (v28CoachUiModel?.actions ?? []).filter((action)=>action.visible).map((action)=>String(action.kind)),
-    renderedVisualPrimitiveCount: boardLinesToRender.length,
-    surfaceVisualPrimitiveCount: (v28BoardVisualUiModel?.visualRecipes ?? []).length,
+    renderedVisualPrimitiveCount: trainerFrameResolution.visual.renderedPrimitiveCount,
+    surfaceVisualPrimitiveCount: trainerFrameResolution.visual.surfacePrimitiveCount,
     orchestrateTeachingVisibleBypass: Boolean(
       v28SurfaceActive &&
       teachingOrchestration &&

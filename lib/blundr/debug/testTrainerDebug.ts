@@ -1,7 +1,9 @@
 import { testTrainerDebugEventLog } from "./__tests__/trainerDebugEventLog.test";
 import { testFallbackCopyGuard } from "./__tests__/fallbackCopyGuard.test";
+import { testStage2FeatureTrace } from "./__tests__/stage2FeatureTrace.test";
 import { testTrainerDebugSanitizer } from "./__tests__/trainerDebugSanitizer.test";
 import { testTrainerDebugSnapshot } from "./__tests__/trainerDebugSnapshot.test";
+import { testTrainerFrameResolutionPageParity } from "../../../tests/coach/trainerFrameResolutionPageParity.test";
 import { testStage2ContentDebugVisibility } from "./__tests__/stage2ContentDebugVisibility.test";
 import { testMultiMoveTrainingQa } from "./testMultiMoveTrainingQa";
 import { testCurrentInstructionFrame } from "../runtime/__tests__/currentInstructionFrame.test";
@@ -17,6 +19,10 @@ export function testTrainerDebug(): void {
   console.log("✓ trainer debug snapshot passed");
   testStage2ContentDebugVisibility();
   console.log("✓ stage2 content debug visibility passed");
+  testStage2FeatureTrace();
+  console.log("✓ stage2 feature trace passed");
+  testTrainerFrameResolutionPageParity();
+  console.log("✓ trainer frame resolution page parity passed");
   testTrainerDebugSanitizer();
   console.log("✓ trainer debug sanitizer passed");
   testTrainerDebugEventLog();

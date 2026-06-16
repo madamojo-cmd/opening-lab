@@ -103,7 +103,7 @@ function hasDebugLeakText(text: string): boolean {
 
 export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDebugSnapshot {
   const started = Date.now();
-  const trainerFrameResolution = buildTrainerFrameResolution(input);
+  const trainerFrameResolution = (input.trainerFrameResolution as any) ?? buildTrainerFrameResolution(input);
   const boardFen4 = normalizeVisualFen(input.fen);
   const overlayFen4 = normalizeVisualFen(input.overlayFen ?? input.visualRecipe?.fen ?? input.fen);
   const recipeFen4 = normalizeVisualFen(input.visualRecipe?.fen);
