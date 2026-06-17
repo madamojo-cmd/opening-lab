@@ -5816,6 +5816,7 @@ export default function App(){
     stage2ApprovedPacketId: stage2CoachingPacketResolution.kind === "approved_packet" ? stage2CoachingPacketResolution.packet.packetId : null,
     stage2ApprovedPacketSourceBundle: stage2CoachingPacketResolution.kind === "approved_packet" ? stage2CoachingPacketResolution.packet.sourceCandidatePackages?.[0] ?? stage2CoachingPacketResolution.packet.sourceCandidatePackage ?? null : null,
     stage2ApprovedPacketSourceFile: stage2CoachingPacketResolution.kind === "approved_packet" ? stage2CoachingPacketResolution.packet.sourceFile ?? null : null,
+    stage2ApprovedPacketSourceRuntimeMoveUci: stage2CoachingPacketResolution.kind === "approved_packet" ? stage2CoachingPacketResolution.packet.sourceRuntimeMoveUci ?? null : null,
     stage2ApprovedPacketStatus: stage2CoachingPacketResolution.kind === "approved_packet" ? stage2CoachingPacketResolution.packet.status : null,
     stage2ApprovedPacketApprovalReadiness: stage2CoachingPacketResolution.kind === "approved_packet" ? stage2CoachingPacketResolution.packet.approvalReadiness : null,
     stage2ApprovedPacketMissReason:

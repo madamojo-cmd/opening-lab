@@ -26,7 +26,7 @@ import type {
   Stage2FeatureTraceTimelineEntry,
   Stage2FeatureTraceVisualRecipeResult,
 } from "./stage2FeatureTraceTypes";
-import type { TrainerFrameResolution } from "./trainerFrameResolutionTypes";
+import type { TrainerFrameResolution, TrainerFrameVisualResult } from "./trainerFrameResolutionTypes";
 
 type FeatureTraceInput = Record<string, any>;
 
@@ -684,6 +684,7 @@ function buildTraceTimeline(featureTrace: Stage2FeatureTrace, selectedOpportunit
         approvedContentMatched: featureTrace.approvedContentMatched,
         approvedPacketKind: featureTrace.approvedPacketKind,
         visualSource: featureTrace.visualSource,
+        visualResult: featureTrace.visualResult,
         visualRecipeRendered: featureTrace.visualRecipeResult.rendered,
         traceStatus: featureTrace.traceStatus,
         missingReasons: featureTrace.missingReasons,
@@ -891,25 +892,95 @@ function buildCoachCardResult(
 function buildVisualRecipeResult(input: FeatureTraceInput, moveFacts: DerivedMoveFacts, trainerFrameResolution: TrainerFrameResolution): Stage2FeatureTraceVisualRecipeResult {
   const visualRecipe = input.visualRecipe ?? null;
   const visualRecipeOverlay = input.visualRecipeOverlay ?? null;
-  const rendered = trainerFrameResolution.visual.authority !== "none";
+  const visualTruth = trainerFrameResolution.visualResult ?? deriveVisualTruthFallback(input, trainerFrameResolution);
+  const rendered = visualTruth.rendered;
+  const targetMatchesMoveUci = visualTruth.targetMatchesInstruction === "not_applicable"
+    ? "unknown"
+    : visualTruth.targetMatchesInstruction;
 
   return {
-    authority: trainerFrameResolution.visual.authority,
-    approvedRecipeRendered: trainerFrameResolution.visual.approvedRecipeRendered,
-    generatedRecipeRendered: trainerFrameResolution.visual.generatedRecipeRendered,
-    fallbackCurrentSurfaceRendered: trainerFrameResolution.visual.fallbackCurrentSurfaceRendered,
+    authority: visualTruth.visualSource,
+    approvedRecipeRendered: visualTruth.approvedRecipeMatched,
+    generatedRecipeRendered: visualTruth.generatedRecipeRendered,
+    fallbackCurrentSurfaceRendered: visualTruth.fallbackSurfaceVisualsRendered,
     noVisualsRendered: trainerFrameResolution.visual.noVisualsRendered,
     rendered,
-    recipeId: trainerFrameResolution.visual.recipeId,
+    recipeId: visualTruth.approvedRecipeId ?? trainerFrameResolution.visual.recipeId,
     patternId: trainerFrameResolution.visual.patternId,
-    moveUci: trainerFrameResolution.visual.renderedMoveUci ?? normalizeUci(input.visualRecipeMoveUci ?? visualRecipe?.moveUci ?? input.visualMoveUci) ?? null,
-    moveSan: normalizeText(input.visualRecipeMoveSan ?? visualRecipe?.moveSan ?? "") || null,
-    targetMatchesMoveUci: trainerFrameResolution.visual.targetMatchesMoveUci,
+    moveUci: visualTruth.finalVisualTargetUci ?? normalizeUci(input.visualRecipeMoveUci ?? visualRecipe?.moveUci ?? input.visualMoveUci) ?? null,
+    moveSan: visualTruth.finalVisualTargetSan ?? (normalizeText(input.visualRecipeMoveSan ?? visualRecipe?.moveSan ?? "") || null),
+    targetMatchesMoveUci,
     blockedByTargetMismatch: Boolean(input.visualRecipeBlockedByTargetMismatch),
     adapterAllowed: typeof visualRecipeOverlay?.adapterAllowed === "boolean" ? Boolean(visualRecipeOverlay.adapterAllowed) : null,
     adapterSuppressedReason: normalizeText(visualRecipeOverlay?.adapterSuppressedReason ?? input.overlaySuppressedReason ?? "") || null,
     primitiveIds: Array.isArray(input.visualRecipePrimitiveIds) ? input.visualRecipePrimitiveIds.map(String) : Array.isArray(visualRecipe?.beats) ? visualRecipe.beats.flatMap((beat: any) => beat.primitives.map((primitive: any) => String(primitive.id))) : [],
-    source: String(input.presentationFrame?.visual?.source ?? input.overlaySource ?? trainerFrameResolution.visual.renderedSource ?? "none") || null,
+    source: String(input.presentationFrame?.visual?.source ?? input.overlaySource ?? visualTruth.visualSource ?? "none") || null,
+  };
+}
+
+function deriveVisualTruthFallback(input: FeatureTraceInput, trainerFrameResolution: TrainerFrameResolution): TrainerFrameVisualResult {
+  const sourceRuntimeMoveUci = normalizeText(
+    input.stage2ApprovedPacketSourceRuntimeMoveUci ??
+      input.approvedPacketSourceRuntimeUci ??
+      trainerFrameResolution.approvedContent.sourceRuntimeMoveUci ??
+      input.visualRecipe?.sourceRuntimeMoveUci ??
+      null,
+  );
+  const finalVisualTargetUci = normalizeText(
+    trainerFrameResolution.visual.targetMoveUci ??
+      input.instructionTargetUci ??
+      input.visualRecipeMoveUci ??
+      input.visualMoveUci ??
+      null,
+  );
+  const finalVisualTargetSan = normalizeText(input.instructionTargetSan ?? input.visualRecipeMoveSan ?? input.visualRecipe?.moveSan ?? null);
+  const visualSource = trainerFrameResolution.visual.authority;
+  const plainViewSuppressed =
+    String(input.trainerView ?? "").toLowerCase() === "plain" &&
+    !Boolean(input.showMoreShown ?? input.showMoreRevealed ?? false);
+  const rendered = trainerFrameResolution.visual.authority !== "none" && !plainViewSuppressed && input.presentationFrame?.visual?.shouldRender !== false;
+  const approvedRecipeMatched =
+    visualSource === "approved_recipe" &&
+    Boolean(trainerFrameResolution.visual.recipeId) &&
+    Boolean(finalVisualTargetUci) &&
+    normalizeText(trainerFrameResolution.visual.targetMoveUci ?? null) === finalVisualTargetUci;
+  const normalizedSourceRuntimeMoveUci = sourceRuntimeMoveUci?.toLowerCase() ?? null;
+  const castlingNormalized = normalizedSourceRuntimeMoveUci
+    ? (
+        normalizedSourceRuntimeMoveUci === "e1h1" ? normalizeText(finalVisualTargetUci) === "e1g1" :
+        normalizedSourceRuntimeMoveUci === "e8h8" ? normalizeText(finalVisualTargetUci) === "e8g8" :
+        normalizedSourceRuntimeMoveUci === "e1c1" ? normalizeText(finalVisualTargetUci) === "e1c1" :
+        normalizedSourceRuntimeMoveUci === "e8c8" ? normalizeText(finalVisualTargetUci) === "e8c8" :
+        "not_applicable"
+      )
+    : "not_applicable";
+
+  return {
+    rendered,
+    visualSource,
+    finalVisualTargetUci,
+    finalVisualTargetSan,
+    approvedRecipeMatched,
+    approvedRecipeId: trainerFrameResolution.visual.recipeId ?? null,
+    approvedRecipeTargetMoveUci: trainerFrameResolution.visual.targetMoveUci ?? null,
+    generatedRecipeRendered: trainerFrameResolution.visual.generatedRecipeRendered,
+    fallbackSurfaceVisualsRendered: trainerFrameResolution.visual.fallbackCurrentSurfaceRendered,
+    primitiveCount: trainerFrameResolution.visual.renderedPrimitiveCount,
+    sourceSquare: finalVisualTargetUci ? finalVisualTargetUci.slice(0, 2) : null,
+    destinationSquare: finalVisualTargetUci ? finalVisualTargetUci.slice(2, 4) : null,
+    targetMatchesInstruction: finalVisualTargetUci && input.instructionTargetUci ? finalVisualTargetUci === normalizeText(input.instructionTargetUci) : "not_applicable",
+    targetMatchesCoachCard: finalVisualTargetUci && normalizeText(input.coachMoveUci ?? input.displayedCoachDecision?.debug?.coachMoveUci ?? null)
+      ? finalVisualTargetUci === normalizeText(input.coachMoveUci ?? input.displayedCoachDecision?.debug?.coachMoveUci ?? null)
+      : "not_applicable",
+    plainViewSuppressed,
+    castlingNormalized,
+    sourceRuntimeMoveUci,
+    missingReasons: [
+      ...(plainViewSuppressed ? ["plain_view_suppressed"] : []),
+      ...(rendered ? [] : ["no_visuals_rendered"]),
+      ...(approvedRecipeMatched ? [] : (visualSource === "approved_recipe" ? ["approved_recipe_target_mismatch"] : [])),
+    ],
+    warnings: [],
   };
 }
 
@@ -1002,6 +1073,7 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
 
   const coachCardResult = buildCoachCardResult(input, moveFacts, selectedOpportunity, trainerFrameResolution);
   const visualRecipeResult = buildVisualRecipeResult(input, moveFacts, trainerFrameResolution);
+  const visualResult = trainerFrameResolution.visualResult ?? deriveVisualTruthFallback(input, trainerFrameResolution);
   const approvedPacketResolution = trainerFrameResolution.approvedContent ?? {
     matched: false,
     packetKind: "none",
@@ -1019,12 +1091,14 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
   const fallbackReason = normalizeTextOrNull(coachCardResult.fallbackReason ?? approvedPacketResolution.fallbackReason ?? null);
   const coachCardSource = deriveCoachCardSource(trainerFrameResolution, approvedContentMatched, fallbackUsed);
   const copyAuthority = trainerFrameResolution.coachCard.finalRendered.authority ?? null;
-  const visualSource = trainerFrameResolution.visual.authority;
+  const visualSource = visualResult.visualSource;
   const visualRecipeId = trainerFrameResolution.visual.recipeId;
-  const visualTargetUci = trainerFrameResolution.visual.targetMoveUci;
-  const visualFallbackUsed = trainerFrameResolution.visual.authority === "fallback_current_surface";
+  const visualTargetUci = visualResult.finalVisualTargetUci;
+  const visualFallbackUsed = visualResult.visualSource === "fallback_current_surface";
   const targetMatchesCoachCard = coachCardResult.targetMatchesMoveUci;
-  const targetMatchesVisual = trainerFrameResolution.visual.targetMatchesMoveUci;
+  const targetMatchesVisual = visualResult.targetMatchesInstruction === "not_applicable"
+    ? "unknown"
+    : visualResult.targetMatchesInstruction;
   const plainViewLeakSafe = derivePlainViewLeakSafe(input, coachCardResult, moveFacts);
   const reviewCandidateEventEligible = Boolean(
     frameKind === "instructional_user_turn" ||
@@ -1195,6 +1269,7 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
     rankedOpportunities,
     selectedOpportunity,
     coachCardResult,
+    visualResult,
     approvedContentMatched,
     approvedPacketId: approvedPacketResolution.packetId,
     approvedPacketKind: approvedPacketResolution.packetKind,

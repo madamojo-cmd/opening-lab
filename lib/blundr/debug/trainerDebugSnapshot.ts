@@ -1319,6 +1319,7 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
     featureTrace: stage2FeatureTraceBundle.featureTrace ?? undefined,
     featureTraceTimeline: stage2FeatureTraceBundle.featureTraceTimeline ?? [],
     trainerFrameResolution,
+    visualResult: trainerFrameResolution.visualResult,
     explanation: {
       selectedTemplateId,
       selectedTemplateCategory: input.coachDecision?.utteranceFamily ?? null,

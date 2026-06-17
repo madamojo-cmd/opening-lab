@@ -21,6 +21,28 @@ export type TrainerFrameCoachCardResolution = {
 
 export type TrainerFrameVisualAuthority = "approved_recipe" | "generated_recipe" | "fallback_current_surface" | "none";
 
+export type TrainerFrameVisualResult = {
+  rendered: boolean;
+  visualSource: TrainerFrameVisualAuthority;
+  finalVisualTargetUci: string | null;
+  finalVisualTargetSan: string | null;
+  approvedRecipeMatched: boolean;
+  approvedRecipeId: string | null;
+  approvedRecipeTargetMoveUci: string | null;
+  generatedRecipeRendered: boolean;
+  fallbackSurfaceVisualsRendered: boolean;
+  primitiveCount: number;
+  sourceSquare: string | null;
+  destinationSquare: string | null;
+  targetMatchesInstruction: boolean | "not_applicable";
+  targetMatchesCoachCard: boolean | "not_applicable";
+  plainViewSuppressed: boolean;
+  castlingNormalized: boolean | "not_applicable";
+  sourceRuntimeMoveUci: string | null;
+  missingReasons: string[];
+  warnings: string[];
+};
+
 export type TrainerFrameVisualResolution = {
   authority: TrainerFrameVisualAuthority;
   approvedRecipeRendered: boolean;
@@ -65,6 +87,7 @@ export type TrainerFrameApprovedContentResolution = {
   packetId: string | null;
   sourceBundle: string | null;
   sourceFile: string | null;
+  sourceRuntimeMoveUci: string | null;
   packetStatus: string | null;
   approvalReadiness: string | null;
   missReason: string | null;
@@ -86,6 +109,7 @@ export type TrainerFrameResolution = {
   acceptedTargetUci: string | null;
   coachCard: TrainerFrameCoachCardResolution;
   visual: TrainerFrameVisualResolution;
+  visualResult: TrainerFrameVisualResult;
   coachQuality: TrainerFrameCoachQualityResolution;
   promotion: TrainerFramePromotionResolution;
   approvedContent: TrainerFrameApprovedContentResolution;

@@ -1,3 +1,5 @@
+import type { TrainerFrameVisualResult } from "./trainerFrameResolutionTypes";
+
 export type Stage2FeatureTraceStatus = "complete" | "partial" | "missing";
 
 export type Stage2FeatureTraceFrameKind =
@@ -133,6 +135,8 @@ export interface Stage2FeatureTraceVisualRecipeResult {
   source: string | null;
 }
 
+export type Stage2FeatureTraceVisualResult = TrainerFrameVisualResult;
+
 export interface Stage2FeatureTracePromotionResult {
   pendingPromotion: Record<string, unknown> | null;
   promotionPickerRendered: boolean;
@@ -188,6 +192,7 @@ export interface Stage2FeatureTrace {
   rankedOpportunities: Stage2FeatureTraceRankedOpportunity[];
   selectedOpportunity: Stage2FeatureTraceRankedOpportunity | null;
   coachCardResult: Stage2FeatureTraceCoachCardResult;
+  visualResult: Stage2FeatureTraceVisualResult;
   approvedContentMatched: boolean;
   approvedPacketId: string | null;
   approvedPacketKind: "approved_packet" | "safe_fallback" | "none";

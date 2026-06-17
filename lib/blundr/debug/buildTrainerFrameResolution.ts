@@ -4,6 +4,7 @@ import type {
   TrainerFrameResolution,
   TrainerFrameCoachCardCopy,
   TrainerFrameCoachCardAuthority,
+  TrainerFrameVisualResult,
 } from "./trainerFrameResolutionTypes";
 
 type Input = Record<string, any>;
@@ -63,6 +64,103 @@ function normalizePacketKind(value: unknown): TrainerFrameApprovedContentResolut
   if (text === "approved_packet") return "approved_packet";
   if (text === "safe_fallback") return "safe_fallback";
   return "none";
+}
+
+function normalizeVisualSource(value: unknown): TrainerFrameVisualResult["visualSource"] {
+  const text = normalizeText(value);
+  if (text === "approved_recipe") return "approved_recipe";
+  if (text === "generated_recipe") return "generated_recipe";
+  if (text === "fallback_current_surface") return "fallback_current_surface";
+  return "none";
+}
+
+function isCastlingNotation(moveUci: string | null): boolean {
+  if (!moveUci) return false;
+  const normalized = moveUci.toLowerCase();
+  return normalized === "e1h1" || normalized === "e8h8" || normalized === "e1c1" || normalized === "e8c8";
+}
+
+function normalizeCastlingMove(moveUci: string | null): string | null {
+  const normalized = normalizeText(moveUci)?.toLowerCase() ?? null;
+  if (!normalized) return null;
+  if (normalized === "e1h1") return "e1g1";
+  if (normalized === "e8h8") return "e8g8";
+  if (normalized === "e1c1") return "e1c1";
+  if (normalized === "e8c8") return "e8c8";
+  return normalized;
+}
+
+function deriveVisualResult(input: Input, visual: TrainerFrameResolution["visual"], approvedContentResolution: TrainerFrameApprovedContentResolution): TrainerFrameVisualResult {
+  const instructionTargetUci = normalizeText(input.instructionTargetUci);
+  const instructionTargetSan = normalizeText(input.instructionTargetSan);
+  const coachMoveUci = normalizeText(input.coachMoveUci ?? input.coachDecision?.debug?.coachMoveUci ?? input.displayedCoachDecision?.debug?.coachMoveUci ?? null);
+  const finalVisualTargetUci = instructionTargetUci ?? visual.targetMoveUci ?? null;
+  const finalVisualTargetSan = instructionTargetSan ?? normalizeText(input.visualRecipeMoveSan ?? input.visualRecipe?.moveSan ?? null);
+  const approvedRecipeId = normalizeText(input.visualRecipe?.visualRecipeId ?? input.visualRecipe?.id ?? visual.recipeId ?? null);
+  const approvedRecipeTargetMoveUci = normalizeText(input.visualRecipe?.targetMoveUci ?? input.visualRecipeMoveUci ?? input.visualRecipe?.moveUci ?? null);
+  const sourceRuntimeMoveUci = normalizeText(
+    input.stage2ApprovedPacketSourceRuntimeMoveUci ??
+      input.approvedPacketSourceRuntimeMoveUci ??
+      approvedContentResolution.sourceRuntimeMoveUci ??
+      input.visualRecipe?.sourceRuntimeMoveUci ??
+      null,
+  );
+  const plainViewSuppressed =
+    String(input.trainerView ?? "").toLowerCase() === "plain" &&
+    Boolean(!(input.showMoreShown ?? input.showMoreRevealed ?? false));
+  const rendered = visual.authority !== "none" && !plainViewSuppressed && input.presentationFrame?.visual?.shouldRender !== false;
+  const approvedRecipeMatched =
+    visual.authority === "approved_recipe" &&
+    Boolean(approvedRecipeId) &&
+    Boolean(approvedRecipeTargetMoveUci) &&
+    Boolean(finalVisualTargetUci) &&
+    normalizeText(approvedRecipeTargetMoveUci) === normalizeText(finalVisualTargetUci);
+  const generatedRecipeRendered = visual.authority === "generated_recipe" && rendered;
+  const fallbackSurfaceVisualsRendered = visual.authority === "fallback_current_surface" && rendered;
+  const sourceSquare = finalVisualTargetUci ? finalVisualTargetUci.slice(0, 2) : null;
+  const destinationSquare = finalVisualTargetUci ? finalVisualTargetUci.slice(2, 4) : null;
+  const targetMatchesInstruction = instructionTargetUci
+    ? Boolean(finalVisualTargetUci && normalizeText(finalVisualTargetUci) === instructionTargetUci)
+    : "not_applicable";
+  const targetMatchesCoachCard = coachMoveUci
+    ? Boolean(finalVisualTargetUci && normalizeText(finalVisualTargetUci) === coachMoveUci)
+    : "not_applicable";
+  const castlingNormalized = sourceRuntimeMoveUci
+    ? (isCastlingNotation(sourceRuntimeMoveUci) && finalVisualTargetUci
+        ? normalizeCastlingMove(sourceRuntimeMoveUci) === normalizeText(finalVisualTargetUci)
+        : "not_applicable")
+    : "not_applicable";
+  const missingReasons: string[] = [];
+  const warnings: string[] = [];
+  if (plainViewSuppressed) missingReasons.push("plain_view_suppressed");
+  if (!rendered && !plainViewSuppressed && visual.authority === "none") missingReasons.push("no_visuals_rendered");
+  if (instructionTargetUci && finalVisualTargetUci && normalizeText(finalVisualTargetUci) !== instructionTargetUci) missingReasons.push("visual_target_mismatch");
+  if (sourceRuntimeMoveUci && castlingNormalized !== "not_applicable" && castlingNormalized !== true) missingReasons.push("castling_not_normalized");
+  if (visual.authority === "approved_recipe" && !approvedRecipeMatched) missingReasons.push("approved_recipe_target_mismatch");
+  if (visual.authority === "approved_recipe" && approvedRecipeMatched) warnings.push("approved_recipe_exact_match");
+  if (visual.authority === "generated_recipe") warnings.push("generated_recipe_rendered");
+
+  return {
+    rendered,
+    visualSource: normalizeVisualSource(visual.authority),
+    finalVisualTargetUci,
+    finalVisualTargetSan,
+    approvedRecipeMatched,
+    approvedRecipeId,
+    approvedRecipeTargetMoveUci,
+    generatedRecipeRendered,
+    fallbackSurfaceVisualsRendered,
+    primitiveCount: visual.renderedPrimitiveCount,
+    sourceSquare,
+    destinationSquare,
+    targetMatchesInstruction,
+    targetMatchesCoachCard,
+    plainViewSuppressed,
+    castlingNormalized,
+    sourceRuntimeMoveUci,
+    missingReasons,
+    warnings,
+  };
 }
 
 export function buildTrainerFrameResolution(input: Input): TrainerFrameResolution {
@@ -179,6 +277,12 @@ export function buildTrainerFrameResolution(input: Input): TrainerFrameResolutio
       input.stage2CoachingPacketResolution?.packet?.sourceFile ??
       input.stage2CoachingPacketSourceFile,
     ),
+    sourceRuntimeMoveUci: normalizeString(
+      input.approvedPacketSourceRuntimeMoveUci ??
+      input.stage2ApprovedPacketSourceRuntimeMoveUci ??
+      input.stage2CoachingPacketResolution?.packet?.sourceRuntimeMoveUci ??
+      null,
+    ),
     packetStatus: normalizeString(
       input.approvedPacketStatus ??
       input.stage2ApprovedPacketStatus ??
@@ -250,6 +354,22 @@ export function buildTrainerFrameResolution(input: Input): TrainerFrameResolutio
       recipeId: visualRecipeId,
       patternId,
     },
+    visualResult: deriveVisualResult(input, {
+      authority: visualAuthority,
+      approvedRecipeRendered,
+      generatedRecipeRendered,
+      fallbackCurrentSurfaceRendered,
+      noVisualsRendered,
+      renderedMoveUci,
+      targetMoveUci,
+      targetMatchesMoveUci,
+      renderedPrimitiveCount: renderedVisualPrimitiveCount,
+      surfacePrimitiveCount: surfaceVisualPrimitiveCount,
+      renderedSource: actualVisualSource,
+      surfaceSource: normalizeText(input.visibleTeachingSurface?.mode ?? input.presentationFrame?.visual?.source ?? null),
+      recipeId: visualRecipeId,
+      patternId,
+    }, approvedContentResolution),
     coachQuality: {
       qualityScore: finalCoachScore,
       qualityScoreSource,

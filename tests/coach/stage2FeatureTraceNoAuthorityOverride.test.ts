@@ -133,8 +133,10 @@ export function testStage2FeatureTraceNoAuthorityOverride(): void {
   assert.equal(trace.coachCardSource, "approved");
   assert.equal(trace.targetUci, "e2e4");
   assert.equal(trace.visualTargetUci, "e2e4");
+  assert.equal(trace.visualResult.visualSource, "generated_recipe");
   assert.equal(trace.visualSource, "generated_recipe");
   assert.equal(trace.visualFallbackUsed, false);
+  assert.equal(trace.visualResult.approvedRecipeMatched, false);
   assert.equal(trace.reviewCandidateEventPreview?.targetUci, "e2e4");
   assert.equal(trace.reviewCandidateEventPreview?.coachCardSource, "approved");
   assert.equal(trace.plainViewLeakSafe, true);

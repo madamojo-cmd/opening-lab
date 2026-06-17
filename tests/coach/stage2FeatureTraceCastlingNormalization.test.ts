@@ -33,7 +33,7 @@ export function testStage2FeatureTraceCastlingNormalization(): void {
   }).featureTrace as any;
   assert.equal(blackTrace.targetUci, "e8g8");
   assert.equal(blackTrace.visualTargetUci, "e8g8");
-  assert.equal(blackTrace.visualSource, "generated_recipe");
+  assert.equal(blackTrace.visualSource, "approved_recipe");
   assert.equal(blackTrace.coachCardResult.targetMatchesMoveUci, true);
 }
 

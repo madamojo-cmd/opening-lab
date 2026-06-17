@@ -26,6 +26,7 @@ export type Stage2CoachingPacketEntry = {
   playKey?: string;
   lineId?: string;
   moveUci?: string;
+  sourceRuntimeMoveUci?: string | null;
   moveSan?: string;
   conceptId?: string;
   difficulty?: "beginner" | "intermediate" | "advanced";
