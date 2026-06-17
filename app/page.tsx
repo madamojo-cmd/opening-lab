@@ -50,7 +50,6 @@ import { attributeLastMove, decideTrainerPhaseActionGate } from "@/lib/blundr/pr
 import { buildVisibleTeachingSurface } from "@/lib/blundr/presentation/buildVisibleTeachingSurface"; // v2.7.40 Agent 3: single visible owner surface
 import { buildLiveVisibleTeachingSurface } from "@/lib/blundr/presentation/buildLiveVisibleTeachingSurface";
 import { adaptVisibleSurfaceToBoardVisuals, adaptVisibleSurfaceToCoachUi } from "@/lib/blundr/presentation/uiSurfaceAdapter";
-import { selectRenderedCoachCardCopyAuthority } from "@/lib/blundr/presentation/renderedCoachCopyAuthority";
 import { isV28VisibleSurfaceEnabled } from "@/lib/blundr/presentation/featureFlags";
 import { buildContinuationCandidateVisual } from "@/lib/blundr/visual/continuationCandidateVisual";
 import { buildOpeningTree } from "@/lib/blundr/openings/openingTree";
@@ -73,10 +72,7 @@ import {
   STAGE2_APPROVED_CONTENT_ENABLED,
   STAGE2_COACHING_RESOLVER_ENABLED,
   STAGE2_SAFE_FALLBACK_ENABLED,
-  applyStage2CoachCopyEnrichment,
-  buildStage2CoachContext,
-  mapVisibleSurfaceModeToStage2CoachingSurface,
-  resolveStage2CoachingPacket,
+  resolveStage2CoachRenderState,
 } from "@/lib/blundr/stage2Coaching";
 import type { MaiaMoveCandidate, MaiaOpponentReplyResult, MaiaProviderStatus, MaiaSkillLevel } from "@/lib/blundr/maia/maiaTypes";
 import { unavailableMaiaProvider } from "@/lib/blundr/maia/maiaProvider";
@@ -3543,29 +3539,6 @@ export default function App(){
       },
     } as any;
   }
-  const stage2CoachContext=buildStage2CoachContext({
-    openingId:runtimeBookFrameQuery.openingId??runtimeOpeningIdForFrame??undefined,
-    playKeyBefore:runtimeBookFrameQuery.playKeyBefore??runtimePlayKeyBeforeForFrame??undefined,
-    learnerSide:selectedOpeningAvailability?.learnerPerspective??undefined,
-    sideToMove:game.turn()==="b"?"black":"white",
-    targetUci:instructionTarget?.uci??undefined,
-    targetSan:instructionTarget?.san??undefined,
-    targetPieceType:instructionTarget?.pieceType??undefined,
-    surface:mapVisibleSurfaceModeToStage2CoachingSurface(v28VisibleSurface?.mode??null),
-    runtimeBook:{
-      status:runtimeBookFrameQuery.status,
-      candidateCount:runtimeBookFrameQuery.candidates.length,
-      topCandidateUci:runtimeBookFrameQuery.candidates[0]?.uci,
-      topCandidateSan:runtimeBookFrameQuery.candidates[0]?.san,
-      topCandidateRank:runtimeBookFrameQuery.candidates[0]?.rank,
-      topCandidateTotalGames:runtimeBookFrameQuery.candidates[0]?.totalGames,
-      bookExhausted:runtimeBookFrameQuery.bookExhausted,
-    },
-    plainRevealState:v28VisibleSurface?.mode==="plain_before_show_more"?(plainHintShown?"hint":"hidden"):(
-      v28VisibleSurface?.mode==="plain_after_show_more"?"show_more":"revealed"
-    ),
-  });
-  const stage2CoachingPacketResolution=resolveStage2CoachingPacket(stage2CoachContext);
   const pipelineCoachTitle = displayedCoachDecision?.shouldShowCoachCard
     ? String(displayedCoachDecision.title ?? "").trim()
     : "";
@@ -3575,11 +3548,27 @@ export default function App(){
   const pipelineCoachQuality = (displayedCoachDecision?.debug as any)?.coachQuality ?? {};
   const pipelineSafetyPassed = !Array.isArray((displayedCoachDecision?.debug as any)?.unverifiedClaims)
     || ((displayedCoachDecision?.debug as any)?.unverifiedClaims as unknown[]).length === 0;
-  const pipelineCopyAuthorityDecision = selectRenderedCoachCardCopyAuthority({
+  const stage2CoachRenderState = resolveStage2CoachRenderState({
+    openingId: runtimeBookFrameQuery.openingId ?? runtimeOpeningIdForFrame ?? undefined,
+    playKeyBefore: runtimeBookFrameQuery.playKeyBefore ?? runtimePlayKeyBeforeForFrame ?? undefined,
+    learnerSide: selectedOpeningAvailability?.learnerPerspective ?? undefined,
+    sideToMove: game.turn() === "b" ? "black" : "white",
+    targetUci: instructionTarget?.uci ?? undefined,
+    targetSan: instructionTarget?.san ?? undefined,
+    targetPieceType: instructionTarget?.pieceType ?? undefined,
+    visibleSurfaceMode: v28VisibleSurface?.mode ?? null,
+    runtimeBookStatus: runtimeBookFrameQuery.status,
+    runtimeBookCandidateCount: runtimeBookFrameQuery.candidates.length,
+    runtimeBookTopCandidateUci: runtimeBookFrameQuery.candidates[0]?.uci,
+    runtimeBookTopCandidateSan: runtimeBookFrameQuery.candidates[0]?.san,
+    runtimeBookTopCandidateRank: runtimeBookFrameQuery.candidates[0]?.rank,
+    runtimeBookTopCandidateTotalGames: runtimeBookFrameQuery.candidates[0]?.totalGames,
+    runtimeBookBookExhausted: runtimeBookFrameQuery.bookExhausted,
+    plainRevealState: v28VisibleSurface?.mode === "plain_before_show_more" ? (plainHintShown ? "hint" : "hidden") : (
+      v28VisibleSurface?.mode === "plain_after_show_more" ? "show_more" : "revealed"
+    ),
     trainerPhase,
     isUserTurn,
-    visibleSurfaceMode: v28VisibleSurface?.mode ?? null,
-    instructionTargetUci: instructionTarget?.uci ?? null,
     surfaceSafetyBlocked: Boolean(visibleTeachingSurface?.safety?.blocked),
     surfaceCopy: {
       title: v28CoachUiModel?.title ?? convergedVisibleSurface.coach.title ?? "Training move",
@@ -3596,13 +3585,10 @@ export default function App(){
     pipelineContainsDebugLeak: Boolean(pipelineCoachQuality?.containsDebugLeak || isDebugLeakText(pipelineCoachBody)),
     pipelinePassedSafety: pipelineSafetyPassed,
   });
-  const stage2CoachCopyEnrichment=applyStage2CoachCopyEnrichment({
-    currentMode:v28VisibleSurface?.mode??null,
-    targetUci:instructionTarget?.uci??null,
-    targetSan:instructionTarget?.san??null,
-    baseCopy:pipelineCopyAuthorityDecision.copy,
-    resolution:stage2CoachingPacketResolution,
-  });
+  const stage2CoachContext = stage2CoachRenderState.stage2CoachContext;
+  const stage2CoachingPacketResolution = stage2CoachRenderState.stage2CoachingPacketResolution;
+  const pipelineCopyAuthorityDecision = stage2CoachRenderState.pipelineCopyAuthorityDecision;
+  const stage2CoachCopyEnrichment = stage2CoachRenderState.stage2CoachCopyEnrichment;
   const coachCardTitleFromSurface = plainBeforeShowMore && !plainHintShown
     ? "Find the next move"
     : stage2CoachCopyEnrichment.copy.title;

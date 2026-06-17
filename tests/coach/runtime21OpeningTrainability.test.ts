@@ -39,7 +39,8 @@ export function testRuntime21OpeningTrainability(): void {
   const repertoireIds = new Set(STAGE2_RUNTIME_TRAINABLE_REPERTOIRES.map((repertoire) => repertoire.id));
   const openingIds = STAGE2_OPENING_AVAILABILITY_MATRIX.map((opening) => opening.openingId);
   assert.deepEqual([...repertoireIds].sort(), [...openingIds].sort(), "runtime_trainable_ids_must_match_visibility_matrix");
-  assert.equal(STAGE2_OPENING_AVAILABILITY_MATRIX.filter((opening) => opening.contentStatus === "sample").length, 3);
+  assert.equal(STAGE2_OPENING_AVAILABILITY_MATRIX.filter((opening) => opening.contentStatus === "approved").length, 21);
+  assert.equal(STAGE2_OPENING_AVAILABILITY_MATRIX.filter((opening) => opening.contentStatus === "sample").length, 0);
 
   for (const opening of STAGE2_OPENING_AVAILABILITY_MATRIX) {
     const repertoire = getStage2RuntimeTrainableRepertoire(opening.openingId);
@@ -54,11 +55,7 @@ export function testRuntime21OpeningTrainability(): void {
     assert.equal(rootNodes.some((node) => node.continuations.length > 0), true, `runtime_trainable_root_continuation_missing:${opening.openingId}`);
 
     assert.equal(opening.runtimeAvailable, true, `runtime_opening_not_available:${opening.openingId}`);
-    const expectedContentStatus =
-      opening.openingId === "italian-black" || opening.openingId === "italian-white" || opening.openingId === "ruy-lopez-white"
-        ? "sample"
-        : "fallback_only";
-    assert.equal(opening.contentStatus, expectedContentStatus, `runtime_opening_content_status_mismatch:${opening.openingId}`);
+    assert.equal(opening.contentStatus, "approved", `runtime_opening_content_status_mismatch:${opening.openingId}`);
   }
 }
 
