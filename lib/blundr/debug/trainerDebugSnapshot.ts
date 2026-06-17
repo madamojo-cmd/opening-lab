@@ -176,6 +176,11 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   const selectedApprovedContentInventory = getStage2ApprovedContentInventoryEntry(String(input.selectedOpeningId ?? input.selectedRepertoireId ?? ""));
   const approvedContentInventorySummary = getStage2ApprovedContentInventorySummary();
   const selectedOpeningApprovedContentAvailable = Boolean(selectedApprovedContentInventory?.approvedContentAvailable);
+  const selectedOpeningPublicReady = Boolean(selectedOpeningAvailability?.publicReady);
+  const selectedOpeningBetaReady = Boolean(selectedOpeningAvailability?.betaReady);
+  const selectedOpeningNeedsBrowserQA = Boolean(selectedOpeningAvailability?.needsBrowserQA);
+  const selectedOpeningLeadingMvpCandidate = Boolean(selectedOpeningAvailability?.leadingMvpCandidate);
+  const selectedOpeningReasonHidden = selectedOpeningAvailability?.reasonHidden ?? null;
   const selectedOpeningApprovedContentReasonRejected =
     selectedOpeningApprovedContentAvailable
       ? null
@@ -1110,6 +1115,13 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       selectedOpeningRuntimeAvailable: Boolean(selectedOpeningAvailability?.runtimeAvailable),
       selectedOpeningContentStatus: selectedOpeningAvailability?.contentStatus ?? "none",
       selectedOpeningApprovedContentAvailable: Boolean(selectedApprovedContentInventory?.approvedContentAvailable),
+      selectedOpeningStage: selectedOpeningAvailability?.stage ?? null,
+      selectedOpeningQaStatus: selectedOpeningAvailability?.qaStatus ?? null,
+      selectedOpeningPublicReady: selectedOpeningPublicReady,
+      selectedOpeningBetaReady: selectedOpeningBetaReady,
+      selectedOpeningNeedsBrowserQA: selectedOpeningNeedsBrowserQA,
+      selectedOpeningLeadingMvpCandidate: selectedOpeningLeadingMvpCandidate,
+      selectedOpeningReasonHidden: selectedOpeningReasonHidden,
       candidateSource: input.candidateSource ?? (input.runtimeBookQueried ? "local_crawled_package" : null),
       liveLichessCalled: false,
       openingAvailabilityStatus: selectedOpeningAvailability?.runtimeAvailable
@@ -1118,6 +1130,10 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       selectedOpeningDisplayName: selectedOpeningAvailability?.displayName ?? null,
       selectedOpeningPerspective: selectedOpeningAvailability?.learnerPerspective ?? null,
       selectedOpeningUserVisible: selectedOpeningAvailability?.userVisible ?? null,
+      publicOpeningCount: runtimeAvailabilitySummary.publicOpeningCount,
+      betaOpeningCount: runtimeAvailabilitySummary.betaOpeningCount,
+      devOpeningCount: runtimeAvailabilitySummary.devOpeningCount,
+      hiddenOpeningCount: runtimeAvailabilitySummary.hiddenOpeningCount,
       approvedPacketMatched: input.trainerFrameResolution?.approvedContent?.matched ?? input.stage2ApprovedPacketMatched ?? null,
       approvedPacketKind: input.trainerFrameResolution?.approvedContent?.packetKind ?? input.stage2ApprovedPacketKind ?? null,
       approvedPacketId: input.trainerFrameResolution?.approvedContent?.packetId ?? input.stage2ApprovedPacketId ?? null,

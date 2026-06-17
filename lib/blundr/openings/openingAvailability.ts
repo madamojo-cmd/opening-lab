@@ -20,7 +20,12 @@ export type OpeningAvailability = {
   approvedContentAvailable: boolean;
   stage: OpeningAvailabilityStage;
   qaStatus: OpeningQaStatus;
-  reasonHidden?: string;
+  publicReady: boolean;
+  betaReady: boolean;
+  needsBrowserQA: boolean;
+  leadingMvpCandidate: boolean;
+  reasonHidden: string | null;
+  notes: string[];
 };
 
 export type OpeningAvailabilitySummary = {
@@ -28,6 +33,10 @@ export type OpeningAvailabilitySummary = {
   runtimePackageId: string;
   openingCount: number;
   visibleOpeningCount: number;
+  publicOpeningCount: number;
+  betaOpeningCount: number;
+  devOpeningCount: number;
+  hiddenOpeningCount: number;
   runtimeAvailableCount: number;
   approvedContentInventoryCount: number;
   approvedContentMatchedCount: number;
@@ -115,6 +124,7 @@ export const STAGE2_OPENING_AVAILABILITY_MATRIX: OpeningAvailability[] = STAGE2_
   const label = OPENING_LABELS[openingId];
   const counts = OPENING_RUNTIME_COUNTS[openingId];
   const approvedContentInventoryEntry = getStage2ApprovedContentInventoryEntry(openingId);
+  const leadingMvpCandidate = openingId === "italian-white";
   const contentStatus: OpeningContentStatus =
     approvedContentInventoryEntry?.status === "sample"
       ? "sample"
@@ -123,6 +133,8 @@ export const STAGE2_OPENING_AVAILABILITY_MATRIX: OpeningAvailability[] = STAGE2_
         : approvedContentInventoryEntry?.status === "fallback_only"
           ? "fallback_only"
           : "fallback_only";
+  const stage: OpeningAvailabilityStage = leadingMvpCandidate ? "beta" : "dev";
+  const reasonHidden = leadingMvpCandidate ? "beta_selector_only_until_browser_qa" : "dev_selector_only_until_browser_qa";
   return {
     openingId,
     displayName: label.displayName,
@@ -134,8 +146,20 @@ export const STAGE2_OPENING_AVAILABILITY_MATRIX: OpeningAvailability[] = STAGE2_
     userVisible: true,
     contentStatus,
     approvedContentAvailable: Boolean(approvedContentInventoryEntry?.approvedContentAvailable),
-    stage: "dev",
+    stage,
     qaStatus: "smoke_pass",
+    publicReady: false,
+    betaReady: leadingMvpCandidate,
+    needsBrowserQA: true,
+    leadingMvpCandidate,
+    reasonHidden,
+    notes: [
+      "runtime_available",
+      "approved_content_available",
+      "trainer_selector_visible",
+      leadingMvpCandidate ? "leading_mvp_candidate" : "not_public_release_ready",
+      "browser_qa_pending",
+    ],
   };
 });
 
@@ -147,11 +171,19 @@ export function getStage2OpeningAvailabilitySummary(): OpeningAvailabilitySummar
   const approvedContentInventorySummary = getStage2ApprovedContentInventorySummary();
   const runtimeAvailableCount = STAGE2_OPENING_AVAILABILITY_MATRIX.filter((entry) => entry.runtimeAvailable).length;
   const approvedContentAvailableCount = STAGE2_OPENING_AVAILABILITY_MATRIX.filter((entry) => entry.approvedContentAvailable).length;
+  const publicOpeningCount = STAGE2_OPENING_AVAILABILITY_MATRIX.filter((entry) => entry.publicReady).length;
+  const betaOpeningCount = STAGE2_OPENING_AVAILABILITY_MATRIX.filter((entry) => entry.betaReady).length;
+  const devOpeningCount = STAGE2_OPENING_AVAILABILITY_MATRIX.filter((entry) => entry.stage === "dev").length;
+  const hiddenOpeningCount = STAGE2_OPENING_AVAILABILITY_MATRIX.filter((entry) => entry.stage === "hidden").length;
   return {
     runtimeDataSource: "local_crawled_package",
     runtimePackageId: STAGE2_RUNTIME_PACKAGE_ID,
     openingCount: approvedContentInventorySummary.approvedContentInventoryCount,
     visibleOpeningCount: STAGE2_OPENING_AVAILABILITY_MATRIX.filter((entry) => entry.userVisible).length,
+    publicOpeningCount,
+    betaOpeningCount,
+    devOpeningCount,
+    hiddenOpeningCount,
     runtimeAvailableCount,
     approvedContentInventoryCount: approvedContentInventorySummary.approvedContentInventoryCount,
     approvedContentMatchedCount: approvedContentInventorySummary.approvedContentMatchedCount,

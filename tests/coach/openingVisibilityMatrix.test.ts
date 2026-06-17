@@ -14,6 +14,10 @@ export function testOpeningVisibilityMatrix(): void {
   assert.equal(summary.runtimePackageId, STAGE2_RUNTIME_PACKAGE_ID);
   assert.equal(summary.openingCount, 21);
   assert.equal(summary.visibleOpeningCount, 21);
+  assert.equal(summary.publicOpeningCount, 0);
+  assert.equal(summary.betaOpeningCount, 1);
+  assert.equal(summary.devOpeningCount, 20);
+  assert.equal(summary.hiddenOpeningCount, 0);
   assert.equal(summary.liveLichessCalled, false);
   assert.equal(summary.openingAvailabilityStatus, "smoke_pass");
 
@@ -33,7 +37,18 @@ export function testOpeningVisibilityMatrix(): void {
     assert.equal(opening.userVisible, true, `opening_not_user_visible:${opening.openingId}`);
     assert.equal(opening.contentStatus, "approved", `content_status_mismatch:${opening.openingId}`);
     assert.equal(opening.approvedContentAvailable, true, `approved_content_should_be_available:${opening.openingId}`);
-    assert.equal(opening.stage, "dev", `stage_mismatch:${opening.openingId}`);
+    assert.equal(opening.publicReady, false, `public_ready_must_remain_false:${opening.openingId}`);
+    assert.equal(opening.needsBrowserQA, true, `browser_qa_pending:${opening.openingId}`);
+    assert.equal(opening.reasonHidden != null, true, `reason_hidden_missing:${opening.openingId}`);
+    if (opening.openingId === "italian-white") {
+      assert.equal(opening.stage, "beta", `beta_stage_expected:${opening.openingId}`);
+      assert.equal(opening.betaReady, true, `beta_ready_expected:${opening.openingId}`);
+      assert.equal(opening.leadingMvpCandidate, true, `leading_mvp_expected:${opening.openingId}`);
+    } else {
+      assert.equal(opening.stage, "dev", `stage_mismatch:${opening.openingId}`);
+      assert.equal(opening.betaReady, false, `beta_ready_should_be_false:${opening.openingId}`);
+      assert.equal(opening.leadingMvpCandidate, false, `leading_mvp_should_be_false:${opening.openingId}`);
+    }
     assert.equal(opening.qaStatus, "smoke_pass", `qa_status_mismatch:${opening.openingId}`);
   }
 
