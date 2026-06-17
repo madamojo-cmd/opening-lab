@@ -20,7 +20,9 @@ import type {
   Stage2FeatureTraceDetectedFeature,
   Stage2FeatureTraceMissingReason,
   Stage2FeatureTrace,
+  Stage2FeatureTraceFrameKind,
   Stage2FeatureTraceRankedOpportunity,
+  Stage2FeatureTraceReviewCandidateEventPreview,
   Stage2FeatureTraceTimelineEntry,
   Stage2FeatureTraceVisualRecipeResult,
 } from "./stage2FeatureTraceTypes";
@@ -65,6 +67,11 @@ function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+function normalizeTextOrNull(value: unknown): string | null {
+  const text = normalizeText(value);
+  return text.length > 0 ? text : null;
+}
+
 function normalizeUci(value: unknown): string | null {
   const text = normalizeText(value).toLowerCase();
   return /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(text) ? text : null;
@@ -80,6 +87,90 @@ function dedupeByKey<T>(items: T[], key: (item: T) => string): T[] {
     out.push(item);
   }
   return out;
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((entry) => String(entry)).filter((entry) => entry.length > 0) : [];
+}
+
+function deriveFrameKind(input: FeatureTraceInput, trainerFrameResolution: TrainerFrameResolution): Stage2FeatureTraceFrameKind {
+  const resolvedKind = normalizeText(input.currentInstructionFrame?.kind ?? input.currentInstructionFrameKind ?? null);
+  if (resolvedKind === "branch_complete") return "branch_complete";
+  if (resolvedKind === "terminal") return "terminal";
+  if (resolvedKind === "opponent_replying") return "opponent_replying";
+  if (resolvedKind === "transitioning") return "system";
+  if (resolvedKind === "continuation_candidate") return "continuation_user_turn";
+  if (resolvedKind === "guided_move" || resolvedKind === "lichess_branch_move" || resolvedKind === "adaptive_branch_move") return "instructional_user_turn";
+  if (String(input.trainingMode ?? "").toLowerCase() === "continuation" && Boolean(input.isUserTurn)) return "continuation_user_turn";
+  if (Boolean(input.isUserTurn) && String(input.trainerPhase ?? "") === "ready_for_user") return "instructional_user_turn";
+  if (String(input.trainerPhase ?? "") === "terminal") return "terminal";
+  if (String(input.trainerPhase ?? "") === "opponent_replying") return "opponent_replying";
+  if (trainerFrameResolution.approvedContent.packetKind === "safe_fallback" && Boolean(input.isUserTurn)) return "instructional_user_turn";
+  return "system";
+}
+
+function deriveCoachCardSource(trainerFrameResolution: TrainerFrameResolution, approvedContentMatched: boolean, fallbackUsed: boolean): "approved" | "live" | "safe_fallback" {
+  if (approvedContentMatched) return "approved";
+  if (fallbackUsed) return "safe_fallback";
+  return trainerFrameResolution.coachCard.finalRendered.source === "surfaceCoachCardDecision" || trainerFrameResolution.coachCard.finalRendered.source === "displayedCoachDecision"
+    ? "live"
+    : "live";
+}
+
+function derivePlainViewLeakSafe(input: FeatureTraceInput, coachCardResult: Stage2FeatureTraceCoachCardResult, moveFacts: DerivedMoveFacts): boolean {
+  const visibleMode = normalizeText(input.visibleTeachingSurface?.mode ?? input.v28VisibleSurface?.mode ?? input.presentationFrame?.coach?.owner ?? "");
+  if (!String(input.trainerView ?? "").includes("plain")) return true;
+  const title = `${coachCardResult.visibleTitle ?? ""} ${coachCardResult.visibleBody ?? ""}`.toLowerCase();
+  const san = normalizeText(moveFacts.moveSan ?? "").toLowerCase();
+  const uci = normalizeText(moveFacts.moveUci ?? "").toLowerCase();
+  const preShowMore = visibleMode === "plain_before_show_more";
+  if (!preShowMore) return true;
+  return !title.includes(san) && !title.includes(uci);
+}
+
+function deriveReviewCandidateEventPreview(params: {
+  openingId: string | null;
+  lineId: string | null;
+  fen4: string;
+  moveFacts: DerivedMoveFacts;
+  selectedTheme: string | null;
+  selectedOpportunity: Stage2FeatureTraceRankedOpportunity | null;
+  frameKind: Stage2FeatureTraceFrameKind;
+  showMoreShown: boolean;
+  coachCardSource: "approved" | "live" | "safe_fallback";
+  visualRecipeResult: Stage2FeatureTraceVisualRecipeResult;
+  plainViewLeakSafe: boolean;
+  approvedContentMatched: boolean;
+  fallbackUsed: boolean;
+  traceStatus: Stage2FeatureTrace["traceStatus"];
+}): Stage2FeatureTraceReviewCandidateEventPreview | null {
+  const instructionalFrame = params.frameKind === "instructional_user_turn" || params.frameKind === "continuation_user_turn";
+  const eligible =
+    instructionalFrame &&
+    params.approvedContentMatched &&
+    !params.fallbackUsed &&
+    params.plainViewLeakSafe &&
+    params.visualRecipeResult.targetMatchesMoveUci === true &&
+    params.selectedOpportunity != null &&
+    params.traceStatus !== "missing";
+
+  if (!eligible) return null;
+  return {
+    openingId: params.openingId,
+    lineId: params.lineId,
+    fen4: params.fen4,
+    targetUci: params.moveFacts.moveUci,
+    targetSan: params.moveFacts.moveSan,
+    conceptIds: params.moveFacts.conceptIds.slice(),
+    selectedTheme: params.selectedTheme,
+    selectedOpportunityId: params.selectedOpportunity?.id ?? null,
+    viewMode: params.showMoreShown ? "assisted" : "plain",
+    usedHint: Boolean(params.showMoreShown),
+    usedShowMore: Boolean(params.showMoreShown),
+    result: params.showMoreShown ? "revealed" : "not_attempted",
+    coachCardSource: params.coachCardSource,
+    visualRecipeId: params.visualRecipeResult.recipeId,
+  };
 }
 
 function toFeatureClaimRecord(claim: any, source: Stage2FeatureTraceDetectedFeature["source"]): Stage2FeatureTraceDetectedFeature {
@@ -568,8 +659,11 @@ function buildTraceTimeline(featureTrace: Stage2FeatureTrace, selectedOpportunit
         fen4: featureTrace.fen4,
         openingId: featureTrace.openingId,
         lineId: featureTrace.lineId,
+        frameKind: featureTrace.frameKind,
         detectedFeatureIds: featureTrace.detectedFeatures.map((feature) => feature.id),
         detectedConceptIds: featureTrace.detectedConcepts.map((concept) => concept.id),
+        selectedFeatureIds: featureTrace.selectedFeatureIds,
+        selectedConceptId: featureTrace.selectedConceptId,
       },
     },
     {
@@ -587,9 +681,13 @@ function buildTraceTimeline(featureTrace: Stage2FeatureTrace, selectedOpportunit
       details: {
         coachCardAuthority: featureTrace.coachCardResult.renderedCopyAuthority,
         coachCardFallbackUsed: featureTrace.coachCardResult.fallbackUsed,
+        approvedContentMatched: featureTrace.approvedContentMatched,
+        approvedPacketKind: featureTrace.approvedPacketKind,
+        visualSource: featureTrace.visualSource,
         visualRecipeRendered: featureTrace.visualRecipeResult.rendered,
         traceStatus: featureTrace.traceStatus,
         missingReasons: featureTrace.missingReasons,
+        reviewCandidateEventEligible: featureTrace.reviewCandidateEventEligible,
       },
     },
   ];
@@ -815,7 +913,12 @@ function buildVisualRecipeResult(input: FeatureTraceInput, moveFacts: DerivedMov
   };
 }
 
-function determineTraceStatus(input: FeatureTraceInput, trace: Stage2FeatureTrace, resolutionKind: string, reasons: Stage2FeatureTraceMissingReason[]): Stage2FeatureTrace["traceStatus"] {
+function determineTraceStatus(
+  input: FeatureTraceInput,
+  trace: Pick<Stage2FeatureTrace, "detectedFeatures" | "rankedOpportunities" | "selectedOpportunity">,
+  resolutionKind: string,
+  reasons: Stage2FeatureTraceMissingReason[],
+): Stage2FeatureTrace["traceStatus"] {
   if (!Boolean(input.trainerPhase === "ready_for_user" && input.isUserTurn)) return "missing";
   if (!trace.detectedFeatures.length) return "missing";
   if (!trace.selectedOpportunity || !trace.rankedOpportunities.length) return "missing";
@@ -832,6 +935,9 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
   const openingId = normalizeText(input.selectedOpeningId ?? input.openingId ?? input.repertoireId ?? "") || null;
   const lineId = normalizeText(input.selectedLineId ?? input.lineId ?? input.activeLineId ?? "") || null;
   const trainerFrameResolution = (input.trainerFrameResolution as TrainerFrameResolution | undefined) ?? buildTrainerFrameResolution(input);
+  const frameKind = deriveFrameKind(input, trainerFrameResolution);
+  const playKeyBefore = normalizeTextOrNull(input.playKeyBefore ?? input.runtimeBookPlayKeyBefore ?? input.continuation?.runtimeBookPlayKeyBefore ?? null);
+  const playKey = normalizeTextOrNull(input.playKey ?? input.currentPlayKey ?? input.runtimeBookPlayKey ?? null);
   const moveFacts = buildDerivedMoveFacts(input);
   const features = extractAdvancedFeatures(String(input.fen ?? ""));
   const pseudoFrame = buildPseudoFrame(input, moveFacts);
@@ -883,16 +989,75 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
     summarizeRankedOpportunity(opportunity, index + 1, index === 0),
   );
   const selectedOpportunity = rankedOpportunities[0] ?? null;
+  const selectedConceptId = selectedOpportunity?.conceptId ?? traceConceptId;
+  const selectedTheme = normalizeTextOrNull(input.coachDecision?.debug?.selectedTheme ?? input.coachQuality?.selectedTheme ?? input.selectedTheme ?? selectedConceptId ?? null);
+  const selectedFeatureIds = dedupeByKey(
+    detectedFeatures
+      .filter((feature) => feature.conceptId != null && feature.conceptId === selectedConceptId)
+      .map((feature) => feature.id),
+    (value) => value,
+  );
 
   const detectedConcepts = buildDetectedConcepts(moveFacts, detectedFeatures, plans, selectedOpportunity);
 
   const coachCardResult = buildCoachCardResult(input, moveFacts, selectedOpportunity, trainerFrameResolution);
   const visualRecipeResult = buildVisualRecipeResult(input, moveFacts, trainerFrameResolution);
+  const approvedPacketResolution = trainerFrameResolution.approvedContent ?? {
+    matched: false,
+    packetKind: "none",
+    packetId: null,
+    sourceBundle: null,
+    sourceFile: null,
+    packetStatus: null,
+    approvalReadiness: null,
+    missReason: null,
+    fallbackReason: coachCardResult.fallbackReason ?? null,
+    visualSource: visualRecipeResult.source,
+  };
+  const approvedContentMatched = Boolean(approvedPacketResolution.matched);
+  const fallbackUsed = Boolean(coachCardResult.fallbackUsed);
+  const fallbackReason = normalizeTextOrNull(coachCardResult.fallbackReason ?? approvedPacketResolution.fallbackReason ?? null);
+  const coachCardSource = deriveCoachCardSource(trainerFrameResolution, approvedContentMatched, fallbackUsed);
+  const copyAuthority = trainerFrameResolution.coachCard.finalRendered.authority ?? null;
+  const visualSource = trainerFrameResolution.visual.authority;
+  const visualRecipeId = trainerFrameResolution.visual.recipeId;
+  const visualTargetUci = trainerFrameResolution.visual.targetMoveUci;
+  const visualFallbackUsed = trainerFrameResolution.visual.authority === "fallback_current_surface";
+  const targetMatchesCoachCard = coachCardResult.targetMatchesMoveUci;
+  const targetMatchesVisual = trainerFrameResolution.visual.targetMatchesMoveUci;
+  const plainViewLeakSafe = derivePlainViewLeakSafe(input, coachCardResult, moveFacts);
+  const reviewCandidateEventEligible = Boolean(
+    frameKind === "instructional_user_turn" ||
+    frameKind === "continuation_user_turn",
+  ) &&
+    approvedContentMatched &&
+    !fallbackUsed &&
+    plainViewLeakSafe &&
+    targetMatchesCoachCard === true &&
+    targetMatchesVisual === true &&
+    detectedFeatures.length > 0 &&
+    selectedOpportunity != null;
+  const reviewCandidateEventPreview = deriveReviewCandidateEventPreview({
+    openingId,
+    lineId,
+    fen4,
+    moveFacts,
+    selectedTheme,
+    selectedOpportunity,
+    frameKind,
+    showMoreShown: Boolean(input.showMoreShown ?? input.showMoreRevealed ?? false),
+    coachCardSource,
+    visualRecipeResult,
+    plainViewLeakSafe,
+    approvedContentMatched,
+    fallbackUsed,
+    traceStatus: reviewCandidateEventEligible ? "complete" : "partial",
+  });
 
   const stage2Context = buildStage2CoachContext({
     openingId: openingId ?? undefined,
-    playKeyBefore: normalizeText(input.playKeyBefore ?? input.runtimeBookPlayKeyBefore ?? ""),
-    playKey: normalizeText(input.playKey ?? input.currentPlayKey ?? input.runtimeBookPlayKey ?? "") || undefined,
+    playKeyBefore: playKeyBefore ?? undefined,
+    playKey: playKey ?? undefined,
     learnerSide: getStage2OpeningAvailability(openingId ?? "")?.learnerPerspective ?? undefined,
     sideToMove: fen4.split(" ")[1] === "b" ? "black" : "white",
     targetUci: moveFacts.moveUci ?? undefined,
@@ -922,18 +1087,6 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
           : "revealed",
   });
   const stage2Resolution = resolveStage2CoachingPacket(stage2Context);
-  const approvedPacketResolution = trainerFrameResolution.approvedContent ?? {
-    matched: stage2Resolution.kind === "approved_packet",
-    packetKind: stage2Resolution.kind,
-    packetId: stage2Resolution.kind === "approved_packet" ? stage2Resolution.packet.packetId : null,
-    sourceBundle: stage2Resolution.kind === "approved_packet" ? stage2Resolution.packet.sourceCandidatePackages?.[0] ?? stage2Resolution.packet.sourceCandidatePackage ?? null : null,
-    sourceFile: stage2Resolution.kind === "approved_packet" ? stage2Resolution.packet.sourceFile ?? null : null,
-    packetStatus: stage2Resolution.kind === "approved_packet" ? stage2Resolution.packet.status : null,
-    approvalReadiness: stage2Resolution.kind === "approved_packet" ? stage2Resolution.packet.approvalReadiness : null,
-    missReason: stage2Resolution.kind === "approved_packet" ? null : stage2Resolution.kind === "none" ? stage2Resolution.reason : "approved_packet_exact_match_not_found",
-    fallbackReason: coachCardResult.fallbackReason ?? null,
-    visualSource: visualRecipeResult.source,
-  };
   const promotionSource = (input.trainerFrameResolution as TrainerFrameResolution | undefined)?.promotion;
   const promotion: Stage2FeatureTrace["promotion"] = {
     pendingPromotion: (promotionSource?.pendingPromotion ?? input.pendingPromotion ?? null) as Record<string, unknown> | null,
@@ -952,6 +1105,11 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
     promotionAuthorityTargetUci: normalizeText(promotionSource?.promotionAuthorityTargetUci ?? input.promotionAuthorityTargetUci ?? "") || null,
   };
   const acceptedTargetUci = normalizeText((input.trainerFrameResolution as TrainerFrameResolution | undefined)?.acceptedTargetUci ?? input.acceptedTargetUci ?? input.acceptedPromotionUci ?? moveFacts.moveUci ?? "") || null;
+  const targetUci = moveFacts.moveUci;
+  const targetSan = moveFacts.moveSan;
+  const targetSource = normalizeTextOrNull(input.instructionTargetSource ?? input.currentInstructionFrame?.targetSource ?? input.expectedMoveResolution?.source ?? input.coachDecision?.debug?.coachDecisionSource ?? null);
+  const criticalIssues = normalizeStringArray(input.criticalIssues ?? input.health?.criticalIssues);
+  const warnings = normalizeStringArray(input.warnings ?? input.health?.warnings);
 
   const missingReasons: Stage2FeatureTraceMissingReason[] = [];
   const instructionalFrame = Boolean(input.trainerPhase === "ready_for_user" && input.isUserTurn === true);
@@ -982,11 +1140,17 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
 
   const featureTrace: Stage2FeatureTrace = {
     frameId,
+    frameKind,
     fen4,
     openingId,
     lineId,
+    playKeyBefore,
+    playKey,
     moveUci: moveFacts.moveUci,
     moveSan: moveFacts.moveSan,
+    targetUci,
+    targetSan,
+    targetSource,
     acceptedTargetUci,
     approvedPacket: approvedPacketResolution,
     boardFacts: {
@@ -995,7 +1159,16 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
       openingId,
       lineId,
       frameId,
+      playKeyBefore,
+      playKey,
+      targetUci,
+      targetSan,
+      targetSource,
       featureClaimsCount: detectedFeatures.length,
+      featureDetectorContributed: detectedFeatures.length > 0,
+      selectedFeatureIds,
+      selectedConceptId,
+      selectedTheme,
       evidenceGraph: {
         claimsCount: evidenceGraph.claims.length,
         deterministicClaimsCount: evidenceGraph.deterministicClaims.length,
@@ -1010,16 +1183,34 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
         destinationOccupancy: evidenceGraph.boardTruth.destinationOccupancy,
         inCheck: evidenceGraph.boardTruth.inCheck,
       },
-      selectedConceptId: traceConceptId,
       stage2ResolutionKind: stage2Resolution.kind,
       stage2ResolutionReason: stage2Resolution.kind === "none" ? stage2Resolution.reason : "approved_or_fallback",
     },
     detectedFeatures,
     detectedConcepts,
+    featureDetectorContributed: detectedFeatures.length > 0,
+    selectedFeatureIds,
+    selectedConceptId,
+    selectedTheme,
     rankedOpportunities,
     selectedOpportunity,
     coachCardResult,
+    approvedContentMatched,
+    approvedPacketId: approvedPacketResolution.packetId,
+    approvedPacketKind: approvedPacketResolution.packetKind,
+    approvedPacketSourceBundle: approvedPacketResolution.sourceBundle,
+    approvedPacketMissReason: approvedPacketResolution.missReason,
+    approvedPacketFallbackReason: approvedPacketResolution.fallbackReason,
+    coachCardSource,
+    copyAuthority,
     visualRecipeResult,
+    visualSource,
+    visualRecipeId,
+    visualTargetUci,
+    visualFallbackUsed,
+    targetMatchesCoachCard,
+    targetMatchesVisual,
+    plainViewLeakSafe,
     promotion,
     finalRenderedTitle: coachCardResult.finalRenderedTitle,
     finalRenderedBody: coachCardResult.finalRenderedBody,
@@ -1044,8 +1235,12 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
       finalRenderedBody: coachCardResult.finalRenderedBody,
       traceStatus: "partial",
       missingReasons,
-    }, stage2Resolution.kind, missingReasons),
+    } as any, stage2Resolution.kind, missingReasons),
     missingReasons: dedupeByKey(missingReasons, (reason) => reason),
+    reviewCandidateEventEligible,
+    reviewCandidateEventPreview,
+    warnings,
+    criticalIssues,
   };
 
   const timeline = buildTraceTimeline(featureTrace, selectedOpportunity);

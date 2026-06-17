@@ -1,5 +1,32 @@
 export type Stage2FeatureTraceStatus = "complete" | "partial" | "missing";
 
+export type Stage2FeatureTraceFrameKind =
+  | "instructional_user_turn"
+  | "continuation_user_turn"
+  | "branch_complete"
+  | "terminal"
+  | "opponent_replying"
+  | "system";
+
+export type Stage2FeatureTraceReviewEventResult = "not_attempted" | "correct" | "miss" | "revealed" | "skipped";
+
+export interface Stage2FeatureTraceReviewCandidateEventPreview {
+  openingId: string | null;
+  lineId: string | null;
+  fen4: string | null;
+  targetUci: string | null;
+  targetSan: string | null;
+  conceptIds: string[];
+  selectedTheme: string | null;
+  selectedOpportunityId: string | null;
+  viewMode: "assisted" | "plain";
+  usedHint: boolean;
+  usedShowMore: boolean;
+  result: Stage2FeatureTraceReviewEventResult;
+  coachCardSource: "approved" | "live" | "safe_fallback";
+  visualRecipeId: string | null;
+}
+
 export type Stage2FeatureTraceMissingReason =
   | "no_detected_features"
   | "no_selected_concept"
@@ -127,11 +154,17 @@ export interface Stage2FeatureTraceTimelineEntry {
 
 export interface Stage2FeatureTrace {
   frameId: string | number | null;
+  frameKind: Stage2FeatureTraceFrameKind;
   fen4: string;
   openingId: string | null;
   lineId: string | null;
+  playKeyBefore: string | null;
+  playKey: string | null;
   moveUci: string | null;
   moveSan: string | null;
+  targetUci: string | null;
+  targetSan: string | null;
+  targetSource: string | null;
   acceptedTargetUci: string | null;
   approvedPacket: {
     matched: boolean;
@@ -148,15 +181,38 @@ export interface Stage2FeatureTrace {
   boardFacts: Record<string, unknown>;
   detectedFeatures: Stage2FeatureTraceDetectedFeature[];
   detectedConcepts: Stage2FeatureTraceDetectedConcept[];
+  featureDetectorContributed: boolean;
+  selectedFeatureIds: string[];
+  selectedConceptId: string | null;
+  selectedTheme: string | null;
   rankedOpportunities: Stage2FeatureTraceRankedOpportunity[];
   selectedOpportunity: Stage2FeatureTraceRankedOpportunity | null;
   coachCardResult: Stage2FeatureTraceCoachCardResult;
+  approvedContentMatched: boolean;
+  approvedPacketId: string | null;
+  approvedPacketKind: "approved_packet" | "safe_fallback" | "none";
+  approvedPacketSourceBundle: string | null;
+  approvedPacketMissReason: string | null;
+  approvedPacketFallbackReason: string | null;
+  coachCardSource: "approved" | "live" | "safe_fallback";
+  copyAuthority: string | null;
   visualRecipeResult: Stage2FeatureTraceVisualRecipeResult;
+  visualSource: "approved_recipe" | "generated_recipe" | "fallback_current_surface" | "none";
+  visualRecipeId: string | null;
+  visualTargetUci: string | null;
+  visualFallbackUsed: boolean;
+  targetMatchesCoachCard: boolean | "unknown";
+  targetMatchesVisual: boolean | "unknown";
+  plainViewLeakSafe: boolean;
   promotion: Stage2FeatureTracePromotionResult;
   finalRenderedTitle: string | null;
   finalRenderedBody: string | null;
   traceStatus: Stage2FeatureTraceStatus;
   missingReasons: Stage2FeatureTraceMissingReason[];
+  reviewCandidateEventEligible: boolean;
+  reviewCandidateEventPreview: Stage2FeatureTraceReviewCandidateEventPreview | null;
+  warnings: string[];
+  criticalIssues: string[];
 }
 
 export interface Stage2FeatureTraceBundle {
