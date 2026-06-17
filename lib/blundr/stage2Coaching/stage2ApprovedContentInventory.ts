@@ -87,6 +87,10 @@ function buildApprovedPacketIndex(): Map<string, ApprovedPacketRow[]> {
   return index;
 }
 
+if (typeof window !== "undefined") {
+  throw new Error("stage2ApprovedContentInventory.server is server-only");
+}
+
 const APPROVED_PACKET_INDEX = buildApprovedPacketIndex();
 
 function buildReasonNotApproved(status: Stage2ApprovedContentInventoryStatus, openingId: string): string {

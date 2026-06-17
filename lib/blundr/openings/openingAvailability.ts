@@ -1,7 +1,7 @@
 import {
   getStage2ApprovedContentInventoryEntry,
   getStage2ApprovedContentInventorySummary,
-} from "../stage2Coaching/stage2ApprovedContentInventory";
+} from "../stage2Coaching/stage2ApprovedContentInventory.generated";
 
 export type OpeningContentStatus = "none" | "fallback_only" | "sample" | "approved_partial" | "approved";
 export type OpeningAvailabilityStage = "hidden" | "dev" | "beta" | "public";

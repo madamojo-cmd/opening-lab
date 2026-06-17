@@ -17,7 +17,7 @@ import {
 import {
   getStage2ApprovedContentInventoryEntry,
   getStage2ApprovedContentInventorySummary,
-} from "../stage2Coaching/stage2ApprovedContentInventory";
+} from "../stage2Coaching/stage2ApprovedContentInventory.generated";
 
 function len(value: unknown): number {
   return Array.isArray(value) ? value.length : value && typeof value === "object" ? Object.keys(value as Record<string, unknown>).length : 0;

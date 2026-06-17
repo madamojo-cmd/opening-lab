@@ -2,7 +2,7 @@ export * from "./applyStage2CoachCopyEnrichment";
 export * from "./buildSafeStage2FallbackPacket";
 export * from "./buildStage2CoachContext";
 export * from "./resolveStage2CoachRenderState";
-export * from "./stage2ApprovedContentInventory";
+export * from "./stage2ApprovedContentInventory.generated";
 export * from "./resolveStage2CoachingPacket";
 export * from "./stage2CoachingFlags";
 export * from "./stage2CoachingTypes";
