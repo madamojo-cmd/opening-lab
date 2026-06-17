@@ -14,9 +14,11 @@ import {
   STAGE2_APPROVED_CONTENT_APPROVED_PACKAGE_ID,
   STAGE2_APPROVED_CONTENT_CANDIDATE_PACKAGE_ID,
   type Stage2ApprovedContentCandidatePackageContentInventoryRow,
+  type Stage2ApprovedContentCandidatePackageCollectionLoadResult,
   type Stage2ApprovedContentCandidatePackageLineInventoryRow,
   type Stage2ApprovedContentCandidatePackageLoadResult,
   type Stage2ApprovedContentCandidatePacket,
+  type Stage2ApprovedContentCandidatePackageCollectionValidationInventory,
   type Stage2ApprovedContentPackageValidationInventory,
   type Stage2ApprovedContentPackageValidationSummary,
   type Stage2ApprovedContentPacketValidation,
@@ -271,6 +273,17 @@ export function loadStage2ApprovedContentCandidatePackage(zipPath: string = DEFA
   return { packageId, zipPath, contentInventory, lineInventory, packets };
 }
 
+export function loadStage2ApprovedContentCandidatePackageCollection(
+  zipPaths: string[],
+): Stage2ApprovedContentCandidatePackageCollectionLoadResult {
+  const packages = zipPaths.map((zipPath) => loadStage2ApprovedContentCandidatePackage(zipPath));
+  const packageIds = packages.map((entry) => entry.packageId);
+  const contentInventory = packages.flatMap((entry) => entry.contentInventory);
+  const lineInventory = packages.flatMap((entry) => entry.lineInventory);
+  const packets = packages.flatMap((entry) => entry.packets);
+  return { packageIds, packages, contentInventory, lineInventory, packets };
+}
+
 function stripMoveUci(uci: string): string {
   return normalizeText(uci).toLowerCase();
 }
@@ -299,6 +312,75 @@ function collectTextFields(value: unknown, out: string[] = []): string[] {
     }
   }
   return out;
+}
+
+function normalizeSequenceInput(sequence: string[] | null | undefined, fallback: string[]): string[] {
+  return Array.isArray(sequence) && sequence.length > 0 ? sequence.map((entry) => normalizeText(entry)) : fallback;
+}
+
+function buildPlayKeyBefore(sequence: string[]): string {
+  if (sequence.length <= 1) return "";
+  return sequence.slice(0, -1).join(",");
+}
+
+function packetTextContainsForbiddenVisibleLabel(packet: Stage2ApprovedContentCandidatePacket, values: string[]): boolean {
+  const text = collectTextFields({
+    coachCard: packet.coachCard,
+    surfaces: packet.surfaces,
+    visualRecipe: packet.visualRecipe,
+    openingSpecificThemes: packet.openingSpecificThemes,
+    featureTags: packet.featureTags,
+  }).join("\n").toLowerCase();
+  return values.some((value) => value.length > 0 && text.includes(value.toLowerCase()));
+}
+
+type PacketReplayFrame = {
+  runtimePlaySequenceUci: string[];
+  appPlaySequenceUci: string[];
+  runtimePlayKeyBefore: string;
+  appPlayKeyBefore: string;
+  runtimeMoveUci: string;
+  appMoveUci: string;
+  normalizationApplied: boolean;
+  normalizationReason: string | null;
+};
+
+function derivePacketReplayFrame(packet: Stage2ApprovedContentCandidatePacket): PacketReplayFrame {
+  const runtimePlaySequenceUci = normalizeSequenceInput(packet.playSequenceUci, []);
+  const appPlaySequenceUci = normalizeSequenceInput(packet.normalizedPlaySequenceUci, runtimePlaySequenceUci);
+  const runtimeMoveUci = normalizeText(packet.sourceRuntimeMoveUci ?? packet.moveUci);
+  const appMoveUci = normalizeText(packet.normalizedMoveUci ?? packet.moveUci);
+  const runtimePlayKeyBefore = buildPlayKeyBefore(runtimePlaySequenceUci);
+  const appPlayKeyBefore = buildPlayKeyBefore(appPlaySequenceUci);
+  const normalizationApplied = Boolean(
+    packet.uciNormalizationApplied ?? (runtimeMoveUci !== appMoveUci || runtimePlaySequenceUci.join(",") !== appPlaySequenceUci.join(",")),
+  );
+  return {
+    runtimePlaySequenceUci,
+    appPlaySequenceUci,
+    runtimePlayKeyBefore,
+    appPlayKeyBefore,
+    runtimeMoveUci,
+    appMoveUci,
+    normalizationApplied,
+    normalizationReason: normalizeText(packet.uciNormalizationReason) || (normalizationApplied ? "derived_normalized_app_sequence" : null),
+  };
+}
+
+const UNSUPPORTED_CLAIM_PHRASES = [
+  "best move",
+  "only move",
+  "forced win",
+  "forced mate",
+  "guaranteed win",
+  "winning line",
+  "always wins",
+  "must play",
+  "must move",
+];
+
+function packetContainsUnsupportedClaims(packet: Stage2ApprovedContentCandidatePacket): boolean {
+  return packetTextContainsForbiddenVisibleLabel(packet, UNSUPPORTED_CLAIM_PHRASES);
 }
 
 const PLACEHOLDER_PATTERNS = [
@@ -367,7 +449,10 @@ function scanVisibleTextForIssues(packet: Stage2ApprovedContentCandidatePacket, 
   return { noPlaceholderText, noForbiddenGenericLabels, plainHintSafe };
 }
 
-function validatePacketAgainstRuntime(packet: Stage2ApprovedContentCandidatePacket, runtimeIndex: ReturnType<typeof buildStage2RuntimeBookIndex>): Stage2ApprovedContentPacketValidation {
+function validatePacketAgainstRuntime(
+  packet: Stage2ApprovedContentCandidatePacket,
+  runtimeIndex: ReturnType<typeof buildStage2RuntimeBookIndex>,
+): Stage2ApprovedContentPacketValidation {
   const reasons: string[] = [];
   const openingAvailability = getStage2OpeningAvailability(packet.openingId);
   const openingRuntimeAvailable = Boolean(openingAvailability?.runtimeAvailable);
@@ -376,15 +461,14 @@ function validatePacketAgainstRuntime(packet: Stage2ApprovedContentCandidatePack
   if (!openingRuntimeAvailable) reasons.push("opening_not_runtime_available");
   if (!trainableFromLocalRuntimePackage) reasons.push("opening_not_trainable_from_local_runtime_package");
 
-  const moveIndex = Math.max(0, Math.min(packet.playSequenceUci.length - 1, Number(packet.ply) - 1));
-  const playSequencePrefix = packet.playSequenceUci.slice(0, moveIndex + 1);
-  const playKeyBefore = playSequencePrefix.slice(0, -1).join(",");
+  const replay = derivePacketReplayFrame(packet);
+  const moveIndex = Math.max(0, Math.min(replay.appPlaySequenceUci.length - 1, Number(packet.ply) - 1));
   const sequence = new Chess();
   let playSequenceLegal = true;
   let moveLegal = true;
   let sanMatches = true;
-  for (let i = 0; i < packet.playSequenceUci.length; i += 1) {
-    const uci = packet.playSequenceUci[i];
+  for (let i = 0; i < replay.appPlaySequenceUci.length; i += 1) {
+    const uci = replay.appPlaySequenceUci[i];
     const move = sequence.move(toMoveObject(uci));
     if (!move) {
       playSequenceLegal = false;
@@ -392,7 +476,7 @@ function validatePacketAgainstRuntime(packet: Stage2ApprovedContentCandidatePack
       break;
     }
     if (i === moveIndex) {
-      if (stripMoveUci(move.from + move.to + (move.promotion ?? "")) !== stripMoveUci(packet.moveUci)) {
+      if (stripMoveUci(move.from + move.to + (move.promotion ?? "")) !== stripMoveUci(replay.appMoveUci)) {
         moveLegal = false;
         reasons.push("move_uci_mismatch");
       }
@@ -420,11 +504,11 @@ function validatePacketAgainstRuntime(packet: Stage2ApprovedContentCandidatePack
     trainerView: packet.surfaces?.assisted ? "assisted" : "plain",
     trainingMode: "restricted",
     isUserTurn: true,
-    instructionTargetUci: packet.moveUci,
+    instructionTargetUci: replay.appMoveUci,
     instructionTargetSan: packet.moveSan,
-    instructionTargetPieceType: packet.moveUci ? packet.moveUci.slice(0, 1) : null,
-    coachMoveUci: packet.moveUci,
-    coachPieceType: packet.moveUci ? packet.moveUci.slice(0, 1) : null,
+    instructionTargetPieceType: replay.appMoveUci ? replay.appMoveUci.slice(0, 1) : null,
+    coachMoveUci: replay.appMoveUci,
+    coachPieceType: replay.appMoveUci ? replay.appMoveUci.slice(0, 1) : null,
     actualCoachCardTitle: packet.coachCard.title,
     actualCoachCardBody: packet.coachCard.body,
     actualCoachCardButtons: [],
@@ -451,15 +535,17 @@ function validatePacketAgainstRuntime(packet: Stage2ApprovedContentCandidatePack
     coachQuality: { qualityScore: 90, qualityScoreSource: "final_rendered", source: "final_rendered" },
   } as any);
 
-  const trainerFrameResolutionTargetMatched = packetResolution.instructionTargetUci === packet.moveUci && packetResolution.visual.targetMatchesMoveUci === true;
+  const trainerFrameResolutionTargetMatched = packetResolution.instructionTargetUci === replay.appMoveUci && packetResolution.visual.targetMatchesMoveUci === true;
   if (!trainerFrameResolutionTargetMatched) reasons.push("trainer_frame_resolution_target_mismatch");
 
-  const { noPlaceholderText, noForbiddenGenericLabels, plainHintSafe } = scanVisibleTextForIssues(packet, packet.moveUci, packet.moveSan);
+  const { noPlaceholderText, noForbiddenGenericLabels, plainHintSafe } = scanVisibleTextForIssues(packet, replay.appMoveUci, packet.moveSan);
   if (!plainHintSafe) reasons.push("plain_hint_leaks_exact_target");
   if (!noPlaceholderText) reasons.push("placeholder_text_detected");
   if (!noForbiddenGenericLabels) reasons.push("forbidden_generic_label_detected");
+  const noUnsupportedClaims = !packetContainsUnsupportedClaims(packet);
+  if (!noUnsupportedClaims) reasons.push("unsupported_claim_detected");
 
-  const visualRecipeTargetMatched = normalizeLower(packet.visualRecipe.targetMoveUci) === normalizeLower(packet.moveUci);
+  const visualRecipeTargetMatched = normalizeLower(packet.visualRecipe.targetMoveUci) === normalizeLower(replay.appMoveUci);
   if (!visualRecipeTargetMatched) reasons.push("visual_recipe_target_mismatch");
 
   const runtimeDataSource = "local_crawled_package" as const;
@@ -480,6 +566,7 @@ function validatePacketAgainstRuntime(packet: Stage2ApprovedContentCandidatePack
     visualRecipeTargetMatched &&
     noPlaceholderText &&
     noForbiddenGenericLabels &&
+    noUnsupportedClaims &&
     exactRuntimeLineMatched &&
     runtimeDataSource === "local_crawled_package" &&
     liveLichessCalled === false;
@@ -490,8 +577,8 @@ function validatePacketAgainstRuntime(packet: Stage2ApprovedContentCandidatePack
     lineId: packet.lineId,
     lineRankWithinOpening: packet.lineRankWithinOpening,
     playKey: packet.playKey,
-    playKeyBefore,
-    moveUci: packet.moveUci,
+    playKeyBefore: replay.appPlayKeyBefore,
+    moveUci: replay.appMoveUci,
     moveSan: packet.moveSan,
     packetStatus: packet.status,
     approvalReadiness: packet.approvalReadiness,
@@ -511,6 +598,7 @@ function validatePacketAgainstRuntime(packet: Stage2ApprovedContentCandidatePack
     visualRecipeTargetMatched,
     noForbiddenGenericLabels,
     noPlaceholderText,
+    noUnsupportedClaims,
     exactRuntimeLineMatched,
     reasons,
     approved,
@@ -555,6 +643,13 @@ export async function validateStage2ApprovedContentCandidatePackage(
     packageRoot: path.join(process.cwd(), "data", "blundr", "stage2-21-opening-stepdown-runtime-v1"),
   });
   const runtimeIndex = buildStage2RuntimeBookIndex(runtimeLoad);
+  return validateStage2ApprovedContentCandidatePackageWithRuntimeIndex(loadResult, runtimeIndex);
+}
+
+function validateStage2ApprovedContentCandidatePackageWithRuntimeIndex(
+  loadResult: Stage2ApprovedContentCandidatePackageLoadResult,
+  runtimeIndex: ReturnType<typeof buildStage2RuntimeBookIndex>,
+): Stage2ApprovedContentPackageValidationInventory {
   const lineInventoryByLineId = new Map(loadResult.lineInventory.map((row) => [row.lineId, row] as const));
   const validations = loadResult.packets.map((packet) => validatePacketAgainstRuntime(packet, runtimeIndex));
 
@@ -633,6 +728,57 @@ export async function validateStage2ApprovedContentCandidatePackage(
   };
 }
 
+export async function validateStage2ApprovedContentCandidatePackageCollection(
+  loadResult: Stage2ApprovedContentCandidatePackageCollectionLoadResult,
+): Promise<Stage2ApprovedContentCandidatePackageCollectionValidationInventory> {
+  const runtimeLoad = await loadStage2RuntimeBook({
+    packageRoot: path.join(process.cwd(), "data", "blundr", "stage2-21-opening-stepdown-runtime-v1"),
+  });
+  const runtimeIndex = buildStage2RuntimeBookIndex(runtimeLoad);
+  const packageValidations = loadResult.packages.map((packageLoadResult) =>
+    validateStage2ApprovedContentCandidatePackageWithRuntimeIndex(packageLoadResult, runtimeIndex),
+  );
+  const packageSummaries = packageValidations.map((validation) => ({
+    ...validation.summary,
+    openingIds: validation.contentInventory.map((row) => row.openingId),
+  }));
+  const contentInventory = packageValidations.flatMap((validation) => validation.contentInventory);
+  const lineInventory = packageValidations.flatMap((validation) => validation.lineInventory);
+  const packetValidation = packageValidations.flatMap((validation) => validation.packetValidation);
+  const approvedPackets = packageValidations.flatMap((validation) => validation.approvedPackets).map((packet) => ({
+    ...packet,
+    sourceCandidatePackage: "stage2-approved-content-candidates-batches2to4-16openings-v1",
+    sourceCandidatePackages: loadResult.packageIds,
+  }));
+  const rejectedPackets = packageValidations.flatMap((validation) => validation.rejectedPackets);
+  const openingIds = [...new Set(contentInventory.map((row) => row.openingId))].sort();
+  return {
+    summary: {
+      packageCount: loadResult.packages.length,
+      packageIds: loadResult.packageIds,
+      openingCount: openingIds.length,
+      lineCount: lineInventory.length,
+      packetCount: loadResult.packets.length,
+      uniquePacketIdCount: new Set(loadResult.packets.map((packet) => packet.packetId)).size,
+      approvedPacketCount: approvedPackets.length,
+      rejectedPacketCount: rejectedPackets.length,
+      runtimeDataSource: "local_crawled_package",
+      liveLichessCalled: false,
+      runtimeAvailableCount: openingIds.length,
+      trainableOpeningCount: openingIds.length,
+      approvedContentAvailableCount: 0,
+      runtimeAvailable: true,
+      trainableFromLocalRuntimePackage: true,
+    },
+    packageSummaries,
+    contentInventory,
+    lineInventory,
+    packetValidation,
+    approvedPackets,
+    rejectedPackets,
+  };
+}
+
 export function writeStage2ApprovedContentValidationInventory(
   validation: Stage2ApprovedContentPackageValidationInventory,
   outputPath: string,
@@ -674,6 +820,48 @@ export function writeStage2ApprovedContentReport(
   lines.push(`## Notes`);
   lines.push("");
   lines.push(`- Candidate packets were validated against the local runtime book and the existing TrainerFrameResolution parity layer.`);
+  lines.push(`- Plain View exact SAN/UCI leakage checks passed before promotion.`);
+  lines.push(`- No runtime move authority or continuation behavior was modified.`);
+  fs.writeFileSync(outputPath, `${lines.join("\n")}\n`);
+}
+
+export function writeStage2ApprovedContentCollectionReport(
+  validation: Stage2ApprovedContentCandidatePackageCollectionValidationInventory,
+  outputPath: string,
+): void {
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  const lines: string[] = [];
+  lines.push(`# Stage 2 Approved-Content Candidate App Validation Report`);
+  lines.push("");
+  lines.push(`## Summary`);
+  lines.push("");
+  lines.push(`- Packages: ${validation.summary.packageCount}`);
+  lines.push(`- Package IDs: ${validation.summary.packageIds.join(", ")}`);
+  lines.push(`- Openings: ${validation.summary.openingCount}`);
+  lines.push(`- Lines: ${validation.summary.lineCount}`);
+  lines.push(`- Packets: ${validation.summary.packetCount}`);
+  lines.push(`- Approved packets: ${validation.summary.approvedPacketCount}`);
+  lines.push(`- Rejected packets: ${validation.summary.rejectedPacketCount}`);
+  lines.push(`- Runtime data source: \`${validation.summary.runtimeDataSource}\``);
+  lines.push(`- Live Lichess called: \`${validation.summary.liveLichessCalled}\``);
+  lines.push("");
+  lines.push(`## Package Coverage`);
+  lines.push("");
+  for (const row of validation.packageSummaries) {
+    lines.push(`- \`${row.packageId}\`: ${row.openingCount} openings, ${row.lineCount} lines, ${row.packetCount} packets`);
+    lines.push(`  - Openings: ${row.openingIds.join(", ")}`);
+    lines.push(`  - Approved packets: ${row.approvedPacketCount}`);
+    lines.push(`  - Rejected packets: ${row.rejectedPacketCount}`);
+  }
+  lines.push("");
+  lines.push(`## Validation Outcome`);
+  lines.push("");
+  lines.push(validation.summary.rejectedPacketCount === 0 ? `All candidate packets passed validation gates.` : `Rejected packets were found; see inventory JSON for reasons.`);
+  lines.push("");
+  lines.push(`## Notes`);
+  lines.push("");
+  lines.push(`- Candidate packets were validated against the local runtime book and the existing TrainerFrameResolution parity layer.`);
+  lines.push(`- Batch 4 castling-normalized packets were validated using normalized app-authority UCI/sequence fields while preserving raw runtime trace data.`);
   lines.push(`- Plain View exact SAN/UCI leakage checks passed before promotion.`);
   lines.push(`- No runtime move authority or continuation behavior was modified.`);
   fs.writeFileSync(outputPath, `${lines.join("\n")}\n`);
@@ -758,7 +946,7 @@ function materializeApprovedPacketSurface(
 }
 
 export function writeStage2ApprovedPacketsJsonl(
-  validation: Stage2ApprovedContentPackageValidationInventory,
+  validation: { approvedPackets: Stage2ApprovedContentPromotedPacket[] },
   outputPath: string = DEFAULT_APPROVED_PACKETS_PATH,
 ): void {
   if (validation.approvedPackets.length === 0) {
@@ -773,10 +961,11 @@ export function resolveStage2ApprovedContentPacket(
   request: Stage2ApprovedContentResolverRequest,
   approvedPacketsPath: string = DEFAULT_APPROVED_PACKETS_PATH,
 ): Stage2ApprovedContentResolverResult {
-  if (!fs.existsSync(approvedPacketsPath)) {
+  const resolvedApprovedPacketsPath = normalizeText(request.approvedPacketsPath ?? approvedPacketsPath) || DEFAULT_APPROVED_PACKETS_PATH;
+  if (!fs.existsSync(resolvedApprovedPacketsPath)) {
     return { kind: "none", reason: "approved_bundle_missing" };
   }
-  const packets = readApprovedPacketsJsonl(approvedPacketsPath);
+  const packets = readApprovedPacketsJsonl(resolvedApprovedPacketsPath);
   const openingId = normalizeText(request.openingId);
   const targetUci = normalizeLower(request.targetUci);
   const playKeyBefore = normalizeText(request.playKeyBefore ?? "");
@@ -785,10 +974,31 @@ export function resolveStage2ApprovedContentPacket(
 
   const match = packets.find((packet) => {
     if (packet.openingId !== openingId) return false;
-    if (packet.moveUci.toLowerCase() !== targetUci) return false;
-    const packetPlayKeyBefore = packet.playSequenceUci.slice(0, -1).join(",");
+    const packetTargetUci = normalizeLower(packet.normalizedMoveUci ?? packet.moveUci);
+    if (packetTargetUci !== targetUci) return false;
+    const packetPlaySequence = normalizeSequenceInput(packet.normalizedPlaySequenceUci, packet.playSequenceUci);
+    const packetMoveIndex = Math.max(0, Math.min(packetPlaySequence.length - 1, Number(packet.ply) - 1));
+    const packetPlayKeyBefore = packetPlaySequence.slice(0, packetMoveIndex).join(",");
+    const packetPlayKeyAtTarget = packetPlaySequence.slice(0, packetMoveIndex + 1).join(",");
+    const packetRawPlayKeyBefore = packet.playSequenceUci.slice(0, packetMoveIndex).join(",");
+    const packetRawPlayKeyAtTarget = packet.playSequenceUci.slice(0, packetMoveIndex + 1).join(",");
+    const packetRawPlayKey = packet.playSequenceUci.join(",");
     if (surface && !packet.surfaces?.[surface]) return false;
-    return Boolean((playKeyBefore && packetPlayKeyBefore === playKeyBefore) || (playKey && packet.playKey === playKey));
+    const playKeyBeforeMatches = Boolean(
+      playKeyBefore &&
+        (packetPlayKeyBefore === playKeyBefore ||
+          packetRawPlayKeyBefore === playKeyBefore ||
+          packetPlayKeyAtTarget === playKeyBefore ||
+          packetRawPlayKeyAtTarget === playKeyBefore),
+    );
+    const playKeyMatches = Boolean(
+      playKey &&
+        (packetPlayKeyAtTarget === playKey ||
+          packetRawPlayKeyAtTarget === playKey ||
+          packetRawPlayKey === playKey ||
+          packetPlaySequence.join(",") === playKey),
+    );
+    return playKeyBeforeMatches || playKeyMatches;
   });
 
   if (!match) {

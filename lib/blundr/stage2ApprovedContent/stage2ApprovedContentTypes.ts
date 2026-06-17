@@ -35,7 +35,12 @@ export type Stage2ApprovedContentCandidatePacket = Record<string, unknown> & {
   lineRankWithinOpening: number;
   playKey: string;
   playSequenceUci: string[];
+  normalizedPlaySequenceUci?: string[] | null;
   moveUci: string;
+  normalizedMoveUci?: string | null;
+  sourceRuntimeMoveUci?: string | null;
+  uciNormalizationApplied?: boolean | null;
+  uciNormalizationReason?: string | null;
   moveSan: string;
   learnerSide: string;
   sideToMove: string;
@@ -77,7 +82,13 @@ export type Stage2ApprovedContentCandidatePacket = Record<string, unknown> & {
 export type Stage2ApprovedContentPromotedPacket = Stage2ApprovedContentCandidatePacket & {
   status: "approved";
   approvalReadiness: "app_validated";
-  sourceCandidatePackage: typeof STAGE2_APPROVED_CONTENT_CANDIDATE_PACKAGE_ID;
+  sourceCandidatePackage: string;
+  sourceCandidatePackages?: string[];
+  sourceRuntimeMoveUci?: string | null;
+  normalizedMoveUci?: string | null;
+  normalizedPlaySequenceUci?: string[] | null;
+  uciNormalizationApplied?: boolean | null;
+  uciNormalizationReason?: string | null;
   safetyStatus: "safe";
   runtimeReconciliation: {
     status: "matched";
@@ -91,6 +102,14 @@ export type Stage2ApprovedContentPromotedPacket = Stage2ApprovedContentCandidate
 export type Stage2ApprovedContentCandidatePackageLoadResult = {
   packageId: string;
   zipPath: string;
+  contentInventory: Stage2ApprovedContentCandidatePackageContentInventoryRow[];
+  lineInventory: Stage2ApprovedContentCandidatePackageLineInventoryRow[];
+  packets: Stage2ApprovedContentCandidatePacket[];
+};
+
+export type Stage2ApprovedContentCandidatePackageCollectionLoadResult = {
+  packageIds: string[];
+  packages: Stage2ApprovedContentCandidatePackageLoadResult[];
   contentInventory: Stage2ApprovedContentCandidatePackageContentInventoryRow[];
   lineInventory: Stage2ApprovedContentCandidatePackageLineInventoryRow[];
   packets: Stage2ApprovedContentCandidatePacket[];
@@ -123,6 +142,7 @@ export type Stage2ApprovedContentPacketValidation = {
   visualRecipeTargetMatched: boolean;
   noForbiddenGenericLabels: boolean;
   noPlaceholderText: boolean;
+  noUnsupportedClaims: boolean;
   exactRuntimeLineMatched: boolean;
   reasons: string[];
   approved: boolean;
@@ -150,6 +170,38 @@ export type Stage2ApprovedContentPackageValidationSummary = {
 
 export type Stage2ApprovedContentPackageValidationInventory = {
   summary: Stage2ApprovedContentPackageValidationSummary;
+  contentInventory: Stage2ApprovedContentCandidatePackageContentInventoryRow[];
+  lineInventory: Stage2ApprovedContentCandidatePackageLineInventoryRow[];
+  packetValidation: Stage2ApprovedContentPacketValidation[];
+  approvedPackets: Stage2ApprovedContentPromotedPacket[];
+  rejectedPackets: Array<Stage2ApprovedContentPacketValidation & { packet: Stage2ApprovedContentCandidatePacket }>;
+};
+
+export type Stage2ApprovedContentPackageValidationResult = Stage2ApprovedContentPackageValidationInventory;
+
+export type Stage2ApprovedContentCandidatePackageValidationInventory = Stage2ApprovedContentPackageValidationInventory & {
+  packageId: string;
+};
+
+export type Stage2ApprovedContentCandidatePackageCollectionValidationInventory = {
+  summary: {
+    packageCount: number;
+    packageIds: string[];
+    openingCount: number;
+    lineCount: number;
+    packetCount: number;
+    uniquePacketIdCount: number;
+    approvedPacketCount: number;
+    rejectedPacketCount: number;
+    runtimeDataSource: "local_crawled_package";
+    liveLichessCalled: false;
+    runtimeAvailableCount: number;
+    trainableOpeningCount: number;
+    approvedContentAvailableCount: number;
+    runtimeAvailable: boolean;
+    trainableFromLocalRuntimePackage: boolean;
+  };
+  packageSummaries: Array<Stage2ApprovedContentPackageValidationSummary & { openingIds: string[] }>;
   contentInventory: Stage2ApprovedContentCandidatePackageContentInventoryRow[];
   lineInventory: Stage2ApprovedContentCandidatePackageLineInventoryRow[];
   packetValidation: Stage2ApprovedContentPacketValidation[];
