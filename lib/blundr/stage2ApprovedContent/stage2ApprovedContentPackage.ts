@@ -25,10 +25,12 @@ import {
 const DEFAULT_CANDIDATE_ZIP_PATH = `${process.cwd()}/docs/2026-06-17/${STAGE2_APPROVED_CONTENT_CANDIDATE_PACKAGE_ID}.zip`;
 
 const DEFAULT_APPROVED_PACKETS_PATH = `${process.cwd()}/data/blundr/${STAGE2_APPROVED_CONTENT_APPROVED_PACKAGE_ID}/approved-packets.jsonl`;
+export const STAGE2_APPROVED_CONTENT_COPY_PATCH_PATH = `${process.cwd()}/data/blundr/stage2-approved-content-copy-polish-patch-v1/copy-patch.jsonl`;
 
 const DEFAULT_APPROVED_PACKETS_PATHS = [
   DEFAULT_APPROVED_PACKETS_PATH,
   `${process.cwd()}/data/blundr/stage2-approved-content-approved-batches2to4-16openings-v1/approved-packets.jsonl`,
+  STAGE2_APPROVED_CONTENT_COPY_PATCH_PATH,
 ] as const;
 
 type ZipEntry = {
@@ -909,11 +911,15 @@ function readApprovedPacketsJsonlCollection(filePaths: string[]): Stage2Approved
   const cacheKey = filePaths.map((entry) => normalizeText(entry)).filter(Boolean).join("|");
   const cached = APPROVED_PACKETS_COLLECTION_CACHE.get(cacheKey);
   if (cached) return cached;
-  const packets = filePaths.flatMap((filePath) => {
+  const packetsById = new Map<string, Stage2ApprovedContentPromotedPacket>();
+  for (const filePath of filePaths) {
     const resolvedPath = normalizeText(filePath);
-    if (!resolvedPath || !fs.existsSync(resolvedPath)) return [];
-    return readApprovedPacketsJsonl(resolvedPath);
-  });
+    if (!resolvedPath || !fs.existsSync(resolvedPath)) continue;
+    for (const packet of readApprovedPacketsJsonl(resolvedPath)) {
+      packetsById.set(String(packet.packetId ?? `${resolvedPath}:${packetsById.size}`), packet);
+    }
+  }
+  const packets = [...packetsById.values()];
   APPROVED_PACKETS_COLLECTION_CACHE.set(cacheKey, packets);
   return packets;
 }

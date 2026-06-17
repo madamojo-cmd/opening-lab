@@ -35,7 +35,8 @@ export function testStage2ApprovedLiveRenderingShowMore(): void {
   assert.equal(Boolean(resolution.packet.showMore), true);
   const showMoreText = `${resolution.packet.title} ${resolution.packet.body} ${resolution.packet.showMore ?? ""}`.toLowerCase();
   assert.equal(showMoreText.includes(String(packet.moveSan).toLowerCase()), true);
-  assert.equal(showMoreText.includes("move the bishop from f1 to c4"), true);
+  assert.equal(showMoreText.includes("italian diagonal"), true);
+  assert.equal(showMoreText.includes("bishop"), true);
 }
 
 testStage2ApprovedLiveRenderingShowMore();

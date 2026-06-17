@@ -1,0 +1,1875 @@
+{
+  "packageId": "stage2-approved-content-copy-polish-patch-v1",
+  "patchPath": "/workspaces/opening-lab/data/blundr/stage2-approved-content-copy-polish-patch-v1/copy-patch.jsonl",
+  "basePackageIds": [
+    "stage2-approved-content-approved-5openings-v1",
+    "stage2-approved-content-approved-batches2to4-16openings-v1"
+  ],
+  "summary": {
+    "packetsScanned": 2515,
+    "openingsScanned": 21,
+    "totalPacketsAfterPatch": 2515,
+    "totalOpeningsAfterPatch": 21,
+    "uniquePacketIdCountBefore": 2515,
+    "uniquePacketIdCountAfter": 2515,
+    "changedPacketCount": 20,
+    "changedPacketIds": [
+      "italian-white.line-001.ply-05.f1c4",
+      "london-white.line-001.ply-01.d2d4",
+      "colle-white.line-001.ply-07.f1d3",
+      "english-white.line-001.ply-11.b2c3",
+      "french-black.line-001.ply-04.d7d5",
+      "french-black.line-002.ply-08.f6d7",
+      "scandinavian-black.line-001.ply-02.d7d5",
+      "scandinavian-black.line-002.ply-08.c5d4",
+      "petroff-black.line-001.ply-04.g8f6",
+      "petroff-black.line-001.ply-12.d8d5",
+      "pirc-black.line-001.ply-12.d8d1",
+      "qgd-black.line-002.ply-08.b8c6",
+      "reti-white.line-001.ply-03.c2c4",
+      "vienna-white.line-001.ply-11.h2h3",
+      "kings-indian-black.line-001.ply-08.d7d6",
+      "kings-indian-black.line-001.ply-10.e8g8",
+      "nimzo-indian-black.line-001.ply-06.f8b4",
+      "queens-indian-black.line-001.ply-06.b7b6",
+      "ruy-lopez-white.line-001.ply-05.f1b5",
+      "scotch-white.line-001.ply-05.d2d4"
+    ]
+  },
+  "repetitionStatsBefore": {
+    "uniqueCoachCardTitles": 190,
+    "uniqueCoachCardBodies": 388,
+    "uniqueAssistedBodies": 388,
+    "uniquePlainHintBodies": 190,
+    "uniquePlainShowMoreBodies": 389,
+    "mostRepeatedTitles": [
+      {
+        "text": "Keep the Pirc setup coherent",
+        "count": 49
+      },
+      {
+        "text": "Keep Scandinavian development connected to the center",
+        "count": 47
+      },
+      {
+        "text": "Keep Petroff play solid",
+        "count": 46
+      },
+      {
+        "text": "Keep French counterplay aimed at the center",
+        "count": 42
+      },
+      {
+        "text": "Keep Vienna development purposeful",
+        "count": 40
+      },
+      {
+        "text": "Keep the English flexibility intact",
+        "count": 39
+      },
+      {
+        "text": "Keep the QGD center solid",
+        "count": 33
+      },
+      {
+        "text": "Add flank pressure on d5",
+        "count": 25
+      },
+      {
+        "text": "Add kingside development to the Vienna center",
+        "count": 25
+      },
+      {
+        "text": "Aim the Colle bishop at the kingside",
+        "count": 25
+      },
+      {
+        "text": "Anchor the King’s Indian center",
+        "count": 25
+      },
+      {
+        "text": "Castle behind the King’s Indian shell",
+        "count": 25
+      },
+      {
+        "text": "Challenge e4 immediately",
+        "count": 25
+      },
+      {
+        "text": "Challenge e4 with the French center",
+        "count": 25
+      },
+      {
+        "text": "Challenge e4 with the Petroff knight",
+        "count": 25
+      }
+    ],
+    "mostRepeatedBodies": [
+      {
+        "text": "b6 signals the Queen’s Indian plan: the c8 bishop is headed to the long diagonal. Black aims pressure at e4 and the central dark squares.",
+        "count": 25
+      },
+      {
+        "text": "Bb4 is the Nimzo-Indian’s defining move: Black pressures the c3 knight that helps White control e4 and d5. This creates structural and central tension without overclaiming tactics.",
+        "count": 25
+      },
+      {
+        "text": "Bb5 is the Spanish bishop move: it pressures the knight that helps defend Black’s e5 pawn. The idea is long-term central pressure, not an immediate pawn win.",
+        "count": 25
+      },
+      {
+        "text": "Bc5 develops the bishop to an active Italian square, keeping pressure on White’s kingside and clearing Black to castle. It also keeps an eye on the central light squares.",
+        "count": 25
+      },
+      {
+        "text": "Bd3 develops the bishop to the classic Colle diagonal toward the kingside. It supports castling and later attacking chances if the center opens.",
+        "count": 25
+      },
+      {
+        "text": "Bg7 completes the King’s Indian fianchetto. The bishop now works against White’s central and queenside dark squares from a safe distance.",
+        "count": 25
+      },
+      {
+        "text": "c3 completes the d4/e3/c3 Colle structure. White reinforces d4 and prepares to choose the right moment for e4.",
+        "count": 25
+      },
+      {
+        "text": "c4 adds the Réti/English-style flank challenge to Black’s d5 square. White still keeps central pawn choices flexible while making Black defend the center.",
+        "count": 25
+      },
+      {
+        "text": "c4 is the English Opening’s defining flank claim: White’s c-pawn controls d5 without committing the e-pawn or d-pawn immediately.",
+        "count": 25
+      },
+      {
+        "text": "c6 is the Slav’s key support move: Black reinforces d5 with the c-pawn instead of locking in the light-square bishop immediately.",
+        "count": 25
+      },
+      {
+        "text": "d4 changes the English from pure flank control into direct d-pawn central pressure. White uses the earlier c-pawn setup to contest Black’s center.",
+        "count": 25
+      },
+      {
+        "text": "d4 establishes the d-pawn base of the Colle System. White plans a compact Nf3/e3/c3 structure before choosing the central break.",
+        "count": 25
+      },
+      {
+        "text": "d4 is the defining Scotch break. White challenges Black’s e5 pawn immediately and aims for active piece play in open lines.",
+        "count": 25
+      },
+      {
+        "text": "d4 turns the Réti move order into direct central occupation. White uses earlier knight and c-pawn pressure to support the d-pawn center.",
+        "count": 25
+      },
+      {
+        "text": "d5 completes the basic French plan by attacking White’s e-pawn. Black creates central tension that may become an exchange, advance, or locked pawn chain.",
+        "count": 25
+      }
+    ],
+    "mostRepeatedPlainHints": [
+      {
+        "text": "Develop behind the compact setup and prepare to challenge White’s center.",
+        "count": 49
+      },
+      {
+        "text": "Develop behind the early central challenge and keep pressure on White’s pawns.",
+        "count": 47
+      },
+      {
+        "text": "Maintain the e-pawn tension, develop cleanly, and avoid early tactical drift.",
+        "count": 46
+      },
+      {
+        "text": "Build the e-pawn and queen-pawn center, then pressure White’s pawn chain.",
+        "count": 42
+      },
+      {
+        "text": "Support the center, develop quickly, and avoid premature queen attacks.",
+        "count": 40
+      },
+      {
+        "text": "Preserve flank control, central flexibility, and safe development.",
+        "count": 39
+      },
+      {
+        "text": "Support the queen-pawn center and develop before resolving the c-pawn tension.",
+        "count": 33
+      },
+      {
+        "text": "Answer the kingside knight by attacking White’s central pawn directly.",
+        "count": 25
+      },
+      {
+        "text": "Bring the kingside knight into contact with White’s central pawn.",
+        "count": 25
+      },
+      {
+        "text": "Bring the kingside knight into the central fight before chasing pawns.",
+        "count": 25
+      },
+      {
+        "text": "Bring the kingside knight into the central fight while d5 remains supported.",
+        "count": 25
+      },
+      {
+        "text": "Bring the kingside knight out once the Vienna center is supported.",
+        "count": 25
+      },
+      {
+        "text": "Bring the queenside knight out to support the king-pawn center and keep kingside choices flexible.",
+        "count": 25
+      },
+      {
+        "text": "Build the kingside fianchetto that will pressure the long diagonal.",
+        "count": 25
+      },
+      {
+        "text": "Build the queen-pawn base that the compact Colle structure rests on.",
+        "count": 25
+      },
+      {
+        "text": "Challenge the king pawn at once instead of building a slower pawn shell.",
+        "count": 25
+      },
+      {
+        "text": "Challenge White’s king pawn with the prepared queen-pawn strike.",
+        "count": 25
+      },
+      {
+        "text": "Commit the queen pawn only after the piece and flank pressure already support the center.",
+        "count": 25
+      },
+      {
+        "text": "Commit the queen pawn only when the flank pressure already supports the center.",
+        "count": 25
+      },
+      {
+        "text": "Maintain piece pressure on the center and avoid committing pawns before the structure is clear.",
+        "count": 25
+      }
+    ],
+    "mostRepeatedPlainShowMoreBodies": [
+      {
+        "text": "The target is b6. ...b6 is the defining queenside fianchetto setup for the Queen’s Indian. Exact move: move the b-pawn to b6 (b6).",
+        "count": 25
+      },
+      {
+        "text": "The target is Bb4. The bishop pressure is directly tied to White’s c3 knight and central control. Exact move: move the bishop from f8 to b4 (Bb4).",
+        "count": 25
+      },
+      {
+        "text": "The target is Bb5. The Ruy Lopez is defined by bishop pressure on the c6 knight and the e5 structure behind it. Exact move: move the bishop from f1 to b5 (Bb5).",
+        "count": 25
+      },
+      {
+        "text": "The target is Bc5. ...Bc5 is the defining active Italian response when Black chooses development over passive defense. Exact move: move the bishop from f8 to c5 (Bc5).",
+        "count": 25
+      },
+      {
+        "text": "The target is Bd3. Bd3 is a signature Colle piece placement once e3 has opened the diagonal. Exact move: move the bishop from f1 to d3 (Bd3).",
+        "count": 25
+      },
+      {
+        "text": "The target is Bg7. The g7 bishop is one of Black’s main sources of counterplay in the King’s Indian. Exact move: move the bishop from f8 to g7 (Bg7).",
+        "count": 25
+      },
+      {
+        "text": "The target is c3. The c3 move is opening-specific because it makes the Colle center sturdy before expansion. Exact move: move the c-pawn to c3 (c3).",
+        "count": 25
+      },
+      {
+        "text": "The target is c4. The c-pawn push is relevant when the Réti structure shifts from knight pressure into flank pressure against d5. Exact move: move the c-pawn to c4 (c4).",
+        "count": 25
+      },
+      {
+        "text": "The target is c4. The English often begins with side control of d5 and keeps transpositions available without overcommitting the center. Exact move: move the c-pawn to c4 (c4).",
+        "count": 25
+      },
+      {
+        "text": "The target is c6. The Slav Defense is defined by ...c6 supporting ...d5 while keeping bishop options healthier than many ...e6 structures. Exact move: move the c-pawn to c6 (c6).",
+        "count": 25
+      },
+      {
+        "text": "The target is d4. Many English lines transpose into queen-pawn structures when d4 becomes well supported. Exact move: move the d-pawn to d4 (d4).",
+        "count": 25
+      },
+      {
+        "text": "The target is d4. The Colle is built around a restrained d-pawn center rather than early side-pawn tension. Exact move: move the d-pawn to d4 (d4).",
+        "count": 25
+      },
+      {
+        "text": "The target is d4. The move is the core Scotch idea: central clarity rather than a slow closed setup. Exact move: move the d-pawn to d4 (d4).",
+        "count": 25
+      },
+      {
+        "text": "The target is d4. The Réti often transposes into queen-pawn structures when White’s pieces already support the center. Exact move: move the d-pawn to d4 (d4).",
+        "count": 25
+      },
+      {
+        "text": "The target is d5. ...d5 is the point of ...e6 and defines the French central battle. Exact move: move the d-pawn to d5 (d5).",
+        "count": 25
+      },
+      {
+        "text": "The target is d5. The Scandinavian Defense is defined by the immediate queen-pawn strike against e4. Exact move: move the d-pawn to d5 (d5).",
+        "count": 25
+      },
+      {
+        "text": "The target is d6. ...d6 is the restraint move that distinguishes many King’s Indian structures from immediate central occupation. Exact move: move the d-pawn to d6 (d6).",
+        "count": 25
+      },
+      {
+        "text": "The target is e3. e3 is central to the Colle because it supports d4 and prepares Bd3 plus castling. Exact move: move the e-pawn to e3 (e3).",
+        "count": 25
+      },
+      {
+        "text": "The target is e6. The French is defined by ...e6 preparing ...d5 and central tension against e4. Exact move: move the e-pawn to e6 (e6).",
+        "count": 25
+      },
+      {
+        "text": "The target is e6. The QGD is defined by ...e6 reinforcing d5 against White’s c-pawn pressure. Exact move: move the e-pawn to e6 (e6).",
+        "count": 25
+      }
+    ]
+  },
+  "repetitionStatsAfter": {
+    "uniqueCoachCardTitles": 208,
+    "uniqueCoachCardBodies": 404,
+    "uniqueAssistedBodies": 405,
+    "uniquePlainHintBodies": 207,
+    "uniquePlainShowMoreBodies": 404,
+    "mostRepeatedTitles": [
+      {
+        "text": "Keep the Pirc setup coherent",
+        "count": 48
+      },
+      {
+        "text": "Keep Scandinavian development connected to the center",
+        "count": 46
+      },
+      {
+        "text": "Keep Petroff play solid",
+        "count": 45
+      },
+      {
+        "text": "Keep French counterplay aimed at the center",
+        "count": 41
+      },
+      {
+        "text": "Keep Vienna development purposeful",
+        "count": 39
+      },
+      {
+        "text": "Keep the English flexibility intact",
+        "count": 38
+      },
+      {
+        "text": "Keep the QGD center solid",
+        "count": 32
+      },
+      {
+        "text": "Add kingside development to the Vienna center",
+        "count": 25
+      },
+      {
+        "text": "Complete the Colle d4/e3/c3 shell",
+        "count": 25
+      },
+      {
+        "text": "Complete the King’s Indian bishop",
+        "count": 25
+      },
+      {
+        "text": "Decline the gambit with solid d5 support",
+        "count": 25
+      },
+      {
+        "text": "Develop behind the Colle center",
+        "count": 25
+      },
+      {
+        "text": "Develop behind the QGD center",
+        "count": 25
+      },
+      {
+        "text": "Develop behind the Slav center",
+        "count": 25
+      },
+      {
+        "text": "Develop the Italian bishop actively",
+        "count": 25
+      }
+    ],
+    "mostRepeatedBodies": [
+      {
+        "text": "Bc5 develops the bishop to an active Italian square, keeping pressure on White’s kingside and clearing Black to castle. It also keeps an eye on the central light squares.",
+        "count": 25
+      },
+      {
+        "text": "Bg7 completes the King’s Indian fianchetto. The bishop now works against White’s central and queenside dark squares from a safe distance.",
+        "count": 25
+      },
+      {
+        "text": "c3 completes the d4/e3/c3 Colle structure. White reinforces d4 and prepares to choose the right moment for e4.",
+        "count": 25
+      },
+      {
+        "text": "c4 is the English Opening’s defining flank claim: White’s c-pawn controls d5 without committing the e-pawn or d-pawn immediately.",
+        "count": 25
+      },
+      {
+        "text": "c6 is the Slav’s key support move: Black reinforces d5 with the c-pawn instead of locking in the light-square bishop immediately.",
+        "count": 25
+      },
+      {
+        "text": "d4 changes the English from pure flank control into direct d-pawn central pressure. White uses the earlier c-pawn setup to contest Black’s center.",
+        "count": 25
+      },
+      {
+        "text": "d4 establishes the d-pawn base of the Colle System. White plans a compact Nf3/e3/c3 structure before choosing the central break.",
+        "count": 25
+      },
+      {
+        "text": "d4 turns the Réti move order into direct central occupation. White uses earlier knight and c-pawn pressure to support the d-pawn center.",
+        "count": 25
+      },
+      {
+        "text": "e3 supports d4 and forms the Colle pawn shell with c3 when available. It also opens the light-square bishop for Bd3.",
+        "count": 25
+      },
+      {
+        "text": "e6 is the French Defense foundation: Black prepares ...d5 against White’s e-pawn. The move creates a solid center but can make the light-square bishop harder to activate.",
+        "count": 25
+      },
+      {
+        "text": "e6 is the Queen’s Gambit Declined answer: Black supports d5 and declines immediate overextension on c4. The center stays solid.",
+        "count": 25
+      },
+      {
+        "text": "g6 prepares the bishop’s long-diagonal role. This is a core King’s Indian idea: pressure White’s center from distance instead of matching every pawn immediately.",
+        "count": 25
+      },
+      {
+        "text": "Nc3 is the Vienna’s defining move: the knight supports e4 and keeps options for Bc4, g3, f4, or Nf3 depending on Black.",
+        "count": 25
+      },
+      {
+        "text": "Nf3 develops the kingside knight and prepares castling while keeping the e-pawn defended. It fits quieter Vienna lines with steady development.",
+        "count": 25
+      },
+      {
+        "text": "Nf3 supports d4 and prepares kingside castling in the Colle structure. The knight helps White build before the e-pawn break.",
+        "count": 25
+      }
+    ],
+    "mostRepeatedPlainHints": [
+      {
+        "text": "Develop behind the compact setup and prepare to challenge White’s center.",
+        "count": 48
+      },
+      {
+        "text": "Develop behind the early central challenge and keep pressure on White’s pawns.",
+        "count": 47
+      },
+      {
+        "text": "Maintain the e-pawn tension, develop cleanly, and avoid early tactical drift.",
+        "count": 45
+      },
+      {
+        "text": "Build the e-pawn and queen-pawn center, then pressure White’s pawn chain.",
+        "count": 41
+      },
+      {
+        "text": "Support the center, develop quickly, and avoid premature queen attacks.",
+        "count": 39
+      },
+      {
+        "text": "Preserve flank control, central flexibility, and safe development.",
+        "count": 38
+      },
+      {
+        "text": "Support the queen-pawn center and develop before resolving the c-pawn tension.",
+        "count": 32
+      },
+      {
+        "text": "Bring the kingside knight into contact with White’s central pawn.",
+        "count": 25
+      },
+      {
+        "text": "Bring the kingside knight into the central fight before chasing pawns.",
+        "count": 25
+      },
+      {
+        "text": "Bring the kingside knight into the central fight while d5 remains supported.",
+        "count": 25
+      },
+      {
+        "text": "Bring the kingside knight out once the Vienna center is supported.",
+        "count": 25
+      },
+      {
+        "text": "Bring the queenside knight out to support the king-pawn center and keep kingside choices flexible.",
+        "count": 25
+      },
+      {
+        "text": "Build the kingside fianchetto that will pressure the long diagonal.",
+        "count": 25
+      },
+      {
+        "text": "Build the queen-pawn base that the compact Colle structure rests on.",
+        "count": 25
+      },
+      {
+        "text": "Commit the queen pawn only after the piece and flank pressure already support the center.",
+        "count": 25
+      },
+      {
+        "text": "Commit the queen pawn only when the flank pressure already supports the center.",
+        "count": 25
+      },
+      {
+        "text": "Maintain piece pressure on the center and avoid committing pawns before the structure is clear.",
+        "count": 25
+      },
+      {
+        "text": "Place the bishop on the long diagonal so it aims at White’s center.",
+        "count": 25
+      },
+      {
+        "text": "Place the king bishop on the active diagonal before castling.",
+        "count": 25
+      },
+      {
+        "text": "Place the kingside knight behind the queen-pawn center and prepare castling.",
+        "count": 25
+      }
+    ],
+    "mostRepeatedPlainShowMoreBodies": [
+      {
+        "text": "The target is Bc5. ...Bc5 is the defining active Italian response when Black chooses development over passive defense. Exact move: move the bishop from f8 to c5 (Bc5).",
+        "count": 25
+      },
+      {
+        "text": "The target is Bg7. The g7 bishop is one of Black’s main sources of counterplay in the King’s Indian. Exact move: move the bishop from f8 to g7 (Bg7).",
+        "count": 25
+      },
+      {
+        "text": "The target is c3. The c3 move is opening-specific because it makes the Colle center sturdy before expansion. Exact move: move the c-pawn to c3 (c3).",
+        "count": 25
+      },
+      {
+        "text": "The target is c4. The English often begins with side control of d5 and keeps transpositions available without overcommitting the center. Exact move: move the c-pawn to c4 (c4).",
+        "count": 25
+      },
+      {
+        "text": "The target is c6. The Slav Defense is defined by ...c6 supporting ...d5 while keeping bishop options healthier than many ...e6 structures. Exact move: move the c-pawn to c6 (c6).",
+        "count": 25
+      },
+      {
+        "text": "The target is d4. Many English lines transpose into queen-pawn structures when d4 becomes well supported. Exact move: move the d-pawn to d4 (d4).",
+        "count": 25
+      },
+      {
+        "text": "The target is d4. The Colle is built around a restrained d-pawn center rather than early side-pawn tension. Exact move: move the d-pawn to d4 (d4).",
+        "count": 25
+      },
+      {
+        "text": "The target is d4. The move is the core Scotch idea: central clarity rather than a slow closed setup. Exact move: move the d-pawn to d4 (d4).",
+        "count": 25
+      },
+      {
+        "text": "The target is d4. The Réti often transposes into queen-pawn structures when White’s pieces already support the center. Exact move: move the d-pawn to d4 (d4).",
+        "count": 25
+      },
+      {
+        "text": "The target is e3. e3 is central to the Colle because it supports d4 and prepares Bd3 plus castling. Exact move: move the e-pawn to e3 (e3).",
+        "count": 25
+      },
+      {
+        "text": "The target is e6. The French is defined by ...e6 preparing ...d5 and central tension against e4. Exact move: move the e-pawn to e6 (e6).",
+        "count": 25
+      },
+      {
+        "text": "The target is e6. The QGD is defined by ...e6 reinforcing d5 against White’s c-pawn pressure. Exact move: move the e-pawn to e6 (e6).",
+        "count": 25
+      },
+      {
+        "text": "The target is g6. ...g6 is opening-specific because it prepares ...Bg7 against the d4/c4 center. Exact move: move the g-pawn to g6 (g6).",
+        "count": 25
+      },
+      {
+        "text": "The target is Nc3. Nc3 distinguishes the Vienna from other e4 openings by supporting the center before Nf3 is mandatory. Exact move: move the knight from b1 to c3 (Nc3).",
+        "count": 25
+      },
+      {
+        "text": "The target is Nf3. Nf3 is a core Colle move because it stabilizes the center while keeping the setup simple. Exact move: move the knight from g1 to f3 (Nf3).",
+        "count": 25
+      },
+      {
+        "text": "The target is Nf3. Nf3 is useful in Vienna structures when White shifts from flexibility to normal king safety. Exact move: move the knight from g1 to f3 (Nf3).",
+        "count": 25
+      },
+      {
+        "text": "The target is Nf6. ...Nf6 is a natural QGD developing move because it reinforces the center and prepares castling. Exact move: move the knight from g8 to f6 (Nf6).",
+        "count": 25
+      },
+      {
+        "text": "The target is Nf6. ...Nf6 is opening-specific because it contests e4 after ...d6 has built the Pirc base. Exact move: move the knight from g8 to f6 (Nf6).",
+        "count": 25
+      },
+      {
+        "text": "The target is Nf6. The knight supports a solid Slav setup and avoids premature pawn grabbing. Exact move: move the knight from g8 to f6 (Nf6).",
+        "count": 25
+      },
+      {
+        "text": "The target is b6. ...b6 is the defining queenside fianchetto setup for the Queen’s Indian. Exact move: move the b-pawn to b6 (b6).",
+        "count": 24
+      }
+    ]
+  },
+  "genericPhraseHitsBefore": [
+    {
+      "phrase": "This is a good move.",
+      "hits": 0
+    },
+    {
+      "phrase": "Continue the position.",
+      "hits": 0
+    },
+    {
+      "phrase": "Develop a piece.",
+      "hits": 0
+    },
+    {
+      "phrase": "Improve your position.",
+      "hits": 0
+    },
+    {
+      "phrase": "This follows opening principles.",
+      "hits": 0
+    },
+    {
+      "phrase": "Active Piece Development.",
+      "hits": 0
+    },
+    {
+      "phrase": "Avoid Blocking Center Pawn.",
+      "hits": 0
+    },
+    {
+      "phrase": "Keep playing normally.",
+      "hits": 0
+    },
+    {
+      "phrase": "Make a useful move.",
+      "hits": 0
+    },
+    {
+      "phrase": "This is standard.",
+      "hits": 0
+    },
+    {
+      "phrase": "This is theory.",
+      "hits": 0
+    },
+    {
+      "phrase": "Good developing move.",
+      "hits": 0
+    },
+    {
+      "phrase": "Natural move.",
+      "hits": 0
+    },
+    {
+      "phrase": "Play the move.",
+      "hits": 0
+    }
+  ],
+  "genericPhraseHitsAfter": [
+    {
+      "phrase": "This is a good move.",
+      "hits": 0
+    },
+    {
+      "phrase": "Continue the position.",
+      "hits": 0
+    },
+    {
+      "phrase": "Develop a piece.",
+      "hits": 0
+    },
+    {
+      "phrase": "Improve your position.",
+      "hits": 0
+    },
+    {
+      "phrase": "This follows opening principles.",
+      "hits": 0
+    },
+    {
+      "phrase": "Active Piece Development.",
+      "hits": 0
+    },
+    {
+      "phrase": "Avoid Blocking Center Pawn.",
+      "hits": 0
+    },
+    {
+      "phrase": "Keep playing normally.",
+      "hits": 0
+    },
+    {
+      "phrase": "Make a useful move.",
+      "hits": 0
+    },
+    {
+      "phrase": "This is standard.",
+      "hits": 0
+    },
+    {
+      "phrase": "This is theory.",
+      "hits": 0
+    },
+    {
+      "phrase": "Good developing move.",
+      "hits": 0
+    },
+    {
+      "phrase": "Natural move.",
+      "hits": 0
+    },
+    {
+      "phrase": "Play the move.",
+      "hits": 0
+    }
+  ],
+  "plainViewLeakRisksBefore": [],
+  "plainViewLeakRisksAfter": [],
+  "packetsWithEmptyConceptsTagsThemes": {
+    "concepts": 0,
+    "featureTags": 0,
+    "themes": 0
+  },
+  "topPriorityCandidates": [
+    {
+      "packetId": "french-black.line-001.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-001",
+      "playKey": "e2e4,e7e6,g1f3,d7d5,e4e5,c7c5,c2c3,b8c6,d2d4,c8d7,f1d3,d8b6",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-002.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-002",
+      "playKey": "e2e4,e7e6,d2d4,d7d5,b1c3,g8f6,e4e5,f6d7,f2f4,c7c5,g1f3,b8c6",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-003.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-003",
+      "playKey": "e2e4,e7e6,g1f3,d7d5,e4e5,c7c5,c2c3,b8c6,d2d4,d8b6,f1d3,c5d4",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-004.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-004",
+      "playKey": "e2e4,e7e6,g1f3,d7d5,e4d5,e6d5,d2d4,g8f6,b1c3,f8d6,c1g5,c7c6",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-005.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-005",
+      "playKey": "e2e4,e7e6,d2d4,d7d5,b1c3,g8f6,c1g5,f8e7,e4e5,f6d7,g5e7,d8e7",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-006.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-006",
+      "playKey": "e2e4,e7e6,g1f3,d7d5,e4e5,c7c5,c2c3,b8c6,d2d4,d8b6,f1e2,c5d4",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-007.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-007",
+      "playKey": "e2e4,e7e6,g1f3,d7d5,e4e5,c7c5,c2c3,b8c6,d2d4,c8d7,f1e2,d8b6",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-008.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-008",
+      "playKey": "e2e4,e7e6,d2d4,d7d5,b1c3,d5e4,c3e4,g8f6,c1g5,f8e7,g5f6,e7f6",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-009.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-009",
+      "playKey": "e2e4,e7e6,d2d4,d7d5,b1c3,f8b4,e4e5,g8e7,a2a3,b4c3,b2c3,c7c5",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-010.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-010",
+      "playKey": "e2e4,e7e6,d2d4,d7d5,e4e5,c7c5,c2c3,b8c6,f1b5,d8b6,b5c6,b7c6",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-011.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-011",
+      "playKey": "e2e4,e7e6,d2d4,d7d5,b1c3,d5e4,c3e4,g8f6,c1g5,f8e7,e4f6,e7f6",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-012.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-012",
+      "playKey": "e2e4,e7e6,d2d4,d7d5,e4d5,e6d5,b1c3,c7c6,g1f3,g8f6,c1g5,f8e7",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-013.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-013",
+      "playKey": "e2e4,e7e6,d2d4,d7d5,b1c3,d5e4,c3e4,b8d7,g1f3,g8f6,e4f6,d7f6",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-014.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-014",
+      "playKey": "e2e4,e7e6,d2d4,d7d5,b1c3,d5e4,c3e4,g8f6,e4f6,d8f6,g1f3,h7h6",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-015.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-015",
+      "playKey": "e2e4,e7e6,g1f3,d7d5,e4e5,c7c5,d2d4,b8c6,f1b5,d8b6,b5c6,b7c6",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-016.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-016",
+      "playKey": "e2e4,e7e6,d2d4,d7d5,b1c3,d5e4,c3e4,b8d7,f1d3,g8f6,g1f3,f8e7",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-017.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-017",
+      "playKey": "e2e4,e7e6,d2d4,d7d5,e4d5,e6d5,b1c3,c7c6,f1d3,f8d6,g1f3,g8f6",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-018.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-018",
+      "playKey": "e2e4,e7e6,d2d4,d7d5,e4e5,c7c5,c2c3,b8c6,f1b5,c8d7,b5c6,d7c6",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-019.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-019",
+      "playKey": "e2e4,e7e6,g1f3,d7d5,e4e5,c7c5,d2d4,c5d4,f3d4,b8c6,d4c6,b7c6",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-020.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-020",
+      "playKey": "e2e4,e7e6,g1f3,d7d5,e4e5,c7c5,c2c3,b8c6,f1b5,c8d7,d2d4,c6e5",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-021.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-021",
+      "playKey": "e2e4,e7e6,g1f3,d7d5,e4e5,c7c5,d2d4,b8c6,f1b5,c8d7,b5c6,d7c6",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-022.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-022",
+      "playKey": "e2e4,e7e6,g1f3,d7d5,e4d5,e6d5,d2d4,f8d6,b1c3,c7c6,f1d3,g8e7",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-023.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-023",
+      "playKey": "e2e4,e7e6,g1f3,d7d5,e4e5,c7c5,d2d4,c5d4,f3d4,b8c6,f1b5,c8d7",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-024.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-024",
+      "playKey": "e2e4,e7e6,g1f3,d7d5,e4e5,c7c5,c2c3,b8c6,d2d4,c8d7,f1d3,c5d4",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-025.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-025",
+      "playKey": "e2e4,e7e6,d2d4,d7d5,b1c3,d5e4,c3e4,b8d7,f1d3,g8f6,g1f3,f6e4",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-001.ply-07.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-001",
+      "playKey": "d2d4,g8f6,g1f3,e7e6,e2e3,c7c5,f1d3,c5d4,e3d4,b8c6,c2c3,d7d5",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-002.ply-07.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-002",
+      "playKey": "d2d4,g8f6,g1f3,d7d5,e2e3,e7e6,f1d3,c7c5,c2c3,b8c6,b1d2,f8d6",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-003.ply-07.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-003",
+      "playKey": "d2d4,g8f6,g1f3,d7d5,e2e3,e7e6,f1d3,c7c5,c2c3,b8c6,b1d2,f8e7",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-004.ply-07.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-004",
+      "playKey": "d2d4,d7d5,g1f3,b8c6,e2e3,g8f6,f1d3,c8g4,b1d2,e7e6,c2c3,f8d6",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-005.ply-07.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-005",
+      "playKey": "d2d4,g8f6,g1f3,d7d5,e2e3,e7e6,f1d3,c7c5,c2c3,c5c4,d3c2,b8c6",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-006.ply-07.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-006",
+      "playKey": "d2d4,g8f6,g1f3,d7d5,e2e3,c8f5,f1d3,f5d3,d1d3,b8c6,c2c3,e7e6",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-007.ply-07.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-007",
+      "playKey": "d2d4,g8f6,g1f3,e7e6,e2e3,c7c5,f1d3,c5d4,e3d4,d7d5,c2c3,f8d6",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-008.ply-07.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-008",
+      "playKey": "d2d4,d7d5,g1f3,b8c6,e2e3,g8f6,f1d3,e7e6,c2c3,f8d6,b1d2,c8d7",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-009.ply-07.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-009",
+      "playKey": "d2d4,g8f6,g1f3,d7d5,e2e3,e7e6,f1d3,c7c5,c2c3,c5c4,d3c2,b7b5",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-010.ply-09.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-010",
+      "playKey": "d2d4,d7d5,g1f3,e7e6,e2e3,c7c5,c2c3,b8c6,f1d3,d8b6,b1d2,g8f6",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-011.ply-07.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-011",
+      "playKey": "d2d4,d7d5,g1f3,b8c6,e2e3,g8f6,f1d3,e7e6,c2c3,f8e7,b1d2,c8d7",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-012.ply-07.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-012",
+      "playKey": "d2d4,g8f6,g1f3,e7e6,e2e3,c7c5,f1d3,c5d4,e3d4,b8c6,c2c3,f8e7",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-013.ply-07.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-013",
+      "playKey": "d2d4,d7d5,g1f3,b8c6,e2e3,g8f6,f1d3,c8g4,b1d2,e7e6,c2c3,f8e7",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-014.ply-09.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-014",
+      "playKey": "d2d4,d7d5,g1f3,e7e6,e2e3,c7c5,c2c3,b8c6,f1d3,d8b6,b1d2,c8d7",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-015.ply-07.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-015",
+      "playKey": "d2d4,d7d5,g1f3,b8c6,e2e3,c8f5,f1d3,f5d3,d1d3,e7e6,c2c3,f8d6",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-016.ply-07.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-016",
+      "playKey": "d2d4,g8f6,g1f3,e7e6,e2e3,c7c5,f1d3,c5d4,f3d4,d7d5,c2c3,b8c6",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-017.ply-07.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-017",
+      "playKey": "d2d4,g8f6,g1f3,e7e6,e2e3,c7c5,f1d3,c5d4,e3d4,d7d5,c2c3,b8c6",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-018.ply-11.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-018",
+      "playKey": "d2d4,g8f6,g1f3,e7e6,e2e3,c7c5,c2c3,b8c6,b1d2,d7d5,f1d3,f8d6",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-019.ply-09.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-019",
+      "playKey": "d2d4,g8f6,g1f3,e7e6,e2e3,c7c5,c2c3,b8c6,f1d3,d7d5,b1d2,f8d6",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-020.ply-11.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-020",
+      "playKey": "d2d4,g8f6,g1f3,e7e6,e2e3,c7c5,c2c3,d7d5,b1d2,b8c6,f1d3,f8d6",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-021.ply-09.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-021",
+      "playKey": "d2d4,g8f6,g1f3,e7e6,e2e3,c7c5,c2c3,d7d5,f1d3,b8c6,b1d2,f8d6",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-022.ply-07.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-022",
+      "playKey": "d2d4,g8f6,g1f3,e7e6,e2e3,c7c5,f1d3,d7d5,c2c3,b8c6,b1d2,f8d6",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-023.ply-07.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-023",
+      "playKey": "d2d4,g8f6,g1f3,e7e6,e2e3,d7d5,f1d3,c7c5,c2c3,b8c6,b1d2,f8d6",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-024.ply-09.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-024",
+      "playKey": "d2d4,d7d5,g1f3,e7e6,e2e3,c7c5,c2c3,b8c6,f1d3,g8f6,b1d2,f8d6",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-025.ply-11.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-025",
+      "playKey": "d2d4,d7d5,g1f3,e7e6,e2e3,c7c5,c2c3,g8f6,b1d2,b8c6,f1d3,f8d6",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    }
+  ],
+  "candidatePackets": [
+    {
+      "packetId": "french-black.line-001.ply-04.d7d5",
+      "openingId": "french-black",
+      "lineId": "french-black-line-001",
+      "playKey": "e2e4,e7e6,g1f3,d7d5,e4e5,c7c5,c2c3,b8c6,d2d4,c8d7,f1d3,d8b6",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 46,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "colle-white.line-001.ply-07.f1d3",
+      "openingId": "colle-white",
+      "lineId": "colle-white-line-001",
+      "playKey": "d2d4,g8f6,g1f3,e7e6,e2e3,c7c5,f1d3,c5d4,e3d4,b8c6,c2c3,d7d5",
+      "moveUci": "f1d3",
+      "moveSan": "Bd3",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "reti-white.line-001.ply-03.c2c4",
+      "openingId": "reti-white",
+      "lineId": "reti-white-line-001",
+      "playKey": "g1f3,d7d5,c2c4,c7c6,d2d4,e7e6,b1c3,g8f6,c1g5,b8d7,e2e3,f8e7",
+      "moveUci": "c2c4",
+      "moveSan": "c4",
+      "score": 38,
+      "reasons": [
+        "repeated_title",
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "scandinavian-black.line-001.ply-02.d7d5",
+      "openingId": "scandinavian-black",
+      "lineId": "scandinavian-black-line-001",
+      "playKey": "e2e4,d7d5,e4e5,c7c5,d2d4,e7e6,c2c3,b8c6,g1f3,c8d7,f1d3,d8b6",
+      "moveUci": "d7d5",
+      "moveSan": "d5",
+      "score": 37,
+      "reasons": [
+        "repeated_title",
+        "repeated_plain_hint",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "english-white.line-001.ply-11.b2c3",
+      "openingId": "english-white",
+      "lineId": "english-white-line-001",
+      "playKey": "c2c4,g8f6,d2d4,g7g6,b1c3,d7d5,c4d5,f6d5,e2e4,d5c3,b2c3,f8g7",
+      "moveUci": "b2c3",
+      "moveSan": "bxc3",
+      "score": 29,
+      "reasons": [
+        "repeated_title",
+        "repeated_plain_hint",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "kings-indian-black.line-001.ply-08.d7d6",
+      "openingId": "kings-indian-black",
+      "lineId": "kings-indian-black-line-001",
+      "playKey": "d2d4,g8f6,c2c4,g7g6,b1c3,f8g7,e2e4,d7d6,g1f3,e8h8,f1e2,e7e5",
+      "moveUci": "d7d6",
+      "moveSan": "d6",
+      "score": 29,
+      "reasons": [
+        "repeated_title",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "petroff-black.line-001.ply-04.g8f6",
+      "openingId": "petroff-black",
+      "lineId": "petroff-black-line-001",
+      "playKey": "e2e4,e7e5,g1f3,g8f6,b1c3,b8c6,f1c4,f6e4,c3e4,d7d5,c4d5,d8d5",
+      "moveUci": "g8f6",
+      "moveSan": "Nf6",
+      "score": 29,
+      "reasons": [
+        "repeated_title",
+        "repeated_plain_hint",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "pirc-black.line-001.ply-12.d8d1",
+      "openingId": "pirc-black",
+      "lineId": "pirc-black-line-001",
+      "playKey": "e2e4,d7d6,d2d4,g8f6,b1c3,g7g6,c1g5,f8g7,e4e5,d6e5,d4e5,d8d1",
+      "moveUci": "d8d1",
+      "moveSan": "Qxd1+",
+      "score": 29,
+      "reasons": [
+        "repeated_title",
+        "repeated_plain_hint",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "qgd-black.line-002.ply-08.b8c6",
+      "openingId": "qgd-black",
+      "lineId": "qgd-black-line-002",
+      "playKey": "d2d4,d7d5,c2c4,e7e6,g1f3,c7c5,b1c3,b8c6,e2e3,c5d4,e3d4,g8f6",
+      "moveUci": "b8c6",
+      "moveSan": "Nc6",
+      "score": 29,
+      "reasons": [
+        "repeated_title",
+        "repeated_plain_hint",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "queens-indian-black.line-001.ply-06.b7b6",
+      "openingId": "queens-indian-black",
+      "lineId": "queens-indian-black-line-001",
+      "playKey": "d2d4,g8f6,c2c4,e7e6,g1f3,b7b6,g2g3,c8b7,f1g2,f8e7,e1h1,e8h8",
+      "moveUci": "b7b6",
+      "moveSan": "b6",
+      "score": 29,
+      "reasons": [
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "scotch-white.line-001.ply-05.d2d4",
+      "openingId": "scotch-white",
+      "lineId": "scotch-white-line-001",
+      "playKey": "e2e4,e7e5,g1f3,b8c6,d2d4,e5d4,f1c4,f8c5,c2c3,g8f6,c3d4,c5b4",
+      "moveUci": "d2d4",
+      "moveSan": "d4",
+      "score": 29,
+      "reasons": [
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "french-black.line-002.ply-08.f6d7",
+      "openingId": "french-black",
+      "lineId": "french-black-line-002",
+      "playKey": "e2e4,e7e6,d2d4,d7d5,b1c3,g8f6,e4e5,f6d7,f2f4,c7c5,g1f3,b8c6",
+      "moveUci": "f6d7",
+      "moveSan": "Nfd7",
+      "score": 27,
+      "reasons": [
+        "repeated_title",
+        "repeated_plain_hint",
+        "fallback_like_hint"
+      ]
+    },
+    {
+      "packetId": "nimzo-indian-black.line-001.ply-06.f8b4",
+      "openingId": "nimzo-indian-black",
+      "lineId": "nimzo-indian-black-line-001",
+      "playKey": "d2d4,g8f6,c2c4,e7e6,b1c3,f8b4,g1f3,e8h8,c1g5,d7d5,e2e3,b8d7",
+      "moveUci": "f8b4",
+      "moveSan": "Bb4",
+      "score": 27,
+      "reasons": [
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint"
+      ]
+    },
+    {
+      "packetId": "petroff-black.line-001.ply-12.d8d5",
+      "openingId": "petroff-black",
+      "lineId": "petroff-black-line-001",
+      "playKey": "e2e4,e7e5,g1f3,g8f6,b1c3,b8c6,f1c4,f6e4,c3e4,d7d5,c4d5,d8d5",
+      "moveUci": "d8d5",
+      "moveSan": "Qxd5",
+      "score": 27,
+      "reasons": [
+        "repeated_title",
+        "repeated_plain_hint",
+        "fallback_like_hint"
+      ]
+    },
+    {
+      "packetId": "ruy-lopez-white.line-001.ply-05.f1b5",
+      "openingId": "ruy-lopez-white",
+      "lineId": "ruy-lopez-white-line-001",
+      "playKey": "e2e4,e7e5,g1f3,b8c6,f1b5,a7a6,b5a4,g8f6,e1h1,f8e7,f1e1,b7b5",
+      "moveUci": "f1b5",
+      "moveSan": "Bb5",
+      "score": 27,
+      "reasons": [
+        "repeated_body",
+        "repeated_show_more",
+        "fallback_like_hint"
+      ]
+    },
+    {
+      "packetId": "scandinavian-black.line-002.ply-08.c5d4",
+      "openingId": "scandinavian-black",
+      "lineId": "scandinavian-black-line-002",
+      "playKey": "e2e4,d7d5,e4e5,c7c5,d2d4,b8c6,c2c3,c5d4,c3d4,e7e6,g1f3,g8e7",
+      "moveUci": "c5d4",
+      "moveSan": "cxd4",
+      "score": 27,
+      "reasons": [
+        "repeated_title",
+        "repeated_plain_hint",
+        "fallback_like_hint"
+      ]
+    },
+    {
+      "packetId": "vienna-white.line-001.ply-11.h2h3",
+      "openingId": "vienna-white",
+      "lineId": "vienna-white-line-001",
+      "playKey": "e2e4,e7e5,b1c3,b8c6,f1c4,f8c5,d2d3,d7d6,g1f3,h7h6,h2h3,g8f6",
+      "moveUci": "h2h3",
+      "moveSan": "h3",
+      "score": 27,
+      "reasons": [
+        "repeated_title",
+        "repeated_plain_hint",
+        "fallback_like_hint"
+      ]
+    },
+    {
+      "packetId": "kings-indian-black.line-001.ply-10.e8g8",
+      "openingId": "kings-indian-black",
+      "lineId": "kings-indian-black-line-001",
+      "playKey": "d2d4,g8f6,c2c4,g7g6,b1c3,f8g7,e2e4,d7d6,g1f3,e8h8,f1e2,e7e5",
+      "moveUci": "e8g8",
+      "moveSan": "O-O",
+      "score": 21,
+      "reasons": [
+        "repeated_title",
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "italian-white.line-001.ply-05.f1c4",
+      "openingId": "italian-white",
+      "lineId": "italian-white-line-001",
+      "playKey": "e2e4,e7e5,g1f3,b8c6,f1c4,g8f6,f3g5,d7d5,e4d5,c6a5,c4b5,c7c6",
+      "moveUci": "f1c4",
+      "moveSan": "Bc4",
+      "score": 12,
+      "reasons": [
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    },
+    {
+      "packetId": "london-white.line-001.ply-01.d2d4",
+      "openingId": "london-white",
+      "lineId": "london-white-line-001",
+      "playKey": "d2d4,g8f6,c1f4,e7e6,e2e3,c7c5,c2c3,b8c6,b1d2,d7d5,g1f3,f8d6",
+      "moveUci": "d2d4",
+      "moveSan": "d4",
+      "score": 12,
+      "reasons": [
+        "fallback_like_hint",
+        "mechanical_opening_title"
+      ]
+    }
+  ]
+}
