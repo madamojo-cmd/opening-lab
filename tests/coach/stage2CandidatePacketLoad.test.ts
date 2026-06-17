@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   loadStage2ApprovedContentCandidatePackage,
   STAGE2_APPROVED_CONTENT_CANDIDATE_PACKAGE_ID,
-} from "../../lib/blundr/stage2ApprovedContent";
+} from "../../lib/blundr/stage2ApprovedContent/stage2ApprovedContentPackage.server";
 
 async function main(): Promise<void> {
   const loadResult = loadStage2ApprovedContentCandidatePackage();

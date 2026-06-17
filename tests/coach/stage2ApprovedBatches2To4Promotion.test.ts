@@ -5,7 +5,7 @@ import {
   getStage2ApprovedContentApprovedPacketsDefaultPath,
   loadStage2ApprovedContentCandidatePackageCollection,
   validateStage2ApprovedContentCandidatePackageCollection,
-} from "../../lib/blundr/stage2ApprovedContent";
+} from "../../lib/blundr/stage2ApprovedContent/stage2ApprovedContentPackage.server";
 
 async function main(): Promise<void> {
   const approvedPath = "data/blundr/stage2-approved-content-approved-batches2to4-16openings-v1/approved-packets.jsonl";

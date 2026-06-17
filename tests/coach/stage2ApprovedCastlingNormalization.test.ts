@@ -1,14 +1,24 @@
 import assert from "node:assert/strict";
 
-import { resolveStage2ApprovedContentPacket } from "../../lib/blundr/stage2ApprovedContent";
+import { STAGE2_APPROVED_CONTENT_APPROVED_PACKETS } from "../../lib/blundr/stage2ApprovedContent/stage2ApprovedContentPackage.generated";
+import { getStage2ApprovedContentApprovedPacketsDefaultPath, resolveStage2ApprovedContentPacket } from "../../lib/blundr/stage2ApprovedContent";
 
 async function main(): Promise<void> {
-  const approvedPath = "data/blundr/stage2-approved-content-approved-batches2to4-16openings-v1/approved-packets.jsonl";
+  const approvedPath = getStage2ApprovedContentApprovedPacketsDefaultPath();
+  const italianBlackPacket = STAGE2_APPROVED_CONTENT_APPROVED_PACKETS.find(
+    (packet) => packet.packetId === "italian-black.line-004.ply-10.e8g8",
+  );
+  const ruyLopezPacket = STAGE2_APPROVED_CONTENT_APPROVED_PACKETS.find(
+    (packet) => packet.packetId === "ruy-lopez-white.line-001.ply-09.e1g1",
+  );
+  assert.ok(italianBlackPacket, "italian_black_packet_missing");
+  assert.ok(ruyLopezPacket, "ruy_lopez_packet_missing");
 
   const packet = resolveStage2ApprovedContentPacket({
     openingId: "italian-black",
-    playKeyBefore: "e2e4,e7e5,g1f3,b8c6,f1c4,f8c5,c2c3,g8f6,d2d3",
+    playKeyBefore: italianBlackPacket ? italianBlackPacket.playSequenceUci.slice(0, Math.max(0, Number(italianBlackPacket.ply ?? 1) - 1)).join(",") : "",
     targetUci: "e8g8",
+    targetSan: "O-O",
     surface: "assisted",
     approvedPacketsPath: approvedPath,
   });
@@ -26,8 +36,9 @@ async function main(): Promise<void> {
 
   const byPlayKey = resolveStage2ApprovedContentPacket({
     openingId: "ruy-lopez-white",
-    playKey: "e2e4,e7e5,g1f3,b8c6,f1b5,a7a6,b5a4,g8f6,e1g1",
+    playKeyBefore: ruyLopezPacket ? ruyLopezPacket.playSequenceUci.slice(0, Math.max(0, Number(ruyLopezPacket.ply ?? 1) - 1)).join(",") : "",
     targetUci: "e1g1",
+    targetSan: "O-O",
     surface: "plain_show_more",
     approvedPacketsPath: approvedPath,
   });

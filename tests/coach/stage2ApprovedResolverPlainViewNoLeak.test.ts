@@ -1,14 +1,22 @@
 import assert from "node:assert/strict";
 
+import { STAGE2_APPROVED_CONTENT_APPROVED_PACKETS } from "../../lib/blundr/stage2ApprovedContent/stage2ApprovedContentPackage.generated";
 import { applyStage2CoachCopyEnrichment } from "../../lib/blundr/stage2Coaching";
 import { getStage2ApprovedContentApprovedPacketsDefaultPath, resolveStage2ApprovedContentPacket } from "../../lib/blundr/stage2ApprovedContent";
 
 async function main(): Promise<void> {
   const approvedPath = getStage2ApprovedContentApprovedPacketsDefaultPath();
+  const londonWhitePacket = STAGE2_APPROVED_CONTENT_APPROVED_PACKETS.find(
+    (packet) => packet.openingId === "london-white" && packet.moveUci === "d2d4",
+  );
+  assert.ok(londonWhitePacket, "london_white_packet_missing");
+  const playKeyBefore = londonWhitePacket ? londonWhitePacket.playSequenceUci.slice(0, Math.max(0, Number(londonWhitePacket.ply ?? 1) - 1)).join(",") : "";
+
   const exact = resolveStage2ApprovedContentPacket({
     openingId: "london-white",
-    playKey: "d2d4,g8f6,c1f4,e7e6,e2e3,c7c5,c2c3,b8c6,b1d2,d7d5,g1f3,f8d6",
+    playKeyBefore,
     targetUci: "d2d4",
+    targetSan: "d4",
     surface: "plain_hint",
     approvedPacketsPath: approvedPath,
   });
