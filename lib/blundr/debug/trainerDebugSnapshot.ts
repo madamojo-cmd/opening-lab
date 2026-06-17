@@ -7,6 +7,10 @@ import { analyzeBlundrPosition } from "../brain/analyzeBlundrPosition";  // v2.7
 import { buildStage2FeatureTrace } from "./buildStage2FeatureTrace";
 import { buildTrainerFrameResolution } from "./buildTrainerFrameResolution";
 import {
+  resolveStage2ProviderWarnings,
+  summarizeStage2ProviderWarnings,
+} from "../providers/providerWarningPolicy";
+import {
   getStage2OpeningAvailability,
   getStage2OpeningAvailabilitySummary,
 } from "../openings/openingAvailability";
@@ -810,6 +814,40 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       coachSource === "verified_safe_fallback",
   );
   const runtimeSafeFallbackReason = String(input.runtimeSafeFallbackReason ?? coachDebug.fallbackReason ?? coachQuality.fallbackReason ?? "").trim() || null;
+  const providerWarnings = resolveStage2ProviderWarnings({
+    runtimeDataSource: runtimeAvailabilitySummary.runtimeDataSource,
+    liveLichessCalled: input.liveLichessCalled ?? false,
+    runtimeAvailable: selectedOpeningAvailability?.runtimeAvailable ?? true,
+    selectedOpeningRuntimeAvailable: selectedOpeningAvailability?.runtimeAvailable ?? true,
+    selectedOpeningContentStatus: selectedOpeningAvailability?.contentStatus ?? null,
+    selectedOpeningApprovedContentAvailable: selectedApprovedContentInventory?.approvedContentAvailable ?? null,
+    trainingMode: input.trainingMode ?? null,
+    trainerPhase: input.trainerPhase ?? null,
+    isUserTurn: input.isUserTurn ?? null,
+    visibleSurfaceMode: String(input.visibleTeachingSurface?.mode ?? input.visibleSurfaceMode ?? input.presentationFrame?.coach?.owner ?? ""),
+    stockfishProviderStatus: input.stockfishProviderStatus ?? null,
+    stockfishValidationStatus: input.stockfishValidationStatus ?? null,
+    stockfishValidationAvailable: input.stockfishValidationAvailable ?? null,
+    maiaProviderStatus: input.maiaProviderStatus ?? null,
+    maiaRuntimeStatus: input.maiaRuntimeStatus ?? null,
+    maiaAllowedThisFrame: input.maiaAllowedThisFrame ?? null,
+    maiaFallbackUsed: input.maiaFallbackUsed ?? null,
+    maiaFallbackReason: input.maiaFallbackReason ?? null,
+    stage2ApprovedContentEnabled: input.stage2ApprovedContentEnabled ?? null,
+    stage2SafeFallbackEnabled: input.stage2SafeFallbackEnabled ?? null,
+    approvedContentMatched: input.trainerFrameResolution?.approvedContent?.matched ?? input.stage2ApprovedPacketMatched ?? null,
+    approvedPacketKind: input.trainerFrameResolution?.approvedContent?.packetKind ?? input.stage2ApprovedPacketKind ?? null,
+    approvedPacketFallbackReason: input.trainerFrameResolution?.approvedContent?.fallbackReason ?? input.stage2ApprovedPacketFallbackReason ?? null,
+    approvedPacketMissReason: input.trainerFrameResolution?.approvedContent?.missReason ?? input.stage2ApprovedPacketMissReason ?? null,
+    stage2CoachingPacketKind: input.stage2CoachingPacketKind ?? input.trainerFrameResolution?.approvedContent?.packetKind ?? null,
+    stage2CoachingSafetyStatus: input.stage2CoachingSafetyStatus ?? null,
+    stage2CoachingRuntimeMatched: input.stage2CoachingRuntimeMatched ?? null,
+    stage2CoachingResolverEnabled: input.stage2CoachingResolverEnabled ?? null,
+    runtimeSafeFallbackUsed,
+    runtimeSafeFallbackReason,
+    candidateSource: input.candidateSource ?? null,
+  });
+  const providerWarningSummary = summarizeStage2ProviderWarnings(providerWarnings);
   const provenanceIssues: string[] = [];
   if (selectedTheme && selectedOpportunityId && selectedTheme !== selectedOpportunityId) provenanceIssues.push("theme_opportunity_mismatch");
   if (selectedTheme && selectedTemplateId && !selectedTemplateId.includes(selectedTheme) && !selectedTemplateId.startsWith("fallback:")) provenanceIssues.push("template_theme_mismatch");
@@ -1319,6 +1357,8 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
     featureTrace: stage2FeatureTraceBundle.featureTrace ?? undefined,
     featureTraceTimeline: stage2FeatureTraceBundle.featureTraceTimeline ?? [],
     trainerFrameResolution,
+    providerWarnings,
+    providerWarningSummary,
     visualResult: trainerFrameResolution.visualResult,
     explanation: {
       selectedTemplateId,

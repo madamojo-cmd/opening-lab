@@ -1,4 +1,5 @@
 import type { PendingPromotion, PromotionPiece } from "../runtime/promotionAuthority";
+import type { Stage2ProviderWarning, Stage2ProviderWarningSummary } from "../providers/providerWarningPolicy";
 
 export type TrainerFrameCoachCardAuthority = "pipeline_coach_decision" | "visible_surface_v28" | "unknown";
 
@@ -113,4 +114,6 @@ export type TrainerFrameResolution = {
   coachQuality: TrainerFrameCoachQualityResolution;
   promotion: TrainerFramePromotionResolution;
   approvedContent: TrainerFrameApprovedContentResolution;
+  providerWarnings?: Stage2ProviderWarning[];
+  providerWarningSummary?: Stage2ProviderWarningSummary;
 };

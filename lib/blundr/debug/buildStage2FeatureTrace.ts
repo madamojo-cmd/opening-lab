@@ -13,6 +13,10 @@ import { normalizeVisualFen } from "../visual/normalizeVisualFen";
 import type { CurrentInstructionFrame } from "../runtime/currentInstructionFrame";
 import type { TeachingOpportunity } from "../opportunity/opportunityTypes";
 import { buildTrainerFrameResolution } from "./buildTrainerFrameResolution";
+import {
+  resolveStage2ProviderWarnings,
+  summarizeStage2ProviderWarnings,
+} from "../providers/providerWarningPolicy";
 import type {
   Stage2FeatureTraceBundle,
   Stage2FeatureTraceCoachCardResult,
@@ -1184,6 +1188,40 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
   const targetSource = normalizeTextOrNull(input.instructionTargetSource ?? input.currentInstructionFrame?.targetSource ?? input.expectedMoveResolution?.source ?? input.coachDecision?.debug?.coachDecisionSource ?? null);
   const criticalIssues = normalizeStringArray(input.criticalIssues ?? input.health?.criticalIssues);
   const warnings = normalizeStringArray(input.warnings ?? input.health?.warnings);
+  const providerWarnings = resolveStage2ProviderWarnings({
+    runtimeDataSource: input.runtimeDataSource ?? "local_crawled_package",
+    liveLichessCalled: input.liveLichessCalled ?? false,
+    runtimeAvailable: input.runtimeAvailable ?? input.selectedOpeningRuntimeAvailable ?? true,
+    selectedOpeningRuntimeAvailable: input.selectedOpeningRuntimeAvailable ?? true,
+    selectedOpeningContentStatus: input.selectedOpeningContentStatus ?? null,
+    selectedOpeningApprovedContentAvailable: input.selectedOpeningApprovedContentAvailable ?? null,
+    trainingMode: input.trainingMode ?? null,
+    trainerPhase: input.trainerPhase ?? null,
+    isUserTurn: input.isUserTurn ?? null,
+    visibleSurfaceMode: String(input.visibleTeachingSurface?.mode ?? input.visibleSurfaceMode ?? input.presentationFrame?.coach?.owner ?? ""),
+    stockfishProviderStatus: input.stockfishProviderStatus ?? null,
+    stockfishValidationStatus: input.stockfishValidationStatus ?? null,
+    stockfishValidationAvailable: input.stockfishValidationAvailable ?? null,
+    maiaProviderStatus: input.maiaProviderStatus ?? null,
+    maiaRuntimeStatus: input.maiaRuntimeStatus ?? null,
+    maiaAllowedThisFrame: input.maiaAllowedThisFrame ?? null,
+    maiaFallbackUsed: input.maiaFallbackUsed ?? null,
+    maiaFallbackReason: input.maiaFallbackReason ?? null,
+    stage2ApprovedContentEnabled: input.stage2ApprovedContentEnabled ?? null,
+    stage2SafeFallbackEnabled: input.stage2SafeFallbackEnabled ?? null,
+    approvedContentMatched,
+    approvedPacketKind: approvedPacketResolution.packetKind,
+    approvedPacketFallbackReason: approvedPacketResolution.fallbackReason,
+    approvedPacketMissReason: approvedPacketResolution.missReason,
+    stage2CoachingPacketKind: stage2Resolution.kind === "approved_packet" ? "approved_packet" : stage2Resolution.kind === "safe_fallback" ? "safe_fallback" : "none",
+    stage2CoachingSafetyStatus: stage2Resolution.kind === "approved_packet" ? stage2Resolution.packet.safetyStatus : stage2Resolution.kind === "safe_fallback" ? stage2Resolution.packet.safetyStatus : null,
+    stage2CoachingRuntimeMatched: stage2Resolution.kind === "approved_packet" ? stage2Resolution.packet.runtimeReconciliation.status === "matched" : stage2Resolution.kind === "safe_fallback" ? stage2Resolution.packet.runtimeReconciliation.status === "matched" : null,
+    stage2CoachingResolverEnabled: input.stage2CoachingResolverEnabled ?? null,
+    runtimeSafeFallbackUsed: fallbackUsed,
+    runtimeSafeFallbackReason: fallbackReason,
+    candidateSource: input.candidateSource ?? null,
+  });
+  const providerWarningSummary = summarizeStage2ProviderWarnings(providerWarnings);
 
   const missingReasons: Stage2FeatureTraceMissingReason[] = [];
   const instructionalFrame = Boolean(input.trainerPhase === "ready_for_user" && input.isUserTurn === true);
@@ -1289,6 +1327,8 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
     promotion,
     finalRenderedTitle: coachCardResult.finalRenderedTitle,
     finalRenderedBody: coachCardResult.finalRenderedBody,
+    providerWarnings,
+    providerWarningSummary,
     traceStatus: determineTraceStatus(input, {
       frameId,
       fen4,

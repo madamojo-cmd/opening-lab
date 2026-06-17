@@ -1,0 +1,383 @@
+{
+  "policyId": "stage2-provider-warning-policy",
+  "version": "v1",
+  "providers": [
+    {
+      "providerId": "local_runtime_package",
+      "allowedRoles": [
+        "authoritative_runtime_source"
+      ],
+      "disallowedRoles": [
+        "historical_source_only",
+        "opponent_reply_provider"
+      ],
+      "warningIds": [
+        "local_runtime_loaded",
+        "local_runtime_missing",
+        "no_live_lichess_required",
+        "live_lichess_disabled",
+        "live_lichess_call_blocked"
+      ]
+    },
+    {
+      "providerId": "historical_lichess_source",
+      "allowedRoles": [
+        "historical_source_only"
+      ],
+      "disallowedRoles": [
+        "authoritative_runtime_source"
+      ],
+      "warningIds": [
+        "live_lichess_disabled",
+        "live_lichess_call_blocked"
+      ]
+    },
+    {
+      "providerId": "maia",
+      "allowedRoles": [
+        "opponent_reply_provider"
+      ],
+      "disallowedRoles": [
+        "authoritative_runtime_source"
+      ],
+      "warningIds": [
+        "maia_unavailable",
+        "maia_not_required_for_restricted_frame",
+        "maia_opponent_reply_only",
+        "maia_not_user_move_authority"
+      ]
+    },
+    {
+      "providerId": "stockfish",
+      "allowedRoles": [
+        "continuation_validator"
+      ],
+      "disallowedRoles": [
+        "authoritative_runtime_source"
+      ],
+      "warningIds": [
+        "stockfish_unavailable",
+        "stockfish_validation_unavailable",
+        "stockfish_not_user_move_authority",
+        "continuation_provider_fallback_used"
+      ]
+    },
+    {
+      "providerId": "approved_content",
+      "allowedRoles": [
+        "approved_content_enricher"
+      ],
+      "disallowedRoles": [
+        "authoritative_runtime_source"
+      ],
+      "warningIds": [
+        "approved_content_not_matched",
+        "approved_content_fallback_used"
+      ]
+    },
+    {
+      "providerId": "safe_fallback",
+      "allowedRoles": [
+        "safe_fallback_renderer"
+      ],
+      "disallowedRoles": [
+        "authoritative_runtime_source"
+      ],
+      "warningIds": [
+        "safe_fallback_used"
+      ]
+    },
+    {
+      "providerId": "debug_snapshot",
+      "allowedRoles": [
+        "debug_report_only"
+      ],
+      "disallowedRoles": [
+        "authoritative_runtime_source"
+      ],
+      "warningIds": [
+        "provider_warning_debug_only",
+        "provider_warning_user_visible",
+        "provider_no_authority_impact"
+      ]
+    }
+  ],
+  "warnings": [
+    {
+      "warningId": "local_runtime_loaded",
+      "providerIds": [
+        "local_runtime_package"
+      ],
+      "severity": "info",
+      "userVisible": false,
+      "debugOnly": true,
+      "fallbackBehavior": "none",
+      "authorityImpact": "none",
+      "tests": [
+        "tests/coach/runtimeDataSourceDebug.test.ts",
+        "tests/coach/noLiveLichessRuntimeCalls.test.ts"
+      ]
+    },
+    {
+      "warningId": "local_runtime_missing",
+      "providerIds": [
+        "local_runtime_package"
+      ],
+      "severity": "blocked",
+      "userVisible": true,
+      "debugOnly": false,
+      "fallbackBehavior": "block_frame",
+      "authorityImpact": "blocked_frame",
+      "tests": [
+        "tests/coach/runtimeCanonical21Openings.test.ts"
+      ]
+    },
+    {
+      "warningId": "no_live_lichess_required",
+      "providerIds": [
+        "local_runtime_package"
+      ],
+      "severity": "info",
+      "userVisible": false,
+      "debugOnly": true,
+      "fallbackBehavior": "none",
+      "authorityImpact": "none",
+      "tests": [
+        "tests/coach/noLiveLichessRuntimeCalls.test.ts",
+        "tests/coach/stage2ApprovedRuntimeSeparation.test.ts"
+      ]
+    },
+    {
+      "warningId": "live_lichess_disabled",
+      "providerIds": [
+        "historical_lichess_source",
+        "local_runtime_package"
+      ],
+      "severity": "info",
+      "userVisible": false,
+      "debugOnly": true,
+      "fallbackBehavior": "none",
+      "authorityImpact": "none",
+      "tests": [
+        "tests/coach/noLiveLichessRuntimeCalls.test.ts"
+      ]
+    },
+    {
+      "warningId": "live_lichess_call_blocked",
+      "providerIds": [
+        "historical_lichess_source"
+      ],
+      "severity": "blocked",
+      "userVisible": true,
+      "debugOnly": false,
+      "fallbackBehavior": "block_call",
+      "authorityImpact": "blocked_frame",
+      "tests": [
+        "tests/coach/noLiveLichessRuntimeCalls.test.ts"
+      ]
+    },
+    {
+      "warningId": "maia_unavailable",
+      "providerIds": [
+        "maia"
+      ],
+      "severity": "degraded",
+      "userVisible": false,
+      "debugOnly": true,
+      "fallbackBehavior": "safe_fallback_or_skip",
+      "authorityImpact": "blocked_non_authority_feature",
+      "tests": [
+        "tests/coach/stage2ProviderWarningDebugTruth.test.ts"
+      ]
+    },
+    {
+      "warningId": "maia_not_required_for_restricted_frame",
+      "providerIds": [
+        "maia"
+      ],
+      "severity": "info",
+      "userVisible": false,
+      "debugOnly": true,
+      "fallbackBehavior": "none",
+      "authorityImpact": "none",
+      "tests": [
+        "tests/coach/stage2ProviderWarningDebugTruth.test.ts"
+      ]
+    },
+    {
+      "warningId": "maia_opponent_reply_only",
+      "providerIds": [
+        "maia"
+      ],
+      "severity": "info",
+      "userVisible": false,
+      "debugOnly": true,
+      "fallbackBehavior": "none",
+      "authorityImpact": "none",
+      "tests": [
+        "tests/coach/stage2ProviderWarningPolicy.test.ts"
+      ]
+    },
+    {
+      "warningId": "maia_not_user_move_authority",
+      "providerIds": [
+        "maia"
+      ],
+      "severity": "info",
+      "userVisible": false,
+      "debugOnly": true,
+      "fallbackBehavior": "none",
+      "authorityImpact": "none",
+      "tests": [
+        "tests/coach/stage2ProviderWarningPolicy.test.ts"
+      ]
+    },
+    {
+      "warningId": "stockfish_unavailable",
+      "providerIds": [
+        "stockfish"
+      ],
+      "severity": "degraded",
+      "userVisible": true,
+      "debugOnly": false,
+      "fallbackBehavior": "safe_fallback_or_skip",
+      "authorityImpact": "blocked_non_authority_feature",
+      "tests": [
+        "tests/coach/coachTitlesAndStockfishWarnings.test.ts",
+        "tests/coach/stage2ProviderWarningDebugTruth.test.ts"
+      ]
+    },
+    {
+      "warningId": "stockfish_validation_unavailable",
+      "providerIds": [
+        "stockfish"
+      ],
+      "severity": "degraded",
+      "userVisible": true,
+      "debugOnly": false,
+      "fallbackBehavior": "safe_fallback_or_skip",
+      "authorityImpact": "blocked_non_authority_feature",
+      "tests": [
+        "tests/coach/stockfishValidationGate.test.ts"
+      ]
+    },
+    {
+      "warningId": "stockfish_not_user_move_authority",
+      "providerIds": [
+        "stockfish"
+      ],
+      "severity": "info",
+      "userVisible": false,
+      "debugOnly": true,
+      "fallbackBehavior": "none",
+      "authorityImpact": "none",
+      "tests": [
+        "tests/coach/stage2ProviderWarningPolicy.test.ts"
+      ]
+    },
+    {
+      "warningId": "continuation_provider_fallback_used",
+      "providerIds": [
+        "stockfish",
+        "safe_fallback"
+      ],
+      "severity": "warning",
+      "userVisible": true,
+      "debugOnly": false,
+      "fallbackBehavior": "safe_fallback",
+      "authorityImpact": "none",
+      "tests": [
+        "tests/coach/runtimeBookExhaustionContinuation.test.ts",
+        "tests/coach/stage2ProviderWarningDebugTruth.test.ts"
+      ]
+    },
+    {
+      "warningId": "approved_content_not_matched",
+      "providerIds": [
+        "approved_content"
+      ],
+      "severity": "warning",
+      "userVisible": false,
+      "debugOnly": true,
+      "fallbackBehavior": "safe_fallback_preserved",
+      "authorityImpact": "none",
+      "tests": [
+        "tests/coach/stage2FeatureTraceFallbackTruth.test.ts",
+        "tests/coach/stage2ProviderWarningDebugTruth.test.ts"
+      ]
+    },
+    {
+      "warningId": "approved_content_fallback_used",
+      "providerIds": [
+        "approved_content",
+        "safe_fallback"
+      ],
+      "severity": "info",
+      "userVisible": false,
+      "debugOnly": true,
+      "fallbackBehavior": "safe_fallback",
+      "authorityImpact": "none",
+      "tests": [
+        "tests/coach/stage2ApprovedLiveRenderingFallback.test.ts",
+        "tests/coach/stage2ProviderWarningDebugTruth.test.ts"
+      ]
+    },
+    {
+      "warningId": "safe_fallback_used",
+      "providerIds": [
+        "safe_fallback"
+      ],
+      "severity": "info",
+      "userVisible": false,
+      "debugOnly": true,
+      "fallbackBehavior": "preserve_lesson_flow",
+      "authorityImpact": "none",
+      "tests": [
+        "tests/coach/stage2FeatureTraceFallbackTruth.test.ts",
+        "tests/coach/stage2ProviderWarningDebugTruth.test.ts"
+      ]
+    },
+    {
+      "warningId": "provider_warning_debug_only",
+      "providerIds": [
+        "debug_snapshot"
+      ],
+      "severity": "info",
+      "userVisible": false,
+      "debugOnly": true,
+      "fallbackBehavior": "none",
+      "authorityImpact": "none",
+      "tests": [
+        "tests/coach/stage2ProviderWarningPolicy.test.ts"
+      ]
+    },
+    {
+      "warningId": "provider_warning_user_visible",
+      "providerIds": [
+        "debug_snapshot"
+      ],
+      "severity": "info",
+      "userVisible": true,
+      "debugOnly": false,
+      "fallbackBehavior": "none",
+      "authorityImpact": "none",
+      "tests": [
+        "tests/coach/stage2ProviderWarningPolicy.test.ts"
+      ]
+    },
+    {
+      "warningId": "provider_no_authority_impact",
+      "providerIds": [
+        "debug_snapshot"
+      ],
+      "severity": "info",
+      "userVisible": false,
+      "debugOnly": true,
+      "fallbackBehavior": "none",
+      "authorityImpact": "none",
+      "tests": [
+        "tests/coach/stage2ProviderWarningPolicy.test.ts"
+      ]
+    }
+  ]
+}

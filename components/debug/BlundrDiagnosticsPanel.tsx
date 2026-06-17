@@ -607,6 +607,8 @@ export function buildDebugCopyEverythingPayload(snapshot: TrainerDebugSnapshot |
     featureTrace: snapshot?.featureTrace ?? null,
     featureTraceTimeline: snapshot?.featureTraceTimeline ?? [],
     trainerFrameResolution: snapshot?.trainerFrameResolution ?? null,
+    providerWarnings: (snapshot as any)?.providerWarnings ?? (snapshot?.trainerFrameResolution as any)?.providerWarnings ?? [],
+    providerWarningSummary: (snapshot as any)?.providerWarningSummary ?? (snapshot?.trainerFrameResolution as any)?.providerWarningSummary ?? null,
     visualResult: (snapshot as any)?.visualResult ?? (snapshot?.trainerFrameResolution as any)?.visualResult ?? (snapshot?.featureTrace as any)?.visualResult ?? null,
     coachCardRenderTimeline: Array.isArray(snapshot?.coachCardRenderTimeline) ? snapshot.coachCardRenderTimeline : [],
     coachPipelineTimeline: Array.isArray(snapshot?.coachTimeline) ? snapshot.coachTimeline : [],
@@ -839,6 +841,14 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
       eventLog,
     ],
   );
+  const providerWarnings = useMemo(
+    () => (Array.isArray((fullDebugSession as any)?.providerWarnings) ? (fullDebugSession as any).providerWarnings : []),
+    [fullDebugSession],
+  );
+  const providerWarningSummary = useMemo(
+    () => (fullDebugSession as any)?.providerWarningSummary ?? null,
+    [fullDebugSession],
+  );
 
   if (!enabled && !snapshot?.build.debugEnabled) return null;
   if (!snapshot) return null;
@@ -913,6 +923,9 @@ export function BlundrDiagnosticsPanel({ snapshot, enabled, onEnabledChange, onC
           <DebugSection title="Presentation"><DebugJsonViewer value={snapshot.presentation} /></DebugSection>
           <DebugSection title="Legacy"><DebugJsonViewer value={snapshot.legacy} /></DebugSection>
           <DebugSection title="Cache/Performance"><DebugJsonViewer value={{ cache: snapshot.cache, performance: snapshot.performance }} /></DebugSection>
+          <DebugSection title="Provider Warnings">
+            <DebugJsonViewer value={{ summary: providerWarningSummary, warnings: providerWarnings }} />
+          </DebugSection>
           <DebugSection title="Coach Timeline" defaultOpen>
             <div className="mb-2 flex flex-wrap gap-2">
               <button type="button" onClick={() => setTimelineFilter("all")} className={`rounded-full px-2 py-1 text-[10px] font-black ${timelineFilter === "all" ? "bg-white text-stone-900" : "bg-stone-800 text-stone-200"}`}>All</button>

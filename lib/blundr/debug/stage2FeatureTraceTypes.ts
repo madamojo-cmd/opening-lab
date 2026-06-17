@@ -1,4 +1,5 @@
 import type { TrainerFrameVisualResult } from "./trainerFrameResolutionTypes";
+import type { Stage2ProviderWarning, Stage2ProviderWarningSummary } from "../providers/providerWarningPolicy";
 
 export type Stage2FeatureTraceStatus = "complete" | "partial" | "missing";
 
@@ -212,6 +213,8 @@ export interface Stage2FeatureTrace {
   promotion: Stage2FeatureTracePromotionResult;
   finalRenderedTitle: string | null;
   finalRenderedBody: string | null;
+  providerWarnings?: Stage2ProviderWarning[];
+  providerWarningSummary?: Stage2ProviderWarningSummary;
   traceStatus: Stage2FeatureTraceStatus;
   missingReasons: Stage2FeatureTraceMissingReason[];
   reviewCandidateEventEligible: boolean;

@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { buildDebugCopyEverythingPayload, BlundrDiagnosticsPanel } from "../../components/debug/BlundrDiagnosticsPanel";
 import { buildTrainerDebugSnapshot } from "../../lib/blundr/debug/trainerDebugSnapshot";
 import { buildStage2CoachContext, resolveStage2CoachingPacket, STAGE2_APPROVED_CONTENT_ENABLED } from "../../lib/blundr/stage2Coaching";
+import { findApprovedPacket, packetPlayKeyAtTarget, packetPlayKeyBefore } from "./stage2ApprovedContentTestHelpers";
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const STAGE2_COACHING_DIR = path.join(REPO_ROOT, "lib", "blundr", "stage2Coaching");
@@ -23,20 +24,22 @@ function importSpecifiers(content: string): string[] {
 }
 
 export function testStage2CoachingResolverShell(): void {
+  const packet = findApprovedPacket((entry) => entry.openingId === "london-white" && entry.moveUci === "g1f3" && entry.status === "approved");
   const baseContext = buildStage2CoachContext({
-    openingId: "london-white",
-    playKeyBefore: "d2d4,d7d5,c1f4",
-    learnerSide: "white",
-    sideToMove: "white",
-    targetUci: "g1f3",
-    targetSan: "Nf3",
+    openingId: packet.openingId,
+    playKeyBefore: packetPlayKeyBefore(packet),
+    playKey: packetPlayKeyAtTarget(packet),
+    learnerSide: packet.learnerSide,
+    sideToMove: packet.sideToMove,
+    targetUci: packet.moveUci,
+    targetSan: packet.moveSan,
     targetPieceType: "n",
     surface: "plain_hint",
     runtimeBook: {
       status: "ready",
       candidateCount: 4,
-      topCandidateUci: "g1f3",
-      topCandidateSan: "Nf3",
+      topCandidateUci: packet.moveUci,
+      topCandidateSan: packet.moveSan,
       topCandidateRank: 1,
       topCandidateTotalGames: 12034,
       bookExhausted: false,
@@ -50,14 +53,14 @@ export function testStage2CoachingResolverShell(): void {
 
   if (result.kind !== "approved_packet") return;
   assert.equal(result.packet.moveUci, "g1f3", "resolver_must_not_change_target_uci");
-  assert.equal(result.packet.moveSan, "Nf3", "resolver_output_should_align_to_target");
+  assert.equal(result.packet.moveSan, packet.moveSan, "resolver_output_should_align_to_target");
   assert.equal(result.packet.status, "approved", "approved_packet_must_remain_approved");
   assert.equal(result.packet.approvalReadiness, "app_validated", "approved_packet_must_be_app_validated");
   assert.equal(result.packet.runtimeReconciliation.status, "matched", "approved_packet_must_match_runtime_reconciliation");
   assert.equal(result.packet.visualRecipeRefs.length > 0, true, "resolver_should_render_visual_recipe_metadata");
-  assert.equal(result.packet.body.includes("Nf3"), false, "plain_hidden_body_must_not_leak_target_san");
+  assert.equal(result.packet.body.includes(packet.moveSan), false, "plain_hidden_body_must_not_leak_target_san");
   assert.equal(result.packet.body.includes("g1f3"), false, "plain_hidden_body_must_not_leak_target_uci");
-  assert.equal((result.packet.hint ?? "").includes("Nf3"), false, "plain_hidden_hint_must_not_leak_target_san");
+  assert.equal((result.packet.hint ?? "").includes(packet.moveSan), false, "plain_hidden_hint_must_not_leak_target_san");
   assert.equal((result.packet.hint ?? "").includes("g1f3"), false, "plain_hidden_hint_must_not_leak_target_uci");
 
   const showMore = resolveStage2CoachingPacket(
