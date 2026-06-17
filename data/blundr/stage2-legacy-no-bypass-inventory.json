@@ -1,0 +1,719 @@
+[
+  {
+    "pathId": "app_page_orchestration",
+    "file": "app/page.tsx",
+    "symbol": null,
+    "category": "move_authority",
+    "classification": "active_authority",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": true,
+    "guardedBy": [
+      "tests/coach/stage2LegacyNoMoveAuthorityBypass.test.ts",
+      "tests/coach/stage2LegacyNoCoachCardBypass.test.ts",
+      "tests/coach/stage2LegacyNoVisualBypass.test.ts",
+      "tests/coach/stage2LegacyNoContinuationBypass.test.ts",
+      "tests/coach/stage2LegacyNoPromotionBypass.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2AppPagePolicyInventory.test.ts",
+      "tests/coach/stage2AppPageResolverParity.test.ts",
+      "tests/coach/stage2AppPageApprovedContentParity.test.ts",
+      "tests/coach/stage2AppPagePlainViewParity.test.ts",
+      "tests/coach/stage2AppPageContinuationParity.test.ts",
+      "tests/coach/stage2AppPageOpeningAvailabilityParity.test.ts"
+    ],
+    "notes": "Page-local orchestration still wires current instruction frames, opening availability, coach copy, visual state, promotion handling, plain-view gating, and continuation flow, but it now consumes the accepted helper chain instead of inventing target authority."
+  },
+  {
+    "pathId": "current_instruction_frame",
+    "file": "lib/blundr/runtime/currentInstructionFrame.ts",
+    "symbol": "buildCurrentInstructionFrame",
+    "category": "move_authority",
+    "classification": "active_authority",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": true,
+    "guardedBy": [
+      "tests/coach/stage2LegacyNoMoveAuthorityBypass.test.ts",
+      "tests/coach/stage2TrainerFrameResolutionNoBypass.test.ts",
+      "tests/coach/effectiveContinuationCandidateAuthority.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2FrameAuthorityLock.test.ts",
+      "tests/coach/revealTargetSourceContract.test.ts",
+      "tests/coach/stage2TrainerFrameResolutionNoBypass.test.ts"
+    ],
+    "notes": "This is the canonical source of frame target authority; it determines the locked instruction target and frame mode before any later adapter/debug layer can observe it."
+  },
+  {
+    "pathId": "continuation_candidate_resolution",
+    "file": "lib/blundr/runtime/resolveEffectiveContinuationCandidate.ts",
+    "symbol": "resolveEffectiveContinuationCandidate",
+    "category": "continuation",
+    "classification": "fallback_only",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/effectiveContinuationCandidateAuthority.test.ts",
+      "tests/coach/runtimeBookBeforeContinuation.test.ts",
+      "tests/coach/runtimeBookExhaustionContinuation.test.ts",
+      "tests/coach/stage2LegacyNoContinuationBypass.test.ts"
+    ],
+    "tests": [
+      "tests/coach/effectiveContinuationCandidateAuthority.test.ts",
+      "tests/coach/runtimeBookBeforeContinuation.test.ts",
+      "tests/coach/runtimeBookExhaustionContinuation.test.ts"
+    ],
+    "notes": "Promotes only already-resolved continuation targets from allowed sources; it does not create user target authority and blocks when the source, legality, mode, or fen checks fail."
+  },
+  {
+    "pathId": "restricted_runtime_book_handoff",
+    "file": "lib/blundr/runtime/restrictedRuntimeBookHandoff.ts",
+    "symbol": "resolveRestrictedRuntimeBookHandoff",
+    "category": "continuation",
+    "classification": "fallback_only",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/restrictedRuntimeBookOpponentTurnHandoff.test.ts",
+      "tests/coach/restrictedLineExhaustedBranchCompleteButtons.test.ts",
+      "tests/coach/runtimeBookExhaustionContinuation.test.ts"
+    ],
+    "tests": [
+      "tests/coach/restrictedRuntimeBookOpponentTurnHandoff.test.ts",
+      "tests/coach/restrictedLineExhaustedBranchCompleteButtons.test.ts"
+    ],
+    "notes": "Detects the restricted-book exhausted handoff and branch-complete eligibility, but only after the runtime book and user-turn conditions already exist."
+  },
+  {
+    "pathId": "continuation_flow_contract",
+    "file": "lib/blundr/runtime/continuationFlowContract.ts",
+    "symbol": "resolveContinuationFlowContract",
+    "category": "continuation",
+    "classification": "adapter_only",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/effectiveContinuationCandidateAuthority.test.ts",
+      "tests/coach/stage2LegacyNoContinuationBypass.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2AppPageContinuationParity.test.ts",
+      "tests/coach/effectiveContinuationCandidateAuthority.test.ts"
+    ],
+    "notes": "Shapes continuation surface state for UI and debug consumers, but does not create candidate authority or alter the accepted move."
+  },
+  {
+    "pathId": "branch_complete_contract",
+    "file": "lib/blundr/runtime/branchCompleteContract.ts",
+    "symbol": "resolveBranchCompleteContract",
+    "category": "branch_complete",
+    "classification": "fallback_only",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/restrictedLineExhaustedBranchCompleteButtons.test.ts",
+      "tests/coach/stage2AppPageContinuationParity.test.ts"
+    ],
+    "tests": [
+      "tests/coach/restrictedLineExhaustedBranchCompleteButtons.test.ts",
+      "tests/coach/stage2AppPageContinuationParity.test.ts"
+    ],
+    "notes": "Controls branch-complete eligibility and Continue From Here display, but it remains downstream of the real target authority and runtime exhaustion evidence."
+  },
+  {
+    "pathId": "promotion_authority",
+    "file": "lib/blundr/runtime/promotionAuthority.ts",
+    "symbol": "resolvePromotionAuthority",
+    "category": "promotion",
+    "classification": "active_authority",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": true,
+    "guardedBy": [
+      "tests/coach/stage2LegacyNoPromotionBypass.test.ts",
+      "tests/coach/stage2VisualPromotionSuffixAuthority.test.ts",
+      "tests/coach/promotionPickerAuthority.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2VisualPromotionSuffixAuthority.test.ts",
+      "tests/coach/promotionPickerAuthority.test.ts"
+    ],
+    "notes": "Promotion suffix handling is authoritative for the accepted promotion move and preserves q/r/b/n distinctions without auto-queening or suffix stripping."
+  },
+  {
+    "pathId": "opponent_reply_guard",
+    "file": "lib/blundr/runtime/opponentReplyGuard.ts",
+    "symbol": "shouldFlagStaleOpponentReplyCommit",
+    "category": "provider",
+    "classification": "debug_only",
+    "canAffectUserVisibleBehavior": false,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2LegacyNoProviderBypass.test.ts",
+      "tests/coach/stage2LegacyDebugOnlyNoBehavior.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2LegacyDebugOnlyNoBehavior.test.ts"
+    ],
+    "notes": "Stale opponent commit detection is a guardrail only; it can flag an invalid replay attempt but cannot select the user move."
+  },
+  {
+    "pathId": "maia_opponent_provider",
+    "file": "lib/blundr/maia/maiaOpponentProvider.ts",
+    "symbol": "buildMaiaOpponentReplyDecision",
+    "category": "provider",
+    "classification": "needs_followup",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2LegacyNoProviderBypass.test.ts",
+      "tests/coach/noLiveLichessRuntimeCalls.test.ts",
+      "tests/coach/maiaContinuationProvider.test.ts"
+    ],
+    "tests": [
+      "tests/coach/maiaContinuationProvider.test.ts",
+      "tests/coach/stage2LegacyNoProviderBypass.test.ts"
+    ],
+    "notes": "Maia remains a parallel continuation/opponent-reply provider. It can suggest or gate continuation responses, but it cannot become the user target authority."
+  },
+  {
+    "pathId": "brain_route",
+    "file": "app/api/brain/route.ts",
+    "symbol": "GET",
+    "category": "coach_card",
+    "classification": "needs_followup",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2LegacyNoCoachCardBypass.test.ts",
+      "tests/coach/stage2LegacyNoProviderBypass.test.ts",
+      "tests/coach/noLiveLichessRuntimeCalls.test.ts"
+    ],
+    "tests": [
+      "tests/coach/noLiveLichessRuntimeCalls.test.ts"
+    ],
+    "notes": "Parallel live annotation route used by the page for trainer commentary. It remains guarded, but it is still a follow-up candidate because it is separate from the exact approved-content resolver chain."
+  },
+  {
+    "pathId": "explorer_route",
+    "file": "app/api/explorer/route.ts",
+    "symbol": "GET",
+    "category": "provider",
+    "classification": "dead_remove_candidate",
+    "canAffectUserVisibleBehavior": false,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/noLiveLichessRuntimeCalls.test.ts",
+      "tests/coach/stage2LegacyNoProviderBypass.test.ts"
+    ],
+    "tests": [
+      "tests/coach/noLiveLichessRuntimeCalls.test.ts"
+    ],
+    "notes": "Legacy explorer proxy is no longer part of the normal trainer flow and is a safe future removal candidate."
+  },
+  {
+    "pathId": "coach_decision_engine",
+    "file": "lib/blundr/coach/coachDecisionEngine.ts",
+    "symbol": "decideCoachOutput",
+    "category": "coach_card",
+    "classification": "adapter_only",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2LegacyNoCoachCardBypass.test.ts",
+      "tests/coach/stage2CoachCardQualityRepetitionAudit.test.ts",
+      "tests/coach/stage2ApprovedCoachCardQualityRegression.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2CoachCardQualityRepetitionAudit.test.ts",
+      "tests/coach/stage2ApprovedCoachCardQualityRegression.test.ts"
+    ],
+    "notes": "Builds coach explanations and fallback copy, but the final rendered copy still goes through the accepted frame-resolution and rendered-authority gates."
+  },
+  {
+    "pathId": "intent_first_coach_engine",
+    "file": "lib/blundr/coach/intentFirstCoachEngine.ts",
+    "symbol": "decideIntentFirstCoach",
+    "category": "coach_card",
+    "classification": "fallback_only",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2LegacyNoCoachCardBypass.test.ts",
+      "tests/coach/stage2ApprovedCoachCardCopyPatchIntegrity.test.ts",
+      "tests/coach/stage2ApprovedCoachCardPlainHintNoLeakAfterPolish.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2ApprovedCoachCardCopyPatchIntegrity.test.ts",
+      "tests/coach/stage2ApprovedCoachCardPlainHintNoLeakAfterPolish.test.ts"
+    ],
+    "notes": "Legacy intent-first copy remains a fallback explanation path and cannot change the accepted move or promotion suffix."
+  },
+  {
+    "pathId": "coach_surface_policy",
+    "file": "lib/blundr/coachSurface/coachSurfacePolicy.ts",
+    "symbol": "decideCoachSurfacePolicy",
+    "category": "coach_card",
+    "classification": "adapter_only",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2LegacyNoCoachCardBypass.test.ts",
+      "tests/coach/stage2LegacyNoPlainViewBypass.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2AppPagePlainViewParity.test.ts",
+      "tests/coach/stage2LegacyNoPlainViewBypass.test.ts"
+    ],
+    "notes": "Policy for which legacy surface can render is still useful, but it only gates explanation surfaces and never creates user move authority."
+  },
+  {
+    "pathId": "rendered_coach_copy_authority",
+    "file": "lib/blundr/presentation/renderedCoachCopyAuthority.ts",
+    "symbol": "selectRenderedCoachCardCopyAuthority",
+    "category": "coach_card",
+    "classification": "active_authority",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2LegacyNoCoachCardBypass.test.ts",
+      "tests/coach/stage2ApprovedLiveRenderingNoAuthorityOverride.test.ts",
+      "tests/coach/stage2VisualNoAuthorityOverride.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2ApprovedLiveRenderingNoAuthorityOverride.test.ts",
+      "tests/coach/stage2VisualNoAuthorityOverride.test.ts"
+    ],
+    "notes": "Final coach-copy authority chooses between pipeline and visible-surface copy, but it remains downstream of the accepted frame target and cannot change the move."
+  },
+  {
+    "pathId": "stage2_coach_render_state",
+    "file": "lib/blundr/stage2Coaching/resolveStage2CoachRenderState.ts",
+    "symbol": "resolveStage2CoachRenderState",
+    "category": "coach_card",
+    "classification": "adapter_only",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2CoachingResolverShell.test.ts",
+      "tests/coach/stage2CoachingResolverSeamEnrichment.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2CoachingResolverShell.test.ts",
+      "tests/coach/stage2CoachingResolverSeamEnrichment.test.ts"
+    ],
+    "notes": "Bundles the stage-2 context, packet resolution, and copy-enrichment state for the final coach render path without altering target authority."
+  },
+  {
+    "pathId": "stage2_coaching_packet_resolver",
+    "file": "lib/blundr/stage2Coaching/resolveStage2CoachingPacket.ts",
+    "symbol": "resolveStage2CoachingPacket",
+    "category": "coach_card",
+    "classification": "fallback_only",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2CoachingResolverShell.test.ts",
+      "tests/coach/stage2CoachingResolverSeamEnrichment.test.ts",
+      "tests/coach/stage2ApprovedResolverExactMatch.test.ts",
+      "tests/coach/stage2ApprovedResolverPlainViewNoLeak.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2CoachingResolverShell.test.ts",
+      "tests/coach/stage2ApprovedResolverExactMatch.test.ts",
+      "tests/coach/stage2ApprovedResolverPlainViewNoLeak.test.ts"
+    ],
+    "notes": "Exact-match approved packets are allowed to enrich the coach copy; when there is no exact match it drops to safe fallback or none, never to a target-authority override."
+  },
+  {
+    "pathId": "stage2_coach_copy_enrichment",
+    "file": "lib/blundr/stage2Coaching/applyStage2CoachCopyEnrichment.ts",
+    "symbol": "applyStage2CoachCopyEnrichment",
+    "category": "coach_card",
+    "classification": "adapter_only",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2CoachingResolverSeamEnrichment.test.ts",
+      "tests/coach/stage2LegacyNoCoachCardBypass.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2CoachingResolverSeamEnrichment.test.ts",
+      "tests/coach/stage2ApprovedLiveRenderingPlainView.test.ts"
+    ],
+    "notes": "Copy-only enrichment enforces exact surface and exact-match gates and refuses plain-pre-show-more target leakage."
+  },
+  {
+    "pathId": "stage2_safe_fallback_packet",
+    "file": "lib/blundr/stage2Coaching/buildSafeStage2FallbackPacket.ts",
+    "symbol": "buildSafeStage2FallbackPacket",
+    "category": "fallback",
+    "classification": "fallback_only",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2CoachingResolverShell.test.ts",
+      "tests/coach/stage2ApprovedLiveRenderingFallback.test.ts",
+      "tests/coach/stage2LegacyNoCoachCardBypass.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2ApprovedLiveRenderingFallback.test.ts",
+      "tests/coach/stage2CoachingResolverShell.test.ts"
+    ],
+    "notes": "Fallback packet is a safe explanatory packet only; it can be shown when no exact approved packet matches, but it cannot alter accepted target authority."
+  },
+  {
+    "pathId": "approved_content_exact_match_resolver",
+    "file": "lib/blundr/stage2ApprovedContent/stage2ApprovedContentPackage.ts",
+    "symbol": "resolveStage2ApprovedContentPacketCollection",
+    "category": "coach_card",
+    "classification": "adapter_only",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2CandidatePacketAppValidation.test.ts",
+      "tests/coach/stage2ApprovedPacketPromotion.test.ts",
+      "tests/coach/stage2ApprovedResolverExactMatch.test.ts",
+      "tests/coach/stage2ApprovedResolverPlainViewNoLeak.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2ApprovedPacketPromotion.test.ts",
+      "tests/coach/stage2ApprovedResolverExactMatch.test.ts",
+      "tests/coach/stage2ApprovedResolverPlainViewNoLeak.test.ts"
+    ],
+    "notes": "This is the exact-match approved-content resolver used by the app and tests. It is an enrichment gate, not a move-authority owner."
+  },
+  {
+    "pathId": "approved_content_candidate_validation",
+    "file": "lib/blundr/stage2ApprovedContent/stage2ApprovedContentPackage.ts",
+    "symbol": "validateStage2ApprovedContentCandidatePackageCollection",
+    "category": "debug",
+    "classification": "debug_only",
+    "canAffectUserVisibleBehavior": false,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2CandidatePacketLoad.test.ts",
+      "tests/coach/stage2CandidatePacketAppValidation.test.ts",
+      "tests/coach/stage2ApprovedBatches2To4Promotion.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2CandidatePacketLoad.test.ts",
+      "tests/coach/stage2CandidatePacketAppValidation.test.ts",
+      "tests/coach/stage2ApprovedBatches2To4Promotion.test.ts"
+    ],
+    "notes": "App-validation inventory generation is build-time / audit-time only and cannot alter the runtime move chain."
+  },
+  {
+    "pathId": "approved_packets_jsonl_writer",
+    "file": "lib/blundr/stage2ApprovedContent/stage2ApprovedContentPackage.ts",
+    "symbol": "writeStage2ApprovedPacketsJsonl",
+    "category": "promotion",
+    "classification": "debug_only",
+    "canAffectUserVisibleBehavior": false,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2ApprovedPacketPromotion.test.ts",
+      "tests/coach/stage2ApprovedBatches2To4Promotion.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2ApprovedPacketPromotion.test.ts",
+      "tests/coach/stage2ApprovedBatches2To4Promotion.test.ts"
+    ],
+    "notes": "Promotion writer only materializes already-validated approved packets into JSONL bundles; it does not select moves or change trainer runtime behavior."
+  },
+  {
+    "pathId": "trainer_presentation_frame",
+    "file": "lib/blundr/presentation/trainerPresentationFrame.ts",
+    "symbol": "computeTrainerPresentationFrame",
+    "category": "visual",
+    "classification": "adapter_only",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2FrameAuthorityLock.test.ts",
+      "tests/coach/stage2VisualTargetAuthorityParity.test.ts",
+      "tests/coach/stage2VisualNoAuthorityOverride.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2FrameAuthorityLock.test.ts",
+      "tests/coach/stage2VisualTargetAuthorityParity.test.ts"
+    ],
+    "notes": "Produces the final visual/coach presentation frame, but only from already-resolved authority inputs."
+  },
+  {
+    "pathId": "visible_surface_adapter",
+    "file": "lib/blundr/presentation/uiSurfaceAdapter.ts",
+    "symbol": "adaptVisibleSurfaceToCoachUi",
+    "category": "coach_card",
+    "classification": "adapter_only",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/uiSurfaceAdapter.test.ts",
+      "tests/coach/stage2VisualPlainViewSuppression.test.ts"
+    ],
+    "tests": [
+      "tests/coach/uiSurfaceAdapter.test.ts",
+      "tests/coach/stage2VisualPlainViewSuppression.test.ts"
+    ],
+    "notes": "Transforms the chosen visible surface into UI shapes; it reports the surface truth but cannot redefine the target."
+  },
+  {
+    "pathId": "visual_recipe_playback",
+    "file": "components/board/useVisualRecipePlayback.ts",
+    "symbol": "useVisualRecipePlayback",
+    "category": "visual",
+    "classification": "adapter_only",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2VisualResultApprovedRecipeTruth.test.ts",
+      "tests/coach/stage2VisualResultGeneratedRecipeTruth.test.ts",
+      "tests/coach/stage2VisualResultFallbackCurrentSurfaceTruth.test.ts",
+      "tests/coach/stage2VisualResultNoVisualTruth.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2VisualResultApprovedRecipeTruth.test.ts",
+      "tests/coach/stage2VisualResultGeneratedRecipeTruth.test.ts",
+      "tests/coach/stage2VisualResultFallbackCurrentSurfaceTruth.test.ts",
+      "tests/coach/stage2VisualResultNoVisualTruth.test.ts"
+    ],
+    "notes": "Playback only animates the already-chosen visual recipe or fallback visual primitives; it cannot create move authority."
+  },
+  {
+    "pathId": "legacy_visual_suppression",
+    "file": "lib/blundr/visualRecipe/legacyVisualSuppression.ts",
+    "symbol": "filterLegacyMainUiLines",
+    "category": "visual",
+    "classification": "fallback_only",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2LegacyNoVisualBypass.test.ts",
+      "tests/coach/stage2VisualPlainViewSuppression.test.ts",
+      "tests/coach/stage2VisualShowMoreTraceability.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2VisualPlainViewSuppression.test.ts",
+      "tests/coach/stage2VisualShowMoreTraceability.test.ts"
+    ],
+    "notes": "Suppresses legacy tactical line types when the legacy visuals are not allowed; this is a display filter, not an authority source."
+  },
+  {
+    "pathId": "runtime_book_loader",
+    "file": "lib/blundr/runtimeBook/loadStage2RuntimeBook.ts",
+    "symbol": "loadStage2RuntimeBook",
+    "category": "provider",
+    "classification": "adapter_only",
+    "canAffectUserVisibleBehavior": false,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/runtimeCanonical21Openings.test.ts",
+      "tests/coach/runtime21OpeningTrainability.test.ts",
+      "tests/coach/noLiveLichessRuntimeCalls.test.ts"
+    ],
+    "tests": [
+      "tests/coach/runtimeCanonical21Openings.test.ts",
+      "tests/coach/runtime21OpeningTrainability.test.ts"
+    ],
+    "notes": "Loads the local crawled runtime package and does not call Lichess."
+  },
+  {
+    "pathId": "runtime_book_candidates_for_frame",
+    "file": "lib/blundr/runtimeBook/getStage2RuntimeCandidatesForFrame.ts",
+    "symbol": "getStage2RuntimeCandidatesForFrame",
+    "category": "continuation",
+    "classification": "adapter_only",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/runtimeBookBeforeContinuation.test.ts",
+      "tests/coach/runtimeBookExhaustionContinuation.test.ts",
+      "tests/coach/effectiveContinuationCandidateAuthority.test.ts"
+    ],
+    "tests": [
+      "tests/coach/runtimeBookBeforeContinuation.test.ts",
+      "tests/coach/runtimeBookExhaustionContinuation.test.ts"
+    ],
+    "notes": "Maps the local runtime book into continuation candidates, but only after openingId and playKeyBefore are already known."
+  },
+  {
+    "pathId": "runtime_book_candidate_adapter",
+    "file": "lib/blundr/runtimeBook/runtimeBookCandidateAdapter.ts",
+    "symbol": "adaptRuntimeBookCandidates",
+    "category": "continuation",
+    "classification": "adapter_only",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/runtimeBookBeforeContinuation.test.ts",
+      "tests/coach/runtimeBookExhaustionContinuation.test.ts"
+    ],
+    "tests": [
+      "tests/coach/runtimeBookBeforeContinuation.test.ts",
+      "tests/coach/runtimeBookExhaustionContinuation.test.ts"
+    ],
+    "notes": "Only normalizes runtime-book moves into candidate objects; it does not choose a target."
+  },
+  {
+    "pathId": "opening_availability_matrix",
+    "file": "lib/blundr/openings/openingAvailability.ts",
+    "symbol": "STAGE2_OPENING_AVAILABILITY_MATRIX",
+    "category": "opening_visibility",
+    "classification": "adapter_only",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2OpeningAvailabilityProductReadiness.test.ts",
+      "tests/coach/stage2OpeningVisibilityNoPublicByAccident.test.ts",
+      "tests/coach/stage2ApprovedContentAvailabilityMatchesBundles.test.ts",
+      "tests/coach/stage2OpeningVisibilityDebugTruth.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2OpeningAvailabilityProductReadiness.test.ts",
+      "tests/coach/stage2OpeningVisibilityNoPublicByAccident.test.ts",
+      "tests/coach/stage2ApprovedContentAvailabilityMatchesBundles.test.ts",
+      "tests/coach/stage2OpeningVisibilityDebugTruth.test.ts"
+    ],
+    "notes": "Reports runtime availability and visibility status only; it cannot make an opening the user's move authority."
+  },
+  {
+    "pathId": "stage2_approved_content_inventory",
+    "file": "lib/blundr/stage2Coaching/stage2ApprovedContentInventory.ts",
+    "symbol": "getStage2ApprovedContentInventorySummary",
+    "category": "opening_visibility",
+    "classification": "adapter_only",
+    "canAffectUserVisibleBehavior": true,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2ApprovedContentAvailabilityMatchesBundles.test.ts",
+      "tests/coach/stage2OpeningVisibilityDebugTruth.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2ApprovedContentAvailabilityMatchesBundles.test.ts",
+      "tests/coach/stage2OpeningVisibilityDebugTruth.test.ts"
+    ],
+    "notes": "Tracks approved-content availability and bundle presence for readiness/debug only."
+  },
+  {
+    "pathId": "trainer_frame_resolution_builder",
+    "file": "lib/blundr/debug/buildTrainerFrameResolution.ts",
+    "symbol": "buildTrainerFrameResolution",
+    "category": "debug",
+    "classification": "debug_only",
+    "canAffectUserVisibleBehavior": false,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/trainerFrameResolutionPageParity.test.ts",
+      "tests/coach/stage2LegacyNoMoveAuthorityBypass.test.ts",
+      "tests/coach/stage2LegacyDebugOnlyNoBehavior.test.ts"
+    ],
+    "tests": [
+      "tests/coach/trainerFrameResolutionPageParity.test.ts",
+      "tests/coach/stage2LegacyDebugOnlyNoBehavior.test.ts"
+    ],
+    "notes": "Normalizes the final frame truth for debug and trace consumers; it cannot create behavior and only reflects already-computed fields."
+  },
+  {
+    "pathId": "stage2_feature_trace_builder",
+    "file": "lib/blundr/debug/buildStage2FeatureTrace.ts",
+    "symbol": "buildStage2FeatureTrace",
+    "category": "feature_trace",
+    "classification": "debug_only",
+    "canAffectUserVisibleBehavior": false,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2FeatureTrace.test.ts",
+      "tests/coach/stage2FeatureConceptOpportunityTraceComplete.test.ts",
+      "tests/coach/stage2FeatureTraceNoAuthorityOverride.test.ts",
+      "tests/coach/stage2LegacyNoFeatureTraceBypass.test.ts"
+    ],
+    "tests": [
+      "tests/coach/stage2FeatureTrace.test.ts",
+      "tests/coach/stage2FeatureTraceNoAuthorityOverride.test.ts",
+      "tests/coach/stage2LegacyNoFeatureTraceBypass.test.ts"
+    ],
+    "notes": "FeatureTrace reports detected features, opportunities, final coach/visual truth, and review readiness, but it cannot change the target or create review items."
+  },
+  {
+    "pathId": "trainer_debug_snapshot",
+    "file": "lib/blundr/debug/trainerDebugSnapshot.ts",
+    "symbol": "buildTrainerDebugSnapshot",
+    "category": "debug",
+    "classification": "debug_only",
+    "canAffectUserVisibleBehavior": false,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/runtimeDataSourceDebug.test.ts",
+      "tests/coach/stage2OpeningVisibilityDebugTruth.test.ts",
+      "tests/coach/stage2LegacyDebugOnlyNoBehavior.test.ts"
+    ],
+    "tests": [
+      "tests/coach/runtimeDataSourceDebug.test.ts",
+      "tests/coach/stage2OpeningVisibilityDebugTruth.test.ts",
+      "tests/coach/stage2LegacyDebugOnlyNoBehavior.test.ts"
+    ],
+    "notes": "Snapshot/reporting layer only; it mirrors already-resolved frame truth into Copy Everything and diagnostics payloads."
+  },
+  {
+    "pathId": "copy_everything_payload",
+    "file": "components/debug/BlundrDiagnosticsPanel.tsx",
+    "symbol": "buildDebugCopyEverythingPayload",
+    "category": "debug",
+    "classification": "debug_only",
+    "canAffectUserVisibleBehavior": false,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/promotionPickerAuthority.test.ts",
+      "tests/coach/stage2OpeningVisibilityDebugTruth.test.ts",
+      "tests/coach/stage2LegacyDebugOnlyNoBehavior.test.ts"
+    ],
+    "tests": [
+      "tests/coach/promotionPickerAuthority.test.ts",
+      "tests/coach/stage2OpeningVisibilityDebugTruth.test.ts",
+      "tests/coach/stage2LegacyDebugOnlyNoBehavior.test.ts"
+    ],
+    "notes": "Copy Everything payload is a reporting surface only; it must stay null-safe and never mutate the trainer state."
+  },
+  {
+    "pathId": "legacy_sample_content_tree",
+    "file": "imports/stage2-sample/content-base/",
+    "symbol": null,
+    "category": "unknown",
+    "classification": "dead_remove_candidate",
+    "canAffectUserVisibleBehavior": false,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2LegacyNoBypassInventory.test.ts"
+    ],
+    "tests": [],
+    "notes": "Sample-derived content tree is not part of the accepted runtime chain and should remain quarantined until a separate cleanup pass."
+  },
+  {
+    "pathId": "legacy_crawled_runtime_source_tree",
+    "file": "docs/2026-06-11/stage2-21opening-crawled-filtered5to2-runtime-source-v1/",
+    "symbol": null,
+    "category": "unknown",
+    "classification": "dead_remove_candidate",
+    "canAffectUserVisibleBehavior": false,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2LegacyNoBypassInventory.test.ts"
+    ],
+    "tests": [],
+    "notes": "Stale crawled runtime source snapshot is a cleanup candidate and is not used by the accepted runtime authority chain."
+  },
+  {
+    "pathId": "legacy_all23_snapshot",
+    "file": "stage2-canonical-all23-12ply/",
+    "symbol": null,
+    "category": "unknown",
+    "classification": "dead_remove_candidate",
+    "canAffectUserVisibleBehavior": false,
+    "canAffectTargetAuthority": false,
+    "guardedBy": [
+      "tests/coach/stage2LegacyNoBypassInventory.test.ts"
+    ],
+    "tests": [],
+    "notes": "Legacy all-23 snapshot is preserved only as a historical artifact and should not influence final-21 runtime behavior."
+  }
+]
