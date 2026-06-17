@@ -13,11 +13,11 @@ async function main(): Promise<void> {
   assert.equal(summary.openingCount, 21);
   assert.equal(summary.visibleOpeningCount, 21);
   assert.equal(summary.runtimeAvailableCount, 21);
-  assert.equal(summary.approvedContentAvailableCount, 0);
+  assert.equal(summary.approvedContentAvailableCount, 21);
 
   const opening = getStage2OpeningAvailability("italian-black");
   assert.equal(opening?.runtimeAvailable, true);
-  assert.equal(opening?.approvedContentAvailable, false);
+  assert.equal(opening?.approvedContentAvailable, true);
   assert.equal(getStage2RuntimeTrainableRepertoire("italian-black")?.id, "italian-black");
 }
 

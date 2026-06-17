@@ -26,6 +26,8 @@ export function testStage2CoachingResolverShell(): void {
   const baseContext = buildStage2CoachContext({
     openingId: "london-white",
     playKeyBefore: "d2d4,d7d5,c1f4",
+    learnerSide: "white",
+    sideToMove: "white",
     targetUci: "g1f3",
     targetSan: "Nf3",
     targetPieceType: "n",
@@ -43,18 +45,16 @@ export function testStage2CoachingResolverShell(): void {
   });
 
   const result = resolveStage2CoachingPacket(baseContext);
-  assert.equal(STAGE2_APPROVED_CONTENT_ENABLED, false, "approved_content_must_be_disabled_for_shell");
-  assert.equal(result.kind === "approved_packet", false, "resolver_must_not_emit_approved_packet");
-  assert.equal(result.kind, "safe_fallback", "resolver_should_emit_safe_fallback_without_content_source");
+  assert.equal(STAGE2_APPROVED_CONTENT_ENABLED, true, "approved_content_must_be_enabled_for_live_activation");
+  assert.equal(result.kind, "approved_packet", "resolver_should_emit_approved_packet_for_exact_match");
 
-  if (result.kind !== "safe_fallback") return;
+  if (result.kind !== "approved_packet") return;
   assert.equal(result.packet.moveUci, "g1f3", "resolver_must_not_change_target_uci");
   assert.equal(result.packet.moveSan, "Nf3", "resolver_output_should_align_to_target");
-  assert.equal(result.packet.body.includes("best"), false, "fallback_must_not_use_unsupported_best_claim");
-  assert.equal(result.packet.body.includes("forced"), false, "fallback_must_not_use_unsupported_forced_claim");
-  assert.equal(result.packet.body.includes("only"), false, "fallback_must_not_use_unsupported_only_claim");
-  assert.equal(result.packet.body.includes("winning"), false, "fallback_must_not_use_unsupported_winning_claim");
-  assert.equal(result.packet.visualRecipeRefs.length, 0, "resolver_shell_must_not_render_visual_recipes");
+  assert.equal(result.packet.status, "approved", "approved_packet_must_remain_approved");
+  assert.equal(result.packet.approvalReadiness, "app_validated", "approved_packet_must_be_app_validated");
+  assert.equal(result.packet.runtimeReconciliation.status, "matched", "approved_packet_must_match_runtime_reconciliation");
+  assert.equal(result.packet.visualRecipeRefs.length > 0, true, "resolver_should_render_visual_recipe_metadata");
   assert.equal(result.packet.body.includes("Nf3"), false, "plain_hidden_body_must_not_leak_target_san");
   assert.equal(result.packet.body.includes("g1f3"), false, "plain_hidden_body_must_not_leak_target_uci");
   assert.equal((result.packet.hint ?? "").includes("Nf3"), false, "plain_hidden_hint_must_not_leak_target_san");
@@ -72,10 +72,24 @@ export function testStage2CoachingResolverShell(): void {
       },
     }),
   );
-  assert.equal(showMore.kind, "safe_fallback", "show_more_path_should_keep_safe_fallback");
-  if (showMore.kind === "safe_fallback") {
-    assert.equal((showMore.packet.showMore ?? "").includes("Book rank #2"), true, "show_more_may_include_runtime_rank");
-    assert.equal((showMore.packet.showMore ?? "").includes("9,988 games"), true, "show_more_may_include_runtime_games");
+  assert.equal(showMore.kind, "approved_packet", "show_more_path_should_use_approved_packet_when_exact_match_exists");
+  if (showMore.kind === "approved_packet") {
+    assert.equal((showMore.packet.showMore ?? "").length > 0, true, "show_more_may_include_approved_content");
+  }
+
+  const fallback = resolveStage2CoachingPacket(
+    buildStage2CoachContext({
+      ...baseContext,
+      targetUci: "a1a2",
+      targetSan: "Ra2",
+      learnerSide: "white",
+      sideToMove: "white",
+      surface: "assisted",
+    }),
+  );
+  assert.equal(fallback.kind, "safe_fallback", "resolver_should_fallback_when_no_approved_packet_matches");
+  if (fallback.kind === "safe_fallback") {
+    assert.equal(fallback.packet.moveUci, "a1a2", "fallback_must_preserve_target_uci");
   }
 
   const stage2Files = fs.readdirSync(STAGE2_COACHING_DIR).filter((name) => /\.(ts|tsx)$/.test(name));
@@ -98,7 +112,7 @@ export function testStage2CoachingResolverShell(): void {
     isUserTurn: true,
     fen: "rnbqkbnr/pp2pppp/8/2pp4/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3",
     stage2CoachingResolverEnabled: true,
-    stage2ApprovedContentEnabled: false,
+    stage2ApprovedContentEnabled: true,
     stage2SafeFallbackEnabled: true,
     stage2CoachingPacketKind: "safe_fallback",
     stage2CoachingSafetyStatus: "safe",

@@ -59,6 +59,19 @@ export type TrainerFramePromotionResolution = {
   promotionAuthorityTargetUci: string | null;
 };
 
+export type TrainerFrameApprovedContentResolution = {
+  matched: boolean;
+  packetKind: "approved_packet" | "safe_fallback" | "none";
+  packetId: string | null;
+  sourceBundle: string | null;
+  sourceFile: string | null;
+  packetStatus: string | null;
+  approvalReadiness: string | null;
+  missReason: string | null;
+  fallbackReason: string | null;
+  visualSource: string | null;
+};
+
 export type TrainerFrameResolution = {
   frameId: string | number | null;
   trainerPhase: string | null;
@@ -75,4 +88,5 @@ export type TrainerFrameResolution = {
   visual: TrainerFrameVisualResolution;
   coachQuality: TrainerFrameCoachQualityResolution;
   promotion: TrainerFramePromotionResolution;
+  approvedContent: TrainerFrameApprovedContentResolution;
 };

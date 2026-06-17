@@ -12,34 +12,30 @@ export function testStage2ApprovedContentInventory(): void {
   const summary = getStage2ApprovedContentInventorySummary();
   assert.equal(STAGE2_APPROVED_CONTENT_INVENTORY.length, 21);
   assert.equal(summary.approvedContentInventoryCount, 21);
-  assert.equal(summary.approvedContentMatchedCount, 0);
-  assert.equal(summary.approvedContentAvailableCount, 0);
-  assert.equal(summary.sampleCount, 3);
-  assert.equal(summary.draftCount, 18);
+  assert.equal(summary.approvedContentMatchedCount, 21);
+  assert.equal(summary.approvedContentAvailableCount, 21);
+  assert.equal(summary.sampleCount, 0);
+  assert.equal(summary.draftCount, 0);
   assert.equal(summary.blockedCount, 0);
   assert.equal(summary.fallbackOnlyCount, 0);
   assert.equal(summary.runtimeMatchedCount, 21);
-  assert.equal(summary.targetMatchedCount, 0);
-  assert.equal(summary.plainViewSafeCount, 0);
-  assert.equal(summary.visualRecipeAvailableCount, 0);
+  assert.equal(summary.targetMatchedCount, 21);
+  assert.equal(summary.plainViewSafeCount, 21);
+  assert.equal(summary.visualRecipeAvailableCount, 21);
 
   for (const entry of STAGE2_APPROVED_CONTENT_INVENTORY) {
     assert.equal(Boolean(entry.openingId), true, `opening_id_missing:${entry.openingId}`);
-    assert.equal(entry.approvedContentAvailable, false, `approved_content_should_not_be_faked:${entry.openingId}`);
+    assert.equal(entry.approvedContentAvailable, true, `approved_content_should_be_available:${entry.openingId}`);
     assert.equal(entry.runtimeMatched, true, `runtime_must_remain_matched:${entry.openingId}`);
-    assert.equal(entry.targetMatched, false, `target_should_not_be_faked:${entry.openingId}`);
-    assert.equal(entry.plainViewSafe, false, `plain_view_safe_should_not_be_faked:${entry.openingId}`);
-    assert.equal(entry.visualRecipeAvailable, false, `visual_recipe_should_not_be_faked:${entry.openingId}`);
-    assert.equal(Boolean(entry.reasonNotApproved), true, `reason_not_approved_missing:${entry.openingId}`);
+    assert.equal(entry.targetMatched, true, `target_should_be_available:${entry.openingId}`);
+    assert.equal(entry.plainViewSafe, true, `plain_view_should_be_safe:${entry.openingId}`);
+    assert.equal(entry.visualRecipeAvailable, true, `visual_recipe_should_be_available:${entry.openingId}`);
+    assert.equal(Boolean(entry.reasonNotApproved), false, `reason_not_approved_should_not_exist:${entry.openingId}`);
   }
 
-  const sample = getStage2ApprovedContentInventoryEntry("italian-white");
-  assert.equal(sample?.status, "sample");
-  assert.equal(sample?.reasonNotApproved, "reconciled_partial_source_not_approved:italian-white");
-
-  const draft = getStage2ApprovedContentInventoryEntry("london-white");
-  assert.equal(draft?.status, "draft");
-  assert.equal(draft?.reasonNotApproved, "draft_source_not_approved:london-white");
+  const approved = getStage2ApprovedContentInventoryEntry("italian-white");
+  assert.equal(approved?.status, "approved");
+  assert.equal(approved?.reasonNotApproved, undefined);
 
   const snapshot = buildTrainerDebugSnapshot({
     debugEnabled: true,
@@ -73,20 +69,21 @@ export function testStage2ApprovedContentInventory(): void {
     runtimeBookBookExhausted: false,
     runtimeBookFallbackUsed: false,
     runtimeBookFallbackAuthority: null,
+    stage2ApprovedContentEnabled: true,
     presentationFrame: { visual: { shouldRender: true, source: "continuation_candidate" }, coach: { owner: "intent_first_coach" }, legacy: {} },
     eventLog: [],
   } as any);
 
   assert.equal((snapshot as any).runtime.approvedContentInventoryCount, 21);
-  assert.equal((snapshot as any).runtime.approvedContentMatchedCount, 0);
-  assert.equal((snapshot as any).runtime.selectedOpeningApprovedContentAvailable, false);
-  assert.equal((snapshot as any).runtime.selectedOpeningContentStatus, "sample");
+  assert.equal((snapshot as any).runtime.approvedContentMatchedCount, 21);
+  assert.equal((snapshot as any).runtime.selectedOpeningApprovedContentAvailable, true);
+  assert.equal((snapshot as any).runtime.selectedOpeningContentStatus, "approved");
 
   const copyEverything = buildDebugCopyEverythingPayload(snapshot);
   assert.equal((copyEverything as any).runtime.approvedContentInventoryCount, 21);
-  assert.equal((copyEverything as any).runtime.approvedContentMatchedCount, 0);
-  assert.equal((copyEverything as any).runtime.selectedOpeningApprovedContentAvailable, false);
-  assert.equal((copyEverything as any).stage2Coaching.reasonRejected, "reconciled_partial_source_not_approved:italian-white");
+  assert.equal((copyEverything as any).runtime.approvedContentMatchedCount, 21);
+  assert.equal((copyEverything as any).runtime.selectedOpeningApprovedContentAvailable, true);
+  assert.equal((copyEverything as any).stage2Coaching.reasonRejected, null);
 }
 
 testStage2ApprovedContentInventory();

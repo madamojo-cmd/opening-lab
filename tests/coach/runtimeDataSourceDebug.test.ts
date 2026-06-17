@@ -26,6 +26,7 @@ export function testRuntimeDataSourceDebug(): void {
     runtimeBookFallbackUsed: false,
     runtimeBookFallbackAuthority: null,
     candidateSource: "local_runtime_package",
+    stage2ApprovedContentEnabled: true,
     coachDecision: {
       shouldShowCoachCard: true,
       title: "London System",
@@ -52,11 +53,11 @@ export function testRuntimeDataSourceDebug(): void {
   assert.equal((snapshot as any).runtime.openingCount, 21);
   assert.equal((snapshot as any).runtime.visibleOpeningCount, 21);
   assert.equal((snapshot as any).runtime.approvedContentInventoryCount, 21);
-  assert.equal((snapshot as any).runtime.approvedContentMatchedCount, 0);
+  assert.equal((snapshot as any).runtime.approvedContentMatchedCount, 21);
   assert.equal((snapshot as any).runtime.selectedOpeningId, "caro-kann-black");
   assert.equal((snapshot as any).runtime.selectedOpeningRuntimeAvailable, true);
-  assert.equal((snapshot as any).runtime.selectedOpeningContentStatus, "fallback_only");
-  assert.equal((snapshot as any).runtime.selectedOpeningApprovedContentAvailable, false);
+  assert.equal((snapshot as any).runtime.selectedOpeningContentStatus, "approved");
+  assert.equal((snapshot as any).runtime.selectedOpeningApprovedContentAvailable, true);
   assert.equal((snapshot as any).runtime.candidateSource, "local_runtime_package");
   assert.equal((snapshot as any).runtime.liveLichessCalled, false);
   assert.equal((snapshot as any).runtime.openingAvailabilityStatus, "runtime_available");
@@ -67,9 +68,9 @@ export function testRuntimeDataSourceDebug(): void {
   assert.equal((copyEverything as any).runtime.openingCount, 21);
   assert.equal((copyEverything as any).runtime.visibleOpeningCount, 21);
   assert.equal((copyEverything as any).runtime.approvedContentInventoryCount, 21);
-  assert.equal((copyEverything as any).runtime.approvedContentMatchedCount, 0);
+  assert.equal((copyEverything as any).runtime.approvedContentMatchedCount, 21);
   assert.equal((copyEverything as any).runtime.selectedOpeningRuntimeAvailable, true);
-  assert.equal((copyEverything as any).runtime.selectedOpeningApprovedContentAvailable, false);
+  assert.equal((copyEverything as any).runtime.selectedOpeningApprovedContentAvailable, true);
   assert.equal((copyEverything as any).runtime.liveLichessCalled, false);
   assert.equal((copyEverything as any).runtime.candidateSource, "local_runtime_package");
   assert.equal((copyEverything as any).runtime.openingAvailabilityStatus, "runtime_available");

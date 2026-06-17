@@ -1,6 +1,7 @@
 export * from "./stage2ApprovedContentTypes";
 export {
   getStage2ApprovedContentApprovedPacketsDefaultPath,
+  resolveStage2ApprovedContentPacketCollection,
   getStage2ApprovedContentCandidatePackageDefaultPath,
   loadStage2ApprovedContentCandidatePackage,
   loadStage2ApprovedContentCandidatePackageCollection,

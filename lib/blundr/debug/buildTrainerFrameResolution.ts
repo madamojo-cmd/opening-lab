@@ -1,5 +1,10 @@
 import type { PendingPromotion, PromotionPiece } from "../runtime/promotionAuthority";
-import type { TrainerFrameResolution, TrainerFrameCoachCardCopy, TrainerFrameCoachCardAuthority } from "./trainerFrameResolutionTypes";
+import type {
+  TrainerFrameApprovedContentResolution,
+  TrainerFrameResolution,
+  TrainerFrameCoachCardCopy,
+  TrainerFrameCoachCardAuthority,
+} from "./trainerFrameResolutionTypes";
 
 type Input = Record<string, any>;
 
@@ -51,6 +56,13 @@ function normalizePromotionPiece(value: unknown): PromotionPiece | null {
 function normalizeString(value: unknown): string | null {
   const text = String(value ?? "").trim();
   return text.length > 0 ? text : null;
+}
+
+function normalizePacketKind(value: unknown): TrainerFrameApprovedContentResolution["packetKind"] {
+  const text = normalizeText(value);
+  if (text === "approved_packet") return "approved_packet";
+  if (text === "safe_fallback") return "safe_fallback";
+  return "none";
 }
 
 export function buildTrainerFrameResolution(input: Input): TrainerFrameResolution {
@@ -132,6 +144,76 @@ export function buildTrainerFrameResolution(input: Input): TrainerFrameResolutio
     promotionAuthorityTargetUci: normalizeString(input.promotionAuthorityTargetUci),
   };
 
+  const approvedContentResolution: TrainerFrameResolution["approvedContent"] = {
+    matched:
+      typeof input.approvedPacketMatched === "boolean"
+        ? input.approvedPacketMatched
+        : typeof input.stage2ApprovedPacketMatched === "boolean"
+          ? input.stage2ApprovedPacketMatched
+          : Boolean(
+            input.stage2CoachingPacketKind === "approved_packet" ||
+            input.stage2CoachingPacketResolution?.kind === "approved_packet",
+          ),
+    packetKind: normalizePacketKind(
+      input.approvedPacketKind ??
+      input.stage2ApprovedPacketKind ??
+      input.stage2CoachingPacketKind ??
+      input.stage2CoachingPacketResolution?.kind,
+    ),
+    packetId: normalizeString(
+      input.approvedPacketId ??
+      input.stage2ApprovedPacketId ??
+      input.stage2CoachingPacketResolution?.packet?.packetId ??
+      input.stage2CoachingPacketId,
+    ),
+    sourceBundle: normalizeString(
+      input.approvedPacketSourceBundle ??
+      input.stage2ApprovedPacketSourceBundle ??
+      input.stage2CoachingPacketResolution?.packet?.sourceCandidatePackages?.[0] ??
+      input.stage2CoachingPacketResolution?.packet?.sourceCandidatePackage ??
+      input.stage2CoachingPacketSourceBundle,
+    ),
+    sourceFile: normalizeString(
+      input.approvedPacketSourceFile ??
+      input.stage2ApprovedPacketSourceFile ??
+      input.stage2CoachingPacketResolution?.packet?.sourceFile ??
+      input.stage2CoachingPacketSourceFile,
+    ),
+    packetStatus: normalizeString(
+      input.approvedPacketStatus ??
+      input.stage2ApprovedPacketStatus ??
+      input.stage2CoachingPacketResolution?.packet?.status ??
+      null,
+    ),
+    approvalReadiness: normalizeString(
+      input.approvedPacketApprovalReadiness ??
+      input.stage2ApprovedPacketApprovalReadiness ??
+      input.stage2CoachingPacketResolution?.packet?.approvalReadiness ??
+      null,
+    ),
+    missReason: normalizeString(
+      input.approvedPacketMissReason ??
+      input.stage2ApprovedPacketMissReason ??
+      input.stage2CoachingPacketResolution?.reason ??
+      null,
+    ),
+    fallbackReason: normalizeString(
+      input.approvedPacketFallbackReason ??
+      input.stage2ApprovedPacketFallbackReason ??
+      input.runtimeSafeFallbackReason ??
+      input.coachQuality?.fallbackReason ??
+      null,
+    ),
+    visualSource: normalizeString(
+      input.approvedPacketVisualSource ??
+      input.stage2ApprovedPacketVisualSource ??
+      input.stage2CoachingPacketResolution?.packet?.surface ??
+      input.actualVisualSource ??
+      input.presentationFrame?.visual?.source ??
+      null,
+    ),
+  };
+
   return {
     frameId: input.trainerFrameId ?? input.frameId ?? input.debugFrameId ?? null,
     trainerPhase: normalizeText(input.trainerPhase),
@@ -176,5 +258,6 @@ export function buildTrainerFrameResolution(input: Input): TrainerFrameResolutio
       lowQualityBasedOn: renderedQualityScore != null ? "final_rendered" : pipelineQualityScore != null ? "fallback" : "none",
     },
     promotion,
+    approvedContent: approvedContentResolution,
   };
 }

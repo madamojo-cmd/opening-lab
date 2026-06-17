@@ -3546,6 +3546,8 @@ export default function App(){
   const stage2CoachContext=buildStage2CoachContext({
     openingId:runtimeBookFrameQuery.openingId??runtimeOpeningIdForFrame??undefined,
     playKeyBefore:runtimeBookFrameQuery.playKeyBefore??runtimePlayKeyBeforeForFrame??undefined,
+    learnerSide:selectedOpeningAvailability?.learnerPerspective??undefined,
+    sideToMove:game.turn()==="b"?"black":"white",
     targetUci:instructionTarget?.uci??undefined,
     targetSan:instructionTarget?.san??undefined,
     targetPieceType:instructionTarget?.pieceType??undefined,
@@ -5823,6 +5825,21 @@ export default function App(){
     visualRecipeOverlay,
     renderedVisualPrimitiveCount: boardLinesToRender.length,
     surfaceVisualPrimitiveCount: (v28BoardVisualUiModel?.visualRecipes ?? []).length,
+    stage2ApprovedPacketMatched: stage2CoachingPacketResolution.kind === "approved_packet",
+    stage2ApprovedPacketKind: stage2CoachingPacketResolution.kind,
+    stage2ApprovedPacketId: stage2CoachingPacketResolution.kind === "approved_packet" ? stage2CoachingPacketResolution.packet.packetId : null,
+    stage2ApprovedPacketSourceBundle: stage2CoachingPacketResolution.kind === "approved_packet" ? stage2CoachingPacketResolution.packet.sourceCandidatePackages?.[0] ?? stage2CoachingPacketResolution.packet.sourceCandidatePackage ?? null : null,
+    stage2ApprovedPacketSourceFile: stage2CoachingPacketResolution.kind === "approved_packet" ? stage2CoachingPacketResolution.packet.sourceFile ?? null : null,
+    stage2ApprovedPacketStatus: stage2CoachingPacketResolution.kind === "approved_packet" ? stage2CoachingPacketResolution.packet.status : null,
+    stage2ApprovedPacketApprovalReadiness: stage2CoachingPacketResolution.kind === "approved_packet" ? stage2CoachingPacketResolution.packet.approvalReadiness : null,
+    stage2ApprovedPacketMissReason:
+      stage2CoachingPacketResolution.kind === "approved_packet"
+        ? null
+        : stage2CoachingPacketResolution.kind === "safe_fallback"
+          ? "approved_packet_exact_match_not_found"
+          : stage2CoachingPacketResolution.reason,
+    stage2ApprovedPacketFallbackReason: null,
+    stage2ApprovedPacketVisualSource: v28SurfaceActive ? "visible_surface_v28" : String(presentationFrame?.visual?.source ?? "none"),
     stage2CoachingPacketKind: stage2CoachingPacketResolution.kind,
     stage2CoachingSafetyStatus: stage2CoachingPacketResolution.kind === "none" ? null : stage2CoachingPacketResolution.packet.safetyStatus,
     stage2CoachingSurface: stage2CoachContext.surface,

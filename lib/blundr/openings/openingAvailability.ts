@@ -133,7 +133,7 @@ export const STAGE2_OPENING_AVAILABILITY_MATRIX: OpeningAvailability[] = STAGE2_
     runtimeCandidateMoveCount: counts.runtimeCandidateMoveCount,
     userVisible: true,
     contentStatus,
-    approvedContentAvailable: false,
+    approvedContentAvailable: Boolean(approvedContentInventoryEntry?.approvedContentAvailable),
     stage: "dev",
     qaStatus: "smoke_pass",
   };

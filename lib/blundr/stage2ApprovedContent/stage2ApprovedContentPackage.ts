@@ -1,12 +1,7 @@
-import fs from "node:fs";
-import path from "node:path";
-import { inflateRawSync } from "node:zlib";
-
 import { Chess } from "chess.js";
 
 import { buildTrainerFrameResolution } from "../debug/buildTrainerFrameResolution";
 import { buildStage2RuntimeBookIndex } from "../runtimeBook/runtimeBookIndex";
-import { loadStage2RuntimeBook } from "../runtimeBook/loadStage2RuntimeBook";
 import { getStage2OpeningAvailability, getStage2OpeningAvailabilitySummary } from "../openings/openingAvailability";
 import { getStage2RuntimeTrainableRepertoire } from "../openings/runtimeTrainableRepertoires";
 
@@ -27,20 +22,14 @@ import {
   type Stage2ApprovedContentResolverResult,
 } from "./stage2ApprovedContentTypes";
 
-const DEFAULT_CANDIDATE_ZIP_PATH = path.join(
-  process.cwd(),
-  "docs",
-  "2026-06-17",
-  `${STAGE2_APPROVED_CONTENT_CANDIDATE_PACKAGE_ID}.zip`,
-);
+const DEFAULT_CANDIDATE_ZIP_PATH = `${process.cwd()}/docs/2026-06-17/${STAGE2_APPROVED_CONTENT_CANDIDATE_PACKAGE_ID}.zip`;
 
-const DEFAULT_APPROVED_PACKETS_PATH = path.join(
-  process.cwd(),
-  "data",
-  "blundr",
-  STAGE2_APPROVED_CONTENT_APPROVED_PACKAGE_ID,
-  "approved-packets.jsonl",
-);
+const DEFAULT_APPROVED_PACKETS_PATH = `${process.cwd()}/data/blundr/${STAGE2_APPROVED_CONTENT_APPROVED_PACKAGE_ID}/approved-packets.jsonl`;
+
+const DEFAULT_APPROVED_PACKETS_PATHS = [
+  DEFAULT_APPROVED_PACKETS_PATH,
+  `${process.cwd()}/data/blundr/stage2-approved-content-approved-batches2to4-16openings-v1/approved-packets.jsonl`,
+] as const;
 
 type ZipEntry = {
   name: string;
@@ -56,6 +45,34 @@ type CsvParseState = {
   field: string;
   inQuotes: boolean;
 };
+
+function getBasename(filePath: string, suffix = ""): string {
+  const parts = String(filePath).split(/[\\/]/);
+  const name = parts[parts.length - 1] ?? String(filePath);
+  return suffix && name.endsWith(suffix) ? name.slice(0, -suffix.length) : name;
+}
+
+function getDirname(filePath: string): string {
+  const normalized = String(filePath).replace(/[\\/]+$/, "");
+  const index = normalized.lastIndexOf("/");
+  if (index < 0) return ".";
+  return index === 0 ? "/" : normalized.slice(0, index);
+}
+
+function getNodeFs(): typeof import("node:fs") {
+  const requireFn = eval("require") as NodeJS.Require;
+  return requireFn("node:fs") as typeof import("node:fs");
+}
+
+function getNodeZlib(): typeof import("node:zlib") {
+  const requireFn = eval("require") as NodeJS.Require;
+  return requireFn("node:zlib") as typeof import("node:zlib");
+}
+
+function getLoadStage2RuntimeBook(): typeof import("../runtimeBook/loadStage2RuntimeBook")["loadStage2RuntimeBook"] {
+  const requireFn = eval("require") as NodeJS.Require;
+  return requireFn("../runtimeBook/loadStage2RuntimeBook").loadStage2RuntimeBook as typeof import("../runtimeBook/loadStage2RuntimeBook")["loadStage2RuntimeBook"];
+}
 
 function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
@@ -85,6 +102,7 @@ function readUInt32LE(buffer: Buffer, offset: number): number {
 }
 
 function parseZipEntries(zipPath: string): ZipEntry[] {
+  const fs = getNodeFs();
   const buffer = fs.readFileSync(zipPath);
   const endSignature = 0x06054b50;
   let eocdOffset = -1;
@@ -133,6 +151,8 @@ function parseZipEntries(zipPath: string): ZipEntry[] {
 }
 
 function readZipEntryBuffer(zipPath: string, entryName: string): Buffer {
+  const fs = getNodeFs();
+  const { inflateRawSync } = getNodeZlib();
   const archive = fs.readFileSync(zipPath);
   const entries = parseZipEntries(zipPath);
   const entry = entries.find((item) => item.name === entryName);
@@ -253,7 +273,7 @@ function parsePacketJsonlRows(text: string): Stage2ApprovedContentCandidatePacke
 }
 
 export function loadStage2ApprovedContentCandidatePackage(zipPath: string = DEFAULT_CANDIDATE_ZIP_PATH): Stage2ApprovedContentCandidatePackageLoadResult {
-  const packageId = path.basename(zipPath, ".zip");
+  const packageId = getBasename(zipPath, ".zip");
   const prefix = `${packageId}/`;
   const contentInventory = parseCsv(readZipEntryText(zipPath, `${prefix}CONTENT_INVENTORY.csv`))
     .slice(1)
@@ -639,8 +659,8 @@ function buildSummary(input: {
 export async function validateStage2ApprovedContentCandidatePackage(
   loadResult: Stage2ApprovedContentCandidatePackageLoadResult,
 ): Promise<Stage2ApprovedContentPackageValidationInventory> {
-  const runtimeLoad = await loadStage2RuntimeBook({
-    packageRoot: path.join(process.cwd(), "data", "blundr", "stage2-21-opening-stepdown-runtime-v1"),
+  const runtimeLoad = await getLoadStage2RuntimeBook()({
+    packageRoot: `${process.cwd()}/data/blundr/stage2-21-opening-stepdown-runtime-v1`,
   });
   const runtimeIndex = buildStage2RuntimeBookIndex(runtimeLoad);
   return validateStage2ApprovedContentCandidatePackageWithRuntimeIndex(loadResult, runtimeIndex);
@@ -731,8 +751,8 @@ function validateStage2ApprovedContentCandidatePackageWithRuntimeIndex(
 export async function validateStage2ApprovedContentCandidatePackageCollection(
   loadResult: Stage2ApprovedContentCandidatePackageCollectionLoadResult,
 ): Promise<Stage2ApprovedContentCandidatePackageCollectionValidationInventory> {
-  const runtimeLoad = await loadStage2RuntimeBook({
-    packageRoot: path.join(process.cwd(), "data", "blundr", "stage2-21-opening-stepdown-runtime-v1"),
+  const runtimeLoad = await getLoadStage2RuntimeBook()({
+    packageRoot: `${process.cwd()}/data/blundr/stage2-21-opening-stepdown-runtime-v1`,
   });
   const runtimeIndex = buildStage2RuntimeBookIndex(runtimeLoad);
   const packageValidations = loadResult.packages.map((packageLoadResult) =>
@@ -783,7 +803,8 @@ export function writeStage2ApprovedContentValidationInventory(
   validation: Stage2ApprovedContentPackageValidationInventory,
   outputPath: string,
 ): void {
-  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  const fs = getNodeFs();
+  fs.mkdirSync(getDirname(outputPath), { recursive: true });
   fs.writeFileSync(outputPath, `${JSON.stringify(validation, null, 2)}\n`);
 }
 
@@ -791,7 +812,8 @@ export function writeStage2ApprovedContentReport(
   validation: Stage2ApprovedContentPackageValidationInventory,
   outputPath: string,
 ): void {
-  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  const fs = getNodeFs();
+  fs.mkdirSync(getDirname(outputPath), { recursive: true });
   const lines: string[] = [];
   lines.push(`# Stage 2 Approved-Content Candidate App Validation Report`);
   lines.push("");
@@ -829,7 +851,8 @@ export function writeStage2ApprovedContentCollectionReport(
   validation: Stage2ApprovedContentCandidatePackageCollectionValidationInventory,
   outputPath: string,
 ): void {
-  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  const fs = getNodeFs();
+  fs.mkdirSync(getDirname(outputPath), { recursive: true });
   const lines: string[] = [];
   lines.push(`# Stage 2 Approved-Content Candidate App Validation Report`);
   lines.push("");
@@ -868,6 +891,7 @@ export function writeStage2ApprovedContentCollectionReport(
 }
 
 function readApprovedPacketsJsonl(filePath: string): Stage2ApprovedContentPromotedPacket[] {
+  const fs = getNodeFs();
   const text = fs.readFileSync(filePath, "utf8");
   const packets: Stage2ApprovedContentPromotedPacket[] = [];
   for (const line of text.split(/\r?\n/)) {
@@ -876,6 +900,93 @@ function readApprovedPacketsJsonl(filePath: string): Stage2ApprovedContentPromot
     packets.push(JSON.parse(trimmed) as Stage2ApprovedContentPromotedPacket);
   }
   return packets;
+}
+
+const APPROVED_PACKETS_COLLECTION_CACHE = new Map<string, Stage2ApprovedContentPromotedPacket[]>();
+
+function readApprovedPacketsJsonlCollection(filePaths: string[]): Stage2ApprovedContentPromotedPacket[] {
+  const fs = getNodeFs();
+  const cacheKey = filePaths.map((entry) => normalizeText(entry)).filter(Boolean).join("|");
+  const cached = APPROVED_PACKETS_COLLECTION_CACHE.get(cacheKey);
+  if (cached) return cached;
+  const packets = filePaths.flatMap((filePath) => {
+    const resolvedPath = normalizeText(filePath);
+    if (!resolvedPath || !fs.existsSync(resolvedPath)) return [];
+    return readApprovedPacketsJsonl(resolvedPath);
+  });
+  APPROVED_PACKETS_COLLECTION_CACHE.set(cacheKey, packets);
+  return packets;
+}
+
+function buildApprovedPacketMatchSequence(
+  packet: Stage2ApprovedContentPromotedPacket,
+  useNormalizedSequence: boolean,
+): string[] {
+  return normalizeSequenceInput(useNormalizedSequence ? packet.normalizedPlaySequenceUci : null, packet.playSequenceUci);
+}
+
+function normalizeSideToMove(value: unknown): string {
+  const text = normalizeLower(value);
+  if (text === "w" || text === "white") return "white";
+  if (text === "b" || text === "black") return "black";
+  return text;
+}
+
+function packetTextHasTargetLeak(surfaceCopy: Record<string, unknown> | null | undefined, targetUci: string, targetSan: string): boolean {
+  const haystack = collectTextFields(surfaceCopy ?? {}).join("\n").toLowerCase();
+  return Boolean((targetUci && haystack.includes(targetUci.toLowerCase())) || (targetSan && haystack.includes(targetSan.toLowerCase())));
+}
+
+function packetMatchesExactApprovedContext(
+  packet: Stage2ApprovedContentPromotedPacket,
+  request: Stage2ApprovedContentResolverRequest,
+): boolean {
+  const openingId = normalizeText(request.openingId);
+  const targetUci = normalizeLower(request.targetUci);
+  const targetSan = normalizeText(request.targetSan ?? "");
+  const playKeyBefore = normalizeText(request.playKeyBefore ?? "");
+  const playKey = normalizeText(request.playKey ?? "");
+  if (!openingId || !targetUci) return false;
+  if (normalizeText(packet.openingId) !== openingId) return false;
+  if (normalizeLower(packet.normalizedMoveUci ?? packet.moveUci) !== targetUci) return false;
+  if (normalizeText(packet.status) !== "approved") return false;
+  if (normalizeText(packet.approvalReadiness) !== "app_validated") return false;
+  if (normalizeText(packet.safetyStatus) !== "safe") return false;
+  if (normalizeText((packet.runtimeReconciliation as { status?: string } | undefined)?.status) !== "matched") return false;
+  if (normalizeText((packet.runtimeReconciliation as { openingId?: string } | undefined)?.openingId) !== openingId) return false;
+  if (request.learnerSide && normalizeSideToMove(packet.learnerSide) !== normalizeSideToMove(request.learnerSide)) return false;
+  if (request.sideToMove && normalizeSideToMove(packet.sideToMove) !== normalizeSideToMove(request.sideToMove)) return false;
+  if (normalizeText(packet.visualRecipe?.targetMoveUci ?? "") && normalizeLower(packet.visualRecipe.targetMoveUci) !== targetUci) return false;
+
+  const normalizedSequence = buildApprovedPacketMatchSequence(packet, true);
+  const rawSequence = buildApprovedPacketMatchSequence(packet, false);
+  const moveIndex = Math.max(0, Math.min(normalizedSequence.length - 1, Number(packet.ply) - 1));
+  const normalizedPlayKeyBefore = normalizedSequence.slice(0, moveIndex).join(",");
+  const normalizedPlayKeyAtTarget = normalizedSequence.slice(0, moveIndex + 1).join(",");
+  const rawPlayKeyBefore = rawSequence.slice(0, moveIndex).join(",");
+  const rawPlayKeyAtTarget = rawSequence.slice(0, moveIndex + 1).join(",");
+  const expectedPlayKeyAtTarget = playKey || (playKeyBefore && targetUci ? `${playKeyBefore},${targetUci}` : targetUci);
+
+  if (playKeyBefore) {
+    const playKeyBeforeMatches = playKeyBefore === normalizedPlayKeyBefore || playKeyBefore === rawPlayKeyBefore;
+    if (!playKeyBeforeMatches) return false;
+  }
+  if (expectedPlayKeyAtTarget) {
+    const playKeyMatches = expectedPlayKeyAtTarget === normalizedPlayKeyAtTarget || expectedPlayKeyAtTarget === rawPlayKeyAtTarget;
+    if (!playKeyMatches) return false;
+  }
+  if (targetSan) {
+    const packetSan = normalizeText(packet.moveSan);
+    if (!packetSan || packetSan.toLowerCase() !== targetSan.toLowerCase()) return false;
+  }
+
+  if (request.surface === "plain_hint") {
+    const plainSurface = packet.surfaces?.[request.surface] ?? null;
+    if (!plainSurface) return false;
+    if (packetTextHasTargetLeak(plainSurface as Record<string, unknown>, targetUci, targetSan)) return false;
+  }
+
+  return true;
 }
 
 function surfaceCopyFromPacket(
@@ -952,7 +1063,8 @@ export function writeStage2ApprovedPacketsJsonl(
   if (validation.approvedPackets.length === 0) {
     throw new Error("stage2_approved_content_no_packets_to_promote");
   }
-  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  const fs = getNodeFs();
+  fs.mkdirSync(getDirname(outputPath), { recursive: true });
   const text = `${validation.approvedPackets.map((packet) => JSON.stringify(packet)).join("\n")}\n`;
   fs.writeFileSync(outputPath, text);
 }
@@ -962,49 +1074,44 @@ export function resolveStage2ApprovedContentPacket(
   approvedPacketsPath: string = DEFAULT_APPROVED_PACKETS_PATH,
 ): Stage2ApprovedContentResolverResult {
   const resolvedApprovedPacketsPath = normalizeText(request.approvedPacketsPath ?? approvedPacketsPath) || DEFAULT_APPROVED_PACKETS_PATH;
+  const fs = getNodeFs();
   if (!fs.existsSync(resolvedApprovedPacketsPath)) {
     return { kind: "none", reason: "approved_bundle_missing" };
   }
   const packets = readApprovedPacketsJsonl(resolvedApprovedPacketsPath);
-  const openingId = normalizeText(request.openingId);
-  const targetUci = normalizeLower(request.targetUci);
-  const playKeyBefore = normalizeText(request.playKeyBefore ?? "");
-  const playKey = normalizeText(request.playKey ?? "");
   const surface = normalizeText(request.surface) as Stage2ApprovedContentResolverRequest["surface"];
 
   const match = packets.find((packet) => {
-    if (packet.openingId !== openingId) return false;
-    const packetTargetUci = normalizeLower(packet.normalizedMoveUci ?? packet.moveUci);
-    if (packetTargetUci !== targetUci) return false;
-    const packetPlaySequence = normalizeSequenceInput(packet.normalizedPlaySequenceUci, packet.playSequenceUci);
-    const packetMoveIndex = Math.max(0, Math.min(packetPlaySequence.length - 1, Number(packet.ply) - 1));
-    const packetPlayKeyBefore = packetPlaySequence.slice(0, packetMoveIndex).join(",");
-    const packetPlayKeyAtTarget = packetPlaySequence.slice(0, packetMoveIndex + 1).join(",");
-    const packetRawPlayKeyBefore = packet.playSequenceUci.slice(0, packetMoveIndex).join(",");
-    const packetRawPlayKeyAtTarget = packet.playSequenceUci.slice(0, packetMoveIndex + 1).join(",");
-    const packetRawPlayKey = packet.playSequenceUci.join(",");
     if (surface && !packet.surfaces?.[surface]) return false;
-    const playKeyBeforeMatches = Boolean(
-      playKeyBefore &&
-        (packetPlayKeyBefore === playKeyBefore ||
-          packetRawPlayKeyBefore === playKeyBefore ||
-          packetPlayKeyAtTarget === playKeyBefore ||
-          packetRawPlayKeyAtTarget === playKeyBefore),
-    );
-    const playKeyMatches = Boolean(
-      playKey &&
-        (packetPlayKeyAtTarget === playKey ||
-          packetRawPlayKeyAtTarget === playKey ||
-          packetRawPlayKey === playKey ||
-          packetPlaySequence.join(",") === playKey),
-    );
-    return playKeyBeforeMatches || playKeyMatches;
+    return packetMatchesExactApprovedContext(packet, request);
   });
 
   if (!match) {
     return { kind: "none", reason: "approved_packet_exact_match_not_found" };
   }
 
+  return { kind: "approved_packet", packet: materializeApprovedPacketSurface(match, surface) };
+}
+
+export function resolveStage2ApprovedContentPacketCollection(
+  request: Stage2ApprovedContentResolverRequest,
+  approvedPacketsPaths: string[] = [...DEFAULT_APPROVED_PACKETS_PATHS],
+): Stage2ApprovedContentResolverResult {
+  const resolvedApprovedPacketsPaths = approvedPacketsPaths
+    .map((entry) => normalizeText(entry))
+    .filter((entry): entry is string => entry.length > 0);
+  if (resolvedApprovedPacketsPaths.length === 0) {
+    return { kind: "none", reason: "approved_bundle_missing" };
+  }
+  const packets = readApprovedPacketsJsonlCollection(resolvedApprovedPacketsPaths);
+  const surface = normalizeText(request.surface) as Stage2ApprovedContentResolverRequest["surface"];
+  const match = packets.find((packet) => {
+    if (surface && !packet.surfaces?.[surface]) return false;
+    return packetMatchesExactApprovedContext(packet, request);
+  });
+  if (!match) {
+    return { kind: "none", reason: "approved_packet_exact_match_not_found" };
+  }
   return { kind: "approved_packet", packet: materializeApprovedPacketSurface(match, surface) };
 }
 

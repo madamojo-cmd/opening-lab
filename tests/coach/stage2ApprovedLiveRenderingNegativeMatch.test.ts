@@ -1,0 +1,38 @@
+import assert from "node:assert/strict";
+
+import { buildStage2CoachContext, resolveStage2CoachingPacket } from "../../lib/blundr/stage2Coaching";
+
+export function testStage2ApprovedLiveRenderingNegativeMatch(): void {
+  const resolution = resolveStage2CoachingPacket(
+    buildStage2CoachContext({
+      openingId: "italian-white",
+      playKeyBefore: "e2e4,e7e5,g1f3,b8c6",
+      learnerSide: "white",
+      sideToMove: "white",
+      targetUci: "a1a2",
+      targetSan: "Ra2",
+      targetPieceType: "r",
+      surface: "assisted",
+      runtimeBook: {
+        status: "ready",
+        candidateCount: 0,
+        topCandidateUci: null,
+        topCandidateSan: null,
+        topCandidateRank: null,
+        topCandidateTotalGames: null,
+        bookExhausted: true,
+      },
+      plainRevealState: "revealed",
+    }),
+  );
+
+  assert.equal(resolution.kind, "safe_fallback");
+  if (resolution.kind !== "safe_fallback") return;
+  assert.equal(resolution.packet.sourceFile, "stage2://safe-fallback");
+  assert.equal(resolution.packet.title, "Book move");
+  assert.equal(resolution.packet.body.length > 0, true);
+  assert.equal(resolution.packet.surface, "assisted");
+}
+
+testStage2ApprovedLiveRenderingNegativeMatch();
+console.log("stage2ApprovedLiveRenderingNegativeMatch ok");

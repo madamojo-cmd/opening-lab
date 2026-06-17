@@ -148,6 +148,8 @@ export function testStage2CoachingResolverSeamEnrichment(): void {
     buildStage2CoachContext({
       openingId: "london-white",
       playKeyBefore: "d2d4,d7d5,c1f4",
+      learnerSide: "white",
+      sideToMove: "white",
       targetUci: preservedTargetUci,
       targetSan: "Nf3",
       targetPieceType: "n",
@@ -155,7 +157,21 @@ export function testStage2CoachingResolverSeamEnrichment(): void {
     }),
   );
   assert.equal(preservedTargetUci, "g1f3");
-  assert.equal(resolved.kind === "approved_packet", false, "resolver shell must not auto-enable approved content");
+  assert.equal(resolved.kind, "approved_packet", "resolver should use approved content for exact matches");
+
+  const fallback = resolveStage2CoachingPacket(
+    buildStage2CoachContext({
+      openingId: "london-white",
+      playKeyBefore: "d2d4,d7d5,c1f4",
+      learnerSide: "white",
+      sideToMove: "white",
+      targetUci: "a1a2",
+      targetSan: "Ra2",
+      targetPieceType: "r",
+      surface: "assisted",
+    }),
+  );
+  assert.equal(fallback.kind, "safe_fallback", "resolver should preserve fallback when no approved packet matches");
 
   assert.equal(mapVisibleSurfaceModeToStage2CoachingSurface("plain_before_show_more"), "plain_hint");
   assert.equal(mapVisibleSurfaceModeToStage2CoachingSurface("plain_after_show_more"), "plain_show_more");

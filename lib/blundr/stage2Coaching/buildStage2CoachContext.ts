@@ -6,10 +6,21 @@ function cleanString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function cleanSide(value: unknown): string | undefined {
+  const text = cleanString(value)?.toLowerCase();
+  if (!text) return undefined;
+  if (text === "w" || text === "white") return "white";
+  if (text === "b" || text === "black") return "black";
+  return text;
+}
+
 export function buildStage2CoachContext(input: Stage2CoachContext): Stage2CoachContext {
   return {
     openingId: cleanString(input.openingId),
     playKeyBefore: cleanString(input.playKeyBefore),
+    playKey: cleanString(input.playKey),
+    learnerSide: cleanSide(input.learnerSide),
+    sideToMove: cleanSide(input.sideToMove),
     targetUci: cleanString(input.targetUci)?.toLowerCase(),
     targetSan: cleanString(input.targetSan),
     targetPieceType: cleanString(input.targetPieceType)?.toLowerCase(),

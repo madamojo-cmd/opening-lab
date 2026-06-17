@@ -8,6 +8,7 @@ import { recognizeStrategicPlans } from "../plans/planRecognitionEngine";
 import { selectRenderedCoachCardCopyAuthority } from "../presentation/renderedCoachCopyAuthority";
 import { mapVisibleSurfaceModeToStage2CoachingSurface, buildStage2CoachContext, resolveStage2CoachingPacket } from "../stage2Coaching";
 import { STAGE2_APPROVED_CONTENT_ENABLED, STAGE2_COACHING_RESOLVER_ENABLED, STAGE2_SAFE_FALLBACK_ENABLED } from "../stage2Coaching/stage2CoachingFlags";
+import { getStage2OpeningAvailability } from "../openings/openingAvailability";
 import { normalizeVisualFen } from "../visual/normalizeVisualFen";
 import type { CurrentInstructionFrame } from "../runtime/currentInstructionFrame";
 import type { TeachingOpportunity } from "../opportunity/opportunityTypes";
@@ -891,6 +892,9 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
   const stage2Context = buildStage2CoachContext({
     openingId: openingId ?? undefined,
     playKeyBefore: normalizeText(input.playKeyBefore ?? input.runtimeBookPlayKeyBefore ?? ""),
+    playKey: normalizeText(input.playKey ?? input.currentPlayKey ?? input.runtimeBookPlayKey ?? "") || undefined,
+    learnerSide: getStage2OpeningAvailability(openingId ?? "")?.learnerPerspective ?? undefined,
+    sideToMove: fen4.split(" ")[1] === "b" ? "black" : "white",
     targetUci: moveFacts.moveUci ?? undefined,
     targetSan: moveFacts.moveSan ?? undefined,
     targetPieceType: moveFacts.pieceType ?? undefined,
@@ -918,6 +922,18 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
           : "revealed",
   });
   const stage2Resolution = resolveStage2CoachingPacket(stage2Context);
+  const approvedPacketResolution = trainerFrameResolution.approvedContent ?? {
+    matched: stage2Resolution.kind === "approved_packet",
+    packetKind: stage2Resolution.kind,
+    packetId: stage2Resolution.kind === "approved_packet" ? stage2Resolution.packet.packetId : null,
+    sourceBundle: stage2Resolution.kind === "approved_packet" ? stage2Resolution.packet.sourceCandidatePackages?.[0] ?? stage2Resolution.packet.sourceCandidatePackage ?? null : null,
+    sourceFile: stage2Resolution.kind === "approved_packet" ? stage2Resolution.packet.sourceFile ?? null : null,
+    packetStatus: stage2Resolution.kind === "approved_packet" ? stage2Resolution.packet.status : null,
+    approvalReadiness: stage2Resolution.kind === "approved_packet" ? stage2Resolution.packet.approvalReadiness : null,
+    missReason: stage2Resolution.kind === "approved_packet" ? null : stage2Resolution.kind === "none" ? stage2Resolution.reason : "approved_packet_exact_match_not_found",
+    fallbackReason: coachCardResult.fallbackReason ?? null,
+    visualSource: visualRecipeResult.source,
+  };
   const promotionSource = (input.trainerFrameResolution as TrainerFrameResolution | undefined)?.promotion;
   const promotion: Stage2FeatureTrace["promotion"] = {
     pendingPromotion: (promotionSource?.pendingPromotion ?? input.pendingPromotion ?? null) as Record<string, unknown> | null,
@@ -945,7 +961,11 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
   if (!detectedConcepts.length) missingReasons.push("no_selected_concept");
   if (!rankedOpportunities.length) missingReasons.push("no_ranked_opportunities");
   if (rankedOpportunities.length === 1 && rankedOpportunities[0]?.layer === "fallback") missingReasons.push("no_ranked_opportunities");
-  if (!STAGE2_APPROVED_CONTENT_ENABLED || stage2Resolution.kind !== "approved_packet") missingReasons.push("approved_content_disabled");
+  if (!STAGE2_APPROVED_CONTENT_ENABLED) {
+    missingReasons.push("approved_content_disabled");
+  } else if (stage2Resolution.kind !== "approved_packet") {
+    missingReasons.push("approved_content_not_matched");
+  }
   if (visualRecipeResult.rendered !== true || visualRecipeResult.targetMatchesMoveUci !== true) missingReasons.push("visual_recipe_not_connected");
   if (coachCardResult.fallbackUsed) missingReasons.push("coachcard_fallback_used");
   if (
@@ -968,6 +988,7 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
     moveUci: moveFacts.moveUci,
     moveSan: moveFacts.moveSan,
     acceptedTargetUci,
+    approvedPacket: approvedPacketResolution,
     boardFacts: {
       ...moveFacts.boardFacts,
       sideToMove: fen4.split(" ")[1] ?? null,
@@ -1017,6 +1038,7 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
       selectedOpportunity,
       coachCardResult,
       visualRecipeResult,
+      approvedPacket: approvedPacketResolution,
       promotion,
       finalRenderedTitle: coachCardResult.finalRenderedTitle,
       finalRenderedBody: coachCardResult.finalRenderedBody,

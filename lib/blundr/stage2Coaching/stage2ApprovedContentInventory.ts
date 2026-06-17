@@ -16,13 +16,10 @@ export type Stage2ApprovedContentInventoryEntry = {
   reasonNotApproved?: string;
 };
 
-const STAGE2_APPROVED_CONTENT_SOURCE_ROOT = "imports/stage2-sample/content-base/docs/content/stage2/openings";
-
-const SAMPLE_OPENINGS = new Set([
-  "italian-black",
-  "italian-white",
-  "ruy-lopez-white",
-]);
+const APPROVED_BUNDLE_PATHS = [
+  `${process.cwd()}/data/blundr/stage2-approved-content-approved-5openings-v1/approved-packets.jsonl`,
+  `${process.cwd()}/data/blundr/stage2-approved-content-approved-batches2to4-16openings-v1/approved-packets.jsonl`,
+];
 
 const STAGE2_APPROVED_CONTENT_INVENTORY_OPENING_IDS = [
   "caro-kann-black",
@@ -48,6 +45,50 @@ const STAGE2_APPROVED_CONTENT_INVENTORY_OPENING_IDS = [
   "vienna-white",
 ] as const;
 
+type ApprovedPacketRow = {
+  openingId: string;
+  lineId?: string;
+  playKey?: string;
+  moveUci?: string;
+  moveSan?: string;
+  sourceFile: string;
+};
+
+function readApprovedPacketsJsonl(filePath: string): ApprovedPacketRow[] {
+  const fs = eval("require")("node:fs") as typeof import("node:fs");
+  if (!fs.existsSync(filePath)) return [];
+  const text = fs.readFileSync(filePath, "utf8");
+  const rows: ApprovedPacketRow[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const packet = JSON.parse(trimmed) as Record<string, unknown>;
+    rows.push({
+      openingId: String(packet.openingId ?? ""),
+      lineId: typeof packet.lineId === "string" ? packet.lineId : undefined,
+      playKey: typeof packet.playKey === "string" ? packet.playKey : undefined,
+      moveUci: typeof packet.moveUci === "string" ? packet.moveUci : undefined,
+      moveSan: typeof packet.moveSan === "string" ? packet.moveSan : undefined,
+      sourceFile: filePath,
+    });
+  }
+  return rows;
+}
+
+function buildApprovedPacketIndex(): Map<string, ApprovedPacketRow[]> {
+  const index = new Map<string, ApprovedPacketRow[]>();
+  for (const bundlePath of APPROVED_BUNDLE_PATHS) {
+    for (const row of readApprovedPacketsJsonl(bundlePath)) {
+      const openingRows = index.get(row.openingId) ?? [];
+      openingRows.push(row);
+      index.set(row.openingId, openingRows);
+    }
+  }
+  return index;
+}
+
+const APPROVED_PACKET_INDEX = buildApprovedPacketIndex();
+
 function buildReasonNotApproved(status: Stage2ApprovedContentInventoryStatus, openingId: string): string {
   switch (status) {
     case "approved":
@@ -64,22 +105,28 @@ function buildReasonNotApproved(status: Stage2ApprovedContentInventoryStatus, op
 }
 
 function buildInventoryEntry(openingId: string): Stage2ApprovedContentInventoryEntry {
-  const status: Stage2ApprovedContentInventoryStatus = SAMPLE_OPENINGS.has(openingId) ? "sample" : "draft";
+  const approvedRows = APPROVED_PACKET_INDEX.get(openingId) ?? [];
+  const sourceFile = approvedRows[0]?.sourceFile ?? APPROVED_BUNDLE_PATHS[0];
+  const firstPacket = approvedRows[0] ?? null;
   return {
     openingId,
-    lineId: openingId,
-    status,
-    sourceFile: `${STAGE2_APPROVED_CONTENT_SOURCE_ROOT}/${openingId}.md`,
-    approvedContentAvailable: false,
-    plainViewSafe: false,
+    lineId: firstPacket?.lineId ?? openingId,
+    playKey: firstPacket?.playKey,
+    moveUci: firstPacket?.moveUci,
+    moveSan: firstPacket?.moveSan,
+    status: "approved",
+    sourceFile,
+    approvedContentAvailable: approvedRows.length > 0,
+    plainViewSafe: approvedRows.length > 0,
     runtimeMatched: true,
-    targetMatched: false,
-    visualRecipeAvailable: false,
-    reasonNotApproved: buildReasonNotApproved(status, openingId),
+    targetMatched: approvedRows.length > 0,
+    visualRecipeAvailable: approvedRows.length > 0,
+    reasonNotApproved: approvedRows.length > 0 ? undefined : buildReasonNotApproved("fallback_only", openingId),
   };
 }
 
-export const STAGE2_APPROVED_CONTENT_INVENTORY: Stage2ApprovedContentInventoryEntry[] = STAGE2_APPROVED_CONTENT_INVENTORY_OPENING_IDS.map((openingId) => buildInventoryEntry(openingId));
+export const STAGE2_APPROVED_CONTENT_INVENTORY: Stage2ApprovedContentInventoryEntry[] =
+  STAGE2_APPROVED_CONTENT_INVENTORY_OPENING_IDS.map((openingId) => buildInventoryEntry(openingId));
 
 export function getStage2ApprovedContentInventoryEntry(openingId: string): Stage2ApprovedContentInventoryEntry | null {
   return STAGE2_APPROVED_CONTENT_INVENTORY.find((entry) => entry.openingId === openingId) ?? null;

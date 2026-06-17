@@ -4,14 +4,16 @@ import { buildStage2CoachContext, resolveStage2CoachingPacket, STAGE2_APPROVED_C
 
 export function testStage2ApprovedContentExactMatch(): void {
   const summary = getStage2ApprovedContentInventorySummary();
-  assert.equal(STAGE2_APPROVED_CONTENT_ENABLED, false);
+  assert.equal(STAGE2_APPROVED_CONTENT_ENABLED, true);
   assert.equal(summary.approvedContentInventoryCount, 21);
-  assert.equal(summary.approvedContentMatchedCount, 0);
+  assert.equal(summary.approvedContentMatchedCount, 21);
 
   const resolution = resolveStage2CoachingPacket(
     buildStage2CoachContext({
       openingId: "italian-white",
       playKeyBefore: "e2e4,e7e5,g1f3,b8c6",
+      learnerSide: "white",
+      sideToMove: "white",
       targetUci: "f1c4",
       targetSan: "Bc4",
       targetPieceType: "b",
@@ -29,13 +31,13 @@ export function testStage2ApprovedContentExactMatch(): void {
     }),
   );
 
-  assert.equal(resolution.kind, "safe_fallback");
-  if (resolution.kind === "safe_fallback") {
+  assert.equal(resolution.kind, "approved_packet");
+  if (resolution.kind === "approved_packet") {
     assert.equal(resolution.packet.status, "approved");
     assert.equal(resolution.packet.safetyStatus, "safe");
     assert.equal(resolution.packet.runtimeReconciliation.status, "matched");
-    assert.equal(resolution.packet.sourceFile, "stage2://safe-fallback");
-    assert.equal(resolution.packet.visualRecipeRefs.length, 0);
+    assert.equal(resolution.packet.sourceFile.includes("stage2-approved-content-approved"), true);
+    assert.equal(resolution.packet.visualRecipeRefs.length > 0, true);
   }
 }
 

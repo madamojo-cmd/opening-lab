@@ -6,6 +6,8 @@ export function testStage2ApprovedContentPlainViewNoLeak(): void {
   const context = buildStage2CoachContext({
     openingId: "italian-white",
     playKeyBefore: "e2e4,e7e5,g1f3,b8c6",
+    learnerSide: "white",
+    sideToMove: "white",
     targetUci: "f1c4",
     targetSan: "Bc4",
     targetPieceType: "b",
@@ -23,8 +25,8 @@ export function testStage2ApprovedContentPlainViewNoLeak(): void {
   });
 
   const resolution = resolveStage2CoachingPacket(context);
-  assert.equal(resolution.kind, "safe_fallback");
-  if (resolution.kind !== "safe_fallback") return;
+  assert.equal(resolution.kind, "approved_packet");
+  if (resolution.kind !== "approved_packet") return;
 
   const packetText = [resolution.packet.title, resolution.packet.body, resolution.packet.hint ?? "", resolution.packet.showMore ?? ""].join("\n").toLowerCase();
   assert.equal(packetText.includes("f1c4"), false);
@@ -37,9 +39,10 @@ export function testStage2ApprovedContentPlainViewNoLeak(): void {
     baseCopy: { title: "Base title", body: "Base body" },
     resolution,
   });
-  assert.equal(enriched.applied, false);
-  assert.equal(enriched.copy.title, "Base title");
-  assert.equal(enriched.copy.body, "Base body");
+  assert.equal(enriched.applied, true);
+  assert.equal(enriched.copy.title.length > 0, true);
+  assert.equal(enriched.copy.body.includes("f1c4"), false);
+  assert.equal(enriched.copy.body.includes("bc4"), false);
 }
 
 testStage2ApprovedContentPlainViewNoLeak();

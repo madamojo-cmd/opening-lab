@@ -21,6 +21,7 @@ export type RuntimeReconciliation =
   | { status: "unmatched"; reason: string; openingId?: string; playKey?: string; lineId?: string; moveUci?: string };
 
 export type Stage2CoachingPacketEntry = {
+  packetId?: string;
   openingId?: string;
   playKey?: string;
   lineId?: string;
@@ -40,6 +41,9 @@ export type Stage2CoachingPacketEntry = {
   evidenceIds: string[];
   sourceFile: string;
   sourceSection: string;
+  sourceCandidatePackage?: string;
+  sourceCandidatePackages?: string[];
+  approvalReadiness?: "ready_for_app_validation" | "app_validated";
   runtimeReconciliation: RuntimeReconciliation;
   safetyStatus: SafetyStatus;
 };
@@ -47,6 +51,9 @@ export type Stage2CoachingPacketEntry = {
 export type Stage2CoachContext = {
   openingId?: string;
   playKeyBefore?: string;
+  playKey?: string;
+  learnerSide?: string;
+  sideToMove?: string;
   targetUci?: string;
   targetSan?: string;
   targetPieceType?: string;

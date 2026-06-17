@@ -21,7 +21,7 @@ export function testOpeningVisibilityMatrix(): void {
   assert.equal(openingIds.length, 21, "opening_id_count_mismatch");
   assert.equal(new Set(openingIds).size, 21, "opening_ids_must_be_unique");
   assert.equal(summary.approvedContentInventoryCount, 21);
-  assert.equal(summary.approvedContentMatchedCount, 0);
+  assert.equal(summary.approvedContentMatchedCount, 21);
 
   for (const opening of STAGE2_OPENING_AVAILABILITY_MATRIX) {
     assert.equal(Boolean(opening.displayName), true, `display_name_missing:${opening.openingId}`);
@@ -31,12 +31,8 @@ export function testOpeningVisibilityMatrix(): void {
     assert.equal(opening.runtimeNodeCount > 0, true, `runtime_node_count_missing:${opening.openingId}`);
     assert.equal(opening.runtimeCandidateMoveCount > 0, true, `runtime_candidate_count_missing:${opening.openingId}`);
     assert.equal(opening.userVisible, true, `opening_not_user_visible:${opening.openingId}`);
-    const expectedContentStatus =
-      opening.openingId === "italian-black" || opening.openingId === "italian-white" || opening.openingId === "ruy-lopez-white"
-        ? "sample"
-        : "fallback_only";
-    assert.equal(opening.contentStatus, expectedContentStatus, `content_status_mismatch:${opening.openingId}`);
-    assert.equal(opening.approvedContentAvailable, false, `approved_content_should_not_be_faked:${opening.openingId}`);
+    assert.equal(opening.contentStatus, "approved", `content_status_mismatch:${opening.openingId}`);
+    assert.equal(opening.approvedContentAvailable, true, `approved_content_should_be_available:${opening.openingId}`);
     assert.equal(opening.stage, "dev", `stage_mismatch:${opening.openingId}`);
     assert.equal(opening.qaStatus, "smoke_pass", `qa_status_mismatch:${opening.openingId}`);
   }

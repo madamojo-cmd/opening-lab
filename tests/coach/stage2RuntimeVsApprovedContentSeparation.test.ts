@@ -28,7 +28,7 @@ export function testStage2RuntimeVsApprovedContentSeparation(): void {
     runtimeBookFallbackUsed: false,
     runtimeBookFallbackAuthority: null,
     stage2CoachingResolverEnabled: true,
-    stage2ApprovedContentEnabled: false,
+    stage2ApprovedContentEnabled: true,
     stage2SafeFallbackEnabled: true,
     stage2CoachingPacketKind: "safe_fallback",
     stage2CoachingSafetyStatus: "safe",
@@ -52,11 +52,11 @@ export function testStage2RuntimeVsApprovedContentSeparation(): void {
   assert.equal((snapshot as any).runtime.visibleOpeningCount, 21);
   assert.equal((snapshot as any).runtime.runtimeAvailableCount, 21);
   assert.equal((snapshot as any).runtime.approvedContentInventoryCount, 21);
-  assert.equal((snapshot as any).runtime.approvedContentMatchedCount, 0);
+  assert.equal((snapshot as any).runtime.approvedContentMatchedCount, 21);
   assert.equal((snapshot as any).runtime.selectedOpeningId, "caro-kann-black");
   assert.equal((snapshot as any).runtime.selectedOpeningRuntimeAvailable, true);
-  assert.equal((snapshot as any).runtime.selectedOpeningContentStatus, "fallback_only");
-  assert.equal((snapshot as any).runtime.selectedOpeningApprovedContentAvailable, false);
+  assert.equal((snapshot as any).runtime.selectedOpeningContentStatus, "approved");
+  assert.equal((snapshot as any).runtime.selectedOpeningApprovedContentAvailable, true);
   assert.equal((snapshot as any).runtime.candidateSource, "local_runtime_package");
   assert.equal((snapshot as any).runtime.liveLichessCalled, false);
   assert.equal((snapshot as any).runtime.openingAvailabilityStatus, "runtime_available");
@@ -68,12 +68,12 @@ export function testStage2RuntimeVsApprovedContentSeparation(): void {
 
   const copyEverything = buildDebugCopyEverythingPayload(snapshot);
   assert.equal((copyEverything as any).runtime.approvedContentInventoryCount, 21);
-  assert.equal((copyEverything as any).runtime.approvedContentMatchedCount, 0);
-  assert.equal((copyEverything as any).runtime.selectedOpeningApprovedContentAvailable, false);
-  assert.equal((copyEverything as any).stage2Coaching.approvedContentEnabled, false);
-  assert.equal((copyEverything as any).stage2Coaching.targetMatched, false);
-  assert.equal((copyEverything as any).stage2Coaching.plainViewSafe, false);
-  assert.equal((copyEverything as any).stage2Coaching.reasonRejected, "draft_source_not_approved:caro-kann-black");
+  assert.equal((copyEverything as any).runtime.approvedContentMatchedCount, 21);
+  assert.equal((copyEverything as any).runtime.selectedOpeningApprovedContentAvailable, true);
+  assert.equal((copyEverything as any).stage2Coaching.approvedContentEnabled, true);
+  assert.equal((copyEverything as any).stage2Coaching.targetMatched, true);
+  assert.equal((copyEverything as any).stage2Coaching.plainViewSafe, true);
+  assert.equal((copyEverything as any).stage2Coaching.reasonRejected, null);
 }
 
 testStage2RuntimeVsApprovedContentSeparation();

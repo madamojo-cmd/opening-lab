@@ -1,3 +1,3 @@
 export const STAGE2_COACHING_RESOLVER_ENABLED = true;
-export const STAGE2_APPROVED_CONTENT_ENABLED = false;
+export const STAGE2_APPROVED_CONTENT_ENABLED = true;
 export const STAGE2_SAFE_FALLBACK_ENABLED = true;

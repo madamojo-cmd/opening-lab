@@ -5,6 +5,7 @@ export type Stage2FeatureTraceMissingReason =
   | "no_selected_concept"
   | "no_ranked_opportunities"
   | "approved_content_disabled"
+  | "approved_content_not_matched"
   | "visual_recipe_not_connected"
   | "coachcard_fallback_used"
   | "legacy_surface_used"
@@ -132,6 +133,18 @@ export interface Stage2FeatureTrace {
   moveUci: string | null;
   moveSan: string | null;
   acceptedTargetUci: string | null;
+  approvedPacket: {
+    matched: boolean;
+    packetKind: "approved_packet" | "safe_fallback" | "none";
+    packetId: string | null;
+    sourceBundle: string | null;
+    sourceFile: string | null;
+    packetStatus: string | null;
+    approvalReadiness: string | null;
+    missReason: string | null;
+    fallbackReason: string | null;
+    visualSource: string | null;
+  };
   boardFacts: Record<string, unknown>;
   detectedFeatures: Stage2FeatureTraceDetectedFeature[];
   detectedConcepts: Stage2FeatureTraceDetectedConcept[];

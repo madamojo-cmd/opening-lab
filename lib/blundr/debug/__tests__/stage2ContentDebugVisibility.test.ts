@@ -40,13 +40,23 @@ export function testStage2ContentDebugVisibility(): void {
     runtimeBookFallbackUsed: false,
     runtimeBookFallbackAuthority: null,
     stage2CoachingResolverEnabled: true,
-    stage2ApprovedContentEnabled: false,
+    stage2ApprovedContentEnabled: true,
     stage2SafeFallbackEnabled: true,
-    stage2CoachingPacketKind: "safe_fallback",
+    stage2CoachingPacketKind: "approved_packet",
     stage2CoachingSafetyStatus: "safe",
     stage2CoachingSurface: "assisted",
-    stage2CoachingSourceFile: "stage2://safe-fallback",
+    stage2CoachingSourceFile: "stage2://approved",
     stage2CoachingRuntimeMatched: true,
+    stage2ApprovedPacketMatched: true,
+    stage2ApprovedPacketKind: "approved_packet",
+    stage2ApprovedPacketId: "italian-white.line-001.ply-05.f1c4",
+    stage2ApprovedPacketSourceBundle: "stage2-approved-content-approved-5openings-v1",
+    stage2ApprovedPacketSourceFile: "data/blundr/stage2-approved-content-approved-5openings-v1/approved-packets.jsonl",
+    stage2ApprovedPacketStatus: "approved",
+    stage2ApprovedPacketApprovalReadiness: "app_validated",
+    stage2ApprovedPacketMissReason: null,
+    stage2ApprovedPacketFallbackReason: null,
+    stage2ApprovedPacketVisualSource: "approved_recipe",
     presentationFrame: { visual: { shouldRender: true, source: "continuation_candidate" }, coach: { owner: "intent_first_coach" }, legacy: {} },
     eventLog: [],
   });
@@ -56,21 +66,24 @@ export function testStage2ContentDebugVisibility(): void {
   assert.equal((snapshot.continuation as any).runtimeBookCandidateCount, 2);
   assert.equal((snapshot.continuation as any).runtimeBookTopCandidateUci, "e4d5");
   assert.equal((snapshot as any).runtime.approvedContentInventoryCount, 21);
-  assert.equal((snapshot as any).runtime.approvedContentMatchedCount, 0);
-  assert.equal((snapshot as any).runtime.selectedOpeningContentStatus, "sample");
-  assert.equal((snapshot as any).runtime.selectedOpeningApprovedContentAvailable, false);
-  assert.equal((snapshot.continuation as any).stage2CoachingTargetMatched, false);
-  assert.equal((snapshot.continuation as any).stage2CoachingPlainViewSafe, false);
-  assert.equal((snapshot.continuation as any).stage2CoachingReasonRejected, "reconciled_partial_source_not_approved:italian-white");
+  assert.equal((snapshot as any).runtime.approvedContentMatchedCount, 21);
+  assert.equal((snapshot as any).runtime.selectedOpeningContentStatus, "approved");
+  assert.equal((snapshot as any).runtime.selectedOpeningApprovedContentAvailable, true);
+  assert.equal((snapshot as any).runtime.stage2CoachingTargetMatched, true);
+  assert.equal((snapshot as any).runtime.stage2CoachingPlainViewSafe, true);
+  assert.equal((snapshot as any).runtime.stage2CoachingReasonRejected, null);
+  assert.equal((snapshot as any).runtime.approvedPacketMatched, true);
+  assert.equal((snapshot as any).runtime.approvedPacketKind, "approved_packet");
 
   const copyEverythingPayload = buildDebugCopyEverythingPayload(snapshot);
   const payloadString = JSON.stringify(copyEverythingPayload);
   assert.equal(payloadString.includes("\"runtimeBook\""), true);
   assert.equal(payloadString.includes("\"openingId\":\"italian-white\""), true);
   assert.equal(payloadString.includes("\"topCandidateUci\":\"e4d5\""), true);
-  assert.equal(payloadString.includes("\"approvedContentInventoryCount\":21"), true);
   assert.equal(payloadString.includes("\"stage2Coaching\""), true);
-  assert.equal(payloadString.includes("\"packetKind\":\"safe_fallback\""), true);
+  assert.equal((copyEverythingPayload.runtime as any).approvedContentInventoryCount, 21);
+  assert.equal((copyEverythingPayload.featureTrace as any).approvedPacket.matched, true);
+  assert.equal((copyEverythingPayload.featureTrace as any).approvedPacket.packetKind, "approved_packet");
   assert.equal(Object.prototype.hasOwnProperty.call(copyEverythingPayload, "history"), false);
   assert.equal(Object.prototype.hasOwnProperty.call(copyEverythingPayload, "derivedAudit"), false);
 

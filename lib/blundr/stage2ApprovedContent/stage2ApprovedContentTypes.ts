@@ -216,6 +216,9 @@ export type Stage2ApprovedContentResolverRequest = {
   playKeyBefore?: string | null;
   playKey?: string | null;
   targetUci: string;
+  targetSan?: string | null;
+  learnerSide?: string | null;
+  sideToMove?: string | null;
   surface: Stage2ApprovedContentResolverSurface;
   approvedPacketsPath?: string;
 };
