@@ -1,20 +1,8 @@
-export type Stage2ApprovedContentInventoryStatus = "approved" | "sample" | "draft" | "blocked" | "fallback_only";
-
-export type Stage2ApprovedContentInventoryEntry = {
-  openingId: string;
-  lineId?: string;
-  playKey?: string;
-  moveUci?: string;
-  moveSan?: string;
-  status: Stage2ApprovedContentInventoryStatus;
-  sourceFile: string;
-  approvedContentAvailable: boolean;
-  plainViewSafe: boolean;
-  runtimeMatched: boolean;
-  targetMatched: boolean;
-  visualRecipeAvailable: boolean;
-  reasonNotApproved?: string;
-};
+import type {
+  Stage2ApprovedContentInventoryEntry,
+  Stage2ApprovedContentInventoryStatus,
+  Stage2ApprovedContentInventorySummary,
+} from "./stage2ApprovedContentInventory.types";
 
 const APPROVED_BUNDLE_PATHS = [
   `${process.cwd()}/data/blundr/stage2-approved-content-approved-5openings-v1/approved-packets.jsonl`,
@@ -136,19 +124,7 @@ export function getStage2ApprovedContentInventoryEntry(openingId: string): Stage
   return STAGE2_APPROVED_CONTENT_INVENTORY.find((entry) => entry.openingId === openingId) ?? null;
 }
 
-export function getStage2ApprovedContentInventorySummary(): {
-  approvedContentInventoryCount: number;
-  approvedContentMatchedCount: number;
-  approvedContentAvailableCount: number;
-  sampleCount: number;
-  draftCount: number;
-  blockedCount: number;
-  fallbackOnlyCount: number;
-  runtimeMatchedCount: number;
-  targetMatchedCount: number;
-  plainViewSafeCount: number;
-  visualRecipeAvailableCount: number;
-} {
+export function getStage2ApprovedContentInventorySummary(): Stage2ApprovedContentInventorySummary {
   const approvedContentInventoryCount = STAGE2_APPROVED_CONTENT_INVENTORY.length;
   const approvedContentMatchedCount = STAGE2_APPROVED_CONTENT_INVENTORY.filter((entry) => entry.approvedContentAvailable).length;
   const sampleCount = STAGE2_APPROVED_CONTENT_INVENTORY.filter((entry) => entry.status === "sample").length;

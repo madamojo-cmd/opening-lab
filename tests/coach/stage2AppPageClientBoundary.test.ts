@@ -7,6 +7,7 @@ const REPO_ROOT = path.resolve(__dirname, "..", "..");
 export function testStage2AppPageClientBoundary(): void {
   const pageSource = fs.readFileSync(path.join(REPO_ROOT, "app/page.tsx"), "utf8");
   const openingAvailabilitySource = fs.readFileSync(path.join(REPO_ROOT, "lib/blundr/openings/openingAvailability.ts"), "utf8");
+  const generatedInventorySource = fs.readFileSync(path.join(REPO_ROOT, "lib/blundr/stage2Coaching/stage2ApprovedContentInventory.generated.ts"), "utf8");
   const stage2CoachingIndexSource = fs.readFileSync(path.join(REPO_ROOT, "lib/blundr/stage2Coaching/index.ts"), "utf8");
 
   assert.equal(pageSource.includes("node:fs"), false);
@@ -14,8 +15,15 @@ export function testStage2AppPageClientBoundary(): void {
   assert.equal(pageSource.includes("openingAvailability"), true);
 
   assert.equal(openingAvailabilitySource.includes("stage2ApprovedContentInventory.generated"), true);
-  assert.equal(openingAvailabilitySource.includes("stage2ApprovedContentInventory"), true);
+  assert.equal(openingAvailabilitySource.includes("stage2ApprovedContentInventory.ts"), false);
+  assert.equal(openingAvailabilitySource.includes("stage2ApprovedContentInventory.server"), false);
   assert.equal(openingAvailabilitySource.includes("node:fs"), false);
+  assert.equal(openingAvailabilitySource.includes("require("), false);
+
+  assert.equal(generatedInventorySource.includes("stage2ApprovedContentInventory.ts"), false);
+  assert.equal(generatedInventorySource.includes("stage2ApprovedContentInventory.server"), false);
+  assert.equal(generatedInventorySource.includes("node:fs"), false);
+  assert.equal(generatedInventorySource.includes("require("), false);
 
   assert.equal(stage2CoachingIndexSource.includes("stage2ApprovedContentInventory.generated"), true);
   assert.equal(stage2CoachingIndexSource.includes("stage2ApprovedContentInventory.ts"), false);

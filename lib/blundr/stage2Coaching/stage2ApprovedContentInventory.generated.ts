@@ -1,4 +1,4 @@
-import type { Stage2ApprovedContentInventoryEntry } from "./stage2ApprovedContentInventory";
+import type { Stage2ApprovedContentInventoryEntry } from "./stage2ApprovedContentInventory.types";
 
 export const STAGE2_APPROVED_CONTENT_INVENTORY: Stage2ApprovedContentInventoryEntry[] = [
   {
