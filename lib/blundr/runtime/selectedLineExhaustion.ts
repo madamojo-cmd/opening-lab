@@ -83,18 +83,6 @@ export function resolveSelectedLineExhaustion(input: ResolveSelectedLineExhausti
       knownFinalMoveMatched,
     };
   }
-  if (input.validBranchCompleteLatch) {
-    return {
-      exhausted: true,
-      reason: "valid_branch_complete_latch",
-      blockedReason: null,
-      hasNextOpponentMove: input.hasNextOpponentMove,
-      hasNextUserMove: input.hasNextUserMove,
-      exactNodeHasChildren: input.exactNodeHasChildren,
-      knownFinalFenMatched,
-      knownFinalMoveMatched,
-    };
-  }
   if (knownFinalFenMatched && knownFinalMoveMatched) {
     return {
       exhausted: true,
@@ -111,6 +99,18 @@ export function resolveSelectedLineExhaustion(input: ResolveSelectedLineExhausti
     return {
       exhausted: true,
       reason: "selected_line_exhausted",
+      blockedReason: null,
+      hasNextOpponentMove: input.hasNextOpponentMove,
+      hasNextUserMove: input.hasNextUserMove,
+      exactNodeHasChildren: input.exactNodeHasChildren,
+      knownFinalFenMatched,
+      knownFinalMoveMatched,
+    };
+  }
+  if (input.validBranchCompleteLatch && input.exactNodeHasChildren !== true && input.hasNextUserMove !== true) {
+    return {
+      exhausted: true,
+      reason: "valid_branch_complete_latch",
       blockedReason: null,
       hasNextOpponentMove: input.hasNextOpponentMove,
       hasNextUserMove: input.hasNextUserMove,

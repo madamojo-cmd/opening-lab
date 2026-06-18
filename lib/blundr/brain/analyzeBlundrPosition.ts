@@ -12,7 +12,7 @@ import type { BlundrBrainAnalysis, BlundrBrainInput } from "./types";
 import { normalizeVisualFen } from "../visual/normalizeVisualFen";
 
 // New production submodules (Step 3+)
-import { buildBoardTruth } from "./boardTruth/buildBoardTruth";
+import { buildBoardTruth } from "./providers/boardTruthProvider";
 import { generateCandidateMoves } from "./candidates/generateCandidateMoves";
 import { validateCandidateWithStockfish } from "./engineValidation/validateCandidateWithStockfish";
 import { rankTeachingCandidates } from "./pedagogy/rankTeachingCandidates";
@@ -31,7 +31,18 @@ export function analyzeBlundrPosition(input: AnalyzeBlundrPositionInput): Blundr
   const fen4 = normalizeVisualFen(input.fen);
 
   // Production Brain: Always computes when called with a valid target on teaching frames.
-  const boardTruth = buildBoardTruth(input.fen);
+  const frameForBoardTruth = input.currentInstructionFrame ?? ({
+    frameId: null,
+    frameKey: `brain:${fen4}`,
+    kind: "terminal",
+    fenBefore: input.fen,
+    ply: 0,
+    sideToMove: input.fen.split(" ")[1] === "w" ? "white" : "black",
+    target: null,
+    mode: "terminal",
+    source: "terminal",
+  } as any);
+  const boardTruth = buildBoardTruth({ frame: frameForBoardTruth });
   let rawCandidates = generateCandidateMoves(input.fen, input.currentInstructionFrame?.target?.uci);
 
   // Light integration of new submodules (full async validation in later steps)
