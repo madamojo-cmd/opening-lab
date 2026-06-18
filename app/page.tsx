@@ -5277,6 +5277,10 @@ export default function App(){
     const nextHasNextOpponentMove=nextExactSelectedLineNodes.length?nextExactSelectedLineNodes.some((node)=>node.continuations.some((move)=>move.color===opponentColor)):"unknown";
     const nextHasNextUserMove=nextExactSelectedLineNodes.length?nextExactSelectedLineNodes.some((node)=>node.continuations.some((move)=>move.color===userColor)):"unknown";
     const nextExplicitCuratedTerminalNode=nextExactSelectedLineNodes.some((node)=>node.terminal&&node.sideToMove===nextGame.turn());
+    const nextSelectedLineConfirmedComplete=Boolean(
+      nextLineCompleteConfirmed &&
+      nextExactNodeHasChildren===false
+    );
     const nextRestrictedRuntimeBookExhaustedOnOpponentTurnAfterUserMove=Boolean(
       trainingMode==="restricted"&&
       !userExplicitlyEnteredContinuation&&
@@ -5290,8 +5294,7 @@ export default function App(){
       nextRestrictedRuntimeBookExhaustedOnOpponentTurnAfterUserMove&&
       (
         nextExplicitCuratedTerminalNode ||
-        nextLineCompleteConfirmed ||
-        moveHistory.length + 1 >= DEFAULT_GUIDED_COVERAGE_THRESHOLDS.minimumGuidedDepthPly
+        nextSelectedLineConfirmedComplete
       )
     );
     const nextBranchCompleteContract=resolveBranchCompleteContract({
@@ -5306,7 +5309,7 @@ export default function App(){
       expectedMoveSource:nextExpectedMoveResolution.source,
       expectedMoveReason:nextExpectedMoveResolution.reason,
       expectedMoveUci:nextExpectedMoveResolution.expectedMoveUci,
-      lineExhaustedByCursor:nextLineCompleteConfirmed||nextRestrictedRuntimeBookExhaustedEligibleForBranchComplete,
+      lineExhaustedByCursor:nextSelectedLineConfirmedComplete||nextRestrictedRuntimeBookExhaustedEligibleForBranchComplete,
       lineExhaustedByLichess:false,
       afterFinalUserMove:!nextIsUserTurn&&legal.color===userColor,
       selectedLineId:selectedRepertoireId,

@@ -23,6 +23,14 @@ function findKingSquares(game: Chess): { white: string | null; black: string | n
   return { white, black };
 }
 
+function findKingSquaresFromFen(fen: string): { white: string | null; black: string | null } {
+  try {
+    return findKingSquares(new Chess(fen));
+  } catch {
+    return { white: null, black: null };
+  }
+}
+
 export function buildBoardTruth(input: { frame: CurrentInstructionFrame }): BoardTruth {
   const { frame } = input;
 
@@ -40,7 +48,7 @@ export function buildBoardTruth(input: { frame: CurrentInstructionFrame }): Boar
       isCastle: false,
       isPromotion: false,
       isEnPassant: false,
-      kingSquares: { white: null, black: null },
+      kingSquares: findKingSquaresFromFen(frame.fenBefore),
       pinnedPieces: [],
       loosePieces: [],
       debug: { reason: "frame_target_null" },
@@ -62,7 +70,7 @@ export function buildBoardTruth(input: { frame: CurrentInstructionFrame }): Boar
       isCastle: false,
       isPromotion: false,
       isEnPassant: false,
-      kingSquares: { white: null, black: null },
+      kingSquares: findKingSquaresFromFen(frame.fenBefore),
       pinnedPieces: [],
       loosePieces: [],
       debug: { reason: "invalid_target_uci", targetUci },
@@ -152,7 +160,7 @@ export function buildBoardTruth(input: { frame: CurrentInstructionFrame }): Boar
       isCastle: frame.target.flags.isCastle,
       isPromotion: frame.target.flags.isPromotion,
       isEnPassant: frame.target.flags.isEnPassant,
-      kingSquares: { white: null, black: null },
+      kingSquares: findKingSquaresFromFen(frame.fenBefore),
       pinnedPieces: [],
       loosePieces: [],
       debug: { reason: "fen_parse_failed" },
