@@ -1719,7 +1719,7 @@ export default function App(){
         playKeyBefore:runtimePlayKeyBeforeForFrame??null,
         candidates:[],
         hasRuntimeBookCandidates:false,
-        bookExhausted:true,
+        bookExhausted:false,
         status:"idle",
         error:null,
       });
@@ -1732,7 +1732,7 @@ export default function App(){
       playKeyBefore:runtimePlayKeyBeforeForFrame,
       candidates:prev.openingId===runtimeOpeningIdForFrame&&prev.playKeyBefore===runtimePlayKeyBeforeForFrame?prev.candidates:[],
       hasRuntimeBookCandidates:prev.openingId===runtimeOpeningIdForFrame&&prev.playKeyBefore===runtimePlayKeyBeforeForFrame?prev.hasRuntimeBookCandidates:false,
-      bookExhausted:prev.openingId===runtimeOpeningIdForFrame&&prev.playKeyBefore===runtimePlayKeyBeforeForFrame?prev.bookExhausted:true,
+      bookExhausted:false,
       status:"loading",
       error:null,
     }));
@@ -1940,7 +1940,7 @@ export default function App(){
     branchCompleteLatch.lineId,
     restrictedLineExhaustedOnOpponentTurnAfterUserMove,
   ]);
-  const branchCompleteEligibleNow=branchCompleteContract.branchCompleteEligible||restrictedRuntimeBookExhaustedEligibleForBranchComplete;
+  const branchCompleteEligibleNow=(branchCompleteContract.branchCompleteEligible||restrictedRuntimeBookExhaustedEligibleForBranchComplete)&&!trustedInstructionTargetExists;
   const branchCompleteReasonNow=restrictedRuntimeBookExhaustedEligibleForBranchComplete
     ?"restricted_book_exhausted_on_opponent_turn_after_user_move"
     :branchCompleteContract.reason??"line_complete";
@@ -2881,6 +2881,9 @@ export default function App(){
   // branch transition surface supports both end-of-book and continuation pause checkpoints.
   const branchTransitionSurface=useMemo(()=>{
     if(game.isGameOver()||game.moves().length===0)return null;
+    if (trainingMode === "restricted" && isUserTurn && trustedInstructionTargetExists) {
+      return null;
+    }
     const transitionTitle = "Line complete";
     const transitionBody = "You finished this training line. Continue from this position or train the line again.";
     const transitionButtons = ["continue_from_here","restart_line"] as const;
@@ -2922,7 +2925,7 @@ export default function App(){
       buttons: transitionButtons,
       reason: selectedLineCompleteConfirmed ? "curated_line_complete" : "lichess_below_500_games",
     } as const;
-  }, [hardEndOfBookGate, selectedLineCompleteConfirmed, trainingMode, isUserTurn, forceContinuationPause, continuationPauseDecision.pauseReason, userExplicitlyEnteredContinuation, game, restrictedRuntimeBookExhaustedEligibleForBranchComplete]);
+  }, [hardEndOfBookGate, selectedLineCompleteConfirmed, trainingMode, isUserTurn, forceContinuationPause, continuationPauseDecision.pauseReason, userExplicitlyEnteredContinuation, game, restrictedRuntimeBookExhaustedEligibleForBranchComplete, trustedInstructionTargetExists]);
   const moveImpactPresentation=useMemo(()=>presentMoveImpact({
     exactMoveAllowed:Boolean(coachDecision?.exactMoveAllowed),
     engineStatus:(coachDecision?.debug as any)?.coachEngineStatus??(enginePreview?.pvs?.length?"ready":"idle"),

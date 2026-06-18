@@ -475,7 +475,11 @@ export function resolveStage2ProviderWarnings(context: Stage2ProviderWarningCont
     addWarning(warnings, "safe_fallback", "safe_fallback_used", "info", "Safe fallback preserved the visible lesson flow.", true, "none", "lesson_flow");
   }
 
-  if (context.stage2CoachingPacketKind === "safe_fallback" || context.runtimeSafeFallbackUsed === true) {
+  if (
+    trainingMode === "continuation" &&
+    isUserTurn &&
+    (context.stage2CoachingPacketKind === "safe_fallback" || context.runtimeSafeFallbackUsed === true)
+  ) {
     addWarning(warnings, "safe_fallback", "continuation_provider_fallback_used", "warning", "Continuation provider fallback was used to preserve the lesson flow.", true, "none", "continuation_validation", Boolean(isUserTurn && trainingMode === "continuation"), false);
   }
 
