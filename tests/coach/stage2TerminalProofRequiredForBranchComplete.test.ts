@@ -111,6 +111,8 @@ export function testStage2TerminalProofRequiredForBranchComplete(): void {
     trainerView: "assisted",
     trainingMode: "restricted",
     isUserTurn: false,
+    selectedOpeningId: "italian-white",
+    selectedLineId: "italian-white",
     fen: "r1bq1rk1/bpp2ppp/p1np1n2/4p3/4P3/1BPP1N2/PP1N1PPP/R1BQR1K1 b - - 16 10",
     expectedMoveResolution: {
       source: "guided_branch_needs_continuation",

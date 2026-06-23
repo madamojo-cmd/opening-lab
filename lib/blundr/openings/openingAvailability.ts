@@ -2,6 +2,8 @@ import {
   getStage2ApprovedContentInventoryEntry,
   getStage2ApprovedContentInventorySummary,
 } from "../stage2Coaching/stage2ApprovedContentInventory.generated";
+import { resolveStage2CanonicalOpeningId, STAGE2_RUNTIME_OPENING_IDS } from "./openingIdentity";
+export { STAGE2_RUNTIME_OPENING_IDS } from "./openingIdentity";
 
 export type OpeningContentStatus = "none" | "fallback_only" | "sample" | "approved_partial" | "approved";
 export type OpeningAvailabilityStage = "hidden" | "dev" | "beta" | "public";
@@ -47,30 +49,6 @@ export type OpeningAvailabilitySummary = {
 
 export const STAGE2_RUNTIME_PACKAGE_ID = "stage2-21-opening-stepdown-runtime-v1" as const;
 export const STAGE2_RUNTIME_PACKAGE_ROOT = `data/blundr/${STAGE2_RUNTIME_PACKAGE_ID}` as const;
-
-export const STAGE2_RUNTIME_OPENING_IDS = [
-  "caro-kann-black",
-  "colle-white",
-  "english-white",
-  "french-black",
-  "italian-black",
-  "italian-white",
-  "kings-indian-black",
-  "london-white",
-  "nimzo-indian-black",
-  "petroff-black",
-  "pirc-black",
-  "qgd-black",
-  "queens-gambit-white",
-  "queens-indian-black",
-  "reti-white",
-  "ruy-lopez-white",
-  "scandinavian-black",
-  "scotch-white",
-  "sicilian-black",
-  "slav-black",
-  "vienna-white",
-] as const;
 
 const OPENING_LABELS: Record<string, { displayName: string; learnerPerspective: "white" | "black" }> = {
   "caro-kann-black": { displayName: "Caro-Kann Defense", learnerPerspective: "black" },
@@ -164,7 +142,9 @@ export const STAGE2_OPENING_AVAILABILITY_MATRIX: OpeningAvailability[] = STAGE2_
 });
 
 export function getStage2OpeningAvailability(openingId: string): OpeningAvailability | null {
-  return STAGE2_OPENING_AVAILABILITY_MATRIX.find((entry) => entry.openingId === openingId) ?? null;
+  const canonicalOpeningId = resolveStage2CanonicalOpeningId(openingId);
+  if (!canonicalOpeningId) return null;
+  return STAGE2_OPENING_AVAILABILITY_MATRIX.find((entry) => entry.openingId === canonicalOpeningId) ?? null;
 }
 
 export function getStage2OpeningAvailabilitySummary(): OpeningAvailabilitySummary {

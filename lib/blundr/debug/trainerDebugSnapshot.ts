@@ -16,6 +16,10 @@ import {
   getStage2OpeningAvailabilitySummary,
 } from "../openings/openingAvailability";
 import {
+  resolveStage2CanonicalOpeningId,
+  resolveStage2OpeningIdentity,
+} from "../openings/openingIdentity";
+import {
   getStage2ApprovedContentInventoryEntry,
   getStage2ApprovedContentInventorySummary,
 } from "../stage2Coaching/stage2ApprovedContentInventory.generated";
@@ -177,9 +181,16 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
     ? buildStage2FeatureTrace({ ...input, trainerFrameResolution })
     : { featureTrace: null, featureTraceTimeline: [] };
   const runtimeAvailabilitySummary = getStage2OpeningAvailabilitySummary();
-  const selectedOpeningAvailability = getStage2OpeningAvailability(String(input.selectedOpeningId ?? input.selectedRepertoireId ?? ""));
-  const selectedApprovedContentInventory = getStage2ApprovedContentInventoryEntry(String(input.selectedOpeningId ?? input.selectedRepertoireId ?? ""));
+  const selectedOpeningIdRaw = String(input.selectedOpeningId ?? input.selectedRepertoireId ?? "");
+  const selectedOpeningResolvedId = resolveStage2CanonicalOpeningId(selectedOpeningIdRaw) ?? selectedOpeningIdRaw;
+  const selectedOpeningAvailability = getStage2OpeningAvailability(selectedOpeningResolvedId);
+  const selectedApprovedContentInventory = getStage2ApprovedContentInventoryEntry(selectedOpeningResolvedId);
   const approvedContentInventorySummary = getStage2ApprovedContentInventorySummary();
+  const openingIdentity = resolveStage2OpeningIdentity({
+    selectedOpeningId: selectedOpeningIdRaw,
+    runtimeOpeningId: String(input.runtimeBookOpeningId ?? (input.trainerFrameResolution as any)?.openingIdentity?.runtimeOpeningId ?? ""),
+    selectedOpeningRuntimeAvailable: Boolean(selectedOpeningAvailability?.runtimeAvailable),
+  });
   const selectedOpeningApprovedContentAvailable = Boolean(selectedApprovedContentInventory?.approvedContentAvailable);
   const selectedOpeningPublicReady = Boolean(selectedOpeningAvailability?.publicReady);
   const selectedOpeningBetaReady = Boolean(selectedOpeningAvailability?.betaReady);
@@ -237,7 +248,10 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       trainingMode: String(input.trainingMode ?? "restricted") as "restricted" | "continuation",
       isUserTurn: Boolean(input.isUserTurn),
       userExplicitlyEnteredContinuation: Boolean(input.userExplicitlyEnteredContinuation),
-      selectedLineId: String(input.selectedLineId ?? input.selectedRepertoireId ?? ""),
+      selectedOpeningId: selectedOpeningIdRaw,
+      selectedLineId: String(input.selectedLineId ?? input.selectedRepertoireId ?? selectedOpeningResolvedId),
+      runtimeOpeningId: String(input.runtimeBookOpeningId ?? (input.trainerFrameResolution as any)?.openingIdentity?.runtimeOpeningId ?? ""),
+      selectedOpeningRuntimeAvailable: Boolean(selectedOpeningAvailability?.runtimeAvailable),
       fen4: normalizeVisualFen(input.fen),
       lastUserMoveUci: input.lastUserMoveUci ?? null,
       lastUserMoveSan: input.lastUserMoveSan ?? null,
@@ -248,6 +262,8 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       hasNextOpponentMove: input.hasNextOpponentMove ?? "unknown",
       hasNextUserMove: input.hasNextUserMove ?? "unknown",
       validBranchCompleteLatch: Boolean(input.validBranchCompleteLatch ?? false),
+      bookCompleteAllowed: Boolean(input.bookCompleteAllowed ?? input.branchTransitionSurfaceRendered ?? selectedLineCompleteConfirmed),
+      guidedCompleteAllowed: Boolean(input.guidedCompleteAllowed ?? input.branchTransitionSurfaceRendered ?? guidedCoveragePolicy.guidedCompleteAllowed ?? selectedLineCompleteConfirmed),
       runtimeBookBookExhausted: Boolean(input.runtimeBookBookExhausted ?? false),
       runtimeBookCandidateCount: Number(input.runtimeBookCandidateCount ?? 0),
       runtimeBookStatus: input.runtimeBookStatus ?? null,
@@ -1005,8 +1021,17 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       continueFromHereClicked: Boolean(input.continueFromHereClicked),
       terminalProof,
       finalSurfaceAuthority,
-      selectedLineId: input.selectedLineId ?? null,
-      selectedOpeningId: input.selectedOpeningId ?? null,
+      openingIdentity: {
+        selectedOpeningId: openingIdentity.selectedOpeningId,
+        canonicalSelectedOpeningId: openingIdentity.canonicalSelectedOpeningId,
+        resolvedSelectedOpeningId: openingIdentity.resolvedSelectedOpeningId,
+        runtimeOpeningId: openingIdentity.runtimeOpeningId,
+        selectedOpeningRuntimeAvailable: openingIdentity.selectedOpeningRuntimeAvailable,
+        openingIdentityMatched: openingIdentity.openingIdentityMatched,
+        openingIdentityMismatchReason: openingIdentity.openingIdentityMismatchReason,
+      },
+      selectedLineId: input.selectedLineId ?? openingIdentity.resolvedSelectedOpeningId ?? null,
+      selectedOpeningId: openingIdentity.selectedOpeningId ?? null,
       selectedConceptId: input.selectedConceptId ?? input.visualRecipe?.conceptId ?? null,
       activeLineName: input.activeLineName ?? null,
     },
@@ -1182,7 +1207,9 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       approvedContentInventoryCount: approvedContentInventorySummary.approvedContentInventoryCount,
       approvedContentMatchedCount: approvedContentInventorySummary.approvedContentMatchedCount,
       approvedContentAvailableCount: runtimeAvailabilitySummary.approvedContentAvailableCount,
-      selectedOpeningId: input.selectedOpeningId ?? input.selectedRepertoireId ?? null,
+      selectedOpeningId: openingIdentity.selectedOpeningId ?? input.selectedRepertoireId ?? null,
+      canonicalSelectedOpeningId: openingIdentity.canonicalSelectedOpeningId ?? null,
+      resolvedSelectedOpeningId: openingIdentity.resolvedSelectedOpeningId ?? null,
       selectedOpeningRuntimeAvailable: Boolean(selectedOpeningAvailability?.runtimeAvailable),
       selectedOpeningContentStatus: selectedOpeningAvailability?.contentStatus ?? "none",
       selectedOpeningApprovedContentAvailable: Boolean(selectedApprovedContentInventory?.approvedContentAvailable),
@@ -1193,6 +1220,8 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       selectedOpeningNeedsBrowserQA: selectedOpeningNeedsBrowserQA,
       selectedOpeningLeadingMvpCandidate: selectedOpeningLeadingMvpCandidate,
       selectedOpeningReasonHidden: selectedOpeningReasonHidden,
+      openingIdentityMatched: openingIdentity.openingIdentityMatched,
+      openingIdentityMismatchReason: openingIdentity.openingIdentityMismatchReason,
       candidateSource: input.candidateSource ?? (input.runtimeBookQueried ? "local_crawled_package" : null),
       liveLichessCalled: false,
       openingAvailabilityStatus: selectedOpeningAvailability?.runtimeAvailable

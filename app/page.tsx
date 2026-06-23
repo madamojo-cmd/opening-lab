@@ -57,6 +57,7 @@ import { resolveExpectedMoveForFrame } from "@/lib/blundr/openings/expectedMoveR
 import { buildOpeningResolverDebug } from "@/lib/blundr/openings/openingResolverDebug";
 import { STAGE2_OPENING_AVAILABILITY_MATRIX, getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
 import { STAGE2_RUNTIME_TRAINABLE_REPERTOIRES } from "@/lib/blundr/openings/runtimeTrainableRepertoires";
+import { resolveStage2CanonicalOpeningId } from "@/lib/blundr/openings/openingIdentity";
 import { decideGuidedCoveragePolicy } from "@/lib/blundr/openings/guidedCoveragePolicy";
 import type { RepertoireLineInput } from "@/lib/blundr/openings/openingTypes";
 import { buildCurrentInstructionFrame, isBookLikeInstructionTarget } from "@/lib/blundr/runtime/currentInstructionFrame";
@@ -327,33 +328,6 @@ const LOCAL_TELEMETRY_KEY = "blundr-v27-local-telemetry";
 const MAX_LOCAL_TELEMETRY_EVENTS = 120;
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
 const FILE_TO_INDEX: Record<string, number> = Object.fromEntries(FILES.map((f, i) => [f, i]));
-const STAGE2_RUNTIME_OPENING_ID_BY_REPERTOIRE_ID: Record<string, string> = {
-  "caro-black": "caro-kann-black",
-  "ruy-white": "ruy-lopez-white",
-};
-const STAGE2_RUNTIME_OPENING_IDS = new Set([
-  "caro-kann-black",
-  "colle-white",
-  "english-white",
-  "french-black",
-  "italian-black",
-  "italian-white",
-  "kings-indian-black",
-  "london-white",
-  "nimzo-indian-black",
-  "petroff-black",
-  "pirc-black",
-  "qgd-black",
-  "queens-gambit-white",
-  "queens-indian-black",
-  "reti-white",
-  "ruy-lopez-white",
-  "scandinavian-black",
-  "scotch-white",
-  "sicilian-black",
-  "slav-black",
-  "vienna-white",
-]);
 const RATING_PRESETS = [
   { label: "New", value: "1000", target: "<1000", skill: 800 },
   { label: "Beginner", value: "1000,1200", target: "1000–1200", skill: 1100 },
@@ -380,8 +354,7 @@ function normalizeFen(fen:string){return fen.split(" ").slice(0,4).join(" ")}
 function buildRuntimeFrameKey(input:{fen:string;trainerPhase:string;trainerView:TrainerView;trainingMode:TrainingMode;isUserTurn:boolean;instructionTargetUci:string|null}){return `${normalizeFen(input.fen)}|${input.trainerPhase}|${input.trainerView}|${input.trainingMode}|${input.isUserTurn?"user":"opp"}|${input.instructionTargetUci??"none"}`}
 function moveToUci(move:{from:string;to:string;promotion?:string}){return `${move.from}${move.to}${move.promotion??""}`}
 function resolveRuntimeOpeningId(repertoireId:string):string|null{
-  const mapped=STAGE2_RUNTIME_OPENING_ID_BY_REPERTOIRE_ID[repertoireId]??repertoireId;
-  return STAGE2_RUNTIME_OPENING_IDS.has(mapped)?mapped:null;
+  return resolveStage2CanonicalOpeningId(repertoireId);
 }
 function buildRuntimePlayKeyBeforeFromSanHistory(historySan:string[]):string|null{
   if(!historySan.length)return null;
@@ -1267,7 +1240,11 @@ export default function App(){
     for(const repertoire of customRepertoires) merged.set(repertoire.id,repertoire);
     return [...merged.values()];
   },[customRepertoires]);
-  const repertoire=repertoires.find(r=>r.id===selectedRepertoireId)??repertoires[0];
+  const canonicalSelectedRepertoireId=useMemo(
+    ()=>resolveStage2CanonicalOpeningId(selectedRepertoireId)??selectedRepertoireId,
+    [selectedRepertoireId],
+  );
+  const repertoire=repertoires.find(r=>r.id===canonicalSelectedRepertoireId)??repertoires[0];
   const openingTree=useMemo(()=>buildOpeningTree(repertoireLineInputs(repertoire)),[repertoire]);
   const game=useMemo(()=>new Chess(fen),[fen]);
   const userColor:ChessColor=repertoire.color==="white"?"w":"b";
@@ -1312,12 +1289,12 @@ export default function App(){
     [expectedMovesForValidation]
   );
   const runtimeOpeningIdForFrame=useMemo(
-    ()=>resolveRuntimeOpeningId(repertoire.id),
-    [repertoire.id],
+    ()=>resolveRuntimeOpeningId(canonicalSelectedRepertoireId),
+    [canonicalSelectedRepertoireId],
   );
   const selectedOpeningAvailability=useMemo(
-    ()=>getStage2OpeningAvailability(selectedRepertoireId),
-    [selectedRepertoireId],
+    ()=>getStage2OpeningAvailability(canonicalSelectedRepertoireId),
+    [canonicalSelectedRepertoireId],
   );
   const runtimePlayKeyBeforeForFrame=useMemo(
     ()=>buildRuntimePlayKeyBeforeFromSanHistory(moveHistory),
@@ -1332,8 +1309,8 @@ export default function App(){
     return len > 0 && cur >= len;
   }, [expectedMoveResolution?.lineCursor, expectedMoveResolution?.lineLength]);
   const exactSelectedLineNodes = useMemo(
-    () => exactOpeningNodes.filter((node) => node.lineId === selectedRepertoireId),
-    [exactOpeningNodes, selectedRepertoireId],
+    () => exactOpeningNodes.filter((node) => node.lineId === canonicalSelectedRepertoireId),
+    [exactOpeningNodes, canonicalSelectedRepertoireId],
   );
   const exactSelectedLineNodeFound = exactSelectedLineNodes.length > 0;
   const selectedLineExactNodeHasChildren = useMemo(() => {
@@ -1357,7 +1334,10 @@ export default function App(){
       trainingMode,
       isUserTurn,
       userExplicitlyEnteredContinuation,
-      selectedLineId: selectedRepertoireId,
+      selectedOpeningId: canonicalSelectedRepertoireId,
+      selectedLineId: canonicalSelectedRepertoireId,
+      runtimeOpeningId: runtimeOpeningIdForFrame,
+      selectedOpeningRuntimeAvailable: Boolean(selectedOpeningAvailability?.runtimeAvailable),
       fen4: normalizeFen(fen),
       lastUserMoveUci: lastMoveColor === userColor ? lastMove : null,
       lastUserMoveSan: lastMoveColor === userColor ? lastMoveSan : null,
@@ -1367,7 +1347,9 @@ export default function App(){
       exactNodeHasChildren: selectedLineExactNodeHasChildren,
       hasNextOpponentMove: hasNextOpponentMoveInSelectedLine,
       hasNextUserMove: hasNextUserMoveInSelectedLine,
-      validBranchCompleteLatch: Boolean(branchCompleteLatch.active && branchCompleteLatch.lineId === selectedRepertoireId),
+      validBranchCompleteLatch: Boolean(branchCompleteLatch.active && branchCompleteLatch.lineId === canonicalSelectedRepertoireId),
+      bookCompleteAllowed: Boolean(selectedLineCompleteConfirmed || explicitCuratedTerminalNode),
+      guidedCompleteAllowed: Boolean(selectedLineCompleteConfirmed || explicitCuratedTerminalNode),
       runtimeBookBookExhausted: Boolean(runtimeBookFrameQuery.bookExhausted),
       runtimeBookCandidateCount: runtimeBookFrameQuery.candidates.length,
       runtimeBookStatus: runtimeBookFrameQuery.status,
@@ -1376,7 +1358,7 @@ export default function App(){
       trainingMode,
       isUserTurn,
       userExplicitlyEnteredContinuation,
-      selectedRepertoireId,
+      canonicalSelectedRepertoireId,
       fen,
       lastMoveColor,
       userColor,
@@ -1389,6 +1371,8 @@ export default function App(){
       hasNextUserMoveInSelectedLine,
       branchCompleteLatch.active,
       branchCompleteLatch.lineId,
+      runtimeOpeningIdForFrame,
+      selectedOpeningAvailability?.runtimeAvailable,
       runtimeBookFrameQuery.bookExhausted,
       runtimeBookFrameQuery.candidates.length,
       runtimeBookFrameQuery.status,
@@ -1576,7 +1560,7 @@ export default function App(){
     currentPly:moveHistory.length,
     fullMoveNumber:Number(fen.split(" ")[5]??Math.floor(moveHistory.length/2)+1),
     activeOpeningId:repertoire.id,
-    activeLineId:selectedRepertoireId,
+    activeLineId:canonicalSelectedRepertoireId,
     normalizedFen:key,
     sideToMove:game.turn() as ChessColor,
     userColor,
@@ -1590,7 +1574,7 @@ export default function App(){
     adaptiveBranchAvailable:false,
     continuationCandidateExists:Boolean(enginePreview&&normalizeFen(enginePreview.fen)===key&&enginePreview.pvs[0]),
     explicitCuratedTerminalNode,
-  }),[moveHistory.length,fen,repertoire.id,selectedRepertoireId,key,game,userColor,exactOpeningNodes,expectedMoveResolution.candidateMoves,opponentBookOptions.length,enginePreview,explicitCuratedTerminalNode]);
+  }),[moveHistory.length,fen,repertoire.id,canonicalSelectedRepertoireId,key,game,userColor,exactOpeningNodes,expectedMoveResolution.candidateMoves,opponentBookOptions.length,enginePreview,explicitCuratedTerminalNode]);
   const rating=ratingPreset(ratingFilter);
   const enabledViews:ActiveBoardView[]=([] as ActiveBoardView[]).concat(boardSettings.showAttack?["attack"]:[],boardSettings.showDefense?["defense"]:[],boardSettings.showPlan?["plan"]:[]);
   const safeBoardView:ActiveBoardView=enabledViews.includes(activeBoardView)?activeBoardView:(enabledViews[0]??"plan");
@@ -1953,7 +1937,7 @@ export default function App(){
     lineExhaustedByCursor:selectedLineCompleteConfirmed,
     lineExhaustedByLichess:lichessEndConfirmed,
     afterFinalUserMove:!isUserTurn&&lastMoveColor===userColor,
-    selectedLineId:selectedRepertoireId,
+    selectedLineId:canonicalSelectedRepertoireId,
     fen4:normalizeFen(fen),
     lastUserMoveUci:lastMoveColor===userColor?lastMove:null,
     lastUserMoveSan:lastMoveColor===userColor?lastMoveSan:null,
@@ -1961,7 +1945,7 @@ export default function App(){
     hasNextOpponentMove:hasNextOpponentMoveInSelectedLine,
     hasNextUserMove:hasNextUserMoveInSelectedLine,
     explicitCuratedTerminalNode,
-    validBranchCompleteLatch:Boolean(branchCompleteLatch.active&&branchCompleteLatch.lineId===selectedRepertoireId),
+    validBranchCompleteLatch:Boolean(branchCompleteLatch.active&&branchCompleteLatch.lineId===canonicalSelectedRepertoireId),
   }),[
     trainingMode,
     trainerPhase,
@@ -1977,7 +1961,7 @@ export default function App(){
     lichessEndConfirmed,
     lastMoveColor,
     userColor,
-    selectedRepertoireId,
+    canonicalSelectedRepertoireId,
     fen,
     lastMove,
     lastMoveSan,
@@ -2346,8 +2330,8 @@ export default function App(){
     trainingContext:teachingOrchestration,
     expectedMoveUci:teachingOrchestration.cue.metadata.moveUci,
     expectedMoveSan:teachingOrchestration.cue.metadata.moveSan,
-    openingId:selectedRepertoireId,
-    lineId:selectedRepertoireId,
+    openingId:canonicalSelectedRepertoireId,
+    lineId:canonicalSelectedRepertoireId,
     fen,
     frameId:trainerFrameId,
     viewMode:effectiveViewModeForVisual,
@@ -2452,7 +2436,7 @@ export default function App(){
     bookStatus:bookComplete?"book_complete":trainingMode==="continuation"?"out_of_book":"in_book",
     trainingContext:teachingOrchestration?{
       conceptId:teachingOrchestration.cue.conceptId,
-      patternId:`${selectedRepertoireId}:${teachingOrchestration.cue.conceptId}`,
+      patternId:`${canonicalSelectedRepertoireId}:${teachingOrchestration.cue.conceptId}`,
       moveTrust:teachingOrchestration.moveTrust,
       contextTrust:teachingOrchestration.contextTrust,
     }:undefined,
@@ -2542,7 +2526,7 @@ export default function App(){
         trainerPhase,
         isContinuation:trainingMode==="continuation",
         openingId:repertoire.id,
-        lineId:selectedRepertoireId,
+        lineId:canonicalSelectedRepertoireId,
         activeLineName:repertoire.name,
         recentCoachBodies:recentInstructional.map((entry)=>entry.body),
         recentCoachThemes:recentInstructional.map((entry)=>String(entry.selectedOpportunityId??"")),
@@ -2554,7 +2538,7 @@ export default function App(){
         userRequestedHelp:coachInteraction==="hint"||coachInteraction==="why",
         repeatedConcept:false,
       });
-      const text=silence.silent?"":coachPipeline.coachExplanation.body||pickLiveCoachCopy(selected?.opportunity??"silence",`${selectedRepertoireId}:${normalizeFen(fen)}`);
+      const text=silence.silent?"":coachPipeline.coachExplanation.body||pickLiveCoachCopy(selected?.opportunity??"silence",`${canonicalSelectedRepertoireId}:${normalizeFen(fen)}`);
       const lintedText=validateLiveCoachCopy(text).allowed&&!isDebugLeakText(text)?text:buildVerifiedUserFacingFallback(coachPipeline.moveFactPacket).body;
       const safeText=lintedText;
       const exactMoveAllowed=Boolean(selected?.exactMoveAllowed&&selected?.candidateMoveUci&&selected?.candidateMoveSan);
@@ -2785,7 +2769,7 @@ export default function App(){
         trainingMode,
         trainerPhase,
         openingId:repertoire.id,
-        lineId:selectedRepertoireId,
+        lineId:canonicalSelectedRepertoireId,
         activeLineName:repertoire.name,
         recentCoachBodies:recentInstructional.map((entry)=>entry.body),
         recentCoachThemes:recentInstructional.map((entry)=>String(entry.selectedOpportunityId??"")),
@@ -2833,7 +2817,7 @@ export default function App(){
         trainingMode,
         trainerPhase,
         openingId:repertoire.id,
-        lineId:selectedRepertoireId,
+        lineId:canonicalSelectedRepertoireId,
         activeLineName:repertoire.name,
         recentCoachBodies:recentInstructional.map((entry)=>entry.body),
         recentCoachThemes:recentInstructional.map((entry)=>String(entry.selectedOpportunityId??"")),
@@ -2881,7 +2865,7 @@ export default function App(){
         trainingMode,
         trainerPhase,
         openingId:repertoire.id,
-        lineId:selectedRepertoireId,
+        lineId:canonicalSelectedRepertoireId,
         activeLineName:repertoire.name,
         recentCoachBodies:recentInstructional.map((entry)=>entry.body),
         recentCoachThemes:recentInstructional.map((entry)=>String(entry.selectedOpportunityId??"")),
@@ -3491,9 +3475,9 @@ export default function App(){
     requestedMode: trainerView as "assisted" | "plain",
     showMoreRevealed: showMoreShown,
     moveSequence: moveHistory,
-    openingKey: selectedRepertoireId || undefined,
+    openingKey: canonicalSelectedRepertoireId || undefined,
     openingName: repertoire.name || undefined,
-    lineKey: selectedRepertoireId || undefined,
+    lineKey: canonicalSelectedRepertoireId || undefined,
     lineName: repertoire.name || undefined,
     expectedMoveReason: expectedMoveResolution?.reason,
     themeTags: [],
@@ -3764,7 +3748,7 @@ export default function App(){
       source:input.source,
       type:input.type,
       fen,
-      openingId:selectedRepertoireId,
+      openingId:canonicalSelectedRepertoireId,
       openingName:repertoire.name,
       trainerView,
       trainingMode,
@@ -3942,7 +3926,7 @@ export default function App(){
       active:true,
       reason:branchCompleteContract.reason??"line_complete",
       fen4:normalizeFen(fen),
-      lineId:selectedRepertoireId,
+      lineId:canonicalSelectedRepertoireId,
       ply:moveHistory.length,
       latchedAtFrameId:trainerFrameId,
     });
@@ -4551,7 +4535,7 @@ export default function App(){
     maiaOpponentRequestSeqRef.current=0;
     maiaTimelineSeqRef.current=0;
   }
-  function selectRepertoire(id:string){const startFen=new Chess().fen();setSelectedRepertoireId(id);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
+  function selectRepertoire(id:string){const startFen=new Chess().fen();const canonicalId=resolveStage2CanonicalOpeningId(id)??id;setSelectedRepertoireId(canonicalId);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
   function resetBoard(){const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveTab("train");bumpRuntimeFrame()}
   function recordPosition(nextFen:string){const nextIndex=historyIndex+1;setPositionHistory(prev=>[...prev.slice(0,nextIndex),nextFen]);setHistoryIndex(nextIndex)}
   function jumpHistory(direction:-1|1){const next=Math.max(0,Math.min(positionHistory.length-1,historyIndex+direction));if(next===historyIndex)return;setHistoryIndex(next);setFen(positionHistory[next]);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);clearPendingOpponentReplyRequest({clearStaleIssue:true});setOpponentCue(null);setOpponentVariationDebug(null);setBookComplete(false);setFeedback(next===positionHistory.length-1?"Returned to the live position.":`Reviewing previous position ${next} of ${positionHistory.length-1}. Use the arrows to return to live play.`);bumpRuntimeFrame()}
@@ -4576,7 +4560,7 @@ export default function App(){
       resultingFen:move.resultingFen,
     }));
     const positionKey=normalizeFen(current.fen());
-    const variationContext={openingId:repertoire.id,lineId:selectedRepertoireId,trainingMode:mode,positionKey};
+    const variationContext={openingId:repertoire.id,lineId:canonicalSelectedRepertoireId,trainingMode:mode,positionKey};
     const memory=loadOpponentVariationMemory();
     let variationDebug:OpponentVariationDebug={
       opponentVariationApplied:false,
@@ -5030,7 +5014,7 @@ export default function App(){
             : "Variation: normal weighted selection.";
     recordOpponentChoice({
       openingId:repertoire.id,
-      lineId:selectedRepertoireId,
+      lineId:canonicalSelectedRepertoireId,
       trainingMode:mode,
       positionKey,
       opponentMoveUci:chosen.uci,
@@ -5324,7 +5308,7 @@ export default function App(){
     });
     const nextLineCompleteConfirmed=(nextExpectedMoveResolution.lineLength??0)>0&&(nextExpectedMoveResolution.lineCursor??0)>=(nextExpectedMoveResolution.lineLength??0);
     const nextExactOpeningNodes=openingTree.nodesByFen4[normalizeFen(nextFen)]??[];
-    const nextExactSelectedLineNodes=nextExactOpeningNodes.filter((node)=>node.lineId===selectedRepertoireId);
+    const nextExactSelectedLineNodes=nextExactOpeningNodes.filter((node)=>node.lineId===canonicalSelectedRepertoireId);
     const nextExactNodeHasChildren=nextExactSelectedLineNodes.length?nextExactSelectedLineNodes.some((node)=>node.continuations.length>0):"unknown";
     const nextHasNextOpponentMove=nextExactSelectedLineNodes.length?nextExactSelectedLineNodes.some((node)=>node.continuations.some((move)=>move.color===opponentColor)):"unknown";
     const nextHasNextUserMove=nextExactSelectedLineNodes.length?nextExactSelectedLineNodes.some((node)=>node.continuations.some((move)=>move.color===userColor)):"unknown";
@@ -5364,7 +5348,7 @@ export default function App(){
       lineExhaustedByCursor:nextSelectedLineConfirmedComplete||nextRestrictedRuntimeBookExhaustedEligibleForBranchComplete,
       lineExhaustedByLichess:false,
       afterFinalUserMove:!nextIsUserTurn&&legal.color===userColor,
-      selectedLineId:selectedRepertoireId,
+      selectedLineId:canonicalSelectedRepertoireId,
       fen4:normalizeFen(nextFen),
       lastUserMoveUci:legal.color===userColor?playedUci:null,
       lastUserMoveSan:legal.color===userColor?legal.san:null,
@@ -5394,7 +5378,7 @@ export default function App(){
         active:true,
         reason:nextRestrictedRuntimeBookExhaustedEligibleForBranchComplete?"restricted_book_exhausted_on_opponent_turn_after_user_move":nextBranchCompleteContract.reason??"line_complete",
         fen4:normalizeFen(nextFen),
-        lineId:selectedRepertoireId,
+        lineId:canonicalSelectedRepertoireId,
         ply:moveHistory.length+1,
         latchedAtFrameId:trainerFrameId+1,
       });
@@ -5433,7 +5417,7 @@ export default function App(){
     if(!pendingPromotion)return;
     void attemptMove(pendingPromotion.from,pendingPromotion.to,promotionPiece);
   }
-  function practiceMistake(m:Mistake){const rep=repertoires.find(r=>r.id===m.repertoireId);if(rep)setSelectedRepertoireId(rep.id);setFen(m.fen);resetHistory(m.fen);setReviewingFen(normalizeFen(m.fen));setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Review this opening position. Play the expected move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setActiveTab("train");bumpRuntimeFrame()}
+  function practiceMistake(m:Mistake){const rep=repertoires.find(r=>r.id===m.repertoireId);if(rep)setSelectedRepertoireId(resolveStage2CanonicalOpeningId(rep.id)??rep.id);setFen(m.fen);resetHistory(m.fen);setReviewingFen(normalizeFen(m.fen));setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Review this opening position. Play the expected move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setActiveTab("train");bumpRuntimeFrame()}
   function createCustomRepertoire(){const moves=newLineText.replace(/\d+\./g," ").replace(/\s+/g," ").trim().split(" ").filter(Boolean);if(!moves.length)return;const test=new Chess();for(const move of moves){try{if(!test.move(move)){setFeedback(`Could not parse move: ${move}`);return}}catch{setFeedback(`Could not parse move: ${move}`);return}}const rep:Repertoire={id:`custom-${Date.now()}`,name:newRepName.trim()||"My Custom Repertoire",color:newRepColor,description:"Custom line saved on this device.",lines:[moves],custom:true};setCustomRepertoires(prev=>[...prev,rep]);setSelectedRepertoireId(rep.id);setShowAddLine(false);const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setTrainingMode("restricted");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setFeedback("Custom repertoire saved. Restricted training is active.");setActiveTab("train");bumpRuntimeFrame()}
   const squareStyles:Record<string,CSSProperties>={};
   if(lastMove&&lastMove.length>=4){
@@ -5849,7 +5833,7 @@ export default function App(){
     exactNodeHasChildren: selectedLineExactNodeHasChildren,
     hasNextOpponentMove: hasNextOpponentMoveInSelectedLine,
     hasNextUserMove: hasNextUserMoveInSelectedLine,
-    validBranchCompleteLatch: Boolean(branchCompleteLatch.active && branchCompleteLatch.lineId === selectedRepertoireId),
+    validBranchCompleteLatch: Boolean(branchCompleteLatch.active && branchCompleteLatch.lineId === canonicalSelectedRepertoireId),
     afterFinalUserMove: !isUserTurn && lastMoveColor === userColor,
     runtimeBookBookExhausted: runtimeBookFrameQuery.bookExhausted,
     runtimeBookCandidateCount: runtimeBookFrameQuery.candidates.length,
@@ -5943,8 +5927,9 @@ export default function App(){
     lastUserMoveUci:lastMoveAttribution.lastUserMoveUci,
     lastOpponentMoveSan:lastMoveAttribution.lastOpponentMoveSan,
     lastOpponentMoveUci:lastMoveAttribution.lastOpponentMoveUci,
-    selectedLineId:selectedRepertoireId,
+    selectedLineId:canonicalSelectedRepertoireId,
     selectedOpeningId:selectedRepertoireId,
+    canonicalSelectedOpeningId:canonicalSelectedRepertoireId,
     selectedConceptId:visualRecipe?.conceptId??teachingOrchestration?.cue.conceptId,
     activeLineName:repertoire.name,
     currentInstructionFrame,
@@ -6285,7 +6270,7 @@ export default function App(){
   }):null;
   return <main className="min-h-screen bg-[#f7f7f4] text-stone-950"><div className="mx-auto flex min-h-screen max-w-md flex-col px-4 pb-24 pt-5">
     {activeTab==="home"&&<section className="space-y-6"><header className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-green-700 text-white shadow-sm"><Beaker size={20}/></div><div><h1 className="text-2xl font-bold tracking-tight">Blundr</h1><p className="text-sm text-stone-500">Visual opening training with a controlled trainer.</p></div></div><button onClick={()=>setShowSettings(true)} className="rounded-2xl bg-white p-3 shadow-sm"><Settings className="text-stone-500" size={20}/></button></header><div className="grid grid-cols-2 gap-3"><MetricCard label="Accuracy" value={`${accuracy}%`} sub="all time" icon={<Trophy size={19}/>}/><MetricCard label="Streak" value={String(progress.streak)} sub="correct" icon={<Flame size={19}/>}/><MetricCard label="Review" value={String(mistakes.length)} sub="mistakes" icon={<XCircle size={19}/>} warning/><MetricCard label="Runtime openings" value={String(STAGE2_OPENING_AVAILABILITY_MATRIX.length)} sub="local crawled" icon={<BookOpen size={19}/>}/></div><div className="rounded-3xl bg-stone-900 p-4 text-white shadow-sm"><div className="flex items-center gap-2 text-sm font-bold text-green-300"><Cloud size={17}/> v2.7.33</div><p className="mt-2 text-sm leading-6 text-stone-300">Training now uses rule-only visual cues by default. Blundr Brain is reserved for manual reveal/debug, so normal practice stays fast, deterministic, and inexpensive.</p></div><div className="space-y-3">{repertoires.slice(0,5).map(r=><button key={r.id} onClick={()=>selectRepertoire(r.id)} className="flex w-full items-center gap-3 rounded-3xl border border-stone-200 bg-white p-3 text-left shadow-sm"><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {countPositions(r)} positions</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>)}</div></section>}
-    {activeTab==="repertoire"&&<section className="space-y-5"><header className="flex items-start justify-between gap-3"><div><h1 className="text-2xl font-bold tracking-tight">Repertoires</h1><p className="text-sm text-stone-500">Reliable openings included in the app.</p></div><button onClick={()=>setShowAddLine(true)} className="rounded-2xl bg-green-700 px-4 py-2 text-sm font-black text-white">Add</button></header><div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-sm"><Search size={18} className="text-stone-400"/><span className="text-sm text-stone-400">Search repertoires</span></div><div className="space-y-3">{repertoires.map(r=><button key={r.id} onClick={()=>selectRepertoire(r.id)} className={classNames("flex w-full items-center gap-3 rounded-3xl border bg-white p-3 text-left shadow-sm",r.id===selectedRepertoireId?"border-green-700":"border-stone-200")}><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {countPositions(r)} positions • {r.color}</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>)}</div><div className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm"><div className="mb-3 flex items-center justify-between gap-3"><div><h2 className="text-lg font-black tracking-tight">Runtime catalog</h2><p className="text-sm text-stone-500">Local crawled runtime package training lines for all 21 openings.</p></div><div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-600">{STAGE2_OPENING_AVAILABILITY_MATRIX.length} visible</div></div><div className="grid gap-2">{STAGE2_OPENING_AVAILABILITY_MATRIX.map((opening)=>{const trainable=repertoires.some((rep)=>rep.id===opening.openingId);return <button key={opening.openingId} onClick={()=>selectRepertoire(opening.openingId)} className={classNames("flex items-center justify-between gap-3 rounded-2xl border p-3 text-left shadow-sm",trainable?"border-green-200 bg-green-50":"border-stone-200 bg-stone-50 opacity-90")}><div className="min-w-0"><div className="font-bold">{opening.displayName}</div><div className="text-xs text-stone-500">{opening.openingId} • {opening.learnerPerspective} • {opening.runtimeNodeCount.toLocaleString()} nodes • {opening.runtimeCandidateMoveCount.toLocaleString()} moves</div></div><div className="text-right text-xs font-black text-stone-500"><div>{opening.contentStatus}</div><div>{opening.qaStatus}</div></div></button>})}</div></div></section>}
+    {activeTab==="repertoire"&&<section className="space-y-5"><header className="flex items-start justify-between gap-3"><div><h1 className="text-2xl font-bold tracking-tight">Repertoires</h1><p className="text-sm text-stone-500">Reliable openings included in the app.</p></div><button onClick={()=>setShowAddLine(true)} className="rounded-2xl bg-green-700 px-4 py-2 text-sm font-black text-white">Add</button></header><div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-sm"><Search size={18} className="text-stone-400"/><span className="text-sm text-stone-400">Search repertoires</span></div><div className="space-y-3">{repertoires.map(r=><button key={r.id} onClick={()=>selectRepertoire(r.id)} className={classNames("flex w-full items-center gap-3 rounded-3xl border bg-white p-3 text-left shadow-sm",r.id===canonicalSelectedRepertoireId?"border-green-700":"border-stone-200")}><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {countPositions(r)} positions • {r.color}</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>)}</div><div className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm"><div className="mb-3 flex items-center justify-between gap-3"><div><h2 className="text-lg font-black tracking-tight">Runtime catalog</h2><p className="text-sm text-stone-500">Local crawled runtime package training lines for all 21 openings.</p></div><div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-600">{STAGE2_OPENING_AVAILABILITY_MATRIX.length} visible</div></div><div className="grid gap-2">{STAGE2_OPENING_AVAILABILITY_MATRIX.map((opening)=>{const trainable=repertoires.some((rep)=>rep.id===opening.openingId);return <button key={opening.openingId} onClick={()=>selectRepertoire(opening.openingId)} className={classNames("flex items-center justify-between gap-3 rounded-2xl border p-3 text-left shadow-sm",trainable?"border-green-200 bg-green-50":"border-stone-200 bg-stone-50 opacity-90",opening.openingId===canonicalSelectedRepertoireId?"ring-2 ring-green-700/30":"")}><div className="min-w-0"><div className="font-bold">{opening.displayName}</div><div className="text-xs text-stone-500">{opening.openingId} • {opening.learnerPerspective} • {opening.runtimeNodeCount.toLocaleString()} nodes • {opening.runtimeCandidateMoveCount.toLocaleString()} moves</div></div><div className="text-right text-xs font-black text-stone-500"><div>{opening.contentStatus}</div><div>{opening.qaStatus}</div></div></button>})}</div></div></section>}
     {activeTab==="train"&&<section className="space-y-4">
       <header className="flex items-start justify-between gap-3">
         <div>

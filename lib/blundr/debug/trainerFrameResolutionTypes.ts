@@ -48,6 +48,16 @@ export type TrainerFrameFinalSurfaceAuthority = {
   finalSurfaceBlockedReasons: string[];
 };
 
+export type TrainerFrameOpeningIdentityResolution = {
+  selectedOpeningId: string | null;
+  canonicalSelectedOpeningId: string | null;
+  resolvedSelectedOpeningId: string | null;
+  runtimeOpeningId: string | null;
+  selectedOpeningRuntimeAvailable: boolean;
+  openingIdentityMatched: boolean;
+  openingIdentityMismatchReason: string | null;
+};
+
 export type TrainerFrameVisualResult = {
   rendered: boolean;
   visualSource: TrainerFrameVisualAuthority;
@@ -142,6 +152,7 @@ export type TrainerFrameResolution = {
   approvedContent: TrainerFrameApprovedContentResolution;
   terminalProof?: TrainerFrameTerminalProofResolution;
   finalSurfaceAuthority?: TrainerFrameFinalSurfaceAuthority;
+  openingIdentity?: TrainerFrameOpeningIdentityResolution;
   providerWarnings?: Stage2ProviderWarning[];
   providerWarningSummary?: Stage2ProviderWarningSummary;
 };

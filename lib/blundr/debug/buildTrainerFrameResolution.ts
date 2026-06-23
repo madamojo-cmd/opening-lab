@@ -1,5 +1,6 @@
 import type { PendingPromotion, PromotionPiece } from "../runtime/promotionAuthority";
 import { resolveStage2TerminalProof } from "../runtime/terminalProof";
+import { resolveStage2OpeningIdentity } from "../openings/openingIdentity";
 import type {
   TrainerFrameApprovedContentResolution,
   TrainerFrameResolution,
@@ -8,6 +9,7 @@ import type {
   TrainerFrameVisualResult,
   TrainerFrameFinalSurfaceAuthority,
   TrainerFrameTerminalProofResolution,
+  TrainerFrameOpeningIdentityResolution,
 } from "./trainerFrameResolutionTypes";
 
 type Input = Record<string, any>;
@@ -82,7 +84,10 @@ function buildTerminalProof(input: Input): TrainerFrameTerminalProofResolution {
     trainingMode: String(input.trainingMode ?? "restricted") as "restricted" | "continuation",
     isUserTurn: Boolean(input.isUserTurn),
     userExplicitlyEnteredContinuation: Boolean(input.userExplicitlyEnteredContinuation),
+    selectedOpeningId: normalizeText(input.selectedOpeningId ?? input.selectedRepertoireId ?? null),
     selectedLineId: normalizeText(input.selectedLineId ?? input.selectedRepertoireId ?? null),
+    runtimeOpeningId: normalizeText(input.runtimeBookOpeningId ?? input.runtimeOpeningId ?? null),
+    selectedOpeningRuntimeAvailable: Boolean(input.selectedOpeningRuntimeAvailable ?? input.runtimeAvailable ?? false),
     fen4: normalizeText(input.fen ?? input.boardFen4 ?? input.normalizedFen ?? ""),
     lastUserMoveUci: normalizeText(input.lastUserMoveUci ?? null),
     lastUserMoveSan: normalizeText(input.lastUserMoveSan ?? null),
@@ -93,6 +98,8 @@ function buildTerminalProof(input: Input): TrainerFrameTerminalProofResolution {
     hasNextOpponentMove: input.hasNextOpponentMove ?? "unknown",
     hasNextUserMove: input.hasNextUserMove ?? "unknown",
     validBranchCompleteLatch: Boolean(input.validBranchCompleteLatch),
+    bookCompleteAllowed: Boolean(input.bookCompleteAllowed ?? input.guidedCompleteAllowed ?? false),
+    guidedCompleteAllowed: Boolean(input.guidedCompleteAllowed ?? input.bookCompleteAllowed ?? false),
     runtimeBookBookExhausted: Boolean(input.runtimeBookBookExhausted),
     runtimeBookCandidateCount: Number(input.runtimeBookCandidateCount ?? 0),
     runtimeBookStatus: normalizeText(input.runtimeBookStatus ?? null),
@@ -254,6 +261,11 @@ export function buildTrainerFrameResolution(input: Input): TrainerFrameResolutio
   const lowQualityThreshold = qualityScoreSource === "verified_safe_fallback" ? 65 : 80;
   const lowQualityTriggered = finalCoachScore != null && finalCoachScore > 0 && finalCoachScore < lowQualityThreshold;
   const acceptedTargetUci = normalizeText(input.acceptedTargetUci ?? input.acceptedPromotionUci ?? input.instructionTargetUci ?? null);
+  const openingIdentity = resolveStage2OpeningIdentity({
+    selectedOpeningId: normalizeText(input.selectedOpeningId ?? input.selectedRepertoireId ?? null),
+    runtimeOpeningId: normalizeText(input.runtimeBookOpeningId ?? input.runtimeOpeningId ?? null),
+    selectedOpeningRuntimeAvailable: Boolean(input.selectedOpeningRuntimeAvailable ?? input.runtimeAvailable ?? false),
+  });
   const terminalProof = (input.terminalProof as TrainerFrameTerminalProofResolution | undefined) ?? buildTerminalProof(input);
   const finalSurfaceAuthority: TrainerFrameFinalSurfaceAuthority = (input.finalSurfaceAuthority as TrainerFrameFinalSurfaceAuthority | undefined) ?? {
     branchCompleteAllowedByTerminalProof: terminalProof.proven,
@@ -413,5 +425,14 @@ export function buildTrainerFrameResolution(input: Input): TrainerFrameResolutio
     approvedContent: approvedContentResolution,
     terminalProof,
     finalSurfaceAuthority,
+    openingIdentity: {
+      selectedOpeningId: openingIdentity.selectedOpeningId,
+      canonicalSelectedOpeningId: openingIdentity.canonicalSelectedOpeningId,
+      resolvedSelectedOpeningId: openingIdentity.resolvedSelectedOpeningId,
+      runtimeOpeningId: openingIdentity.runtimeOpeningId,
+      selectedOpeningRuntimeAvailable: openingIdentity.selectedOpeningRuntimeAvailable,
+      openingIdentityMatched: openingIdentity.openingIdentityMatched,
+      openingIdentityMismatchReason: openingIdentity.openingIdentityMismatchReason,
+    } as TrainerFrameOpeningIdentityResolution,
   };
 }
