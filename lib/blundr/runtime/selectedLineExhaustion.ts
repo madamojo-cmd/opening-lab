@@ -107,11 +107,11 @@ export function resolveSelectedLineExhaustion(input: ResolveSelectedLineExhausti
       knownFinalMoveMatched,
     };
   }
-  if (input.validBranchCompleteLatch && input.exactNodeHasChildren !== true && input.hasNextUserMove !== true) {
+  if (input.validBranchCompleteLatch) {
     return {
-      exhausted: true,
-      reason: "valid_branch_complete_latch",
-      blockedReason: null,
+      exhausted: false,
+      reason: null,
+      blockedReason: "branch_complete_latch_is_not_terminal_proof",
       hasNextOpponentMove: input.hasNextOpponentMove,
       hasNextUserMove: input.hasNextUserMove,
       exactNodeHasChildren: input.exactNodeHasChildren,
