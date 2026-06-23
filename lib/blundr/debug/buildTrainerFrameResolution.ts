@@ -1,10 +1,13 @@
 import type { PendingPromotion, PromotionPiece } from "../runtime/promotionAuthority";
+import { resolveStage2TerminalProof } from "../runtime/terminalProof";
 import type {
   TrainerFrameApprovedContentResolution,
   TrainerFrameResolution,
   TrainerFrameCoachCardCopy,
   TrainerFrameCoachCardAuthority,
   TrainerFrameVisualResult,
+  TrainerFrameFinalSurfaceAuthority,
+  TrainerFrameTerminalProofResolution,
 } from "./trainerFrameResolutionTypes";
 
 type Input = Record<string, any>;
@@ -72,6 +75,28 @@ function normalizeVisualSource(value: unknown): TrainerFrameVisualResult["visual
   if (text === "generated_recipe") return "generated_recipe";
   if (text === "fallback_current_surface") return "fallback_current_surface";
   return "none";
+}
+
+function buildTerminalProof(input: Input): TrainerFrameTerminalProofResolution {
+  return resolveStage2TerminalProof({
+    trainingMode: String(input.trainingMode ?? "restricted") as "restricted" | "continuation",
+    isUserTurn: Boolean(input.isUserTurn),
+    userExplicitlyEnteredContinuation: Boolean(input.userExplicitlyEnteredContinuation),
+    selectedLineId: normalizeText(input.selectedLineId ?? input.selectedRepertoireId ?? null),
+    fen4: normalizeText(input.fen ?? input.boardFen4 ?? input.normalizedFen ?? ""),
+    lastUserMoveUci: normalizeText(input.lastUserMoveUci ?? null),
+    lastUserMoveSan: normalizeText(input.lastUserMoveSan ?? null),
+    afterFinalUserMove: Boolean(input.afterFinalUserMove),
+    explicitCuratedTerminalNode: Boolean(input.explicitCuratedTerminalNode),
+    selectedLineCompleteConfirmed: Boolean(input.selectedLineCompleteConfirmed),
+    exactNodeHasChildren: input.exactNodeHasChildren ?? "unknown",
+    hasNextOpponentMove: input.hasNextOpponentMove ?? "unknown",
+    hasNextUserMove: input.hasNextUserMove ?? "unknown",
+    validBranchCompleteLatch: Boolean(input.validBranchCompleteLatch),
+    runtimeBookBookExhausted: Boolean(input.runtimeBookBookExhausted),
+    runtimeBookCandidateCount: Number(input.runtimeBookCandidateCount ?? 0),
+    runtimeBookStatus: normalizeText(input.runtimeBookStatus ?? null),
+  });
 }
 
 function isCastlingNotation(moveUci: string | null): boolean {
@@ -229,6 +254,13 @@ export function buildTrainerFrameResolution(input: Input): TrainerFrameResolutio
   const lowQualityThreshold = qualityScoreSource === "verified_safe_fallback" ? 65 : 80;
   const lowQualityTriggered = finalCoachScore != null && finalCoachScore > 0 && finalCoachScore < lowQualityThreshold;
   const acceptedTargetUci = normalizeText(input.acceptedTargetUci ?? input.acceptedPromotionUci ?? input.instructionTargetUci ?? null);
+  const terminalProof = (input.terminalProof as TrainerFrameTerminalProofResolution | undefined) ?? buildTerminalProof(input);
+  const finalSurfaceAuthority: TrainerFrameFinalSurfaceAuthority = (input.finalSurfaceAuthority as TrainerFrameFinalSurfaceAuthority | undefined) ?? {
+    branchCompleteAllowedByTerminalProof: terminalProof.proven,
+    continueFromHereAllowedByTerminalProof: terminalProof.proven,
+    runtimeBookExhaustionTreatedAsDebugOnly: terminalProof.runtimeBookExhaustionTreatedAsDebugOnly,
+    finalSurfaceBlockedReasons: terminalProof.blockedReasons.slice(),
+  };
   const promotion: TrainerFrameResolution["promotion"] = {
     pendingPromotion: (input.pendingPromotion as PendingPromotion | null | undefined) ?? null,
     promotionPickerRendered: Boolean(input.promotionPickerRendered),
@@ -379,5 +411,7 @@ export function buildTrainerFrameResolution(input: Input): TrainerFrameResolutio
     },
     promotion,
     approvedContent: approvedContentResolution,
+    terminalProof,
+    finalSurfaceAuthority,
   };
 }

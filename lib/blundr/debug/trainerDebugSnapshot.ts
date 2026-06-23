@@ -4,6 +4,7 @@ import type { DebugEvent, TrainerDebugSnapshot } from "./trainerDebugTypes";
 import { sanitizeForDebugJson } from "./trainerDebugSanitizer";
 import { computeInstructionFrameKey } from "../runtime/currentInstructionFrame";  // v2.7.39.1 target locking
 import { analyzeBlundrPosition } from "../brain/analyzeBlundrPosition";  // v2.7.39.2+ Brain facade exposure (debug only for now)
+import { resolveStage2TerminalProof } from "../runtime/terminalProof";
 import { buildStage2FeatureTrace } from "./buildStage2FeatureTrace";
 import { buildTrainerFrameResolution } from "./buildTrainerFrameResolution";
 import {
@@ -229,6 +230,36 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   const qualityScoreSource = String(coachQuality.qualityScoreSource ?? "pipeline_explanation");
   const expectedMoveResolution = input.expectedMoveResolution ?? {};
   const guidedCoveragePolicy = input.guidedCoveragePolicy ?? {};
+  const selectedLineCompleteConfirmed = Boolean(Number(expectedMoveResolution?.lineLength ?? 0) > 0 && Number(expectedMoveResolution?.lineCursor ?? 0) >= Number(expectedMoveResolution?.lineLength ?? 0));
+  const terminalProof = (input.trainerFrameResolution as any)?.terminalProof
+    ?? input.terminalProof
+    ?? resolveStage2TerminalProof({
+      trainingMode: String(input.trainingMode ?? "restricted") as "restricted" | "continuation",
+      isUserTurn: Boolean(input.isUserTurn),
+      userExplicitlyEnteredContinuation: Boolean(input.userExplicitlyEnteredContinuation),
+      selectedLineId: String(input.selectedLineId ?? input.selectedRepertoireId ?? ""),
+      fen4: normalizeVisualFen(input.fen),
+      lastUserMoveUci: input.lastUserMoveUci ?? null,
+      lastUserMoveSan: input.lastUserMoveSan ?? null,
+      afterFinalUserMove: Boolean(input.afterFinalUserMove ?? (!input.isUserTurn && Boolean(input.lastUserMoveUci))),
+      explicitCuratedTerminalNode: Boolean(input.explicitCuratedTerminalNode ?? expectedMoveResolution?.debug?.explicitCuratedTerminalNode ?? false),
+      selectedLineCompleteConfirmed,
+      exactNodeHasChildren: input.exactNodeHasChildren ?? "unknown",
+      hasNextOpponentMove: input.hasNextOpponentMove ?? "unknown",
+      hasNextUserMove: input.hasNextUserMove ?? "unknown",
+      validBranchCompleteLatch: Boolean(input.validBranchCompleteLatch ?? false),
+      runtimeBookBookExhausted: Boolean(input.runtimeBookBookExhausted ?? false),
+      runtimeBookCandidateCount: Number(input.runtimeBookCandidateCount ?? 0),
+      runtimeBookStatus: input.runtimeBookStatus ?? null,
+    });
+  const finalSurfaceAuthority = (input.trainerFrameResolution as any)?.finalSurfaceAuthority
+    ?? input.finalSurfaceAuthority
+    ?? {
+      branchCompleteAllowedByTerminalProof: Boolean(terminalProof.proven),
+      continueFromHereAllowedByTerminalProof: Boolean(terminalProof.proven),
+      runtimeBookExhaustionTreatedAsDebugOnly: Boolean(terminalProof.runtimeBookExhaustionTreatedAsDebugOnly),
+      finalSurfaceBlockedReasons: Array.isArray(terminalProof.blockedReasons) ? terminalProof.blockedReasons.slice() : [],
+    };
   const branchTransitionSurfaceRendered = Boolean(input.branchTransitionSurfaceRendered);
   const branchTransitionPayloadValid = Boolean(
     branchTransitionSurfaceRendered &&
@@ -972,6 +1003,8 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       branchTransitionReason: input.branchTransitionReason ?? null,
       continueFromHereAvailable: Boolean(input.continueFromHereAvailable),
       continueFromHereClicked: Boolean(input.continueFromHereClicked),
+      terminalProof,
+      finalSurfaceAuthority,
       selectedLineId: input.selectedLineId ?? null,
       selectedOpeningId: input.selectedOpeningId ?? null,
       selectedConceptId: input.selectedConceptId ?? input.visualRecipe?.conceptId ?? null,

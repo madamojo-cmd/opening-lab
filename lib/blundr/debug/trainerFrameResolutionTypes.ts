@@ -22,6 +22,32 @@ export type TrainerFrameCoachCardResolution = {
 
 export type TrainerFrameVisualAuthority = "approved_recipe" | "generated_recipe" | "fallback_current_surface" | "none";
 
+export type TrainerFrameTerminalProofSource =
+  | "selected_line_cursor"
+  | "selected_line_exhaustion"
+  | "explicit_curated_terminal_node"
+  | "valid_branch_complete_latch"
+  | "none";
+
+export type TrainerFrameTerminalProofResolution = {
+  proven: boolean;
+  source: TrainerFrameTerminalProofSource;
+  reason: string | null;
+  blockedReasons: string[];
+  selectedLineExhausted: boolean;
+  selectedLineExhaustionReason: string | null;
+  selectedLineExhaustionBlockedReason: string | null;
+  runtimeBookExhaustionObserved: boolean;
+  runtimeBookExhaustionTreatedAsDebugOnly: boolean;
+};
+
+export type TrainerFrameFinalSurfaceAuthority = {
+  branchCompleteAllowedByTerminalProof: boolean;
+  continueFromHereAllowedByTerminalProof: boolean;
+  runtimeBookExhaustionTreatedAsDebugOnly: boolean;
+  finalSurfaceBlockedReasons: string[];
+};
+
 export type TrainerFrameVisualResult = {
   rendered: boolean;
   visualSource: TrainerFrameVisualAuthority;
@@ -114,6 +140,8 @@ export type TrainerFrameResolution = {
   coachQuality: TrainerFrameCoachQualityResolution;
   promotion: TrainerFramePromotionResolution;
   approvedContent: TrainerFrameApprovedContentResolution;
+  terminalProof?: TrainerFrameTerminalProofResolution;
+  finalSurfaceAuthority?: TrainerFrameFinalSurfaceAuthority;
   providerWarnings?: Stage2ProviderWarning[];
   providerWarningSummary?: Stage2ProviderWarningSummary;
 };

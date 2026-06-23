@@ -1,4 +1,8 @@
-import type { TrainerFrameVisualResult } from "./trainerFrameResolutionTypes";
+import type {
+  TrainerFrameFinalSurfaceAuthority,
+  TrainerFrameTerminalProofResolution,
+  TrainerFrameVisualResult,
+} from "./trainerFrameResolutionTypes";
 import type { Stage2ProviderWarning, Stage2ProviderWarningSummary } from "../providers/providerWarningPolicy";
 
 export type Stage2FeatureTraceStatus = "complete" | "partial" | "missing";
@@ -194,6 +198,8 @@ export interface Stage2FeatureTrace {
   selectedOpportunity: Stage2FeatureTraceRankedOpportunity | null;
   coachCardResult: Stage2FeatureTraceCoachCardResult;
   visualResult: Stage2FeatureTraceVisualResult;
+  terminalProof?: TrainerFrameTerminalProofResolution;
+  finalSurfaceAuthority?: TrainerFrameFinalSurfaceAuthority;
   approvedContentMatched: boolean;
   approvedPacketId: string | null;
   approvedPacketKind: "approved_packet" | "safe_fallback" | "none";

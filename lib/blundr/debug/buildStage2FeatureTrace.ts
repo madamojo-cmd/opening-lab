@@ -1078,6 +1078,8 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
   const coachCardResult = buildCoachCardResult(input, moveFacts, selectedOpportunity, trainerFrameResolution);
   const visualRecipeResult = buildVisualRecipeResult(input, moveFacts, trainerFrameResolution);
   const visualResult = trainerFrameResolution.visualResult ?? deriveVisualTruthFallback(input, trainerFrameResolution);
+  const terminalProof = trainerFrameResolution.terminalProof ?? null;
+  const finalSurfaceAuthority = trainerFrameResolution.finalSurfaceAuthority ?? null;
   const approvedPacketResolution = trainerFrameResolution.approvedContent ?? {
     matched: false,
     packetKind: "none",
@@ -1308,6 +1310,8 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
     selectedOpportunity,
     coachCardResult,
     visualResult,
+    terminalProof,
+    finalSurfaceAuthority,
     approvedContentMatched,
     approvedPacketId: approvedPacketResolution.packetId,
     approvedPacketKind: approvedPacketResolution.packetKind,
