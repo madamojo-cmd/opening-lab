@@ -18,6 +18,10 @@ export interface RestrictedRuntimeBookHandoffResult {
   restrictedRuntimeBookExhaustedEligibleForBranchComplete: boolean;
 }
 
+function normalize(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase();
+}
+
 export function resolveRestrictedRuntimeBookHandoff(
   input: RestrictedRuntimeBookHandoffInput,
 ): RestrictedRuntimeBookHandoffResult {
@@ -32,13 +36,24 @@ export function resolveRestrictedRuntimeBookHandoff(
     input.runtimeBookCandidateCount === 0,
   );
 
+  const moveAuthorityKind =
+    input.trainingMode !== "restricted"
+      ? "safe_local_fallback"
+      : input.explicitCuratedTerminalNode || input.selectedLineCompleteConfirmed
+        ? "terminal"
+        : normalize(input.runtimeBookStatus) === "ready" && input.runtimeBookMatchesFrame && input.runtimeBookCandidateCount > 0
+          ? "runtime_exact"
+          : input.runtimeBookMatchesFrame && input.runtimeBookBookExhausted
+            ? "selected_line"
+            : "safe_local_fallback";
+
   const eligibleForBranchComplete = Boolean(
-    exhaustedOnOpponentTurnAfterUserMove &&
-    (
-      input.explicitCuratedTerminalNode ||
-      input.selectedLineCompleteConfirmed ||
-      input.currentPly >= input.minimumGuidedDepthPly
-    ),
+    moveAuthorityKind === "terminal" &&
+      (
+        input.explicitCuratedTerminalNode ||
+        input.selectedLineCompleteConfirmed ||
+        input.currentPly >= input.minimumGuidedDepthPly
+      ),
   );
 
   return {
