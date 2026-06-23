@@ -1411,8 +1411,16 @@ export default function App(){
     currentPlyCount >= HARD_CONTINUATION_BREAK_PLY &&
     currentPlyCount > 0 &&
     !game.isGameOver();
-  const lineExhaustedForPause = trainingMode === "restricted" && isUserTurn && !userExplicitlyEnteredContinuation && selectedLineCompleteConfirmed;
-  const branchExhaustedForPause = trainingMode === "restricted" && isUserTurn && !userExplicitlyEnteredContinuation && lichessEndConfirmed;
+  const lineExhaustedForPause =
+    trainingMode === "restricted" &&
+    isUserTurn &&
+    !userExplicitlyEnteredContinuation &&
+    (selectedLineCompleteConfirmed || restrictedRuntimeBookExhaustedEligibleForBranchComplete);
+  const branchExhaustedForPause =
+    trainingMode === "restricted" &&
+    isUserTurn &&
+    !userExplicitlyEnteredContinuation &&
+    restrictedRuntimeBookExhaustedEligibleForBranchComplete;
   const continuationPauseDecision = shouldForceContinuationPause({
     plyCount: hardStopApplies ? currentPlyCount : 0,
     lineExhausted: lineExhaustedForPause,
@@ -1448,13 +1456,13 @@ export default function App(){
     if (!isUserTurn) return false;
     if (trainingMode !== "restricted") return false;
     if (userExplicitlyEnteredContinuation) return false;
-    return selectedLineCompleteConfirmed || lichessEndConfirmed;
+    return selectedLineCompleteConfirmed || restrictedRuntimeBookExhaustedEligibleForBranchComplete;
   }, [
     isUserTurn,
     trainingMode,
     userExplicitlyEnteredContinuation,
     selectedLineCompleteConfirmed,
-    lichessEndConfirmed,
+    restrictedRuntimeBookExhaustedEligibleForBranchComplete,
   ]);
 
   // Step 3/4/10 (exact order): trusted curated target exists for restricted user turn (from opening tree / resolver).
@@ -1550,7 +1558,7 @@ export default function App(){
   const continuationPolicyCandidate=useMemo(()=>{
     // Strict hotfix gate: only confirmed line complete (cursor >= length) or resolved Lichess <500
     const isHardEndOfBookForCandidate =
-      (selectedLineCompleteConfirmed || lichessEndConfirmed) &&
+      (selectedLineCompleteConfirmed || restrictedRuntimeBookExhaustedEligibleForBranchComplete) &&
       !userExplicitlyEnteredContinuation;
 
     if (isHardEndOfBookForCandidate) {
@@ -2923,7 +2931,7 @@ export default function App(){
       title: transitionTitle,
       body: transitionBody,
       buttons: transitionButtons,
-      reason: selectedLineCompleteConfirmed ? "curated_line_complete" : "lichess_below_500_games",
+      reason: selectedLineCompleteConfirmed ? "curated_line_complete" : "restricted_book_exhausted_on_opponent_turn_after_user_move",
     } as const;
   }, [hardEndOfBookGate, selectedLineCompleteConfirmed, trainingMode, isUserTurn, forceContinuationPause, continuationPauseDecision.pauseReason, userExplicitlyEnteredContinuation, game, restrictedRuntimeBookExhaustedEligibleForBranchComplete, trustedInstructionTargetExists]);
   const moveImpactPresentation=useMemo(()=>presentMoveImpact({
