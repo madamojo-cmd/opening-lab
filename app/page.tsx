@@ -3803,10 +3803,20 @@ export default function App(){
     }
   }
   function clearPendingOpponentReplyRequest(options?:{clearStaleIssue?:boolean}){
+    const hadPendingRef=pendingOpponentRequestRef.current!==null;
+    const hadPendingState=pendingOpponentRequest!==null;
+    const hadTimeout=opponentReplyTimeoutRef.current!==null;
+    if(!hadPendingRef&&!hadPendingState&&!hadTimeout){
+      return;
+    }
     clearOpponentReplyTimeout();
-    pendingOpponentRequestRef.current=null;
-    setPendingOpponentRequest(null);
-    if(options?.clearStaleIssue)clearRuntimeCriticalIssue("stale_opponent_reply_commit");
+    if(hadPendingRef){
+      pendingOpponentRequestRef.current=null;
+    }
+    if(hadPendingState){
+      setPendingOpponentRequest(null);
+    }
+    if(options?.clearStaleIssue&&(hadPendingRef||hadPendingState))clearRuntimeCriticalIssue("stale_opponent_reply_commit");
   }
   function commitRuntimeFrame(input:{
     nextFen?:string;
@@ -3920,25 +3930,44 @@ export default function App(){
     setContinuationCandidateLock(lock);
   },[trainingMode,userExplicitlyEnteredContinuation,isUserTurn,validatedContinuationCandidate?.uci,validatedContinuationCandidate?.san,validatedContinuationCandidate?.source,validatedContinuationCandidate?.reason,fen]);
   useEffect(()=>{
-    if(!branchCompleteContract.branchCompleteEligible)return;
-    if(branchCompleteLatchRef.current.active)return;
+    if(!branchCompleteEligibleNow||!stage2TerminalProof.proven)return;
+    const existing=branchCompleteLatchRef.current;
+    const fen4=normalizeFen(fen);
+    if(existing.active&&existing.lineId===canonicalSelectedRepertoireId&&existing.fen4===fen4)return;
     setBranchCompleteLatch({
       active:true,
-      reason:branchCompleteContract.reason??"line_complete",
-      fen4:normalizeFen(fen),
+      reason:branchCompleteReasonNow??stage2TerminalProof.reason??"line_complete",
+      fen4,
       lineId:canonicalSelectedRepertoireId,
       ply:moveHistory.length,
       latchedAtFrameId:trainerFrameId,
     });
-  },[branchCompleteContract.branchCompleteEligible,branchCompleteContract.reason,fen,selectedRepertoireId,moveHistory.length,trainerFrameId]);
+  },[branchCompleteEligibleNow,stage2TerminalProof.proven,stage2TerminalProof.reason,branchCompleteReasonNow,fen,canonicalSelectedRepertoireId,moveHistory.length,trainerFrameId]);
   useEffect(()=>{
     if(!branchCompleteShouldCancelPending)return;
-    branchCompleteBlockedOpponentRequestIdRef.current=pendingOpponentRequestRef.current?.requestId??null;
-    clearPendingOpponentReplyRequest({clearStaleIssue:true});
-    if(trainerPhase==="opponent_replying"||trainerPhase==="opponent_selecting"){
-      setTrainerPhase("ready_for_user");
+    const pendingId=pendingOpponentRequestRef.current?.requestId??null;
+    const hasPendingState=pendingOpponentRequest!==null;
+    const hasPendingRef=pendingId!==null;
+    const isOpponentTransitionPhase=
+      trainerPhase==="opponent_replying"||
+      trainerPhase==="opponent_selecting";
+    if(!hasPendingState&&!hasPendingRef&&!isOpponentTransitionPhase){
+      return;
     }
-  },[branchCompleteShouldCancelPending,trainerPhase]);
+    if(hasPendingRef){
+      branchCompleteBlockedOpponentRequestIdRef.current=pendingId;
+    }
+    if(hasPendingState||hasPendingRef){
+      clearPendingOpponentReplyRequest({clearStaleIssue:true});
+    }
+    if(isOpponentTransitionPhase){
+      setTrainerPhase((current)=>(
+        current==="opponent_replying"||current==="opponent_selecting"
+          ?"ready_for_user"
+          :current
+      ));
+    }
+  },[branchCompleteShouldCancelPending,pendingOpponentRequest?.requestId,trainerPhase]);
   useEffect(()=>{
     if(!pendingOpponentRequest)return;
     const pendingMatchesBoard=normalizeFen(fen)===pendingOpponentRequest.baseFen;
@@ -4368,7 +4397,7 @@ export default function App(){
       return;
     }
     if(pendingOpponentRequest) clearPendingOpponentReplyRequest({clearStaleIssue:true});
-  },[activeTab,fen,bookComplete,isUserTurn,isReviewingHistory,selectedRepertoireId,trainingMode,ratingFilter,game,endingInfo?.title,trainerPhase,pendingOpponentRequest,branchCompleteEligibleNow,runtimeBookFrameShouldQuery,runtimeBookFrameQuery.status]);
+  },[activeTab,fen,bookComplete,isUserTurn,isReviewingHistory,canonicalSelectedRepertoireId,trainingMode,ratingFilter,game,endingInfo?.title,trainerPhase,pendingOpponentRequest?.requestId,branchCompleteEligibleNow,runtimeBookFrameShouldQuery,runtimeBookFrameQuery.status]);
   async function loadExplorer(positionFen:string){
     const cacheKey=`${normalizeFen(positionFen)}|${ratingFilter}|${speedFilter}`;
     if(explorerCache.current[cacheKey]){
@@ -4580,38 +4609,44 @@ export default function App(){
     let continuationPolicyDecision:ReturnType<typeof selectContinuedPlayMove>|null=null;
     if(mode==="restricted"){
       if(!currentOpponentBookOptions.length){
-        setTrainingMode("restricted");
-        setUserExplicitlyEnteredContinuation(false);
-        setContinueFromHereClicked(false);
-        setContinuationAnalysisStatus("idle");
-        setTrainerPhase("ready_for_user");
-        setBookComplete(true);
-        setFeedback("Line complete. Continue from this position or train the line again.");
-        setBrain(p=>({...p,book:"complete",source:"opponent branch exhausted",lichess:"ready"}));
-        return;
+        const legal=current.moves({verbose:true}) as any[];
+        if(!legal.length){
+          clearPendingOpponentReplyRequest({clearStaleIssue:true});
+          setTrainerPhase("terminal");
+          setFeedback("Game over. Restart the opening to train again.");
+          setBrain(p=>({...p,book:"complete",source:"terminal_position",lichess:"ready"}));
+          return;
+        }
+        const fallbackMove=legal[0];
+        current.move({from:fallbackMove.from,to:fallbackMove.to,promotion:fallbackMove.promotion??undefined});
+        chosen={san:fallbackMove.san,uci:moveToUci(fallbackMove),fen:current.fen()};
+        source="Restricted local legal fallback";
+        variationDebug.fallbackUsed=true;
+        variationDebug.opponentVariationReason="restricted_no_mapped_opponent_reply";
+      }else{
+        const explorer=await loadExplorer(current.fen());
+        const valid=currentOpponentBookOptions.map(book=>{const match=explorer.find(m=>m.uci===book.uci);return{...book,weight:match?.total??1,pct:match?.pct??0,branchKey:`${positionKey}::${book.uci}`}});
+        const decision=selectOpponentCandidateWithVariation({
+          context:variationContext,
+          memory,
+          candidates:valid.map((candidate)=>({
+            uci:candidate.uci,
+            san:candidate.san,
+            branchKey:candidate.branchKey,
+            weight:candidate.weight,
+            legal:true,
+            supported:true,
+            engineSafe:true,
+            severeBlunder:false,
+            source:"opening_branch",
+            pct:candidate.pct,
+          })),
+        });
+        const weighted=decision?valid.find((candidate)=>candidate.branchKey===decision.selected.branchKey)??valid[0]:pickWeighted(valid);
+        variationDebug=decision?{...decision}:variationDebug;
+        chosen={san:weighted.san,uci:weighted.uci,fen:weighted.resultingFen};
+        source=weighted.pct?`Lichess-weighted opening branch (${weighted.pct}%)`:"Saved opening branch";
       }
-      const explorer=await loadExplorer(current.fen());
-      const valid=currentOpponentBookOptions.map(book=>{const match=explorer.find(m=>m.uci===book.uci);return{...book,weight:match?.total??1,pct:match?.pct??0,branchKey:`${positionKey}::${book.uci}`}});
-      const decision=selectOpponentCandidateWithVariation({
-        context:variationContext,
-        memory,
-        candidates:valid.map((candidate)=>({
-          uci:candidate.uci,
-          san:candidate.san,
-          branchKey:candidate.branchKey,
-          weight:candidate.weight,
-          legal:true,
-          supported:true,
-          engineSafe:true,
-          severeBlunder:false,
-          source:"opening_branch",
-          pct:candidate.pct,
-        })),
-      });
-      const weighted=decision?valid.find((candidate)=>candidate.branchKey===decision.selected.branchKey)??valid[0]:pickWeighted(valid);
-      variationDebug=decision?{...decision}:variationDebug;
-      chosen={san:weighted.san,uci:weighted.uci,fen:weighted.resultingFen};
-      source=weighted.pct?`Lichess-weighted opening branch (${weighted.pct}%)`:"Saved opening branch";
     }else{
       const legalMovesVerbose=current.moves({verbose:true}) as any[];
       const legalMovesUci=legalMovesVerbose.map((move)=>moveToUci(move));
@@ -5358,7 +5393,32 @@ export default function App(){
       explicitCuratedTerminalNode:nextExplicitCuratedTerminalNode,
       validBranchCompleteLatch:false,
     });
-    const needsOpponentReply=!nextGame.isGameOver()&&nextGame.turn()!==userColor&&!nextBranchCompleteContract.shouldPreventOpponentScheduling&&!nextRestrictedRuntimeBookExhaustedEligibleForBranchComplete;
+    const nextTerminalProof=resolveStage2TerminalProof({
+      trainingMode,
+      isUserTurn:nextIsUserTurn,
+      userExplicitlyEnteredContinuation,
+      selectedOpeningId:canonicalSelectedRepertoireId,
+      selectedLineId:canonicalSelectedRepertoireId,
+      runtimeOpeningId:runtimeOpeningIdForFrame,
+      selectedOpeningRuntimeAvailable:Boolean(selectedOpeningAvailability?.runtimeAvailable),
+      fen4:normalizeFen(nextFen),
+      lastUserMoveUci:legal.color===userColor?playedUci:null,
+      lastUserMoveSan:legal.color===userColor?legal.san:null,
+      afterFinalUserMove:!nextIsUserTurn&&legal.color===userColor,
+      explicitCuratedTerminalNode:nextExplicitCuratedTerminalNode,
+      selectedLineCompleteConfirmed:nextSelectedLineConfirmedComplete,
+      exactNodeHasChildren:nextExactNodeHasChildren,
+      hasNextOpponentMove:nextHasNextOpponentMove,
+      hasNextUserMove:nextHasNextUserMove,
+      validBranchCompleteLatch:false,
+      bookCompleteAllowed:Boolean(nextSelectedLineConfirmedComplete||nextExplicitCuratedTerminalNode),
+      guidedCompleteAllowed:Boolean(nextSelectedLineConfirmedComplete||nextExplicitCuratedTerminalNode),
+      runtimeBookBookExhausted:false,
+      runtimeBookCandidateCount:0,
+      runtimeBookStatus:null,
+    });
+    const nextBranchCompleteProven=Boolean(nextBranchCompleteContract.branchCompleteEligible&&nextTerminalProof.proven);
+    const needsOpponentReply=!nextGame.isGameOver()&&nextGame.turn()!==userColor&&!nextBranchCompleteProven;
     commitRuntimeFrame({
       nextFen,
       nextPhase:nextGame.isGameOver()?"terminal":(needsOpponentReply?"opponent_selecting":"ready_for_user"),
@@ -5373,10 +5433,10 @@ export default function App(){
     setOpponentCue(null);
     setOpponentVariationDebug(null);
     setShowAnswer(false);
-    if(nextBranchCompleteContract.branchCompleteEligible||nextRestrictedRuntimeBookExhaustedEligibleForBranchComplete){
+    if(nextBranchCompleteProven){
       setBranchCompleteLatch({
         active:true,
-        reason:nextRestrictedRuntimeBookExhaustedEligibleForBranchComplete?"restricted_book_exhausted_on_opponent_turn_after_user_move":nextBranchCompleteContract.reason??"line_complete",
+        reason:nextTerminalProof.reason??nextBranchCompleteContract.reason??"line_complete",
         fen4:normalizeFen(nextFen),
         lineId:canonicalSelectedRepertoireId,
         ply:moveHistory.length+1,
