@@ -12,10 +12,11 @@ export function testStage2PendingOpponentClearIsIdempotent(): void {
   assert.match(helper, /const hadPendingRef=pendingOpponentRequestRef\.current!==null;/);
   assert.match(helper, /const hadPendingState=pendingOpponentRequest!==null;/);
   assert.match(helper, /const hadTimeout=opponentReplyTimeoutRef\.current!==null;/);
-  assert.match(helper, /if\(!hadPendingRef&&!hadPendingState&&!hadTimeout\)\{\s*return;\s*\}/);
+  assert.match(helper, /if\(!hadPendingRef&&!hadPendingState&&!hadTimeout\)\{\s*return false;\s*\}/);
   assert.match(helper, /if\(hadPendingRef\)\{\s*pendingOpponentRequestRef\.current=null;\s*\}/);
   assert.match(helper, /if\(hadPendingState\)\{\s*setPendingOpponentRequest\(null\);\s*\}/);
   assert.match(helper, /if\(options\?\.clearStaleIssue&&\(hadPendingRef\|\|hadPendingState\)\)clearRuntimeCriticalIssue\("stale_opponent_reply_commit"\);/);
+  assert.match(helper, /return true;/);
 }
 
 testStage2PendingOpponentClearIsIdempotent();

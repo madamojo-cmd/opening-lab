@@ -111,7 +111,7 @@ export function resolveSelectedLineExhaustion(input: ResolveSelectedLineExhausti
     return {
       exhausted: false,
       reason: null,
-      blockedReason: "branch_complete_latch_is_not_terminal_proof",
+      blockedReason: "stale_branch_complete_latch",
       hasNextOpponentMove: input.hasNextOpponentMove,
       hasNextUserMove: input.hasNextUserMove,
       exactNodeHasChildren: input.exactNodeHasChildren,

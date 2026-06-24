@@ -1973,13 +1973,11 @@ export default function App(){
     branchCompleteLatch.lineId,
     restrictedLineExhaustedOnOpponentTurnAfterUserMove,
   ]);
-  const branchCompleteEligibleNow=Boolean(branchCompleteContract.branchCompleteEligible&&stage2TerminalProof.proven&&!trustedInstructionTargetExists);
+  const branchCompleteEligibleNow=Boolean(stage2TerminalProof.proven&&!trustedInstructionTargetExists);
   const branchCompleteReasonNow=stage2TerminalProof.proven
     ? stage2TerminalProof.reason ?? branchCompleteContract.reason ?? "line_complete"
     : stage2TerminalProof.blockedReasons[0] ?? branchCompleteContract.blockedReason ?? "terminal_proof_required";
-  const branchCompleteShouldCancelPending=branchCompleteContract.shouldCancelPendingOpponent||(
-    branchCompleteEligibleNow&&Boolean(pendingOpponentRequest)
-  );
+  const branchCompleteShouldCancelPending=branchCompleteEligibleNow&&Boolean(pendingOpponentRequest);
   const continuationFlowContract=useMemo(()=>resolveContinuationFlowContract({
     trainingMode,
     branchComplete:branchCompleteEligibleNow,
@@ -3807,7 +3805,7 @@ export default function App(){
     const hadPendingState=pendingOpponentRequest!==null;
     const hadTimeout=opponentReplyTimeoutRef.current!==null;
     if(!hadPendingRef&&!hadPendingState&&!hadTimeout){
-      return;
+      return false;
     }
     clearOpponentReplyTimeout();
     if(hadPendingRef){
@@ -3817,6 +3815,7 @@ export default function App(){
       setPendingOpponentRequest(null);
     }
     if(options?.clearStaleIssue&&(hadPendingRef||hadPendingState))clearRuntimeCriticalIssue("stale_opponent_reply_commit");
+    return true;
   }
   function commitRuntimeFrame(input:{
     nextFen?:string;
@@ -3955,6 +3954,9 @@ export default function App(){
       return;
     }
     if(hasPendingRef){
+      if(branchCompleteBlockedOpponentRequestIdRef.current===pendingId){
+        return;
+      }
       branchCompleteBlockedOpponentRequestIdRef.current=pendingId;
     }
     if(hasPendingState||hasPendingRef){
@@ -5417,8 +5419,8 @@ export default function App(){
       runtimeBookCandidateCount:0,
       runtimeBookStatus:null,
     });
-    const nextBranchCompleteProven=Boolean(nextBranchCompleteContract.branchCompleteEligible&&nextTerminalProof.proven);
-    const needsOpponentReply=!nextGame.isGameOver()&&nextGame.turn()!==userColor&&!nextBranchCompleteProven;
+    const nextBranchCompleteEligible=Boolean(nextBranchCompleteContract.branchCompleteEligible&&nextTerminalProof.proven);
+    const needsOpponentReply=!nextGame.isGameOver()&&nextGame.turn()!==userColor&&!nextBranchCompleteEligible;
     commitRuntimeFrame({
       nextFen,
       nextPhase:nextGame.isGameOver()?"terminal":(needsOpponentReply?"opponent_selecting":"ready_for_user"),
@@ -5433,7 +5435,7 @@ export default function App(){
     setOpponentCue(null);
     setOpponentVariationDebug(null);
     setShowAnswer(false);
-    if(nextBranchCompleteProven){
+    if(nextBranchCompleteEligible){
       setBranchCompleteLatch({
         active:true,
         reason:nextTerminalProof.reason??nextBranchCompleteContract.reason??"line_complete",

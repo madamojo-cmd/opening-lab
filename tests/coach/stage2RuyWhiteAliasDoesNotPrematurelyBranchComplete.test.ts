@@ -27,21 +27,21 @@ export function testStage2RuyWhiteAliasDoesNotPrematurelyBranchComplete(): void 
     runtimeBookStatus: "ready",
     visibleTeachingSurface: {
       owner: "v28_visible_surface",
-      mode: "branch_complete",
-      coach: { shouldRender: true, title: "Line complete", body: "You finished this training line.", buttons: ["continue_from_here", "restart_line"] },
+      mode: "guided_move",
+      coach: { shouldRender: true, title: "Nf3 — Develop the knight", body: "Develop the knight.", buttons: [] },
       visual: { lines: [] },
-      actions: ["continue_from_here", "restart_line"],
+      actions: [],
       safety: { blocked: false, criticalIssues: [] },
       debug: { visibleCoachOwner: "visible_surface_v28", visibleVisualOwner: "visible_surface_v28", visibleActionOwner: "visible_surface_v28" },
     },
     presentationFrame: {
       visual: { shouldRender: false, source: "none" },
-      coach: { shouldRender: true, owner: "branch_transition_surface", title: "Line complete", body: "You finished this training line.", buttons: ["continue_from_here", "restart_line"] },
+      coach: { shouldRender: true, owner: "intent_first_coach", title: "Nf3 — Develop the knight", body: "Develop the knight.", buttons: [] },
       legacy: {},
     },
-    actualCoachCardTitle: "Line complete",
-    actualCoachCardBody: "You finished this training line.",
-    actualCoachCardButtons: ["continue_from_here", "restart_line"],
+    actualCoachCardTitle: "Nf3 — Develop the knight",
+    actualCoachCardBody: "Develop the knight.",
+    actualCoachCardButtons: [],
     actualCoachCardSource: "surfaceCoachCardDecision",
     actualVisualSource: "visible_surface_v28",
     renderedVisualPrimitiveCount: 0,
@@ -75,16 +75,16 @@ export function testStage2RuyWhiteAliasDoesNotPrematurelyBranchComplete(): void 
     branchCompleteBlockedReason: null,
     visibleTeachingSurface: {
       owner: "v28_visible_surface",
-      mode: "branch_complete",
-      coach: { shouldRender: true, title: "Line complete", body: "You finished this training line.", buttons: ["continue_from_here", "restart_line"] },
+      mode: "guided_move",
+      coach: { shouldRender: true, title: "Nf3 — Develop the knight", body: "Develop the knight.", buttons: [] },
       visual: { lines: [] },
-      actions: ["continue_from_here", "restart_line"],
+      actions: [],
       safety: { blocked: false, criticalIssues: [] },
       debug: { visibleCoachOwner: "visible_surface_v28", visibleVisualOwner: "visible_surface_v28", visibleActionOwner: "visible_surface_v28" },
     },
     presentationFrame: {
       visual: { shouldRender: false, source: "none" },
-      coach: { shouldRender: true, owner: "branch_transition_surface", title: "Line complete", body: "You finished this training line.", buttons: ["continue_from_here", "restart_line"] },
+      coach: { shouldRender: true, owner: "intent_first_coach", title: "Nf3 — Develop the knight", body: "Develop the knight.", buttons: [] },
       legacy: {},
     },
     coachDecision: {
@@ -112,7 +112,11 @@ export function testStage2RuyWhiteAliasDoesNotPrematurelyBranchComplete(): void 
   assert.equal(frameResolution.terminalProof?.proven, false);
   assert.equal(frameResolution.finalSurfaceAuthority?.branchCompleteAllowedByTerminalProof, false);
   assert.equal((snapshot.frame as any)?.terminalProof?.proven, false);
-  assert.equal((snapshot.coach as any)?.visibleTitle, "Line complete");
+  assert.equal((snapshot.coach as any)?.visibleTitle.includes("Line complete"), false);
+  assert.equal((snapshot.coach as any)?.visibleTitle, "Nf3 — Develop the knight");
+  assert.equal((snapshot.frame as any)?.branchTransitionSurfaceRendered, false);
+  assert.equal((snapshot.frame as any)?.continueFromHereAvailable, false);
+  assert.equal((snapshot.frame as any)?.continueFromHereButtonRendered, false);
   assert.equal((snapshot.runtime as any)?.selectedOpeningId, "ruy-white");
   assert.equal((snapshot.runtime as any)?.canonicalSelectedOpeningId, "ruy-lopez-white");
 }
