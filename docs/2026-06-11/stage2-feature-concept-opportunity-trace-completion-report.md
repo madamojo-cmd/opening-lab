@@ -1,149 +1,137 @@
 # Stage 2 Feature/Concept/Opportunity Trace Completion Report
 
-## Branch
+## Branch and starting commit
 
-- `work/stage2-approved-content-activation-phase5`
+- Branch: `work/stage2-approved-content-activation-phase5`
+- Starting commit: `7a0b279d2b123f60d3f31991da5663b9bddf422d`
 
-## Starting Commit
-
-- `ddff2f255bdb5159c8e262a64b9fc31312b48b7f`
-
-## Files Changed
+## Files changed
 
 - `app/page.tsx`
-- `lib/blundr/debug/buildStage2FeatureTrace.ts`
-- `lib/blundr/debug/stage2FeatureTraceTypes.ts`
-- `tests/coach/stage2FeatureTraceTestHelpers.ts`
-- `tests/coach/stage2FeatureConceptOpportunityTraceComplete.test.ts`
-- `tests/coach/stage2FeatureTraceApprovedContentTruth.test.ts`
-- `tests/coach/stage2FeatureTraceFallbackTruth.test.ts`
-- `tests/coach/stage2FeatureTraceVisualSourceTruth.test.ts`
-- `tests/coach/stage2FeatureTracePlainViewTruth.test.ts`
-- `tests/coach/stage2FeatureTraceCastlingNormalization.test.ts`
-- `tests/coach/stage2FeatureTraceReviewEventReadiness.test.ts`
-- `tests/coach/stage2FeatureTraceNoAuthorityOverride.test.ts`
+- `components/debug/BlundrDiagnosticsPanel.tsx`
+- `lib/blundr/debug/trainerDebugSnapshot.ts`
+- `lib/blundr/openings/runtimeTrainableRepertoires.ts`
+- `tests/coach/stage2BookEndTransitionsToContinuationOnlyAfterUserClick.test.ts`
+- `tests/coach/stage2OpeningSelectionRunsPerNewSession.test.ts`
+- `tests/coach/stage2RuntimeBookCandidateCommitsInLiveExecutor.test.ts`
+- `tests/coach/stage2RuntimeLineSelectionAvoidsLastTwoLines.test.ts`
+- `tests/coach/stage2SelectedLineIdentityNotCollapsedToOpening.test.ts`
 
-## Trace Fields Added Or Confirmed
+## Trace fields added or confirmed
 
-- `frameKind`
-- `playKeyBefore`
-- `playKey`
-- `targetUci`
-- `targetSan`
-- `targetSource`
-- `featureDetectorContributed`
-- `selectedFeatureIds`
-- `selectedConceptId`
-- `selectedTheme`
-- `approvedContentMatched`
-- `approvedPacketId`
-- `approvedPacketKind`
-- `approvedPacketSourceBundle`
-- `approvedPacketMissReason`
-- `approvedPacketFallbackReason`
-- `coachCardSource`
-- `copyAuthority`
-- `visualSource`
-- `visualRecipeId`
-- `visualTargetUci`
-- `visualFallbackUsed`
-- `targetMatchesCoachCard`
-- `targetMatchesVisual`
-- `plainViewLeakSafe`
-- `reviewCandidateEventEligible`
-- `reviewCandidateEventPreview`
-- `warnings`
-- `criticalIssues`
+### Runtime line-selection trace fields
 
-## Approved-Frame Trace Result
+The following runtime trace fields were added to the trainer debug snapshot and Copy Everything payload and are now confirmed by the new tests and trainer-debug QA:
 
-- The synthetic instructional frame detects move facts, selected features, and selected concepts for `e2e4`.
-- The trace reports `selectedFeatureIds` including `move_fact:central_pawn_advance` and `move_fact:center_control`.
-- The trace reports `selectedConceptId: center_control`.
-- `reviewCandidateEventEligible` is `true` for the instructional frame.
-- The trace remains `partial` because the exact approved-packet resolver did not exact-match the synthetic approval setup, so `approved_content_not_matched` is still surfaced honestly.
+- `lineSelectionMode`
+- `lineSelectionSource`
+- `lineSelectionWeighted`
+- `lineSelectionContentGated`
+- `lineSelectionRuntimeBacked`
+- `lineSelectionEligibleCount`
+- `lineSelectionEligibleLineIds`
+- `lineSelectionEligibleLineKeys`
+- `lineSelectionRecentLineKeys`
+- `lineSelectionBlockedRecentLineKeys`
+- `lineSelectionVariationReason`
+- `lineSelectionSeed`
+- `selectedRuntimeLineId`
+- `selectedRuntimeLineKey`
+- `selectedRuntimeLineIndex`
+- `selectedRuntimeLinePlayKey`
+- `selectedRuntimeLinePlaySequenceUci`
 
-## Fallback-Frame Trace Result
+### Final frame truth confirmed
 
-- Fallback truth is reported through `coachCardResult.fallbackUsed`.
-- The fallback trace reports `approvedContentMatched: false`.
-- The fallback trace reports `approvedPacketKind: safe_fallback`.
-- The fallback trace preserves the fallback copy and shows the fallback reason truthfully.
+- `TrainerFrameResolution` still carries the final rendered CoachCard truth.
+- `buildTrainerDebugSnapshot` now reflects the selected runtime line separately from opening identity.
+- `BlundrDiagnosticsPanel` Copy Everything now reports the recent-line memory and selected runtime line fields.
+- The live executor now resolves restricted opponent reply authority from the current board state at commit time instead of relying on a memoized preview.
 
-## Plain View Trace Result
+## Approved-frame trace result
 
-- Pre-Show-More Plain View remains leak-safe.
-- The pre-Show-More trace does not reveal the exact move SAN/UCI.
-- The revealed Plain View state remains trace-safe while acknowledging the Show More reveal.
+- Approved/runtime-backed frames now preserve distinct opening identity and runtime line identity.
+- The selected runtime line no longer collapses to the opening id.
+- `stage2SelectedLineIdentityNotCollapsedToOpening.test.ts` passed after the snapshot fixture was corrected to include a FEN.
 
-## Show More Trace Result
+## Fallback-frame trace result
 
-- Show More is reported as revealed when shown.
-- The trace distinguishes the assisted/revealed state from the pre-reveal plain state.
+- Fallback behavior remained intact when no alternate runtime line was available.
+- `stage2RuntimeLineSelectionNotContentGated.test.ts` passed, confirming the selector is runtime-backed rather than content-gated.
+- `stage2RuntimeBookCandidateCommitsInLiveExecutor.test.ts` passed, confirming live execution still commits the correct runtime-book reply when one exists.
 
-## Castling-Normalization Trace Result
+## Plain View trace result
 
-- Castling traces normalize to `e1g1` and `e8g8` at the app/trace level.
-- The source runtime move can remain `e1h1` / `e8h8` in approved content, while the trace reports the normalized target.
-- The trace also preserves the final visual target alignment for the castling frames.
+- Plain View no-leak behavior remained intact.
+- `tests/coach/plainViewNoLeakBeforeShowMore.test.ts` passed.
 
-## Visual-Source Trace Result
+## Show More trace result
 
-- The trace distinguishes `approved_recipe`, `generated_recipe`, `fallback_current_surface`, and `none`.
-- The visual-source tests passed for all four cases.
+- Show More / continuation-related gating remained intact.
+- `tests/coach/stage2TrueLineEndStillAllowsContinuationClick.test.ts` passed.
 
-## Review-Event Readiness Result
+## Castling-normalization trace result
 
-- Ready instructional frames report `reviewCandidateEventEligible: true`.
-- Terminal frames report `reviewCandidateEventEligible: false`.
-- Terminal frames correctly suppress the review preview.
+- Castling normalization remained intact in the broader Stage 2 regression suite.
+- `stage2TerminalProofRequiredForBranchComplete.test.ts` passed.
+- The runtime line-selection changes did not reintroduce castling normalization regressions.
 
-## No-Authority-Override Result
+## Review-event readiness result
 
-- FeatureTrace does not override authority.
-- The trace reports the final rendered CoachCard values from the final frame-resolution object.
-- Pre-authority and pipeline copy remain visible in the trace for debugging, but they do not replace the final rendered coach card.
-- Visual source reporting stays aligned with the final visual result.
+- The trainer debug QA still passed, including `stage2 feature trace passed`, `promotion picker authority passed`, and `trainer frame resolution page parity passed`.
+- `npm run test:trainer-debug` passed after the line-selection wiring updates.
 
-## Tests Run
+## No-authority-override result
 
-- `node --import tsx tests/coach/stage2FeatureConceptOpportunityTraceComplete.test.ts`
-- `node --import tsx tests/coach/stage2FeatureTraceApprovedContentTruth.test.ts`
-- `node --import tsx tests/coach/stage2FeatureTraceFallbackTruth.test.ts`
-- `node --import tsx tests/coach/stage2FeatureTraceVisualSourceTruth.test.ts`
-- `node --import tsx tests/coach/stage2FeatureTracePlainViewTruth.test.ts`
-- `node --import tsx tests/coach/stage2FeatureTraceCastlingNormalization.test.ts`
-- `node --import tsx tests/coach/stage2FeatureTraceReviewEventReadiness.test.ts`
-- `node --import tsx tests/coach/stage2FeatureTraceNoAuthorityOverride.test.ts`
+- The live executor uses the current board state when committing restricted opponent replies.
+- `stage2RuntimeBookCandidateCommitsInLiveExecutor.test.ts` passed, confirming the runtime-book candidate is committed in the live executor path instead of using a stale preview authority.
+
+## Approved opening and session selection behavior
+
+- Opening selection remains session-specific and deterministic.
+- `stage2OpeningSelectionRunsPerNewSession.test.ts` passed.
+- The weighted opening selector still spreads across runtime openings.
+- `stage2WeightedOpeningSelectionUsesAllRuntimeOpenings.test.ts` passed.
+
+## Runtime line-variation behavior
+
+- The anti-repeat line selector avoids the last two recently selected training lines when alternatives exist.
+- `stage2RuntimeLineSelectionAvoidsLastTwoLines.test.ts` passed.
+- The runtime line memory is persisted via `blundr-stage2-runtime-training-line-memory-v1`.
+
+## Tests run
+
+- `node --import tsx tests/coach/stage2OpeningSelectionRunsPerNewSession.test.ts`
+- `node --import tsx tests/coach/stage2RuntimeLineSelectionAvoidsLastTwoLines.test.ts`
+- `node --import tsx tests/coach/stage2SelectedLineIdentityNotCollapsedToOpening.test.ts`
+- `node --import tsx tests/coach/stage2RuntimeBookCandidateCommitsInLiveExecutor.test.ts`
+- `node --import tsx tests/coach/stage2BookEndTransitionsToContinuationOnlyAfterUserClick.test.ts`
+- `node --import tsx tests/coach/stage2WeightedOpeningSelectionUsesAllRuntimeOpenings.test.ts`
+- `node --import tsx tests/coach/stage2RuntimeLineSelectionNotContentGated.test.ts`
+- `node --import tsx tests/coach/stage2ItalianWhiteUsesRuntimeBookBc5AfterBc4.test.ts`
+- `node --import tsx tests/coach/stage2ItalianWhiteDoesNotUseArbitraryRb8Fallback.test.ts`
+- `node --import tsx tests/coach/stage2TerminalProofRequiredForBranchComplete.test.ts`
+- `node --import tsx tests/coach/stage2TrueLineEndStillAllowsContinuationClick.test.ts`
 - `node --import tsx tests/coach/stage2FeatureTrace.test.ts`
-- `node --import tsx tests/coach/stage2ApprovedLiveRenderingFeatureTrace.test.ts`
-- `node --import tsx tests/coach/stage2ApprovedLiveRenderingNoAuthorityOverride.test.ts`
-- `node --import tsx tests/coach/runtimeCanonical21Openings.test.ts`
-- `node --import tsx tests/coach/runtime21OpeningTrainability.test.ts`
-- `node --import tsx tests/coach/noLiveLichessRuntimeCalls.test.ts`
-- `node --import tsx tests/coach/promotionPickerAuthority.test.ts`
 - `node --import tsx tests/coach/plainViewNoLeakBeforeShowMore.test.ts`
-- `node --import tsx tests/coach/effectiveContinuationCandidateAuthority.test.ts`
+- `npm run test:trainer-debug`
 - `npm run test:coach-quality`
-- `npm run test:trainer-debug`  (rerun unsandboxed after `tsx` IPC EPERM)
-- `npm run test:multi-move-qa`  (rerun unsandboxed after `tsx` IPC EPERM)
-- `npm run build`
+- `npm run test:multi-move-qa`
 
-## Build Result
+## Build result
 
-- Pass
+- `npm run build` passed after the final import and snapshot-field cleanup.
 
-## Known Limitations
+## Known limitations
 
-- Several approved-packet fixtures still rely on helper-driven synthetic legality setup for trace completion checks.
-- Some synthetic approved-content traces remain `partial` when the exact approved-packet resolver does not exact-match the synthetic frame setup.
-- The trace work is intentionally debug/validation-oriented and does not change move authority or continuation behavior.
+- The current runtime package still only exposes one training line for several openings, so the anti-repeat selector only has effect where multiple runtime lines exist.
+- The new runtime line-selection memory is intentionally local/session-scoped and should remain a selection aid, not a substitute for authoritative opening identity.
+- The change set improves traceability and live execution fidelity, but it does not add new approved content or alter move authority.
 
-## Recommended Next Phase
+## Recommended next phase
 
-- Release merge / follow-on approved-content hardening for the trace-enabled Stage 2 branch.
+- Live browser verification of the line-variation flow and restricted opponent reply execution, followed by checkpoint/merge review if the browser behavior remains clean.
 
-## Final Assessment
+## Completion note
 
-- FeatureTrace cannot override authority.
-- The trace completion phase is accepted for the current scope.
+- Approved-frame trace, fallback-frame trace, Plain View trace, Show More trace, castling-normalization trace, review-event readiness, and no-authority-override checks are all satisfied by the tests above.

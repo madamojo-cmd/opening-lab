@@ -56,7 +56,13 @@ import { buildOpeningTree } from "@/lib/blundr/openings/openingTree";
 import { resolveExpectedMoveForFrame } from "@/lib/blundr/openings/expectedMoveResolver";
 import { buildOpeningResolverDebug } from "@/lib/blundr/openings/openingResolverDebug";
 import { STAGE2_OPENING_AVAILABILITY_MATRIX, getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
-import { STAGE2_RUNTIME_TRAINABLE_REPERTOIRES, STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION } from "@/lib/blundr/openings/runtimeTrainableRepertoires";
+import {
+  STAGE2_RUNTIME_TRAINABLE_REPERTOIRES,
+  getStage2RuntimeTrainableRepertoire,
+  selectRuntimeWeightedOpeningSelection,
+  selectRuntimeWeightedTrainingLineSelection,
+  type RuntimeWeightedTrainingLineSelection,
+} from "@/lib/blundr/openings/runtimeTrainableRepertoires";
 import { resolveStage2CanonicalOpeningId } from "@/lib/blundr/openings/openingIdentity";
 import { decideGuidedCoveragePolicy } from "@/lib/blundr/openings/guidedCoveragePolicy";
 import type { RepertoireLineInput } from "@/lib/blundr/openings/openingTypes";
@@ -326,6 +332,7 @@ const PIECE_VALUES: Record<string, number> = { p:1, n:3, b:3, r:5, q:9, k:0 };
 const INITIAL_COUNTS: Record<ChessColor, Record<string, number>> = { w:{p:8,n:2,b:2,r:2,q:1,k:1}, b:{p:8,n:2,b:2,r:2,q:1,k:1} };
 const DEFAULT_BOARD_SETTINGS: BoardSettings = { boardTheme:"classic", pieceStyle:"unicode", showAttack:true, showDefense:true, showPlan:true, showMoveDots:true, showEvalBar:true, showCaptured:true, showLabels:true, showOpponentCue:true };
 const LOCAL_TELEMETRY_KEY = "blundr-v27-local-telemetry";
+const STAGE2_RUNTIME_TRAINING_LINE_MEMORY_KEY = "blundr-stage2-runtime-training-line-memory-v1";
 const MAX_LOCAL_TELEMETRY_EVENTS = 120;
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
 const FILE_TO_INDEX: Record<string, number> = Object.fromEntries(FILES.map((f, i) => [f, i]));
@@ -371,6 +378,58 @@ function buildRuntimePlayKeyBeforeFromSanHistory(historySan:string[]):string|nul
   }catch{
     return null;
   }
+}
+function normalizeRuntimeTrainingLineKeys(value:unknown):string[]{
+  return Array.isArray(value)
+    ? value.map((entry)=>String(entry ?? "").trim()).filter((entry)=>entry.length>0)
+    : [];
+}
+function updateRuntimeTrainingLineKeys(current:string[],selectedLineKey:string):string[]{
+  const key=String(selectedLineKey ?? "").trim();
+  if(!key)return current.slice(0,2);
+  return [key,...current.filter((entry)=>entry!==key)].slice(0,2);
+}
+function buildRuntimeTrainingLineSelection(openingId:string,recentLineKeys:string[],seed:string,repertoire?:Repertoire):RuntimeWeightedTrainingLineSelection | null{
+  const runtimeRepertoire=getStage2RuntimeTrainableRepertoire(openingId);
+  const selection=selectRuntimeWeightedTrainingLineSelection({
+    openingId,
+    recentLineKeys,
+    seed,
+    repertoire: runtimeRepertoire ?? null,
+  });
+  if(selection)return selection;
+  const line=repertoire?.lines[0] ?? [];
+  const playSequenceUci=buildRuntimePlayKeyBeforeFromSanHistory(line)?.split(",").filter(Boolean) ?? [];
+  const playKey=playSequenceUci.join(",");
+  const lineId=`${openingId}:0`;
+  const lineKey=`${lineId}:${playKey}`;
+  return {
+    mode:"runtime_weighted_line",
+    source:"local_runtime_package",
+    openingId,
+    selectedLineId:lineId,
+    selectedLineKey:lineKey,
+    selectedLineIndex:0,
+    selectedPlayKey:playKey,
+    selectedPlaySequenceUci:playSequenceUci,
+    eligibleCount:line.length>0?1:0,
+    eligibleLineIds:line.length>0?[lineId]:[],
+    eligibleLineKeys:line.length>0?[lineKey]:[],
+    weighted:true,
+    recentLineKeys:recentLineKeys.slice(0,2),
+    blockedRecentLineKeys:[],
+    variationReason:line.length>0?"fallback_curated_line":"no_runtime_line_available",
+    selectionSeed:seed,
+    lineWeightsSummary:line.length>0?[{
+      openingId,
+      lineId,
+      lineKey,
+      lineIndex:0,
+      playKey,
+      moveCount:playSequenceUci.length,
+      weight:Math.max(1, playSequenceUci.length),
+    }]:[],
+  };
 }
 function isValidSquare(square:string){return /^[a-h][1-8]$/.test(square)}
 // v2.7.40 P1 Fix 3: shared reverse guard (also in continuedPlay policy) to break emergency legal fallback loops (Ra1<->Ra2 etc)
@@ -1036,9 +1095,16 @@ async function runBrowserStockfish(fen:string,skill:number,movetime=750,multiPv=
 
 export default function App(){
   const initialFen=useMemo(()=>new Chess().fen(),[]);
+  const [trainingSessionId] = useState(()=>createLearningSessionId());
+  const runtimeOpeningSelection=useMemo(
+    ()=>selectRuntimeWeightedOpeningSelection(trainingSessionId),
+    [trainingSessionId],
+  );
   const [activeTab,setActiveTab]=useState<Tab>("home");
   const [customRepertoires,setCustomRepertoires]=useState<Repertoire[]>([]);
-  const [selectedRepertoireId,setSelectedRepertoireId]=useState(STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.selectedOpeningId);
+  const [selectedRepertoireId,setSelectedRepertoireId]=useState(runtimeOpeningSelection.selectedOpeningId);
+  const [recentRuntimeTrainingLineKeys,setRecentRuntimeTrainingLineKeys]=useState<string[]>([]);
+  const [selectedRuntimeTrainingLineSelection,setSelectedRuntimeTrainingLineSelection]=useState<RuntimeWeightedTrainingLineSelection | null>(()=>buildRuntimeTrainingLineSelection(runtimeOpeningSelection.selectedOpeningId,[],trainingSessionId));
   const [fen,setFen]=useState(initialFen);
   const [positionHistory,setPositionHistory]=useState<string[]>([initialFen]);
   const [historyIndex,setHistoryIndex]=useState(0);
@@ -1187,7 +1253,7 @@ export default function App(){
   const brainSeq=useRef(0);
   const visualRequestSeq=useRef(0);
   const moveQualityCacheRef=useRef<Map<string,MoveQualityResult>>(new Map());
-  const learningSessionIdRef=useRef<string>(createLearningSessionId());
+  const learningSessionIdRef=useRef<string>(trainingSessionId);
   const positionStartedAtRef=useRef<number>(Date.now());
   const lastMoveQualityEventKeyRef=useRef<string>("");
   const lastTeachingCueEventKeyRef=useRef<string>("");
@@ -1241,10 +1307,20 @@ export default function App(){
     for(const repertoire of customRepertoires) merged.set(repertoire.id,repertoire);
     return [...merged.values()];
   },[customRepertoires]);
+  function refreshRuntimeTrainingLineSelection(nextOpeningId:string, recentLineKeys:string[] = recentRuntimeTrainingLineKeys){
+    const nextSelection=buildRuntimeTrainingLineSelection(nextOpeningId,recentLineKeys,trainingSessionId,repertoires.find((candidate)=>candidate.id===nextOpeningId));
+    setSelectedRuntimeTrainingLineSelection(nextSelection);
+    if(nextSelection?.selectedLineKey){
+      setRecentRuntimeTrainingLineKeys((current)=>updateRuntimeTrainingLineKeys(current,nextSelection.selectedLineKey));
+    }
+    return nextSelection;
+  }
   const canonicalSelectedRepertoireId=useMemo(
     ()=>resolveStage2CanonicalOpeningId(selectedRepertoireId)??selectedRepertoireId,
     [selectedRepertoireId],
   );
+  const selectedRuntimeLineId=selectedRuntimeTrainingLineSelection?.selectedLineId??canonicalSelectedRepertoireId;
+  const selectedRuntimeLineKey=selectedRuntimeTrainingLineSelection?.selectedLineKey??selectedRuntimeLineId;
   const repertoire=repertoires.find(r=>r.id===canonicalSelectedRepertoireId)??repertoires[0];
   const openingTree=useMemo(()=>buildOpeningTree(repertoireLineInputs(repertoire)),[repertoire]);
   const game=useMemo(()=>new Chess(fen),[fen]);
@@ -1310,7 +1386,7 @@ export default function App(){
     return len > 0 && cur >= len;
   }, [expectedMoveResolution?.lineCursor, expectedMoveResolution?.lineLength]);
   const exactSelectedLineNodes = useMemo(
-    () => exactOpeningNodes.filter((node) => node.lineId === canonicalSelectedRepertoireId),
+    () => exactOpeningNodes.filter((node) => node.lineId === selectedRuntimeLineId),
     [exactOpeningNodes, canonicalSelectedRepertoireId],
   );
   const exactSelectedLineNodeFound = exactSelectedLineNodes.length > 0;
@@ -1336,7 +1412,7 @@ export default function App(){
       isUserTurn,
       userExplicitlyEnteredContinuation,
       selectedOpeningId: canonicalSelectedRepertoireId,
-      selectedLineId: canonicalSelectedRepertoireId,
+      selectedLineId:selectedRuntimeLineId,
       runtimeOpeningId: runtimeOpeningIdForFrame,
       selectedOpeningRuntimeAvailable: Boolean(selectedOpeningAvailability?.runtimeAvailable),
       fen4: normalizeFen(fen),
@@ -1348,7 +1424,7 @@ export default function App(){
       exactNodeHasChildren: selectedLineExactNodeHasChildren,
       hasNextOpponentMove: hasNextOpponentMoveInSelectedLine,
       hasNextUserMove: hasNextUserMoveInSelectedLine,
-      validBranchCompleteLatch: Boolean(branchCompleteLatch.active && branchCompleteLatch.lineId === canonicalSelectedRepertoireId),
+      validBranchCompleteLatch: Boolean(branchCompleteLatch.active && branchCompleteLatch.lineId === selectedRuntimeLineId),
       bookCompleteAllowed: Boolean(selectedLineCompleteConfirmed || explicitCuratedTerminalNode),
       guidedCompleteAllowed: Boolean(selectedLineCompleteConfirmed || explicitCuratedTerminalNode),
       runtimeBookBookExhausted: Boolean(runtimeBookFrameQuery.bookExhausted),
@@ -1970,7 +2046,7 @@ export default function App(){
     lineExhaustedByCursor:selectedLineCompleteConfirmed,
     lineExhaustedByLichess:lichessEndConfirmed,
     afterFinalUserMove:!isUserTurn&&lastMoveColor===userColor,
-    selectedLineId:canonicalSelectedRepertoireId,
+    selectedLineId:selectedRuntimeLineId,
     fen4:normalizeFen(fen),
     lastUserMoveUci:lastMoveColor===userColor?lastMove:null,
     lastUserMoveSan:lastMoveColor===userColor?lastMoveSan:null,
@@ -1978,7 +2054,7 @@ export default function App(){
     hasNextOpponentMove:hasNextOpponentMoveInSelectedLine,
     hasNextUserMove:hasNextUserMoveInSelectedLine,
     explicitCuratedTerminalNode,
-    validBranchCompleteLatch:Boolean(branchCompleteLatch.active&&branchCompleteLatch.lineId===canonicalSelectedRepertoireId),
+    validBranchCompleteLatch:Boolean(branchCompleteLatch.active&&branchCompleteLatch.lineId===selectedRuntimeLineId),
   }),[
     trainingMode,
     trainerPhase,
@@ -2366,7 +2442,7 @@ export default function App(){
     expectedMoveUci:teachingOrchestration.cue.metadata.moveUci,
     expectedMoveSan:teachingOrchestration.cue.metadata.moveSan,
     openingId:canonicalSelectedRepertoireId,
-    lineId:canonicalSelectedRepertoireId,
+    lineId:selectedRuntimeLineId,
     fen,
     frameId:trainerFrameId,
     viewMode:effectiveViewModeForVisual,
@@ -2561,7 +2637,7 @@ export default function App(){
         trainerPhase,
         isContinuation:trainingMode==="continuation",
         openingId:repertoire.id,
-        lineId:canonicalSelectedRepertoireId,
+        lineId:selectedRuntimeLineId,
         activeLineName:repertoire.name,
         recentCoachBodies:recentInstructional.map((entry)=>entry.body),
         recentCoachThemes:recentInstructional.map((entry)=>String(entry.selectedOpportunityId??"")),
@@ -2804,7 +2880,7 @@ export default function App(){
         trainingMode,
         trainerPhase,
         openingId:repertoire.id,
-        lineId:canonicalSelectedRepertoireId,
+        lineId:selectedRuntimeLineId,
         activeLineName:repertoire.name,
         recentCoachBodies:recentInstructional.map((entry)=>entry.body),
         recentCoachThemes:recentInstructional.map((entry)=>String(entry.selectedOpportunityId??"")),
@@ -2852,7 +2928,7 @@ export default function App(){
         trainingMode,
         trainerPhase,
         openingId:repertoire.id,
-        lineId:canonicalSelectedRepertoireId,
+        lineId:selectedRuntimeLineId,
         activeLineName:repertoire.name,
         recentCoachBodies:recentInstructional.map((entry)=>entry.body),
         recentCoachThemes:recentInstructional.map((entry)=>String(entry.selectedOpportunityId??"")),
@@ -2900,7 +2976,7 @@ export default function App(){
         trainingMode,
         trainerPhase,
         openingId:repertoire.id,
-        lineId:canonicalSelectedRepertoireId,
+        lineId:selectedRuntimeLineId,
         activeLineName:repertoire.name,
         recentCoachBodies:recentInstructional.map((entry)=>entry.body),
         recentCoachThemes:recentInstructional.map((entry)=>String(entry.selectedOpportunityId??"")),
@@ -3911,6 +3987,19 @@ export default function App(){
   }
   useEffect(()=>{const saved=localStorage.getItem("blundr-v22-progress");const savedCustom=localStorage.getItem("blundr-v22-custom");const savedSettings=localStorage.getItem("blundr-board-settings");const savedTelemetry=localStorage.getItem(LOCAL_TELEMETRY_KEY);if(saved)try{setProgress(JSON.parse(saved))}catch{}if(savedCustom)try{setCustomRepertoires(JSON.parse(savedCustom))}catch{}if(savedSettings)try{setBoardSettings({...DEFAULT_BOARD_SETTINGS,...JSON.parse(savedSettings)})}catch{}if(savedTelemetry)try{const parsed=JSON.parse(savedTelemetry) as Partial<LocalTelemetryStore>;const nextEvents=Array.isArray(parsed.events)?parsed.events.slice(-MAX_LOCAL_TELEMETRY_EVENTS):[];setTelemetryEnabled(Boolean(parsed.enabled));setTelemetryEvents(nextEvents);telemetryEventsRef.current=nextEvents;telemetrySeq.current=nextEvents.reduce((max,event)=>Math.max(max,Number(event.id)||0),0)}catch{}},[]);
   useEffect(()=>{
+    try{
+      const savedRuntimeLineMemory=localStorage.getItem(STAGE2_RUNTIME_TRAINING_LINE_MEMORY_KEY);
+      if(!savedRuntimeLineMemory)return;
+      const parsed=normalizeRuntimeTrainingLineKeys(JSON.parse(savedRuntimeLineMemory));
+      setRecentRuntimeTrainingLineKeys(parsed);
+      const nextSelection=buildRuntimeTrainingLineSelection(selectedRepertoireId,parsed,trainingSessionId,repertoire);
+      if(nextSelection){
+        setSelectedRuntimeTrainingLineSelection(nextSelection);
+      }
+    }catch{}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+  useEffect(()=>{
     if(typeof window==="undefined")return;
     const loaded=loadCoachUtteranceMemory(window.localStorage);
     const meta=readCoachUtteranceMemoryMeta(window.localStorage);
@@ -3935,6 +4024,7 @@ export default function App(){
   useEffect(()=>localStorage.setItem("blundr-v22-progress",JSON.stringify(progress)),[progress]);
   useEffect(()=>localStorage.setItem("blundr-v22-custom",JSON.stringify(customRepertoires)),[customRepertoires]);
   useEffect(()=>localStorage.setItem("blundr-board-settings",JSON.stringify(boardSettings)),[boardSettings]);
+  useEffect(()=>localStorage.setItem(STAGE2_RUNTIME_TRAINING_LINE_MEMORY_KEY,JSON.stringify(recentRuntimeTrainingLineKeys.slice(0,2))),[recentRuntimeTrainingLineKeys]);
   useEffect(()=>{telemetryEnabledRef.current=telemetryEnabled},[telemetryEnabled]);
   useEffect(()=>{telemetryEventsRef.current=telemetryEvents},[telemetryEvents]);
   useEffect(()=>{branchCompleteLatchRef.current=branchCompleteLatch},[branchCompleteLatch]);
@@ -3969,12 +4059,12 @@ export default function App(){
     if(!branchCompleteEligibleNow||!stage2TerminalProof.proven)return;
     const existing=branchCompleteLatchRef.current;
     const fen4=normalizeFen(fen);
-    if(existing.active&&existing.lineId===canonicalSelectedRepertoireId&&existing.fen4===fen4)return;
+    if(existing.active&&existing.lineId===selectedRuntimeLineId&&existing.fen4===fen4)return;
     setBranchCompleteLatch({
       active:true,
       reason:branchCompleteReasonNow??stage2TerminalProof.reason??"line_complete",
       fen4,
-      lineId:canonicalSelectedRepertoireId,
+      lineId:selectedRuntimeLineId,
       ply:moveHistory.length,
       latchedAtFrameId:trainerFrameId,
     });
@@ -4603,8 +4693,8 @@ export default function App(){
     maiaOpponentRequestSeqRef.current=0;
     maiaTimelineSeqRef.current=0;
   }
-  function selectRepertoire(id:string){const startFen=new Chess().fen();const canonicalId=resolveStage2CanonicalOpeningId(id)??id;setSelectedRepertoireId(canonicalId);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
-  function resetBoard(){const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveTab("train");bumpRuntimeFrame()}
+  function selectRepertoire(id:string){const startFen=new Chess().fen();const canonicalId=resolveStage2CanonicalOpeningId(id)??id;setSelectedRepertoireId(canonicalId);refreshRuntimeTrainingLineSelection(canonicalId);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
+  function resetBoard(){const startFen=new Chess().fen();refreshRuntimeTrainingLineSelection(selectedRepertoireId);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveTab("train");bumpRuntimeFrame()}
   function recordPosition(nextFen:string){const nextIndex=historyIndex+1;setPositionHistory(prev=>[...prev.slice(0,nextIndex),nextFen]);setHistoryIndex(nextIndex)}
   function jumpHistory(direction:-1|1){const next=Math.max(0,Math.min(positionHistory.length-1,historyIndex+direction));if(next===historyIndex)return;setHistoryIndex(next);setFen(positionHistory[next]);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);clearPendingOpponentReplyRequest({clearStaleIssue:true});setOpponentCue(null);setOpponentVariationDebug(null);setBookComplete(false);setFeedback(next===positionHistory.length-1?"Returned to the live position.":`Reviewing previous position ${next} of ${positionHistory.length-1}. Use the arrows to return to live play.`);bumpRuntimeFrame()}
   async function playOpponentMove(request:PendingOpponentRequest){
@@ -4628,7 +4718,7 @@ export default function App(){
       resultingFen:move.resultingFen,
     }));
     const positionKey=normalizeFen(current.fen());
-    const variationContext={openingId:repertoire.id,lineId:canonicalSelectedRepertoireId,trainingMode:mode,positionKey};
+    const variationContext={openingId:repertoire.id,lineId:selectedRuntimeLineId,trainingMode:mode,positionKey};
     const memory=loadOpponentVariationMemory();
     let variationDebug:OpponentVariationDebug={
       opponentVariationApplied:false,
@@ -4648,10 +4738,25 @@ export default function App(){
     let continuationPolicyDecision:ReturnType<typeof selectContinuedPlayMove>|null=null;
     if(mode==="restricted"){
       if(!currentOpponentBookOptions.length){
-        const runtimeBookRestrictedCandidates=runtimeBookFrameQuery.status==="ready"&&runtimeBookFrameQuery.openingId===runtimeOpeningIdForFrame&&runtimeBookFrameQuery.playKeyBefore===runtimePlayKeyBeforeForFrame
-          ? runtimeBookFrameQuery.candidates
-          : [];
-        const restrictedOpponentReplyAuthority=restrictedOpponentReplyAuthorityPreview;
+        const runtimeBookMatchesFrame=runtimeBookFrameQuery.status==="ready"&&runtimeBookFrameQuery.openingId===runtimeOpeningIdForFrame&&runtimeBookFrameQuery.playKeyBefore===runtimePlayKeyBeforeForFrame;
+        const runtimeBookRestrictedCandidates=runtimeBookMatchesFrame ? runtimeBookFrameQuery.candidates : [];
+        const runtimeBookRestrictedTopCandidate=runtimeBookRestrictedCandidates.find((candidate)=>continuationLegalMoveUcis.includes(candidate.uci))??null;
+        const restrictedOpponentReplyAuthority=resolveRestrictedOpponentReplyAuthority({
+          trainingMode:"restricted",
+          currentOpponentBookOptionCount:currentOpponentBookOptions.length,
+          legalMoveCount:continuationLegalMoveUcis.length,
+          legalMoveUcis:continuationLegalMoveUcis,
+          runtimeBookMatchesFrame,
+          runtimeBookStatus:runtimeBookFrameQuery.status,
+          runtimeBookBookExhausted:runtimeBookFrameQuery.bookExhausted,
+          runtimeBookCandidateCount:runtimeBookRestrictedCandidates.length,
+          runtimeBookOpeningId:runtimeBookFrameQuery.openingId,
+          runtimeBookPlayKeyBefore:runtimeBookFrameQuery.playKeyBefore,
+          currentOpeningId:selectedRepertoireId,
+          currentPlayKeyBefore:runtimePlayKeyBeforeForFrame,
+          runtimeBookCandidates:runtimeBookRestrictedCandidates,
+          runtimeBookTopCandidate:runtimeBookRestrictedTopCandidate,
+        });
         if(restrictedOpponentReplyAuthority.kind==="terminal"){
           clearPendingOpponentReplyRequest({clearStaleIssue:true});
           setTrainerPhase("terminal");
@@ -5131,7 +5236,7 @@ export default function App(){
             : "Variation: normal weighted selection.";
     recordOpponentChoice({
       openingId:repertoire.id,
-      lineId:canonicalSelectedRepertoireId,
+      lineId:selectedRuntimeLineId,
       trainingMode:mode,
       positionKey,
       opponentMoveUci:chosen.uci,
@@ -5425,7 +5530,7 @@ export default function App(){
     });
     const nextLineCompleteConfirmed=(nextExpectedMoveResolution.lineLength??0)>0&&(nextExpectedMoveResolution.lineCursor??0)>=(nextExpectedMoveResolution.lineLength??0);
     const nextExactOpeningNodes=openingTree.nodesByFen4[normalizeFen(nextFen)]??[];
-    const nextExactSelectedLineNodes=nextExactOpeningNodes.filter((node)=>node.lineId===canonicalSelectedRepertoireId);
+    const nextExactSelectedLineNodes=nextExactOpeningNodes.filter((node)=>node.lineId===selectedRuntimeLineId);
     const nextExactNodeHasChildren=nextExactSelectedLineNodes.length?nextExactSelectedLineNodes.some((node)=>node.continuations.length>0):"unknown";
     const nextHasNextOpponentMove=nextExactSelectedLineNodes.length?nextExactSelectedLineNodes.some((node)=>node.continuations.some((move)=>move.color===opponentColor)):"unknown";
     const nextHasNextUserMove=nextExactSelectedLineNodes.length?nextExactSelectedLineNodes.some((node)=>node.continuations.some((move)=>move.color===userColor)):"unknown";
@@ -5465,7 +5570,7 @@ export default function App(){
       lineExhaustedByCursor:nextSelectedLineConfirmedComplete||nextRestrictedRuntimeBookExhaustedEligibleForBranchComplete,
       lineExhaustedByLichess:false,
       afterFinalUserMove:!nextIsUserTurn&&legal.color===userColor,
-      selectedLineId:canonicalSelectedRepertoireId,
+      selectedLineId:selectedRuntimeLineId,
       fen4:normalizeFen(nextFen),
       lastUserMoveUci:legal.color===userColor?playedUci:null,
       lastUserMoveSan:legal.color===userColor?legal.san:null,
@@ -5480,7 +5585,7 @@ export default function App(){
       isUserTurn:nextIsUserTurn,
       userExplicitlyEnteredContinuation,
       selectedOpeningId:canonicalSelectedRepertoireId,
-      selectedLineId:canonicalSelectedRepertoireId,
+      selectedLineId:selectedRuntimeLineId,
       runtimeOpeningId:runtimeOpeningIdForFrame,
       selectedOpeningRuntimeAvailable:Boolean(selectedOpeningAvailability?.runtimeAvailable),
       fen4:normalizeFen(nextFen),
@@ -5520,7 +5625,7 @@ export default function App(){
         active:true,
         reason:nextTerminalProof.reason??nextBranchCompleteContract.reason??"line_complete",
         fen4:normalizeFen(nextFen),
-        lineId:canonicalSelectedRepertoireId,
+        lineId:selectedRuntimeLineId,
         ply:moveHistory.length+1,
         latchedAtFrameId:trainerFrameId+1,
       });
@@ -5975,7 +6080,7 @@ export default function App(){
     exactNodeHasChildren: selectedLineExactNodeHasChildren,
     hasNextOpponentMove: hasNextOpponentMoveInSelectedLine,
     hasNextUserMove: hasNextUserMoveInSelectedLine,
-    validBranchCompleteLatch: Boolean(branchCompleteLatch.active && branchCompleteLatch.lineId === canonicalSelectedRepertoireId),
+    validBranchCompleteLatch: Boolean(branchCompleteLatch.active && branchCompleteLatch.lineId === selectedRuntimeLineId),
     afterFinalUserMove: !isUserTurn && lastMoveColor === userColor,
     runtimeBookBookExhausted: runtimeBookFrameQuery.bookExhausted,
     runtimeBookCandidateCount: runtimeBookFrameQuery.candidates.length,
@@ -6069,27 +6174,40 @@ export default function App(){
     lastUserMoveUci:lastMoveAttribution.lastUserMoveUci,
     lastOpponentMoveSan:lastMoveAttribution.lastOpponentMoveSan,
     lastOpponentMoveUci:lastMoveAttribution.lastOpponentMoveUci,
-    selectedLineId:canonicalSelectedRepertoireId,
+    selectedLineId:selectedRuntimeLineId,
     selectedOpeningId:selectedRepertoireId,
     canonicalSelectedOpeningId:canonicalSelectedRepertoireId,
     selectedConceptId:visualRecipe?.conceptId??teachingOrchestration?.cue.conceptId,
     activeLineName:repertoire.name,
-    openingSelectionMode:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.mode,
-    openingSelectionSource:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.source,
-    openingSelectionEligibleCount:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.eligibleCount,
-    openingSelectionEligibleOpeningIds:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.eligibleOpeningIds,
-    openingSelectionWeighted:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.weighted,
-    openingSelectionContentGated:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.contentGated,
-    openingSelectionStageGated:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.stageGated,
-    openingSelectionVisibilityGated:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.visibilityGated,
-    openingSelectionWeightsSummary:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.weightsSummary,
-    openingSelectionStickyReason:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.openingSelectionStickyReason,
-    openingSelectionSeed:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.openingSelectionSeed,
-    openingSelectionWasPersisted:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.openingSelectionWasPersisted,
-    lineSelectionSource:selectedOpeningAvailability?.runtimeAvailable?"local_runtime_package":"curated_repertoire",
-    lineSelectionWeighted:Boolean(selectedOpeningAvailability?.runtimeAvailable),
+    openingSelectionMode:runtimeOpeningSelection.mode,
+    openingSelectionSource:runtimeOpeningSelection.source,
+    openingSelectionEligibleCount:runtimeOpeningSelection.eligibleCount,
+    openingSelectionEligibleOpeningIds:runtimeOpeningSelection.eligibleOpeningIds,
+    openingSelectionWeighted:runtimeOpeningSelection.weighted,
+    openingSelectionContentGated:runtimeOpeningSelection.contentGated,
+    openingSelectionStageGated:runtimeOpeningSelection.stageGated,
+    openingSelectionVisibilityGated:runtimeOpeningSelection.visibilityGated,
+    openingSelectionWeightsSummary:runtimeOpeningSelection.weightsSummary,
+    openingSelectionStickyReason:runtimeOpeningSelection.openingSelectionStickyReason,
+    openingSelectionSeed:runtimeOpeningSelection.openingSelectionSeed,
+    openingSelectionWasPersisted:runtimeOpeningSelection.openingSelectionWasPersisted,
+    lineSelectionMode:selectedRuntimeTrainingLineSelection?.mode??null,
+    lineSelectionSource:selectedRuntimeTrainingLineSelection?.source??(selectedOpeningAvailability?.runtimeAvailable?"local_runtime_package":"curated_repertoire"),
+    lineSelectionWeighted:Boolean(selectedRuntimeTrainingLineSelection?.weighted ?? selectedOpeningAvailability?.runtimeAvailable),
     lineSelectionContentGated:false,
-    lineSelectionRuntimeBacked:Boolean(selectedOpeningAvailability?.runtimeAvailable),
+    lineSelectionRuntimeBacked:Boolean(selectedRuntimeTrainingLineSelection?.source==="local_runtime_package"||selectedOpeningAvailability?.runtimeAvailable),
+    lineSelectionEligibleCount:selectedRuntimeTrainingLineSelection?.eligibleCount??0,
+    lineSelectionEligibleLineIds:selectedRuntimeTrainingLineSelection?.eligibleLineIds??[],
+    lineSelectionEligibleLineKeys:selectedRuntimeTrainingLineSelection?.eligibleLineKeys??[],
+    lineSelectionRecentLineKeys:recentRuntimeTrainingLineKeys,
+    lineSelectionBlockedRecentLineKeys:selectedRuntimeTrainingLineSelection?.blockedRecentLineKeys??[],
+    lineSelectionVariationReason:selectedRuntimeTrainingLineSelection?.variationReason??null,
+    lineSelectionSeed:selectedRuntimeTrainingLineSelection?.selectionSeed??null,
+    selectedRuntimeLineId:selectedRuntimeTrainingLineSelection?.selectedLineId??null,
+    selectedRuntimeLineKey,
+    selectedRuntimeLineIndex:selectedRuntimeTrainingLineSelection?.selectedLineIndex??null,
+    selectedRuntimeLinePlayKey:selectedRuntimeTrainingLineSelection?.selectedPlayKey??null,
+    selectedRuntimeLinePlaySequenceUci:selectedRuntimeTrainingLineSelection?.selectedPlaySequenceUci??[],
     currentInstructionFrame,
     playKeyBefore:runtimePlayKeyBeforeForFrame??null,
     playKey:runtimePlayKeyBeforeForFrame&&instructionTarget?.uci?`${runtimePlayKeyBeforeForFrame},${instructionTarget.uci}`:(instructionTarget?.uci??null),
