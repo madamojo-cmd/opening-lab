@@ -63,7 +63,9 @@ export type RuntimeWeightedTrainingLineSelection = {
   weighted: true;
   recentLineKeys: string[];
   blockedRecentLineKeys: string[];
+  blockedThirdRepeatLineKeys: string[];
   variationReason: string | null;
+  repeatUnavoidable: boolean;
   selectionSeed: string | null;
   lineWeightsSummary: RuntimeWeightedTrainingLineSelectionSummary[];
 };
@@ -174,13 +176,15 @@ export function selectRuntimeWeightedTrainingLineSelection(input: {
     return null;
   }
 
-  const recentLineKeys = Array.from(
-    new Set(
-      (input.recentLineKeys ?? [])
-        .map((entry) => String(entry ?? "").trim())
-        .filter(Boolean),
-    ),
-  ).slice(0, 2);
+  const recentLineKeys = (input.recentLineKeys ?? [])
+    .map((entry) => String(entry ?? "").trim())
+    .filter(Boolean)
+    .slice(0, 2);
+
+  const thirdConsecutiveRepeatLineKey =
+    recentLineKeys.length === 2 && recentLineKeys[0] === recentLineKeys[1]
+      ? recentLineKeys[0]
+      : null;
 
   const lineSummaries = repertoire.lines.map((line, lineIndex) => {
     const selectedPlaySequenceUci = sanLineToUciSequence(line);
@@ -199,10 +203,11 @@ export function selectRuntimeWeightedTrainingLineSelection(input: {
     };
   });
 
-  const eligibleLineSummaries = lineSummaries.filter((line) => !recentLineKeys.includes(line.lineKey));
-  const blockedRecentLineKeys = lineSummaries
-    .filter((line) => recentLineKeys.includes(line.lineKey))
-    .map((line) => line.lineKey);
+  const eligibleLineSummaries = thirdConsecutiveRepeatLineKey
+    ? lineSummaries.filter((line) => line.lineKey !== thirdConsecutiveRepeatLineKey)
+    : lineSummaries;
+  const blockedThirdRepeatLineKeys = thirdConsecutiveRepeatLineKey ? [thirdConsecutiveRepeatLineKey] : [];
+  const repeatUnavoidable = Boolean(thirdConsecutiveRepeatLineKey && eligibleLineSummaries.length === 0);
   const weightedCandidates = eligibleLineSummaries.length > 0 ? eligibleLineSummaries : lineSummaries;
   const selected = pickWeighted(
     weightedCandidates,
@@ -223,11 +228,13 @@ export function selectRuntimeWeightedTrainingLineSelection(input: {
     eligibleLineKeys: eligibleLineSummaries.map((line) => line.lineKey),
     weighted: true,
     recentLineKeys,
-    blockedRecentLineKeys,
+    blockedRecentLineKeys: blockedThirdRepeatLineKeys,
+    blockedThirdRepeatLineKeys,
     variationReason:
-      eligibleLineSummaries.length > 0
-        ? (blockedRecentLineKeys.length > 0 ? "recent_line_keys_excluded" : "fresh_line_selection")
-        : "recent_line_memory_exhausted",
+      repeatUnavoidable
+        ? "repeat_unavoidable_no_alternative"
+        : (blockedThirdRepeatLineKeys.length > 0 ? "third_consecutive_repeat_excluded" : "fresh_line_selection"),
+    repeatUnavoidable,
     selectionSeed: input.seed ?? RUNTIME_WEIGHTED_OPENING_SELECTION_SEED,
     lineWeightsSummary: lineSummaries.map(({ openingId, lineId, lineKey, lineIndex, playKey, moveCount, weight }) => ({
       openingId,
