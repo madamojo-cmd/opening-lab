@@ -10,6 +10,7 @@ export type Stage2FeatureTraceStatus = "complete" | "partial" | "missing";
 export type Stage2FeatureTraceFrameKind =
   | "instructional_user_turn"
   | "continuation_user_turn"
+  | "terminal_continuation_pause"
   | "branch_complete"
   | "terminal"
   | "opponent_replying"

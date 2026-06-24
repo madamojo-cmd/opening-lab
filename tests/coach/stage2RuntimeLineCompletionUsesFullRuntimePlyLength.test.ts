@@ -16,11 +16,12 @@ function buildSnapshot(selectedRuntimeLineCurrentPly: number, selectedRuntimeLin
     selectedLineId: "italian-white:0",
     selectedRuntimeLineId: "italian-white:0",
     selectedRuntimeLineKey: "italian-white:0:e2e4,e7e5,g1f3,b8c6,f1c4,bc5",
+    selectedOpeningRuntimeAvailable: true,
     selectedRuntimeLinePlyLength,
     selectedRuntimeLineCurrentPly,
     selectedRuntimeLineExhausted: selectedRuntimeLineCurrentPly >= selectedRuntimeLinePlyLength,
     selectedLineCompleteConfirmed: selectedRuntimeLineCurrentPly >= selectedRuntimeLinePlyLength,
-    terminalProofLineAuthority: "selected_runtime_line_play_sequence_uci",
+    terminalProofLineAuthority: selectedRuntimeLineCurrentPly >= selectedRuntimeLinePlyLength ? "actual_runtime_branch_or_depth" : "selected_runtime_line_play_sequence_uci",
     terminalProofBlockedReason: selectedRuntimeLineCurrentPly >= selectedRuntimeLinePlyLength ? null : "runtime_line_not_exhausted",
     runtimeBookQueried: true,
     runtimeBookOpeningId: "italian-white",
@@ -96,6 +97,7 @@ export function testStage2RuntimeLineCompletionUsesFullRuntimePlyLength(): void 
   assert.equal((sixOfSix.runtime as any)?.selectedRuntimeLinePlyLength, 6);
   assert.equal((sixOfSix.runtime as any)?.selectedRuntimeLineCurrentPly, 6);
   assert.equal((sixOfSix.runtime as any)?.selectedRuntimeLineExhausted, true);
+  assert.equal((sixOfSix.runtime as any)?.terminalProofLineAuthority, "actual_runtime_branch_or_depth");
 }
 
 testStage2RuntimeLineCompletionUsesFullRuntimePlyLength();

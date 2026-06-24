@@ -15,7 +15,8 @@ export function buildStage2RuntimeGraphSnapshot(overrides: Record<string, unknow
     ? (overrides.moveHistory as unknown[])
     : playSequenceUci.slice(0, Math.max(0, currentPly));
   const lastMoveUci = moveHistory.length > 0 ? String(moveHistory[moveHistory.length - 1]) : null;
-  const lineComplete = Boolean(overrides.selectedLineCompleteConfirmed ?? currentPly >= playSequenceUci.length);
+  const selectedRuntimeLinePlyLength = Number(overrides.selectedRuntimeLinePlyLength ?? playSequenceUci.length);
+  const lineComplete = Boolean(overrides.selectedLineCompleteConfirmed ?? currentPly >= selectedRuntimeLinePlyLength);
   const branchTransitionRendered = Boolean(overrides.branchTransitionSurfaceRendered ?? lineComplete);
   const visibleTitle = String(overrides.visibleTitle ?? (lineComplete ? "Line complete" : "Book progress"));
 
@@ -40,26 +41,27 @@ export function buildStage2RuntimeGraphSnapshot(overrides: Record<string, unknow
     selectedRuntimeLineKey: String(overrides.selectedRuntimeLineKey ?? `${selectedRuntimeLineId}:${playSequenceUci.join(",")}`),
     selectedRuntimeLinePlayKey: String(overrides.selectedRuntimeLinePlayKey ?? playSequenceUci.join(",")),
     selectedRuntimeLinePlaySequenceUci: playSequenceUci,
-    selectedRuntimeLinePlyLength: playSequenceUci.length,
+    selectedRuntimeLinePlyLength,
     selectedRuntimeLineCurrentPly: currentPly,
-    selectedRuntimeLineExhausted: Boolean(overrides.selectedRuntimeLineExhausted ?? currentPly >= playSequenceUci.length),
+    selectedRuntimeLineExhausted: Boolean(overrides.selectedRuntimeLineExhausted ?? currentPly >= selectedRuntimeLinePlyLength),
     stage2OpeningDepthTargetPly: Number(overrides.stage2OpeningDepthTargetPly ?? 12),
     stage2OpeningCurrentPly: Number(overrides.stage2OpeningCurrentPly ?? currentPly),
     stage2OpeningDepthReached: Boolean(overrides.stage2OpeningDepthReached ?? currentPly >= 12),
-    bookCompleteAllowed: Boolean(overrides.bookCompleteAllowed ?? overrides.guidedCompleteAllowed ?? false),
-    guidedCompleteAllowed: Boolean(overrides.guidedCompleteAllowed ?? overrides.bookCompleteAllowed ?? false),
-    runtimeGraphAuthorityUsed: String(overrides.runtimeGraphAuthorityUsed ?? "local_runtime_package"),
+    bookCompleteAllowed: Boolean(overrides.bookCompleteAllowed ?? lineComplete),
+    guidedCompleteAllowed: Boolean(overrides.guidedCompleteAllowed ?? lineComplete),
+    runtimeGraphAuthorityUsed: Boolean(overrides.runtimeGraphAuthorityUsed ?? true),
     runtimeGraphCurrentPlayKey: String(overrides.runtimeGraphCurrentPlayKey ?? playSequenceUci.slice(0, currentPly).join(",")),
     runtimeGraphCandidateCount: Number(overrides.runtimeGraphCandidateCount ?? 3),
     runtimeGraphSelectedCandidateUci: String(overrides.runtimeGraphSelectedCandidateUci ?? "f1c4"),
-    selectedRuntimeLineUsedFor: String(overrides.selectedRuntimeLineUsedFor ?? "opening_stage"),
+    selectedRuntimeLineUsedFor: String(overrides.selectedRuntimeLineUsedFor ?? "initial_seed"),
     hardRailDetected: Boolean(overrides.hardRailDetected ?? false),
     hardRailBlockedReason: overrides.hardRailBlockedReason ?? null,
     selectedLineCompleteConfirmed: lineComplete,
-    terminalProofLineAuthority: String(overrides.terminalProofLineAuthority ?? "selected_runtime_line_play_sequence_uci"),
+    terminalProofLineAuthority: String(overrides.terminalProofLineAuthority ?? (lineComplete ? "actual_runtime_branch_or_depth" : "selected_runtime_line_play_sequence_uci")),
     terminalProofBlockedReason: overrides.terminalProofBlockedReason ?? (lineComplete ? null : "runtime_line_not_exhausted"),
     runtimeBookQueried: Boolean(overrides.runtimeBookQueried ?? true),
     runtimeBookOpeningId: String(overrides.runtimeBookOpeningId ?? selectedOpeningId),
+    selectedOpeningRuntimeAvailable: Boolean(overrides.selectedOpeningRuntimeAvailable ?? true),
     runtimeBookPlayKeyBefore: String(overrides.runtimeBookPlayKeyBefore ?? playSequenceUci.slice(0, Math.max(0, currentPly)).join(",")),
     runtimeBookStatus: String(overrides.runtimeBookStatus ?? "ready"),
     runtimeBookCandidateCount: Number(overrides.runtimeBookCandidateCount ?? 0),

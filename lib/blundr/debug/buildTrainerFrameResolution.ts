@@ -81,9 +81,21 @@ function normalizeVisualSource(value: unknown): TrainerFrameVisualResult["visual
 
 function buildTerminalProof(input: Input): TrainerFrameTerminalProofResolution {
   const selectedRuntimeLinePlyLength = Number(input.selectedRuntimeLinePlyLength ?? 0);
-  const selectedRuntimeLineCurrentPly = Number(input.selectedRuntimeLineCurrentPly ?? 0);
-  const selectedRuntimeLineExhausted = Boolean(input.selectedRuntimeLineExhausted ?? (selectedRuntimeLinePlyLength > 0 && selectedRuntimeLineCurrentPly >= selectedRuntimeLinePlyLength));
-  const terminalProofLineAuthority = normalizeString(input.terminalProofLineAuthority ?? null);
+  const resolvedCurrentPlyCandidate =
+    Number.isFinite(Number(input.currentPly)) ? Number(input.currentPly) :
+    Array.isArray(input.moveHistory) ? input.moveHistory.length :
+    Number.isFinite(Number(input.selectedRuntimeLineCurrentPly)) ? Number(input.selectedRuntimeLineCurrentPly) :
+    0;
+  const selectedRuntimeLineCurrentPly = resolvedCurrentPlyCandidate;
+  const selectedRuntimeLineExhausted =
+    Boolean(input.selectedRuntimeLineExhausted) ||
+    (selectedRuntimeLinePlyLength > 0 && selectedRuntimeLineCurrentPly >= selectedRuntimeLinePlyLength);
+  const selectedLineCompleteConfirmed =
+    Boolean(input.selectedLineCompleteConfirmed) ||
+    (selectedRuntimeLinePlyLength > 0 && selectedRuntimeLineCurrentPly >= selectedRuntimeLinePlyLength);
+  const terminalProofLineAuthority = selectedLineCompleteConfirmed && selectedRuntimeLineCurrentPly >= selectedRuntimeLinePlyLength
+    ? "actual_runtime_branch_or_depth"
+    : normalizeString(input.terminalProofLineAuthority ?? null);
   const terminalProofBlockedReason = normalizeString(input.terminalProofBlockedReason ?? null);
   return {
     ...resolveStage2TerminalProof({
@@ -99,13 +111,13 @@ function buildTerminalProof(input: Input): TrainerFrameTerminalProofResolution {
     lastUserMoveSan: normalizeText(input.lastUserMoveSan ?? null),
     afterFinalUserMove: Boolean(input.afterFinalUserMove),
     explicitCuratedTerminalNode: Boolean(input.explicitCuratedTerminalNode),
-    selectedLineCompleteConfirmed: Boolean(input.selectedLineCompleteConfirmed),
+    selectedLineCompleteConfirmed,
     exactNodeHasChildren: input.exactNodeHasChildren ?? "unknown",
     hasNextOpponentMove: input.hasNextOpponentMove ?? "unknown",
     hasNextUserMove: input.hasNextUserMove ?? "unknown",
     validBranchCompleteLatch: Boolean(input.validBranchCompleteLatch),
-    bookCompleteAllowed: Boolean(input.bookCompleteAllowed ?? input.guidedCompleteAllowed ?? false),
-    guidedCompleteAllowed: Boolean(input.guidedCompleteAllowed ?? input.bookCompleteAllowed ?? false),
+    bookCompleteAllowed: Boolean(input.bookCompleteAllowed ?? input.branchTransitionSurfaceRendered ?? selectedLineCompleteConfirmed),
+    guidedCompleteAllowed: Boolean(input.guidedCompleteAllowed ?? input.branchTransitionSurfaceRendered ?? selectedLineCompleteConfirmed),
     runtimeBookBookExhausted: Boolean(input.runtimeBookBookExhausted),
     runtimeBookCandidateCount: Number(input.runtimeBookCandidateCount ?? 0),
     runtimeBookStatus: normalizeText(input.runtimeBookStatus ?? null),
@@ -278,7 +290,11 @@ export function buildTrainerFrameResolution(input: Input): TrainerFrameResolutio
   const openingIdentity = resolveStage2OpeningIdentity({
     selectedOpeningId: normalizeText(input.selectedOpeningId ?? input.selectedRepertoireId ?? null),
     runtimeOpeningId: normalizeText(input.runtimeBookOpeningId ?? input.runtimeOpeningId ?? null),
-    selectedOpeningRuntimeAvailable: Boolean(input.selectedOpeningRuntimeAvailable ?? input.runtimeAvailable ?? false),
+    selectedOpeningRuntimeAvailable: Boolean(
+      input.selectedOpeningRuntimeAvailable ??
+      input.runtimeAvailable ??
+      normalizeText(input.runtimeBookOpeningId ?? input.runtimeOpeningId ?? null),
+    ),
   });
   const terminalProof = (input.terminalProof as TrainerFrameTerminalProofResolution | undefined) ?? buildTerminalProof(input);
   const finalSurfaceAuthority: TrainerFrameFinalSurfaceAuthority = (input.finalSurfaceAuthority as TrainerFrameFinalSurfaceAuthority | undefined) ?? {

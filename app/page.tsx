@@ -1340,15 +1340,12 @@ export default function App(){
     ()=>buildRuntimePlayKeyBeforeFromSanHistory(moveHistory),
     [moveHistory.join("|")],
   );
-  const selectedRuntimeLineCurrentPly=useMemo(
-    ()=>countMatchedRuntimeLinePlies(selectedRuntimeLinePlaySequenceUci,runtimePlayKeyBeforeForFrame?runtimePlayKeyBeforeForFrame.split(",").filter(Boolean):[]),
-    [selectedRuntimeLinePlaySequenceUci.join("|"),runtimePlayKeyBeforeForFrame],
-  );
+  const selectedRuntimeLineCurrentPly=moveHistory.length;
   const selectedRuntimeLineExhausted=selectedRuntimeLinePlyLength>0&&selectedRuntimeLineCurrentPly>=selectedRuntimeLinePlyLength;
   const stage2OpeningDepthTargetPly=12;
   const stage2OpeningCurrentPly=selectedRuntimeLineCurrentPly;
   const stage2OpeningDepthReached=stage2OpeningCurrentPly>=stage2OpeningDepthTargetPly;
-  const selectedRuntimeLineUsedFor=trainingMode==="continuation"?"continuation":"opening_stage";
+  const selectedRuntimeLineUsedFor=trainingMode==="continuation"?"memory_only":"initial_seed";
   const hardRailDetected=selectedRuntimeLinePlyLength>0&&selectedRuntimeLinePlyLength<stage2OpeningDepthTargetPly;
   const hardRailBlockedReason=hardRailDetected?"runtime_line_shorter_than_opening_depth_target":null;
   const lineSelectionPreviousTwoSame=recentRuntimeTrainingLineKeys.length>=2&&recentRuntimeTrainingLineKeys[0]===recentRuntimeTrainingLineKeys[1];
@@ -1912,7 +1909,7 @@ export default function App(){
     ()=>runtimeBookFrameQuery.hasRuntimeBookCandidates?runtimeBookFrameQuery.candidates[0]??null:null,
     [runtimeBookFrameQuery.hasRuntimeBookCandidates,runtimeBookFrameQuery.candidates],
   );
-  const runtimeGraphAuthorityUsed=selectedRuntimeTrainingLineSelection?.source??"curated_repertoire";
+  const runtimeGraphAuthorityUsed=Boolean(selectedRuntimeTrainingLineSelection?.source ?? selectedOpeningAvailability?.runtimeAvailable);
   const runtimeGraphCurrentPlayKey=runtimePlayKeyBeforeForFrame??null;
   const runtimeGraphCandidateCount=runtimeBookFrameQuery.candidates.length;
   const runtimeGraphSelectedCandidateUci=runtimeBookPreferredCandidate?.uci??null;
@@ -5576,10 +5573,7 @@ export default function App(){
     const nextHasNextUserMove=nextExactSelectedLineNodes.length?nextExactSelectedLineNodes.some((node)=>node.continuations.some((move)=>move.color===userColor)):"unknown";
     const nextExplicitCuratedTerminalNode=nextExactSelectedLineNodes.some((node)=>node.terminal&&node.sideToMove===nextGame.turn());
     const nextRuntimePlayKeyBefore=buildRuntimePlayKeyBeforeFromSanHistory([...moveHistory,legal.san])??null;
-    const nextRuntimeLineCurrentPly=countMatchedRuntimeLinePlies(
-      selectedRuntimeLinePlaySequenceUci,
-      nextRuntimePlayKeyBefore?nextRuntimePlayKeyBefore.split(",").filter(Boolean):[],
-    );
+    const nextRuntimeLineCurrentPly=moveHistory.length+1;
     const nextRuntimeLineExhausted=selectedRuntimeLinePlyLength>0&&nextRuntimeLineCurrentPly>=selectedRuntimeLinePlyLength;
     const nextSelectedLineConfirmedComplete=Boolean(
       (selectedRuntimeLinePlyLength>0 ? nextRuntimeLineExhausted : nextLineCompleteConfirmed) &&
@@ -6107,6 +6101,12 @@ export default function App(){
     trainerView,
     trainingMode,
     isUserTurn,
+    selectedOpeningId: canonicalSelectedRepertoireId,
+    selectedRepertoireId,
+    selectedOpeningRuntimeAvailable: selectedOpeningAvailability?.runtimeAvailable ?? null,
+    runtimeAvailable: selectedOpeningAvailability?.runtimeAvailable ?? false,
+    runtimeOpeningId: runtimeOpeningIdForFrame ?? null,
+    runtimeBookOpeningId: runtimeBookFrameQuery.openingId ?? runtimeOpeningIdForFrame ?? null,
     instructionTargetUci: instructionTarget?.uci ?? null,
     instructionTargetSan: instructionTarget?.san ?? null,
     instructionTargetPieceType: instructionTarget?.pieceType ?? null,
@@ -6130,7 +6130,7 @@ export default function App(){
     selectedRuntimeLinePlyLength,
     selectedRuntimeLineCurrentPly,
     selectedRuntimeLineExhausted,
-    terminalProofLineAuthority: selectedRuntimeTrainingLineSelection?.selectedLineKey ? "selected_runtime_line_play_sequence_uci" : "expected_move_resolution",
+    terminalProofLineAuthority: stage2OpeningDepthReached ? "actual_runtime_branch_or_depth" : (selectedRuntimeTrainingLineSelection?.selectedLineKey ? "selected_runtime_line_play_sequence_uci" : "expected_move_resolution"),
     terminalProofBlockedReason: stage2TerminalProof.blockedReasons[0] ?? null,
     afterFinalUserMove: !isUserTurn && lastMoveColor === userColor,
     runtimeBookBookExhausted: runtimeBookFrameQuery.bookExhausted,
@@ -6278,7 +6278,7 @@ export default function App(){
     hardRailDetected,
     hardRailBlockedReason,
     selectedLineCompleteConfirmed,
-    terminalProofLineAuthority:selectedRuntimeTrainingLineSelection?.selectedLineKey ? "selected_runtime_line_play_sequence_uci" : "expected_move_resolution",
+    terminalProofLineAuthority:stage2OpeningDepthReached ? "actual_runtime_branch_or_depth" : (selectedRuntimeTrainingLineSelection?.selectedLineKey ? "selected_runtime_line_play_sequence_uci" : "expected_move_resolution"),
     terminalProofBlockedReason:stage2TerminalProof.blockedReasons[0]??null,
     currentInstructionFrame,
     playKeyBefore:runtimePlayKeyBeforeForFrame??null,

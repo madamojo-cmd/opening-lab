@@ -103,6 +103,15 @@ function deriveFrameKind(input: FeatureTraceInput, trainerFrameResolution: Train
   if (resolvedKind === "terminal") return "terminal";
   if (resolvedKind === "opponent_replying") return "opponent_replying";
   if (resolvedKind === "transitioning") return "system";
+  if (
+    trainerFrameResolution.terminalProof?.proven &&
+    String(input.trainingMode ?? "") === "restricted" &&
+    Boolean(input.isUserTurn) &&
+    String(input.trainerPhase ?? "") === "ready_for_user" &&
+    input.instructionTargetUci == null
+  ) {
+    return "terminal_continuation_pause";
+  }
   if (resolvedKind === "continuation_candidate") return "continuation_user_turn";
   if (resolvedKind === "guided_move" || resolvedKind === "lichess_branch_move" || resolvedKind === "adaptive_branch_move") return "instructional_user_turn";
   if (String(input.trainingMode ?? "").toLowerCase() === "continuation" && Boolean(input.isUserTurn)) return "continuation_user_turn";

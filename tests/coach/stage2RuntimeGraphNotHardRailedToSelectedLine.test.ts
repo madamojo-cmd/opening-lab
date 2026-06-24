@@ -13,19 +13,19 @@ export function testStage2RuntimeGraphNotHardRailedToSelectedLine(): void {
     stage2OpeningDepthReached: false,
     hardRailDetected: false,
     hardRailBlockedReason: null,
-    runtimeGraphAuthorityUsed: "local_runtime_package",
+    runtimeGraphAuthorityUsed: true,
     runtimeGraphCurrentPlayKey: "",
     runtimeGraphCandidateCount: 3,
     runtimeGraphSelectedCandidateUci: "f1c4",
-    selectedRuntimeLineUsedFor: "opening_stage",
+    selectedRuntimeLineUsedFor: "initial_seed",
   });
 
-  assert.equal((snapshot.continuation as any)?.runtimeGraphAuthorityUsed, "local_runtime_package");
+  assert.equal((snapshot.continuation as any)?.runtimeGraphAuthorityUsed, true);
   assert.equal((snapshot.continuation as any)?.runtimeGraphCandidateCount, 3);
   assert.equal((snapshot.continuation as any)?.runtimeGraphSelectedCandidateUci, "f1c4");
   assert.equal((snapshot.continuation as any)?.hardRailDetected, false);
   assert.equal((snapshot.continuation as any)?.hardRailBlockedReason, null);
-  assert.equal((snapshot.continuation as any)?.selectedRuntimeLineUsedFor, "opening_stage");
+  assert.equal((snapshot.continuation as any)?.selectedRuntimeLineUsedFor, "initial_seed");
 }
 
 testStage2RuntimeGraphNotHardRailedToSelectedLine();

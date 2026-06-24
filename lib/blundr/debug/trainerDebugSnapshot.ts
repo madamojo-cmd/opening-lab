@@ -195,7 +195,7 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   const approvedContentInventorySummary = getStage2ApprovedContentInventorySummary();
   const openingIdentity = resolveStage2OpeningIdentity({
     selectedOpeningId: selectedOpeningIdRaw,
-    runtimeOpeningId: String(input.runtimeBookOpeningId ?? (input.trainerFrameResolution as any)?.openingIdentity?.runtimeOpeningId ?? ""),
+    runtimeOpeningId: String(input.runtimeBookOpeningId ?? trainerFrameResolution.openingIdentity?.runtimeOpeningId ?? ""),
     selectedOpeningRuntimeAvailable: Boolean(selectedOpeningAvailability?.runtimeAvailable),
   });
   const selectedOpeningApprovedContentAvailable = Boolean(selectedApprovedContentInventory?.approvedContentAvailable);
@@ -248,10 +248,24 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   const qualityScoreSource = String(coachQuality.qualityScoreSource ?? "pipeline_explanation");
   const expectedMoveResolution = input.expectedMoveResolution ?? {};
   const guidedCoveragePolicy = input.guidedCoveragePolicy ?? {};
+  const actualCurrentPly = Number(
+    input.currentPly ??
+    input.stage2OpeningCurrentPly ??
+    (Array.isArray(input.moveHistory) ? input.moveHistory.length : 0),
+  );
   const selectedLineCompleteConfirmed = typeof input.selectedLineCompleteConfirmed === "boolean"
     ? input.selectedLineCompleteConfirmed
-    : Boolean(Number(expectedMoveResolution?.lineLength ?? 0) > 0 && Number(expectedMoveResolution?.lineCursor ?? 0) >= Number(expectedMoveResolution?.lineLength ?? 0));
-  const terminalProof = (input.trainerFrameResolution as any)?.terminalProof
+    : Boolean(
+        (
+          Number(input.selectedRuntimeLinePlyLength ?? expectedMoveResolution?.lineLength ?? 0) > 0 &&
+          actualCurrentPly >= Number(input.selectedRuntimeLinePlyLength ?? expectedMoveResolution?.lineLength ?? 0)
+        ) ||
+        (
+          Number(expectedMoveResolution?.lineLength ?? 0) > 0 &&
+          Number(expectedMoveResolution?.lineCursor ?? 0) >= Number(expectedMoveResolution?.lineLength ?? 0)
+        ),
+      );
+  const terminalProof = trainerFrameResolution.terminalProof
     ?? input.terminalProof
     ?? resolveStage2TerminalProof({
       trainingMode: String(input.trainingMode ?? "restricted") as "restricted" | "continuation",
@@ -259,7 +273,7 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       userExplicitlyEnteredContinuation: Boolean(input.userExplicitlyEnteredContinuation),
       selectedOpeningId: selectedOpeningIdRaw,
       selectedLineId: String(input.selectedLineId ?? input.selectedRepertoireId ?? selectedOpeningResolvedId),
-      runtimeOpeningId: String(input.runtimeBookOpeningId ?? (input.trainerFrameResolution as any)?.openingIdentity?.runtimeOpeningId ?? ""),
+      runtimeOpeningId: String(input.runtimeBookOpeningId ?? trainerFrameResolution.openingIdentity?.runtimeOpeningId ?? ""),
       selectedOpeningRuntimeAvailable: Boolean(selectedOpeningAvailability?.runtimeAvailable),
       fen4: normalizeVisualFen(input.fen),
       lastUserMoveUci: input.lastUserMoveUci ?? null,
@@ -277,7 +291,7 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       runtimeBookCandidateCount: Number(input.runtimeBookCandidateCount ?? 0),
       runtimeBookStatus: input.runtimeBookStatus ?? null,
     });
-  const finalSurfaceAuthority = (input.trainerFrameResolution as any)?.finalSurfaceAuthority
+  const finalSurfaceAuthority = trainerFrameResolution.finalSurfaceAuthority
     ?? input.finalSurfaceAuthority
     ?? {
       branchCompleteAllowedByTerminalProof: Boolean(terminalProof.proven),
@@ -293,6 +307,12 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       visibleButtons.includes("continue_from_here") &&
       visibleButtons.includes("restart_line"),
   );
+  const terminalContinuationPauseFrame =
+    Boolean(terminalProof.proven) &&
+    input.trainingMode === "restricted" &&
+    input.isUserTurn === true &&
+    String(input.trainerPhase) === "ready_for_user" &&
+    instructionTargetUci == null;
   if (input.trainerPhase === "transitioning") criticalIssues.push("illegal_transitioning_phase");
   if (input.trainerPhase === "opponent_animating") criticalIssues.push("illegal_transitioning_phase");
   if (input.pendingOpponentRequest && Date.now() - Number(input.pendingOpponentRequest.startedAt ?? 0) > 5000) {
@@ -385,6 +405,15 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
     String(continuationRuntimeStatus) === "terminal" ||
     String(input.continuationTerminalReason ?? "") === "checkmate";
   const legalMoveCount = typeof input.legalMoveCount === "number" ? input.legalMoveCount : undefined;
+  const explicitContinuationLoading =
+    input.trainingMode === "continuation" &&
+    Boolean(input.userExplicitlyEnteredContinuation) &&
+    (
+      continuationRuntimeStatus === "loading" ||
+      continuationRuntimeStatus === "analyzing" ||
+      String(input.maiaRuntimeStatus ?? "") === "loading" ||
+      String(input.maiaProviderStatus ?? "") === "loading"
+    );
   const lineExhaustedEvidence =
     Boolean(input.branchCompleteLineExhaustedEvidence) ||
     String(expectedMoveResolution.source ?? "") === "guided_branch_needs_continuation" ||
@@ -400,7 +429,7 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
     criticalIssues.push("suggested_move_not_in_stockfish_top10");
     criticalIssues.push("stockfish_top10_gate_failed");
   }
-  if (input.trainingMode === "continuation" && instructionTargetUci && stockfishProviderStatus !== "ready" && continuationSurfaceMode === "assisted") {
+  if (input.trainingMode === "continuation" && instructionTargetUci && stockfishProviderStatus !== "ready" && continuationSurfaceMode === "assisted" && !explicitContinuationLoading) {
     criticalIssues.push("unvalidated_continuation_suggestion_rendered");
   }
   if (input.trainingMode === "continuation" && renderedBadgeLabel === "Genius" && !(lastContinuationUserMoveRating?.reason === "genius_motif_verified")) {
@@ -469,8 +498,8 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   if (maiaSanityGuardResult === "blocked" || maiaSanityGuardBlockedReason === "maia_sanity_guard_rejected_candidate") {
     warnings.push("maia_sanity_guard_rejected_candidate");
   }
-  if (isTeachingFrame(input) && instructionTargetUci == null && !branchTransitionSurfaceRendered && !continuationNullTargetStatusFrame) criticalIssues.push("instruction_target_missing_on_teaching_frame");
-  if (input.isUserTurn && instructionTargetUci == null && String(input.trainerPhase) === "ready_for_user" && !branchTransitionSurfaceRendered && !continuationNullTargetStatusFrame) {
+  if (isTeachingFrame(input) && instructionTargetUci == null && !branchTransitionSurfaceRendered && !continuationNullTargetStatusFrame && !terminalContinuationPauseFrame) criticalIssues.push("instruction_target_missing_on_teaching_frame");
+  if (input.isUserTurn && instructionTargetUci == null && String(input.trainerPhase) === "ready_for_user" && !branchTransitionSurfaceRendered && !continuationNullTargetStatusFrame && !terminalContinuationPauseFrame) {
     criticalIssues.push("user_turn_missing_instruction_target");
     criticalIssues.push("ready_for_user_without_target");
   }
@@ -525,7 +554,7 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
     if ((coachQuality.targetAligned ?? (coachMoveUci === instructionTargetUci)) !== true) criticalIssues.push("coach_target_mismatch");
     if ((coachQuality.pieceAligned ?? (!instructionTargetPieceType || !coachPieceType || instructionTargetPieceType === coachPieceType)) !== true) criticalIssues.push("coach_piece_mismatch");
     const score = Number(trainerFrameResolution.coachQuality.qualityScore ?? coachQuality.qualityScore ?? 0);
-    if (score > 0) {
+    if (score > 0 && !explicitContinuationLoading) {
       const source = String(coachDebug.coachDecisionSource ?? coachQuality.source ?? "live_coach");
       const required = source === "verified_safe_fallback" ? 65 : 80;
       if (score < required) criticalIssues.push("coach_low_quality");
@@ -574,7 +603,7 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   if (instructionTargetUci && !opportunityPipelineConnected && !coachDebug.pipelineBypassReason) criticalIssues.push("opportunity_pipeline_not_connected");
   if (instructionTargetUci && !explanationPipelineConnected && !coachDebug.pipelineBypassReason) criticalIssues.push("explanation_pipeline_not_connected");
   if (instructionTargetUci && visualRecipeMoveUci && visualRecipeMoveUci !== instructionTargetUci) criticalIssues.push("visual_recipe_target_mismatch");
-  if (instructionTargetUci && revealTargetSource && revealTargetSource !== "instruction_target") criticalIssues.push("reveal_target_source_mismatch");
+  if (instructionTargetUci && revealTargetSource && revealTargetSource !== "instruction_target" && !explicitContinuationLoading) criticalIssues.push("reveal_target_source_mismatch");
   if (input.coachFrameStale) criticalIssues.push("stale_coach_frame");
   if (input.visualFrameStale) criticalIssues.push("stale_visual_frame");
   if (input.revealTargetStale) criticalIssues.push("stale_reveal_target");
@@ -765,14 +794,14 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       criticalIssues.push(issue);
     }
   }
-  if ((actualCoachCardTitle ?? null) !== (visibleTitle ?? null) || (actualCoachCardBody ?? null) !== (visibleBody ?? null)) {
+  if (!explicitContinuationLoading && ((actualCoachCardTitle ?? null) !== (visibleTitle ?? null) || (actualCoachCardBody ?? null) !== (visibleBody ?? null))) {
     criticalIssues.push("coach_card_debug_parity_mismatch");
   }
-  if (JSON.stringify(actualCoachCardButtons) !== JSON.stringify(visibleButtons.map(String))) {
+  if (!explicitContinuationLoading && JSON.stringify(actualCoachCardButtons) !== JSON.stringify(visibleButtons.map(String))) {
     criticalIssues.push("action_debug_parity_mismatch");
   }
   const latestActionFrame = actionTimeline.length ? actionTimeline[actionTimeline.length - 1] : null;
-  if (latestActionFrame && Array.isArray((latestActionFrame as any).renderedActionIds)) {
+  if (!explicitContinuationLoading && latestActionFrame && Array.isArray((latestActionFrame as any).renderedActionIds)) {
     const latestRendered = (latestActionFrame as any).renderedActionIds.map(String);
     if (JSON.stringify(latestRendered) !== JSON.stringify(actualCoachCardButtons)) {
       criticalIssues.push("action_debug_parity_mismatch");

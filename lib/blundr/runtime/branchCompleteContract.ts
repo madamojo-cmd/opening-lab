@@ -75,15 +75,28 @@ export function resolveBranchCompleteContract(input: ResolveBranchCompleteContra
     hasNextUserMove: input.hasNextUserMove ?? "unknown",
     validBranchCompleteLatch: bool(input.validBranchCompleteLatch),
   });
+  const selectedLineExhausted =
+    bool(input.lineExhaustedByCursor) ||
+    bool(input.lineExhaustedByLichess) ||
+    selectedLineResolution.exhausted;
+  const selectedLineExhaustionReason =
+    selectedLineResolution.reason ??
+    (bool(input.lineExhaustedByCursor)
+      ? "curated_line_complete"
+      : bool(input.lineExhaustedByLichess)
+        ? "line_complete"
+        : null);
+  const selectedLineExhaustionBlockedReason =
+    selectedLineExhausted ? null : (selectedLineResolution.blockedReason ?? "selected_line_not_exhausted");
   const finalGuidedUserMoveCompletedLine = selectedLineResolution.reason === "restricted_line_exhausted_after_final_known_move";
-  const lineExhaustedEvidence = bool(input.lineExhaustedByCursor) || bool(input.lineExhaustedByLichess) || exhaustedByResolver || selectedLineResolution.exhausted;
+  const lineExhaustedEvidence = bool(input.lineExhaustedByCursor) || bool(input.lineExhaustedByLichess) || exhaustedByResolver || selectedLineExhausted;
   const afterFinalUserMove = bool(input.afterFinalUserMove) || (!input.isUserTurn && lineExhaustedEvidence);
 
   let blockedReason: string | null = null;
   if (input.trainingMode !== "restricted") blockedReason = "not_restricted_mode";
   else if (input.userExplicitlyEnteredContinuation) blockedReason = "already_in_continuation";
   else if (input.isTerminal) blockedReason = "terminal_position";
-  else if (!selectedLineResolution.exhausted && !exhaustedByResolver && !bool(input.lineExhaustedByCursor) && !bool(input.lineExhaustedByLichess)) {
+  else if (!selectedLineExhausted && !exhaustedByResolver && !bool(input.lineExhaustedByCursor) && !bool(input.lineExhaustedByLichess)) {
     blockedReason = selectedLineResolution.blockedReason ?? "selected_line_not_exhausted";
   }
   else if (!lineExhaustedEvidence) blockedReason = "line_not_exhausted";
@@ -122,9 +135,9 @@ export function resolveBranchCompleteContract(input: ResolveBranchCompleteContra
     pendingOpponentRequestConflict,
     branchCompleteReason: reason,
     branchCompleteBlockedReason: blockedReason,
-    selectedLineExhausted: selectedLineResolution.exhausted,
-    selectedLineExhaustionReason: selectedLineResolution.reason,
-    selectedLineExhaustionBlockedReason: selectedLineResolution.blockedReason,
+    selectedLineExhausted,
+    selectedLineExhaustionReason,
+    selectedLineExhaustionBlockedReason,
     exactNodeHasChildren: selectedLineResolution.exactNodeHasChildren,
     hasNextOpponentMove: selectedLineResolution.hasNextOpponentMove,
     hasNextUserMove: selectedLineResolution.hasNextUserMove,
