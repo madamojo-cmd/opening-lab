@@ -70,6 +70,12 @@ async function testRuntimeBookLookup(): Promise<void> {
   }
 
   const moveGroupKeys = [...index.moveIndexByOpeningAndPlayKeyBefore.keys()];
+  for (const key of moveGroupKeys) {
+    assert.equal(/e1h1|e1a1|e8h8|e8a8/.test(key), false, `dirty_castling_key_exposed:${key}`);
+  }
+  for (const key of index.nodeIndexByOpeningAndPlayKey.keys()) {
+    assert.equal(/e1h1|e1a1|e8h8|e8a8/.test(key), false, `dirty_castling_node_key_exposed:${key}`);
+  }
   for (const openingId of ROOT_SMOKE_OPENINGS) {
     const playKeyBefore = minPlayKeyBeforeForOpening(openingId, moveGroupKeys);
     assert.equal(Boolean(playKeyBefore), true, `missing_opening_move_groups:${openingId}`);
@@ -98,6 +104,7 @@ async function testRuntimeBookLookup(): Promise<void> {
   assert.equal(fromQuery.rank, fromIndex.rank, "metadata_rank_not_preserved");
   assert.equal(fromQuery.totalGames, fromIndex.totalGames, "metadata_totalgames_not_preserved");
   assert.equal(fromQuery.playPct, fromIndex.playPct, "metadata_playpct_not_preserved");
+  assert.equal(/e1h1|e1a1|e8h8|e8a8/.test(String(fromQuery.moveUci ?? "")), false, "dirty_castling_candidate_exposed");
 
   assert.deepEqual(
     getRuntimeBookMoves(index, { openingId: "nonexistent-opening", playKeyBefore: "e2e4" }),

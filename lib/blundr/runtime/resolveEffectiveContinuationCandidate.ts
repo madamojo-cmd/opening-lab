@@ -1,4 +1,6 @@
 import { Chess } from "chess.js";
+import { normalizeRuntimeCastlingUci } from "./uciNormalization";
+import { applyRuntimeUciMove } from "./uciReplay";
 
 export type EffectiveContinuationCandidate = {
   uci: string;
@@ -73,8 +75,8 @@ function normalizeFen4(fen: string | null | undefined): string {
 }
 
 function normalizeUci(uci: string | null | undefined): string | null {
-  const value = String(uci ?? "").trim().toLowerCase();
-  return /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(value) ? value : null;
+  const value = normalizeRuntimeCastlingUci(uci);
+  return value && /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(value) ? value : null;
 }
 
 function buildCandidateFromUci(input: {
@@ -88,16 +90,13 @@ function buildCandidateFromUci(input: {
 }): EffectiveContinuationCandidate | null {
   try {
     const game = new Chess(input.boardFen);
-    const move = game.move({
-      from: input.uci.slice(0, 2),
-      to: input.uci.slice(2, 4),
-      promotion: input.uci.length > 4 ? input.uci.slice(4, 5) : "q",
-    });
+    const move = applyRuntimeUciMove(game, input.uci);
     if (!move) return null;
 
     const pieceTypeCode = String(move.piece ?? "").toLowerCase();
     const pieceTypeCanonical = PIECE_NAME_BY_CODE[pieceTypeCode] ?? "unknown";
-    const appliedUci = `${move.from}${move.to}${move.promotion ?? ""}`.toLowerCase();
+    const appliedUci = normalizeUci(`${move.from}${move.to}${move.promotion ?? ""}`) ?? null;
+    if (!appliedUci) return null;
     const san = String(move.san ?? input.fallbackSan ?? appliedUci);
     if (!san || pieceTypeCanonical === "unknown") return null;
 

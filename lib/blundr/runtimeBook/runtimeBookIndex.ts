@@ -4,6 +4,7 @@ import type {
   Stage2RuntimeBookMove,
   Stage2RuntimeBookNode,
 } from "./runtimeBookTypes";
+import { normalizeRuntimePlayKey } from "../runtime/uciNormalization";
 
 function nodeKey(openingId: string, playKey: string): string {
   return `${openingId}::${playKey}`;
@@ -41,8 +42,10 @@ export function buildStage2RuntimeBookIndex(loadResult: Stage2RuntimeBookLoadRes
       if (ply > prev) maxPlyByOpening.set(openingId, ply);
     }
 
-    if (typeof node.playKey === "string") {
-      nodeIndexByOpeningAndPlayKey.set(nodeKey(openingId, node.playKey), node);
+    const normalizedNodePlayKey = normalizeRuntimePlayKey(node.playKey ?? "") ?? null;
+    if (normalizedNodePlayKey) {
+      node.playKey = normalizedNodePlayKey;
+      nodeIndexByOpeningAndPlayKey.set(nodeKey(openingId, normalizedNodePlayKey), node);
     }
   }
 
@@ -51,7 +54,7 @@ export function buildStage2RuntimeBookIndex(loadResult: Stage2RuntimeBookLoadRes
     const openingId = String(move.openingId ?? "");
     if (!openingId) continue;
     openingIds.add(openingId);
-    const playKeyBefore = typeof move.playKeyBefore === "string" ? move.playKeyBefore : "";
+    const playKeyBefore = normalizeRuntimePlayKey(move.playKeyBefore ?? "") ?? "";
     const key = moveKey(openingId, playKeyBefore);
     const group = moveIndexByOpeningAndPlayKeyBefore.get(key) ?? [];
     group.push(move);

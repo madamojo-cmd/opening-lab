@@ -1,4 +1,5 @@
 import type { Stage2RuntimeBookIndex, Stage2RuntimeBookMove, Stage2RuntimeBookMoveQueryInput } from "./runtimeBookTypes";
+import { normalizeRuntimePlayKey } from "../runtime/uciNormalization";
 
 function keyFor(openingId: string, playKeyBefore: string): string {
   return `${openingId}::${playKeyBefore}`;
@@ -6,7 +7,7 @@ function keyFor(openingId: string, playKeyBefore: string): string {
 
 export function getRuntimeBookMoves(index: Stage2RuntimeBookIndex, query: Stage2RuntimeBookMoveQueryInput): Stage2RuntimeBookMove[] {
   const openingId = String(query.openingId ?? "");
-  const playKeyBefore = String(query.playKeyBefore ?? "");
+  const playKeyBefore = normalizeRuntimePlayKey(query.playKeyBefore ?? "") ?? "";
   if (!openingId) return [];
   if (!playKeyBefore) return [];
 

@@ -1,4 +1,5 @@
 import type { Stage2RuntimeBookCandidate } from "../runtimeBook/runtimeBookTypes";
+import { normalizeRuntimeCastlingUci } from "./uciNormalization";
 
 export type RestrictedOpponentReplyAuthorityKind = "runtime_reply" | "terminal" | "blocked";
 
@@ -50,7 +51,11 @@ export function resolveRestrictedOpponentReplyAuthority(input: {
   runtimeBookCandidates?: RestrictedOpponentReplyAuthorityCandidate[] | null;
   runtimeBookTopCandidate?: RestrictedOpponentReplyAuthorityCandidate | null;
 }): RestrictedOpponentReplyAuthorityResolution {
-  const legalMoveUcis = new Set((input.legalMoveUcis ?? []).map((uci) => String(uci ?? "").trim().toLowerCase()).filter(Boolean));
+  const legalMoveUcis = new Set(
+    (input.legalMoveUcis ?? [])
+      .map((uci) => normalizeRuntimeCastlingUci(uci))
+      .filter((uci): uci is string => Boolean(uci)),
+  );
   const runtimeBookCandidates = Array.isArray(input.runtimeBookCandidates) ? input.runtimeBookCandidates : [];
   const runtimeBookTopCandidate = input.runtimeBookTopCandidate ?? runtimeBookCandidates[0] ?? null;
   const runtimeBookStatus = String(input.runtimeBookStatus ?? "").trim().toLowerCase();
@@ -60,10 +65,11 @@ export function resolveRestrictedOpponentReplyAuthority(input: {
   const runtimeBookPlayKeyBefore = String(input.runtimeBookPlayKeyBefore ?? "").trim().toLowerCase();
   const currentOpeningId = String(input.currentOpeningId ?? "").trim().toLowerCase();
   const currentPlayKeyBefore = String(input.currentPlayKeyBefore ?? "").trim().toLowerCase();
-  const selectedRuntimeBookCandidate = runtimeBookCandidates.find((candidate) => legalMoveUcis.has(String(candidate.uci ?? "").trim().toLowerCase()))
-    ?? (runtimeBookTopCandidate && legalMoveUcis.has(String(runtimeBookTopCandidate.uci ?? "").trim().toLowerCase()) ? runtimeBookTopCandidate : null);
+  const selectedRuntimeBookCandidate =
+    runtimeBookCandidates.find((candidate) => legalMoveUcis.has(normalizeRuntimeCastlingUci(candidate.uci) ?? ""))
+    ?? (runtimeBookTopCandidate && legalMoveUcis.has(normalizeRuntimeCastlingUci(runtimeBookTopCandidate.uci) ?? "") ? runtimeBookTopCandidate : null);
   const runtimeBookSource: RestrictedOpponentReplyAuthoritySource =
-    runtimeBookStatus === "ready" && runtimeBookMatchesFrame && runtimeBookCandidateCount > 0
+    runtimeBookStatus === "ready" && runtimeBookCandidateCount > 0
       ? runtimeBookOpeningId && currentOpeningId && runtimeBookOpeningId === currentOpeningId && runtimeBookPlayKeyBefore && currentPlayKeyBefore && runtimeBookPlayKeyBefore === currentPlayKeyBefore
         ? "runtime_book_exact"
         : runtimeBookOpeningId && currentOpeningId && runtimeBookOpeningId === currentOpeningId
@@ -101,7 +107,7 @@ export function resolveRestrictedOpponentReplyAuthority(input: {
       runtimeBookCandidateCount,
       runtimeBookMatchesFrame,
       opponentReplyAuthoritySource: "blocked",
-      opponentReplyAuthorityCandidateUci: runtimeBookTopCandidate?.uci ?? null,
+      opponentReplyAuthorityCandidateUci: normalizeRuntimeCastlingUci(runtimeBookTopCandidate?.uci) ?? null,
       opponentReplyAuthorityCandidateSan: runtimeBookTopCandidate?.san ?? null,
       opponentReplyAuthorityCandidateGames: runtimeBookTopCandidate?.totalGames ?? null,
       opponentReplyAuthorityCandidatePlayPct: runtimeBookTopCandidate?.playPct ?? null,
@@ -113,9 +119,7 @@ export function resolveRestrictedOpponentReplyAuthority(input: {
     const rejectedReason =
       runtimeBookStatus !== "ready"
         ? "runtime_book_not_ready"
-        : !runtimeBookMatchesFrame
-          ? "runtime_book_frame_mismatch"
-          : runtimeBookCandidateCount <= 0
+        : runtimeBookCandidateCount <= 0
             ? "missing_runtime_backed_opponent_reply"
             : runtimeBookCandidates.length > 0 && !runtimeBookCandidateIsLegal
               ? "runtime_book_candidate_illegal"
@@ -129,7 +133,7 @@ export function resolveRestrictedOpponentReplyAuthority(input: {
       runtimeBookCandidateCount,
       runtimeBookMatchesFrame,
       opponentReplyAuthoritySource: "blocked",
-      opponentReplyAuthorityCandidateUci: runtimeBookTopCandidate?.uci ?? null,
+      opponentReplyAuthorityCandidateUci: normalizeRuntimeCastlingUci(runtimeBookTopCandidate?.uci) ?? null,
       opponentReplyAuthorityCandidateSan: runtimeBookTopCandidate?.san ?? null,
       opponentReplyAuthorityCandidateGames: runtimeBookTopCandidate?.totalGames ?? null,
       opponentReplyAuthorityCandidatePlayPct: runtimeBookTopCandidate?.playPct ?? null,
@@ -150,7 +154,7 @@ export function resolveRestrictedOpponentReplyAuthority(input: {
     runtimeBookCandidateCount,
     runtimeBookMatchesFrame,
     opponentReplyAuthoritySource: runtimeBookSource,
-    opponentReplyAuthorityCandidateUci: selectedCandidate?.uci ?? runtimeBookTopCandidate?.uci ?? null,
+    opponentReplyAuthorityCandidateUci: normalizeRuntimeCastlingUci(selectedCandidate?.uci) ?? normalizeRuntimeCastlingUci(runtimeBookTopCandidate?.uci) ?? null,
     opponentReplyAuthorityCandidateSan: selectedCandidate?.san ?? runtimeBookTopCandidate?.san ?? null,
     opponentReplyAuthorityCandidateGames: selectedCandidate?.totalGames ?? runtimeBookTopCandidate?.totalGames ?? null,
     opponentReplyAuthorityCandidatePlayPct: selectedCandidate?.playPct ?? runtimeBookTopCandidate?.playPct ?? null,

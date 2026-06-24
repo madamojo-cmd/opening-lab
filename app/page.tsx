@@ -72,6 +72,7 @@ import { resolveBranchCompleteContract } from "@/lib/blundr/runtime/branchComple
 import { resolveContinuationFlowContract } from "@/lib/blundr/runtime/continuationFlowContract";
 import { shouldFlagStaleOpponentReplyCommit } from "@/lib/blundr/runtime/opponentReplyGuard";
 import { resolveRestrictedOpponentReplyAuthority } from "@/lib/blundr/runtime/restrictedOpponentReplyAuthority";
+import { applyRuntimeUciMove } from "@/lib/blundr/runtime/uciReplay";
 import { DEFAULT_GUIDED_COVERAGE_THRESHOLDS } from "@/lib/blundr/openings/guidedCoveragePolicy";
 import { resolveRestrictedRuntimeBookHandoff } from "@/lib/blundr/runtime/restrictedRuntimeBookHandoff";
 import { resolveStage2TerminalProof } from "@/lib/blundr/runtime/terminalProof";
@@ -457,7 +458,7 @@ function repertoireLineInputs(rep:Repertoire):RepertoireLineInput[]{return rep.l
 function countPositions(rep:Repertoire){return buildOpeningTree(repertoireLineInputs(rep)).nodeCount}
 function getAccuracy(progress:Progress){return progress.attempts?Math.round((progress.correct/progress.attempts)*100):0}
 function parseExplorerMoves(payload:any):ExplorerMove[]{const moves=Array.isArray(payload?.moves)?payload.moves:[];const denom=moves.reduce((s:number,m:any)=>s+(m.white??0)+(m.draws??0)+(m.black??0),0)||1;return moves.map((m:any)=>{const total=(m.white??0)+(m.draws??0)+(m.black??0);return{uci:m.uci,san:m.san,total,pct:Math.round((total/denom)*100),averageRating:m.averageRating}}).filter((m:ExplorerMove)=>m.uci&&m.total>0)}
-function applyUci(fen:string,uci:string){try{const game=new Chess(fen);const move=game.move({from:uci.slice(0,2),to:uci.slice(2,4),promotion:uci.length>4?uci.slice(4,5):undefined});if(!move)return null;return{san:move.san,uci:moveToUci(move),fen:game.fen(),color:move.color as ChessColor}}catch{return null}}
+function applyUci(fen:string,uci:string){try{const game=new Chess(fen);const move=applyRuntimeUciMove(game,uci);if(!move)return null;return{san:move.san,uci:moveToUci(move),fen:game.fen(),color:move.color as ChessColor}}catch{return null}}
 function blankAnnotation():BrainAnnotation{return{source:"initial",fallback:true,selectedView:"plan",headline:"Ready",mainExplanation:"Make a move or tap Reveal Next Move.",visualExplanation:"The board can now show a fast local cue immediately while Brain refines the coaching text.",planExplanation:"Restricted mode keeps you inside the selected opening.",nextPlan:"Play the highlighted training move when available.",keySquares:[],planArrows:[],attack:{title:"Your attack",message:"Fast local visuals will appear as soon as training starts.",lines:[],cues:[]},defense:{title:"Your defense",message:"Fast local visuals will appear as soon as training starts.",lines:[],cues:[]},plan:{title:"Plan",message:"Fast local visuals will appear as soon as training starts.",lines:[],cues:[]},confidence:"initial"}}
 function isKnightGeometry(from:string,to:string){if(!isValidSquare(from)||!isValidSquare(to))return false;const df=Math.abs(FILE_TO_INDEX[from[0]]-FILE_TO_INDEX[to[0]]);const dr=Math.abs(Number(from[1])-Number(to[1]));return(df===1&&dr===2)||(df===2&&dr===1)}
 function lineFromContinuation(move:Continuation,kind:LineKind="plan"):ActiveLine{return{from:move.uci.slice(0,2),to:move.uci.slice(2,4),kind,label:move.san}}
@@ -1110,6 +1111,7 @@ export default function App(){
   const [customRepertoires,setCustomRepertoires]=useState<Repertoire[]>([]);
   const [selectedRepertoireId,setSelectedRepertoireId]=useState(runtimeOpeningSelection.selectedOpeningId);
   const [runtimeTrainingSessionId,setRuntimeTrainingSessionId]=useState<string>(()=>createLearningSessionId());
+  const [continuationSessionId,setContinuationSessionId]=useState<string|null>(null);
   const [recentRuntimeTrainingLineKeys,setRecentRuntimeTrainingLineKeys]=useState<string[]>([]);
   const [selectedRuntimeTrainingLineSelection,setSelectedRuntimeTrainingLineSelection]=useState<RuntimeWeightedTrainingLineSelection | null>(()=>buildRuntimeTrainingLineSelection(runtimeOpeningSelection.selectedOpeningId,[],runtimeTrainingSessionId));
   const [fen,setFen]=useState(initialFen);
@@ -1343,6 +1345,12 @@ export default function App(){
     [selectedRuntimeLinePlaySequenceUci.join("|"),runtimePlayKeyBeforeForFrame],
   );
   const selectedRuntimeLineExhausted=selectedRuntimeLinePlyLength>0&&selectedRuntimeLineCurrentPly>=selectedRuntimeLinePlyLength;
+  const stage2OpeningDepthTargetPly=12;
+  const stage2OpeningCurrentPly=selectedRuntimeLineCurrentPly;
+  const stage2OpeningDepthReached=stage2OpeningCurrentPly>=stage2OpeningDepthTargetPly;
+  const selectedRuntimeLineUsedFor=trainingMode==="continuation"?"continuation":"opening_stage";
+  const hardRailDetected=selectedRuntimeLinePlyLength>0&&selectedRuntimeLinePlyLength<stage2OpeningDepthTargetPly;
+  const hardRailBlockedReason=hardRailDetected?"runtime_line_shorter_than_opening_depth_target":null;
   const lineSelectionPreviousTwoSame=recentRuntimeTrainingLineKeys.length>=2&&recentRuntimeTrainingLineKeys[0]===recentRuntimeTrainingLineKeys[1];
   const repertoire=repertoires.find(r=>r.id===canonicalSelectedRepertoireId)??repertoires[0];
   const openingTree=useMemo(()=>buildOpeningTree(repertoireLineInputs(repertoire)),[repertoire]);
@@ -1904,6 +1912,10 @@ export default function App(){
     ()=>runtimeBookFrameQuery.hasRuntimeBookCandidates?runtimeBookFrameQuery.candidates[0]??null:null,
     [runtimeBookFrameQuery.hasRuntimeBookCandidates,runtimeBookFrameQuery.candidates],
   );
+  const runtimeGraphAuthorityUsed=selectedRuntimeTrainingLineSelection?.source??"curated_repertoire";
+  const runtimeGraphCurrentPlayKey=runtimePlayKeyBeforeForFrame??null;
+  const runtimeGraphCandidateCount=runtimeBookFrameQuery.candidates.length;
+  const runtimeGraphSelectedCandidateUci=runtimeBookPreferredCandidate?.uci??null;
   const stockfishTopMovesForContinuation=useMemo(()=>mapEngineLinesToStockfishTopMoves({
     fen,
     pvs:engineLines.map((line)=>({uci:line.uci,san:line.san,cp:line.cp})),
@@ -2100,7 +2112,11 @@ export default function App(){
     branchCompleteLatch.lineId,
     restrictedLineExhaustedOnOpponentTurnAfterUserMove,
   ]);
-  const branchCompleteEligibleNow=Boolean(stage2TerminalProof.proven&&!trustedInstructionTargetExists);
+  const branchCompleteEligibleNow=Boolean(stage2TerminalProof.proven&&!trustedInstructionTargetExists&&!continueFromHereClicked&&!userExplicitlyEnteredContinuation);
+  const continueFromHereClickHandled=Boolean(continueFromHereClicked&&userExplicitlyEnteredContinuation&&trainingMode==="continuation"&&!branchCompleteEligibleNow);
+  const continueFromHereClickBlockedReason=continueFromHereClicked&&!continueFromHereClickHandled
+    ? (branchCompleteEligibleNow ? "branch_complete_still_active" : "continuation_not_entered")
+    : null;
   const branchCompleteReasonNow=stage2TerminalProof.proven
     ? stage2TerminalProof.reason ?? branchCompleteContract.reason ?? "line_complete"
     : stage2TerminalProof.blockedReasons[0] ?? branchCompleteContract.blockedReason ?? "terminal_proof_required";
@@ -4653,6 +4669,7 @@ export default function App(){
   function resetBranchAndContinuationState(){
     setUserExplicitlyEnteredContinuation(false);
     setContinueFromHereClicked(false);
+    setContinuationSessionId(null);
     setContinuationPauseClicked(false);
     setContinuationHardStopAcknowledged(false);
     setContinuationAnalysisStatus("idle");
@@ -4936,7 +4953,7 @@ export default function App(){
           legalMovesUci,
           maxCandidates:5,
           timeoutMs:MAIA_OPPONENT_TIMEOUT_MS,
-          continuationSessionId:selectedRepertoireId ?? null,
+          continuationSessionId:continuationSessionId ?? selectedRepertoireId ?? null,
         };
         const maiaTimedResult=await withMaiaTimeout<MaiaOpponentReplyResult>(
           maiaOpponentProvider.getOpponentReplies(requestPayload),
@@ -5319,16 +5336,21 @@ export default function App(){
     const current=new Chess(fen);
     const legal=current.moves().length;
     const terminal=current.isGameOver()||legal===0;
+    const nextContinuationSessionId=continuationSessionId??createLearningSessionId();
     setUserExplicitlyEnteredContinuation(true);
     setContinueFromHereClicked(true);
     setContinuationPauseClicked(true);
+    setContinuationSessionId(nextContinuationSessionId);
     if(currentPlyCount>=22){
       setContinuationHardStopAcknowledged(true);
     }
     setTrainingMode("continuation");
     setBookComplete(false);
     setBranchCompleteLatch({active:false,reason:null,fen4:null,lineId:null,ply:null,latchedAtFrameId:null});
+    clearPendingOpponentReplyRequest({clearStaleIssue:true});
     setEnginePreview(null);
+    setMaiaOpponentProviderStatus("loading");
+    setMaiaApiRouteStatus("loading");
     if(terminal){
       setContinuationAnalysisStatus("terminal");
       setTrainerPhase("terminal");
@@ -6245,6 +6267,16 @@ export default function App(){
     selectedRuntimeLinePlyLength:selectedRuntimeLinePlyLength,
     selectedRuntimeLineCurrentPly:selectedRuntimeLineCurrentPly,
     selectedRuntimeLineExhausted:selectedRuntimeLineExhausted,
+    stage2OpeningDepthTargetPly,
+    stage2OpeningCurrentPly,
+    stage2OpeningDepthReached,
+    runtimeGraphAuthorityUsed,
+    runtimeGraphCurrentPlayKey,
+    runtimeGraphCandidateCount,
+    runtimeGraphSelectedCandidateUci,
+    selectedRuntimeLineUsedFor,
+    hardRailDetected,
+    hardRailBlockedReason,
     selectedLineCompleteConfirmed,
     terminalProofLineAuthority:selectedRuntimeTrainingLineSelection?.selectedLineKey ? "selected_runtime_line_play_sequence_uci" : "expected_move_resolution",
     terminalProofBlockedReason:stage2TerminalProof.blockedReasons[0]??null,
@@ -6319,6 +6351,9 @@ export default function App(){
     continuationHardStopMoveNumber:continuationPauseDecision.hardStopMoveNumber,
     continuationHardStopPlyLimit:continuationPauseDecision.hardStopPlyLimit,
     continuationCurrentPlyCount:continuationPauseDecision.currentPlyCount,
+    continueFromHereClickHandled,
+    continueFromHereClickBlockedReason,
+    continuationSessionId,
     continuationCandidateEvaluationBlockedUntilClick:Boolean(forceContinuationPause&&!continuationPauseClicked),
     continuationInstructionTargetBeforeClick:!continuationPauseClicked?instructionTarget?.uci??null:null,
     continuationVisualTargetBeforeClick:!continuationPauseClicked?visualMoveUciForDebug:null,
@@ -6444,6 +6479,13 @@ export default function App(){
     maiaSkillLevel:maiaOpponentSkillLevel,
     maiaRequestId:maiaOpponentRequestId,
     maiaRequestFen4:maiaOpponentRequestFen4,
+    maiaContinuationEnabled: Boolean(trainingMode==="continuation"&&userExplicitlyEnteredContinuation),
+    maiaContinuationStatus: maiaOpponentProviderStatus,
+    maiaContinuationLoaded: maiaOpponentProviderStatus==="ready",
+    maiaContinuationError: maiaRuntimeErrorReason,
+    maiaOpponentProviderUsed: Boolean(trainingMode==="continuation"&&userExplicitlyEnteredContinuation),
+    maiaOpponentRequestPending: Boolean(pendingOpponentRequest),
+    maiaOpponentLastMoveUci: lastMoveColor===opponentColor?lastMove:null,
     maiaContinuationOnly:true,
     maiaAllowedThisFrame:trainingMode==="continuation"&&userExplicitlyEnteredContinuation,
     maiaBlockedReason:maiaOpponentDecisionReason,

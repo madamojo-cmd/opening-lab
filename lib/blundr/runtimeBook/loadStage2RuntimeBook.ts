@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
+import { Chess } from "chess.js";
 
 import type {
   Stage2RuntimeBookLoadResult,
@@ -9,6 +10,12 @@ import type {
   Stage2RuntimeBookRawMoveRow,
   Stage2RuntimeBookRawNodeRow,
 } from "./runtimeBookTypes";
+import { applyRuntimeUciMove } from "../runtime/uciReplay";
+import {
+  normalizeRuntimeCastlingUci,
+  normalizeRuntimePlayKey,
+  normalizeRuntimePlaySequenceUci,
+} from "../runtime/uciNormalization";
 
 const DEFAULT_PACKAGE_ROOT = path.join(
   process.cwd(),
@@ -57,7 +64,22 @@ function normalizeNodeRow(row: Stage2RuntimeBookRawNodeRow, lineNumber: number):
   if (row.ply != null && !Number.isFinite(row.ply)) {
     throw new Error(`runtime_book_node_invalid_ply:${lineNumber}`);
   }
-  return { ...row };
+  const playSequenceUci = normalizeRuntimePlaySequenceUci(String(row.playSequenceUci ?? row.playKey ?? "").split(","));
+  const playKey = normalizeRuntimePlayKey(row.playKey ?? playSequenceUci.join(","));
+  if (playSequenceUci.length > 0) {
+    const game = new Chess();
+    for (const uci of playSequenceUci) {
+      const move = applyRuntimeUciMove(game, uci);
+      if (!move) {
+        throw new Error(`runtime_book_node_illegal_replay:${lineNumber}:${uci}`);
+      }
+    }
+  }
+  return {
+    ...row,
+    playSequenceUci: playSequenceUci.length > 0 ? playSequenceUci.join(",") : undefined,
+    playKey: playKey ?? undefined,
+  };
 }
 
 function normalizeMoveRow(row: Stage2RuntimeBookRawMoveRow, lineNumber: number): Stage2RuntimeBookMove {
@@ -79,7 +101,11 @@ function normalizeMoveRow(row: Stage2RuntimeBookRawMoveRow, lineNumber: number):
   if (row.playPct != null && !Number.isFinite(row.playPct)) {
     throw new Error(`runtime_book_move_invalid_play_pct:${lineNumber}`);
   }
-  return { ...row };
+  return {
+    ...row,
+    playKeyBefore: normalizeRuntimePlayKey(row.playKeyBefore ?? "") ?? undefined,
+    moveUci: normalizeRuntimeCastlingUci(row.moveUci ?? undefined) ?? undefined,
+  };
 }
 
 export async function loadStage2RuntimeBook(options?: {

@@ -45,7 +45,7 @@ export function testRuntime21OpeningTrainability(): void {
   for (const opening of STAGE2_OPENING_AVAILABILITY_MATRIX) {
     const repertoire = getStage2RuntimeTrainableRepertoire(opening.openingId);
     assert.ok(repertoire, `runtime_trainable_repertoire_missing:${opening.openingId}`);
-    assert.equal(repertoire?.lines.length ?? 0, 1, `runtime_trainable_line_missing:${opening.openingId}`);
+    assert.equal((repertoire?.lines.length ?? 0) > 1, true, `runtime_trainable_line_pool_not_universal:${opening.openingId}`);
 
     const openingTree = buildOpeningTree(buildRepertoireLineInputs(repertoire!));
     assert.equal(openingTree.nodeCount > 0, true, `runtime_trainable_tree_empty:${opening.openingId}`);

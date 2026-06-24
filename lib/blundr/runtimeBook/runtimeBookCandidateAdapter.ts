@@ -1,11 +1,12 @@
 import type { Stage2RuntimeBookMove } from "./runtimeBookTypes";
 import type { Stage2RuntimeBookCandidate } from "./runtimeBookTypes";
+import { normalizeRuntimeCastlingUci } from "../runtime/uciNormalization";
 
 export function adaptRuntimeBookCandidates(moves: Stage2RuntimeBookMove[]): Stage2RuntimeBookCandidate[] {
   return moves
     .filter((move) => typeof move.moveUci === "string" && move.moveUci.length >= 4)
     .map((move) => ({
-      uci: String(move.moveUci),
+      uci: normalizeRuntimeCastlingUci(move.moveUci) ?? String(move.moveUci).trim().toLowerCase(),
       san: typeof move.moveSan === "string" && move.moveSan.length > 0 ? move.moveSan : undefined,
       source: "book",
       supported: true,

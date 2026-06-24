@@ -1,10 +1,13 @@
 import { Chess } from "chess.js";
 
+import { STAGE2_RUNTIME_TRAINABLE_REPERTOIRE_LINES } from "./stage2RuntimeTrainableRepertoires.generated";
 import {
   STAGE2_OPENING_AVAILABILITY_MATRIX,
   STAGE2_RUNTIME_OPENING_IDS,
   type OpeningAvailability,
 } from "./openingAvailability";
+import { applyRuntimeUciMove } from "../runtime/uciReplay";
+import { normalizeRuntimePlaySequenceUci } from "../runtime/uciNormalization";
 
 export type RuntimeTrainableRepertoire = {
   id: string;
@@ -70,58 +73,21 @@ export type RuntimeWeightedTrainingLineSelection = {
   lineWeightsSummary: RuntimeWeightedTrainingLineSelectionSummary[];
 };
 
-type RuntimeTrainableRepertoireSpec = {
-  openingId: string;
-  uciSequence: string[];
+type RuntimeTrainableLineData = {
+  lineId: string;
+  playKey: string;
+  playSequenceUci: readonly string[];
+  movesSan: readonly string[];
+  totalGames: number;
 };
 
-const RUNTIME_TRAINABLE_REPERTOIRE_SPECS: Record<string, RuntimeTrainableRepertoireSpec> = {
-  "caro-kann-black": { openingId: "caro-kann-black", uciSequence: ["e2e4", "c7c6"] },
-  "colle-white": { openingId: "colle-white", uciSequence: ["d2d4"] },
-  "english-white": { openingId: "english-white", uciSequence: ["c2c4"] },
-  "french-black": { openingId: "french-black", uciSequence: ["e2e4", "e7e6"] },
-  "italian-black": { openingId: "italian-black", uciSequence: ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4"] },
-  "italian-white": { openingId: "italian-white", uciSequence: ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "f8c5"] },
-  "kings-indian-black": { openingId: "kings-indian-black", uciSequence: ["d2d4", "g8f6", "c2c4", "g7g6"] },
-  "london-white": { openingId: "london-white", uciSequence: ["d2d4"] },
-  "nimzo-indian-black": { openingId: "nimzo-indian-black", uciSequence: ["d2d4", "g8f6", "c2c4", "e7e6", "b1c3", "f8b4"] },
-  "petroff-black": { openingId: "petroff-black", uciSequence: ["e2e4", "e7e5", "g1f3", "g8f6"] },
-  "pirc-black": { openingId: "pirc-black", uciSequence: ["e2e4", "d7d6", "d2d4", "g8f6"] },
-  "qgd-black": { openingId: "qgd-black", uciSequence: ["d2d4", "d7d5", "c2c4", "e7e6"] },
-  "queens-gambit-white": { openingId: "queens-gambit-white", uciSequence: ["d2d4", "d7d5", "c2c4"] },
-  "queens-indian-black": { openingId: "queens-indian-black", uciSequence: ["d2d4", "g8f6", "c2c4", "e7e6", "g1f3", "b7b6"] },
-  "reti-white": { openingId: "reti-white", uciSequence: ["g1f3", "d7d5", "c2c4"] },
-  "ruy-lopez-white": { openingId: "ruy-lopez-white", uciSequence: ["e2e4", "e7e5", "g1f3", "b8c6", "f1b5"] },
-  "scandinavian-black": { openingId: "scandinavian-black", uciSequence: ["e2e4", "d7d5"] },
-  "scotch-white": { openingId: "scotch-white", uciSequence: ["e2e4", "e7e5", "g1f3", "b8c6", "d2d4"] },
-  "sicilian-black": { openingId: "sicilian-black", uciSequence: ["e2e4", "c7c5"] },
-  "slav-black": { openingId: "slav-black", uciSequence: ["d2d4", "d7d5", "c2c4", "c7c6"] },
-  "vienna-white": { openingId: "vienna-white", uciSequence: ["e2e4", "e7e5", "b1c3"] },
-};
+const GENERATED_REPERTOIRE_LINES = STAGE2_RUNTIME_TRAINABLE_REPERTOIRE_LINES as unknown as Record<string, readonly RuntimeTrainableLineData[]>;
 
-function uciToMove(uci: string): { from: string; to: string; promotion?: string } {
-  return {
-    from: uci.slice(0, 2),
-    to: uci.slice(2, 4),
-    promotion: uci.length > 4 ? uci.slice(4, 5) : undefined,
-  };
-}
-
-function moveToUci(move: { from?: string; to?: string; promotion?: string | null }): string {
-  return `${String(move.from ?? "").toLowerCase()}${String(move.to ?? "").toLowerCase()}${String(move.promotion ?? "").toLowerCase()}`;
-}
-
-export function updateRuntimeTrainingLineKeys(current: string[], selectedLineKey: string): string[] {
-  const key = String(selectedLineKey ?? "").trim();
-  if (!key) return current.slice(0, 2);
-  return [key, ...current].slice(0, 2);
-}
-
-function uciSequenceToSanLine(uciSequence: string[]): string[] {
+function buildSanLineFromUciSequence(uciSequence: readonly string[]): string[] {
   const game = new Chess();
   const sanLine: string[] = [];
-  for (const uci of uciSequence) {
-    const move = game.move(uciToMove(uci));
+  for (const uci of normalizeRuntimePlaySequenceUci(uciSequence)) {
+    const move = applyRuntimeUciMove(game, uci);
     if (!move) {
       throw new Error(`runtime_trainable_line_invalid_uci:${uci}`);
     }
@@ -130,7 +96,7 @@ function uciSequenceToSanLine(uciSequence: string[]): string[] {
   return sanLine;
 }
 
-function sanLineToUciSequence(sanLine: string[]): string[] {
+function buildUciSequenceFromSanLine(sanLine: readonly string[]): string[] {
   const game = new Chess();
   const uciLine: string[] = [];
   for (const san of sanLine) {
@@ -138,23 +104,26 @@ function sanLineToUciSequence(sanLine: string[]): string[] {
     if (!move) {
       throw new Error(`runtime_trainable_line_invalid_san:${san}`);
     }
-    uciLine.push(moveToUci(move));
+    uciLine.push(`${move.from}${move.to}${move.promotion ?? ""}`.toLowerCase());
   }
   return uciLine;
 }
 
+function getGeneratedLinesForOpening(openingId: string): readonly RuntimeTrainableLineData[] {
+  return GENERATED_REPERTOIRE_LINES[openingId] ?? [];
+}
+
 function buildTrainableRepertoire(entry: OpeningAvailability): RuntimeTrainableRepertoire {
-  const spec = RUNTIME_TRAINABLE_REPERTOIRE_SPECS[entry.openingId];
-  if (!spec) {
+  const rawLines = getGeneratedLinesForOpening(entry.openingId);
+  if (rawLines.length === 0) {
     throw new Error(`runtime_trainable_repertoire_missing:${entry.openingId}`);
   }
-  const line = uciSequenceToSanLine(spec.uciSequence);
   return {
     id: entry.openingId,
     name: entry.displayName,
     color: entry.learnerPerspective,
-    description: `Runtime-backed local crawled package line for ${entry.displayName}. Fallback-only coaching remains available.`,
-    lines: [line],
+    description: `Runtime-backed local crawled package line pool for ${entry.displayName}. Fallback-only coaching remains available.`,
+    lines: rawLines.map((line) => (line.movesSan.length > 0 ? line.movesSan.map(String) : buildSanLineFromUciSequence(line.playSequenceUci))),
     custom: false,
   };
 }
@@ -171,6 +140,51 @@ export function getStage2RuntimeTrainableRepertoire(openingId: string): RuntimeT
   return STAGE2_RUNTIME_TRAINABLE_REPERTOIRES.find((entry) => entry.id === openingId) ?? null;
 }
 
+function hashSeed(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function createSeededRandom(seed: string): () => number {
+  let state = hashSeed(seed) || 0x9e3779b9;
+  return () => {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    return ((state >>> 0) % 0x100000000) / 0x100000000;
+  };
+}
+
+function pickWeighted<T extends { weight: number }>(items: T[], seed: string): T {
+  if (!items.length) {
+    throw new Error("weighted_selection_requires_items");
+  }
+  const total = items.reduce((sum, item) => sum + Math.max(1, item.weight), 0);
+  const random = createSeededRandom(seed)();
+  let roll = random * total;
+  for (const item of items) {
+    roll -= Math.max(1, item.weight);
+    if (roll <= 0) {
+      return item;
+    }
+  }
+  return items[items.length - 1];
+}
+
+function lineDataForRepertoire(repertoire: RuntimeTrainableRepertoire): readonly RuntimeTrainableLineData[] {
+  return getGeneratedLinesForOpening(repertoire.id);
+}
+
+export function updateRuntimeTrainingLineKeys(current: string[], selectedLineKey: string): string[] {
+  const key = String(selectedLineKey ?? "").trim();
+  if (!key) return current.slice(0, 2);
+  return [key, ...current].slice(0, 2);
+}
+
 export function selectRuntimeWeightedTrainingLineSelection(input: {
   openingId: string;
   recentLineKeys?: string[] | null;
@@ -182,6 +196,7 @@ export function selectRuntimeWeightedTrainingLineSelection(input: {
     return null;
   }
 
+  const rawLines = lineDataForRepertoire(repertoire);
   const recentLineKeys = (input.recentLineKeys ?? [])
     .map((entry) => String(entry ?? "").trim())
     .filter(Boolean)
@@ -193,19 +208,23 @@ export function selectRuntimeWeightedTrainingLineSelection(input: {
       : null;
 
   const lineSummaries = repertoire.lines.map((line, lineIndex) => {
-    const selectedPlaySequenceUci = sanLineToUciSequence(line);
-    const selectedPlayKey = selectedPlaySequenceUci.join(",");
-    const lineId = `${repertoire.id}:${lineIndex}`;
-    const lineKey = `${lineId}:${selectedPlayKey}`;
+    const sourceLine = rawLines[lineIndex];
+    const normalizedPlaySequenceUci = sourceLine?.playSequenceUci
+      ? normalizeRuntimePlaySequenceUci(sourceLine.playSequenceUci)
+      : buildUciSequenceFromSanLine(line);
+    const playKey = sourceLine?.playKey ?? normalizedPlaySequenceUci.join(",");
+    const lineId = sourceLine?.lineId ?? `${repertoire.id}:${lineIndex}`;
+    const lineKey = `${lineId}:${playKey}`;
+    const totalGames = sourceLine?.totalGames ?? normalizedPlaySequenceUci.length;
     return {
       openingId: repertoire.id,
       lineId,
       lineKey,
       lineIndex,
-      playKey: selectedPlayKey,
-      moveCount: selectedPlaySequenceUci.length,
-      weight: Math.max(1, selectedPlaySequenceUci.length),
-      selectedPlaySequenceUci,
+      playKey,
+      moveCount: normalizedPlaySequenceUci.length,
+      weight: Math.max(1, totalGames),
+      selectedPlaySequenceUci: normalizedPlaySequenceUci,
     };
   });
 
@@ -255,41 +274,6 @@ export function selectRuntimeWeightedTrainingLineSelection(input: {
 }
 
 const RUNTIME_WEIGHTED_OPENING_SELECTION_SEED = "stage2-runtime-weighted-opening-selection-v1";
-
-function hashSeed(value: string): number {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-function createSeededRandom(seed: string): () => number {
-  let state = hashSeed(seed) || 0x9e3779b9;
-  return () => {
-    state ^= state << 13;
-    state ^= state >>> 17;
-    state ^= state << 5;
-    return ((state >>> 0) % 0x100000000) / 0x100000000;
-  };
-}
-
-function pickWeighted<T extends { weight: number }>(items: T[], seed: string): T {
-  if (!items.length) {
-    throw new Error("weighted_selection_requires_items");
-  }
-  const total = items.reduce((sum, item) => sum + Math.max(1, item.weight), 0);
-  const random = createSeededRandom(seed)();
-  let roll = random * total;
-  for (const item of items) {
-    roll -= Math.max(1, item.weight);
-    if (roll <= 0) {
-      return item;
-    }
-  }
-  return items[items.length - 1];
-}
 
 export function selectRuntimeWeightedOpeningSelection(seed: string = RUNTIME_WEIGHTED_OPENING_SELECTION_SEED): RuntimeWeightedOpeningSelection {
   const eligibleOpenings = STAGE2_OPENING_AVAILABILITY_MATRIX.filter(

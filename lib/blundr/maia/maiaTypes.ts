@@ -14,7 +14,8 @@ export type MaiaProviderStatus =
   | "unavailable"
   | "timeout"
   | "error"
-  | "disabled";
+  | "disabled"
+  | "loading";
 
 export interface MaiaMoveCandidate {
   uci: string;

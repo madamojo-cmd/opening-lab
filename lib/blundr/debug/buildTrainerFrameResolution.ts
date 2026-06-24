@@ -121,14 +121,16 @@ function buildTerminalProof(input: Input): TrainerFrameTerminalProofResolution {
 function isCastlingNotation(moveUci: string | null): boolean {
   if (!moveUci) return false;
   const normalized = moveUci.toLowerCase();
-  return normalized === "e1h1" || normalized === "e8h8" || normalized === "e1c1" || normalized === "e8c8";
+  return normalized === "e1h1" || normalized === "e1a1" || normalized === "e8h8" || normalized === "e8a8" || normalized === "e1c1" || normalized === "e8c8";
 }
 
 function normalizeCastlingMove(moveUci: string | null): string | null {
   const normalized = normalizeText(moveUci)?.toLowerCase() ?? null;
   if (!normalized) return null;
   if (normalized === "e1h1") return "e1g1";
+  if (normalized === "e1a1") return "e1c1";
   if (normalized === "e8h8") return "e8g8";
+  if (normalized === "e8a8") return "e8c8";
   if (normalized === "e1c1") return "e1c1";
   if (normalized === "e8c8") return "e8c8";
   return normalized;
