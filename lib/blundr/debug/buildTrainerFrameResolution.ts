@@ -80,7 +80,13 @@ function normalizeVisualSource(value: unknown): TrainerFrameVisualResult["visual
 }
 
 function buildTerminalProof(input: Input): TrainerFrameTerminalProofResolution {
-  return resolveStage2TerminalProof({
+  const selectedRuntimeLinePlyLength = Number(input.selectedRuntimeLinePlyLength ?? 0);
+  const selectedRuntimeLineCurrentPly = Number(input.selectedRuntimeLineCurrentPly ?? 0);
+  const selectedRuntimeLineExhausted = Boolean(input.selectedRuntimeLineExhausted ?? (selectedRuntimeLinePlyLength > 0 && selectedRuntimeLineCurrentPly >= selectedRuntimeLinePlyLength));
+  const terminalProofLineAuthority = normalizeString(input.terminalProofLineAuthority ?? null);
+  const terminalProofBlockedReason = normalizeString(input.terminalProofBlockedReason ?? null);
+  return {
+    ...resolveStage2TerminalProof({
     trainingMode: String(input.trainingMode ?? "restricted") as "restricted" | "continuation",
     isUserTurn: Boolean(input.isUserTurn),
     userExplicitlyEnteredContinuation: Boolean(input.userExplicitlyEnteredContinuation),
@@ -103,7 +109,13 @@ function buildTerminalProof(input: Input): TrainerFrameTerminalProofResolution {
     runtimeBookBookExhausted: Boolean(input.runtimeBookBookExhausted),
     runtimeBookCandidateCount: Number(input.runtimeBookCandidateCount ?? 0),
     runtimeBookStatus: normalizeText(input.runtimeBookStatus ?? null),
-  });
+    }),
+    selectedRuntimeLinePlyLength,
+    selectedRuntimeLineCurrentPly,
+    selectedRuntimeLineExhausted,
+    terminalProofLineAuthority,
+    terminalProofBlockedReason,
+  };
 }
 
 function isCastlingNotation(moveUci: string | null): boolean {

@@ -81,7 +81,7 @@ const RUNTIME_TRAINABLE_REPERTOIRE_SPECS: Record<string, RuntimeTrainableReperto
   "english-white": { openingId: "english-white", uciSequence: ["c2c4"] },
   "french-black": { openingId: "french-black", uciSequence: ["e2e4", "e7e6"] },
   "italian-black": { openingId: "italian-black", uciSequence: ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4"] },
-  "italian-white": { openingId: "italian-white", uciSequence: ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4"] },
+  "italian-white": { openingId: "italian-white", uciSequence: ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "f8c5"] },
   "kings-indian-black": { openingId: "kings-indian-black", uciSequence: ["d2d4", "g8f6", "c2c4", "g7g6"] },
   "london-white": { openingId: "london-white", uciSequence: ["d2d4"] },
   "nimzo-indian-black": { openingId: "nimzo-indian-black", uciSequence: ["d2d4", "g8f6", "c2c4", "e7e6", "b1c3", "f8b4"] },
@@ -109,6 +109,12 @@ function uciToMove(uci: string): { from: string; to: string; promotion?: string 
 
 function moveToUci(move: { from?: string; to?: string; promotion?: string | null }): string {
   return `${String(move.from ?? "").toLowerCase()}${String(move.to ?? "").toLowerCase()}${String(move.promotion ?? "").toLowerCase()}`;
+}
+
+export function updateRuntimeTrainingLineKeys(current: string[], selectedLineKey: string): string[] {
+  const key = String(selectedLineKey ?? "").trim();
+  if (!key) return current.slice(0, 2);
+  return [key, ...current].slice(0, 2);
 }
 
 function uciSequenceToSanLine(uciSequence: string[]): string[] {

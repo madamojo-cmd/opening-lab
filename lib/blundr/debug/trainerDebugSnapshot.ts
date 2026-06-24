@@ -33,6 +33,11 @@ function bool(value: unknown): boolean {
   return Boolean(value);
 }
 
+function normalizeString(value: unknown): string | null {
+  const text = String(value ?? "").trim();
+  return text.length > 0 ? text : null;
+}
+
 function isAllowedNullTargetState(input: any): boolean {
   const phase = String(input?.trainerPhase ?? "");
   const visibleSurfaceMode = String(input?.visibleTeachingSurface?.mode ?? "");
@@ -242,7 +247,9 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
   const qualityScoreSource = String(coachQuality.qualityScoreSource ?? "pipeline_explanation");
   const expectedMoveResolution = input.expectedMoveResolution ?? {};
   const guidedCoveragePolicy = input.guidedCoveragePolicy ?? {};
-  const selectedLineCompleteConfirmed = Boolean(Number(expectedMoveResolution?.lineLength ?? 0) > 0 && Number(expectedMoveResolution?.lineCursor ?? 0) >= Number(expectedMoveResolution?.lineLength ?? 0));
+  const selectedLineCompleteConfirmed = typeof input.selectedLineCompleteConfirmed === "boolean"
+    ? input.selectedLineCompleteConfirmed
+    : Boolean(Number(expectedMoveResolution?.lineLength ?? 0) > 0 && Number(expectedMoveResolution?.lineCursor ?? 0) >= Number(expectedMoveResolution?.lineLength ?? 0));
   const terminalProof = (input.trainerFrameResolution as any)?.terminalProof
     ?? input.terminalProof
     ?? resolveStage2TerminalProof({
@@ -1250,6 +1257,9 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       lineSelectionRecentLineKeys: Array.isArray(input.lineSelectionRecentLineKeys) ? input.lineSelectionRecentLineKeys.map(String) : [],
       lineSelectionBlockedRecentLineKeys: Array.isArray(input.lineSelectionBlockedRecentLineKeys) ? input.lineSelectionBlockedRecentLineKeys.map(String) : [],
       lineSelectionBlockedThirdRepeatLineKeys: Array.isArray(input.lineSelectionBlockedThirdRepeatLineKeys) ? input.lineSelectionBlockedThirdRepeatLineKeys.map(String) : [],
+      lineSelectionSelectedLineKey: normalizeString(input.lineSelectionSelectedLineKey ?? input.selectedRuntimeLineKey ?? null),
+      lineSelectionPreviousTwoSame: Boolean(input.lineSelectionPreviousTwoSame),
+      lineSelectionSessionId: normalizeString(input.lineSelectionSessionId ?? null),
       lineSelectionVariationReason: input.lineSelectionVariationReason ?? null,
       lineSelectionRepeatUnavoidable: Boolean(input.lineSelectionRepeatUnavoidable),
       lineSelectionSeed: input.lineSelectionSeed ?? null,
@@ -1258,6 +1268,12 @@ export function buildTrainerDebugSnapshot(input: Record<string, any>): TrainerDe
       selectedRuntimeLineIndex: input.selectedRuntimeLineIndex ?? null,
       selectedRuntimeLinePlayKey: input.selectedRuntimeLinePlayKey ?? null,
       selectedRuntimeLinePlaySequenceUci: Array.isArray(input.selectedRuntimeLinePlaySequenceUci) ? input.selectedRuntimeLinePlaySequenceUci.map(String) : [],
+      selectedRuntimeLinePlyLength: Number(input.selectedRuntimeLinePlyLength ?? 0),
+      selectedRuntimeLineCurrentPly: Number(input.selectedRuntimeLineCurrentPly ?? 0),
+      selectedRuntimeLineExhausted: Boolean(input.selectedRuntimeLineExhausted),
+      selectedLineCompleteConfirmed: Boolean(input.selectedLineCompleteConfirmed ?? selectedLineCompleteConfirmed),
+      terminalProofLineAuthority: normalizeString(input.terminalProofLineAuthority ?? null),
+      terminalProofBlockedReason: normalizeString(input.terminalProofBlockedReason ?? null),
       openingIdentityMatched: openingIdentity.openingIdentityMatched,
       openingIdentityMismatchReason: openingIdentity.openingIdentityMismatchReason,
       candidateSource: input.candidateSource ?? (input.runtimeBookQueried ? "local_crawled_package" : null),

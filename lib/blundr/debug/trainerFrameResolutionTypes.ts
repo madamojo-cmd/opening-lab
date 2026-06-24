@@ -39,6 +39,11 @@ export type TrainerFrameTerminalProofResolution = {
   selectedLineExhaustionBlockedReason: string | null;
   runtimeBookExhaustionObserved: boolean;
   runtimeBookExhaustionTreatedAsDebugOnly: boolean;
+  selectedRuntimeLinePlyLength?: number;
+  selectedRuntimeLineCurrentPly?: number;
+  selectedRuntimeLineExhausted?: boolean;
+  terminalProofLineAuthority?: string | null;
+  terminalProofBlockedReason?: string | null;
 };
 
 export type TrainerFrameFinalSurfaceAuthority = {
