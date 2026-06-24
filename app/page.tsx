@@ -1843,6 +1843,38 @@ export default function App(){
     ()=>((game.moves({verbose:true}) as any[]).map((move)=>moveToUci(move))),
     [game],
   );
+  const restrictedOpponentReplyAuthorityPreview=useMemo(()=> {
+    const runtimeBookMatchesFrame=runtimeBookFrameQuery.status==="ready"&&runtimeBookFrameQuery.openingId===runtimeOpeningIdForFrame&&runtimeBookFrameQuery.playKeyBefore===runtimePlayKeyBeforeForFrame;
+    const runtimeBookSelectedCandidate=runtimeBookMatchesFrame
+      ? runtimeBookFrameQuery.candidates.find((candidate)=>continuationLegalMoveUcis.includes(candidate.uci))??null
+      : null;
+    return resolveRestrictedOpponentReplyAuthority({
+      trainingMode:"restricted",
+      currentOpponentBookOptionCount:0,
+      legalMoveCount:continuationLegalMoveUcis.length,
+      legalMoveUcis:continuationLegalMoveUcis,
+      runtimeBookMatchesFrame,
+      runtimeBookStatus:runtimeBookFrameQuery.status,
+      runtimeBookBookExhausted:runtimeBookFrameQuery.bookExhausted,
+      runtimeBookCandidateCount:runtimeBookFrameQuery.candidates.length,
+      runtimeBookOpeningId:runtimeBookFrameQuery.openingId,
+      runtimeBookPlayKeyBefore:runtimeBookFrameQuery.playKeyBefore,
+      currentOpeningId:selectedRepertoireId,
+      currentPlayKeyBefore:runtimePlayKeyBeforeForFrame,
+      runtimeBookCandidates:runtimeBookFrameQuery.candidates,
+      runtimeBookTopCandidate:runtimeBookSelectedCandidate,
+    });
+  },[
+    continuationLegalMoveUcis.join("|"),
+    runtimeBookFrameQuery.status,
+    runtimeBookFrameQuery.openingId,
+    runtimeBookFrameQuery.playKeyBefore,
+    runtimeBookFrameQuery.candidates,
+    runtimeBookFrameQuery.bookExhausted,
+    runtimeOpeningIdForFrame,
+    runtimePlayKeyBeforeForFrame,
+    selectedRepertoireId,
+  ]);
   const continuationCandidateResolution=useMemo(()=>resolveEffectiveContinuationCandidate({
     trainingMode,
     isUserTurn,
@@ -4616,11 +4648,10 @@ export default function App(){
     let continuationPolicyDecision:ReturnType<typeof selectContinuedPlayMove>|null=null;
     if(mode==="restricted"){
       if(!currentOpponentBookOptions.length){
-        const legalMoves=current.moves({verbose:true}) as any[];
-        const restrictedOpponentReplyAuthority=resolveRestrictedOpponentReplyAuthority({
-          currentOpponentBookOptionCount:currentOpponentBookOptions.length,
-          legalMoveCount:legalMoves.length,
-        });
+        const runtimeBookRestrictedCandidates=runtimeBookFrameQuery.status==="ready"&&runtimeBookFrameQuery.openingId===runtimeOpeningIdForFrame&&runtimeBookFrameQuery.playKeyBefore===runtimePlayKeyBeforeForFrame
+          ? runtimeBookFrameQuery.candidates
+          : [];
+        const restrictedOpponentReplyAuthority=restrictedOpponentReplyAuthorityPreview;
         if(restrictedOpponentReplyAuthority.kind==="terminal"){
           clearPendingOpponentReplyRequest({clearStaleIssue:true});
           setTrainerPhase("terminal");
@@ -4628,12 +4659,52 @@ export default function App(){
           setBrain(p=>({...p,book:"complete",source:"terminal_position",lichess:"ready"}));
           return;
         }
-        clearPendingOpponentReplyRequest({clearStaleIssue:true});
-        pushRuntimeCriticalIssue("restricted_opponent_reply_missing_runtime_authority");
-        setTrainerPhase("error");
-        setFeedback("No runtime-backed opponent reply is available for this frame. Select another line or reopen the opening.");
-        setBrain(p=>({...p,book:"complete",source:"restricted_opponent_reply_blocked",lichess:"ready"}));
-        return;
+        if(restrictedOpponentReplyAuthority.kind==="runtime_reply"&&restrictedOpponentReplyAuthority.opponentReplyAuthorityCandidateUci){
+          const applied=applyUci(current.fen(),restrictedOpponentReplyAuthority.opponentReplyAuthorityCandidateUci);
+          if(!applied){
+            clearPendingOpponentReplyRequest({clearStaleIssue:true});
+            pushRuntimeCriticalIssue("restricted_opponent_reply_missing_runtime_authority");
+            setTrainerPhase("error");
+            setFeedback("The runtime-backed opponent reply was legal in the catalog but could not be applied in the current position.");
+            setBrain(p=>({...p,book:"complete",source:"restricted_runtime_reply_apply_failed",lichess:"ready"}));
+            return;
+          }
+          clearPendingOpponentReplyRequest({clearStaleIssue:true});
+          chosen={san:applied.san,uci:applied.uci,fen:applied.fen};
+          source=`Runtime book reply (${restrictedOpponentReplyAuthority.opponentReplyAuthoritySource})`;
+          variationDebug={
+            ...variationDebug,
+            fallbackUsed:false,
+            opponentVariationApplied:true,
+            opponentVariationReason:"runtime_book_reply_selected",
+            selectedOpponentBranchKey:`${positionKey}::${applied.uci}`,
+            candidateOpponentBranches:runtimeBookRestrictedCandidates.map((candidate)=>({
+              branchKey:`${positionKey}::${candidate.uci}`,
+              uci:candidate.uci,
+              san:candidate.san,
+              baseWeight:Number(candidate.totalGames ?? 1),
+              adjustedWeight:Number(candidate.playPct ?? 0),
+              source:String(candidate.sourceDetail ?? candidate.sources ?? "runtime_book"),
+              safetyStatus:"runtime_book",
+              selectionScore:Number(candidate.rank ?? candidate.totalGames ?? 0),
+            })),
+            blockedThirdRepeatBranches:[],
+          };
+        }else if(restrictedOpponentReplyAuthority.kind==="blocked"){
+          clearPendingOpponentReplyRequest({clearStaleIssue:true});
+          pushRuntimeCriticalIssue("restricted_opponent_reply_missing_runtime_authority");
+          setTrainerPhase("error");
+          setFeedback("No runtime-backed opponent reply is available for this frame. Select another line or reopen the opening.");
+          setBrain(p=>({...p,book:"complete",source:"restricted_opponent_reply_blocked",lichess:"ready"}));
+          return;
+        }else{
+          clearPendingOpponentReplyRequest({clearStaleIssue:true});
+          pushRuntimeCriticalIssue("restricted_opponent_reply_missing_runtime_authority");
+          setTrainerPhase("error");
+          setFeedback("No runtime-backed opponent reply is available for this frame. Select another line or reopen the opening.");
+          setBrain(p=>({...p,book:"complete",source:"restricted_opponent_reply_blocked",lichess:"ready"}));
+          return;
+        }
       }else{
         const explorer=await loadExplorer(current.fen());
         const valid=currentOpponentBookOptions.map(book=>{const match=explorer.find(m=>m.uci===book.uci);return{...book,weight:match?.total??1,pct:match?.pct??0,branchKey:`${positionKey}::${book.uci}`}});
@@ -6107,6 +6178,12 @@ export default function App(){
     runtimeBookTopCandidateRank:runtimeBookFrameQuery.candidates[0]?.rank??null,
     runtimeBookTopCandidateGames:runtimeBookFrameQuery.candidates[0]?.totalGames??null,
     runtimeBookTopCandidatePlayPct:runtimeBookFrameQuery.candidates[0]?.playPct??null,
+    opponentReplyAuthoritySource:restrictedOpponentReplyAuthorityPreview.opponentReplyAuthoritySource,
+    opponentReplyAuthorityCandidateUci:restrictedOpponentReplyAuthorityPreview.opponentReplyAuthorityCandidateUci,
+    opponentReplyAuthorityCandidateSan:restrictedOpponentReplyAuthorityPreview.opponentReplyAuthorityCandidateSan,
+    opponentReplyAuthorityCandidateGames:restrictedOpponentReplyAuthorityPreview.opponentReplyAuthorityCandidateGames,
+    opponentReplyAuthorityCandidatePlayPct:restrictedOpponentReplyAuthorityPreview.opponentReplyAuthorityCandidatePlayPct,
+    opponentReplyAuthorityRejectedReason:restrictedOpponentReplyAuthorityPreview.opponentReplyAuthorityRejectedReason,
     runtimeBookBookExhausted:runtimeBookFrameQuery.bookExhausted,
     runtimeBookFallbackUsed:Boolean(
       runtimeBookFrameQuery.bookExhausted&&

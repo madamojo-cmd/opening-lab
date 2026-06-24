@@ -544,6 +544,12 @@ export function buildDebugCopyEverythingPayload(snapshot: TrainerDebugSnapshot |
       topCandidateRank: (snapshot?.continuation as any)?.runtimeBookTopCandidateRank ?? null,
       topCandidateGames: (snapshot?.continuation as any)?.runtimeBookTopCandidateGames ?? null,
       topCandidatePlayPct: (snapshot?.continuation as any)?.runtimeBookTopCandidatePlayPct ?? null,
+      opponentReplyAuthoritySource: (snapshot?.continuation as any)?.opponentReplyAuthoritySource ?? null,
+      opponentReplyAuthorityCandidateUci: (snapshot?.continuation as any)?.opponentReplyAuthorityCandidateUci ?? null,
+      opponentReplyAuthorityCandidateSan: (snapshot?.continuation as any)?.opponentReplyAuthorityCandidateSan ?? null,
+      opponentReplyAuthorityCandidateGames: (snapshot?.continuation as any)?.opponentReplyAuthorityCandidateGames ?? null,
+      opponentReplyAuthorityCandidatePlayPct: (snapshot?.continuation as any)?.opponentReplyAuthorityCandidatePlayPct ?? null,
+      opponentReplyAuthorityRejectedReason: (snapshot?.continuation as any)?.opponentReplyAuthorityRejectedReason ?? null,
       bookExhausted: (snapshot?.continuation as any)?.runtimeBookBookExhausted ?? null,
       fallbackUsed: (snapshot?.continuation as any)?.runtimeBookFallbackUsed ?? null,
       fallbackAuthority: (snapshot?.continuation as any)?.runtimeBookFallbackAuthority ?? null,
@@ -686,6 +692,9 @@ playKeyBefore: ${(snapshot.continuation as any)?.runtimeBookPlayKeyBefore ?? "no
 status: ${(snapshot.continuation as any)?.runtimeBookStatus ?? "none"}
 candidateCount: ${(snapshot.continuation as any)?.runtimeBookCandidateCount ?? 0}
 topCandidateUci: ${(snapshot.continuation as any)?.runtimeBookTopCandidateUci ?? "none"}
+opponentReplyAuthoritySource: ${(snapshot.continuation as any)?.opponentReplyAuthoritySource ?? "none"}
+opponentReplyAuthorityCandidateUci: ${(snapshot.continuation as any)?.opponentReplyAuthorityCandidateUci ?? "none"}
+opponentReplyAuthorityRejectedReason: ${(snapshot.continuation as any)?.opponentReplyAuthorityRejectedReason ?? "none"}
 bookExhausted: ${(snapshot.continuation as any)?.runtimeBookBookExhausted ?? false}
 fallbackUsed: ${(snapshot.continuation as any)?.runtimeBookFallbackUsed ?? false}
 fallbackAuthority: ${(snapshot.continuation as any)?.runtimeBookFallbackAuthority ?? "none"}
