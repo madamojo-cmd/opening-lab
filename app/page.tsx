@@ -56,7 +56,7 @@ import { buildOpeningTree } from "@/lib/blundr/openings/openingTree";
 import { resolveExpectedMoveForFrame } from "@/lib/blundr/openings/expectedMoveResolver";
 import { buildOpeningResolverDebug } from "@/lib/blundr/openings/openingResolverDebug";
 import { STAGE2_OPENING_AVAILABILITY_MATRIX, getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
-import { STAGE2_RUNTIME_TRAINABLE_REPERTOIRES } from "@/lib/blundr/openings/runtimeTrainableRepertoires";
+import { STAGE2_RUNTIME_TRAINABLE_REPERTOIRES, STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION } from "@/lib/blundr/openings/runtimeTrainableRepertoires";
 import { resolveStage2CanonicalOpeningId } from "@/lib/blundr/openings/openingIdentity";
 import { decideGuidedCoveragePolicy } from "@/lib/blundr/openings/guidedCoveragePolicy";
 import type { RepertoireLineInput } from "@/lib/blundr/openings/openingTypes";
@@ -64,6 +64,7 @@ import { buildCurrentInstructionFrame, isBookLikeInstructionTarget } from "@/lib
 import { resolveBranchCompleteContract } from "@/lib/blundr/runtime/branchCompleteContract";
 import { resolveContinuationFlowContract } from "@/lib/blundr/runtime/continuationFlowContract";
 import { shouldFlagStaleOpponentReplyCommit } from "@/lib/blundr/runtime/opponentReplyGuard";
+import { resolveRestrictedOpponentReplyAuthority } from "@/lib/blundr/runtime/restrictedOpponentReplyAuthority";
 import { DEFAULT_GUIDED_COVERAGE_THRESHOLDS } from "@/lib/blundr/openings/guidedCoveragePolicy";
 import { resolveRestrictedRuntimeBookHandoff } from "@/lib/blundr/runtime/restrictedRuntimeBookHandoff";
 import { resolveStage2TerminalProof } from "@/lib/blundr/runtime/terminalProof";
@@ -1037,7 +1038,7 @@ export default function App(){
   const initialFen=useMemo(()=>new Chess().fen(),[]);
   const [activeTab,setActiveTab]=useState<Tab>("home");
   const [customRepertoires,setCustomRepertoires]=useState<Repertoire[]>([]);
-  const [selectedRepertoireId,setSelectedRepertoireId]=useState(OPENINGS[0].id);
+  const [selectedRepertoireId,setSelectedRepertoireId]=useState(STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.selectedOpeningId);
   const [fen,setFen]=useState(initialFen);
   const [positionHistory,setPositionHistory]=useState<string[]>([initialFen]);
   const [historyIndex,setHistoryIndex]=useState(0);
@@ -2140,6 +2141,10 @@ export default function App(){
     // This is the core "prevent replacement" guard (Coach Perfection Gate 3A).
     const lockedForThisFrame = lockedContinuationRef.current[thisFrameKey];
     const useLocked = !!(trainingMode==="continuation" && isUserTurn && lockedForThisFrame?.uci);
+    const guidedMoveAuthorityEligible =
+      Boolean(expectedMoveResolution.expectedMoveUci) &&
+      expectedMoveResolution.source !== "continuation_candidate" &&
+      expectedMoveResolution.source !== "opening_family_plan";
 
     return buildCurrentInstructionFrame({
       frameId:trainerFrameId,
@@ -2148,7 +2153,7 @@ export default function App(){
       trainerPhase,
       trainerView,
       isUserTurn,
-      guidedMove:expectedMoveResolution.expectedMoveUci&&expectedMoveResolution.source!=="continuation_candidate"?{
+      guidedMove:guidedMoveAuthorityEligible?{
         uci:expectedMoveResolution.expectedMoveUci,
         san:expectedMoveResolution.expectedMoveSan,
         source:expectedMoveResolution.source,
@@ -4611,20 +4616,24 @@ export default function App(){
     let continuationPolicyDecision:ReturnType<typeof selectContinuedPlayMove>|null=null;
     if(mode==="restricted"){
       if(!currentOpponentBookOptions.length){
-        const legal=current.moves({verbose:true}) as any[];
-        if(!legal.length){
+        const legalMoves=current.moves({verbose:true}) as any[];
+        const restrictedOpponentReplyAuthority=resolveRestrictedOpponentReplyAuthority({
+          currentOpponentBookOptionCount:currentOpponentBookOptions.length,
+          legalMoveCount:legalMoves.length,
+        });
+        if(restrictedOpponentReplyAuthority.kind==="terminal"){
           clearPendingOpponentReplyRequest({clearStaleIssue:true});
           setTrainerPhase("terminal");
           setFeedback("Game over. Restart the opening to train again.");
           setBrain(p=>({...p,book:"complete",source:"terminal_position",lichess:"ready"}));
           return;
         }
-        const fallbackMove=legal[0];
-        current.move({from:fallbackMove.from,to:fallbackMove.to,promotion:fallbackMove.promotion??undefined});
-        chosen={san:fallbackMove.san,uci:moveToUci(fallbackMove),fen:current.fen()};
-        source="Restricted local legal fallback";
-        variationDebug.fallbackUsed=true;
-        variationDebug.opponentVariationReason="restricted_no_mapped_opponent_reply";
+        clearPendingOpponentReplyRequest({clearStaleIssue:true});
+        pushRuntimeCriticalIssue("restricted_opponent_reply_missing_runtime_authority");
+        setTrainerPhase("error");
+        setFeedback("No runtime-backed opponent reply is available for this frame. Select another line or reopen the opening.");
+        setBrain(p=>({...p,book:"complete",source:"restricted_opponent_reply_blocked",lichess:"ready"}));
+        return;
       }else{
         const explorer=await loadExplorer(current.fen());
         const valid=currentOpponentBookOptions.map(book=>{const match=explorer.find(m=>m.uci===book.uci);return{...book,weight:match?.total??1,pct:match?.pct??0,branchKey:`${positionKey}::${book.uci}`}});
@@ -5994,6 +6003,22 @@ export default function App(){
     canonicalSelectedOpeningId:canonicalSelectedRepertoireId,
     selectedConceptId:visualRecipe?.conceptId??teachingOrchestration?.cue.conceptId,
     activeLineName:repertoire.name,
+    openingSelectionMode:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.mode,
+    openingSelectionSource:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.source,
+    openingSelectionEligibleCount:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.eligibleCount,
+    openingSelectionEligibleOpeningIds:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.eligibleOpeningIds,
+    openingSelectionWeighted:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.weighted,
+    openingSelectionContentGated:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.contentGated,
+    openingSelectionStageGated:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.stageGated,
+    openingSelectionVisibilityGated:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.visibilityGated,
+    openingSelectionWeightsSummary:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.weightsSummary,
+    openingSelectionStickyReason:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.openingSelectionStickyReason,
+    openingSelectionSeed:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.openingSelectionSeed,
+    openingSelectionWasPersisted:STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION.openingSelectionWasPersisted,
+    lineSelectionSource:selectedOpeningAvailability?.runtimeAvailable?"local_runtime_package":"curated_repertoire",
+    lineSelectionWeighted:Boolean(selectedOpeningAvailability?.runtimeAvailable),
+    lineSelectionContentGated:false,
+    lineSelectionRuntimeBacked:Boolean(selectedOpeningAvailability?.runtimeAvailable),
     currentInstructionFrame,
     playKeyBefore:runtimePlayKeyBeforeForFrame??null,
     playKey:runtimePlayKeyBeforeForFrame&&instructionTarget?.uci?`${runtimePlayKeyBeforeForFrame},${instructionTarget.uci}`:(instructionTarget?.uci??null),
