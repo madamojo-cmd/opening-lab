@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Chess } from "chess.js";
@@ -26,7 +27,6 @@ import { createLearningSessionId, recordLearningEvent } from "@/lib/blundr/learn
 import type { LearningEvent } from "@/lib/blundr/learning/learningEvents";
 import { loadOpponentVariationMemory, recordOpponentChoice } from "@/lib/blundr/opponent/opponentVariationMemory";
 import { selectOpponentCandidateWithVariation } from "@/lib/blundr/opponent/opponentVariationPolicy";
-import { CoachCard } from "@/components/coach/CoachCard";
 import { buildCoachContext } from "@/lib/blundr/coach/coachContextBuilder";
 import { decideCoachOutput } from "@/lib/blundr/coach/coachDecisionEngine";
 import { buildCoachUtteranceRecordKey, loadCoachUtteranceMemory, readCoachUtteranceMemoryMeta, recordCoachUtterance } from "@/lib/blundr/coach/coachUtteranceMemory";
@@ -57,13 +57,10 @@ import { resolveExpectedMoveForFrame } from "@/lib/blundr/openings/expectedMoveR
 import { buildOpeningResolverDebug } from "@/lib/blundr/openings/openingResolverDebug";
 import { STAGE2_OPENING_AVAILABILITY_MATRIX, getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
 import {
-  STAGE2_RUNTIME_TRAINABLE_REPERTOIRES,
-  getStage2RuntimeTrainableRepertoire,
   selectRuntimeWeightedOpeningSelection,
-  selectRuntimeWeightedTrainingLineSelection,
-  updateRuntimeTrainingLineKeys,
   type RuntimeWeightedTrainingLineSelection,
-} from "@/lib/blundr/openings/runtimeTrainableRepertoires";
+} from "@/lib/blundr/openings/runtimeOpeningSelection";
+import { loadRuntimeTrainableRepertoire, type LoadedRuntimeTrainableRepertoire } from "@/lib/blundr/openings/runtimeTrainableRepertoireLoader";
 import { resolveStage2CanonicalOpeningId } from "@/lib/blundr/openings/openingIdentity";
 import {
   resolveAdaptiveOpeningIdentity,
@@ -95,7 +92,6 @@ import { MaiaApiClientProvider } from "@/lib/blundr/maia/maiaApiClientProvider";
 import { buildMaiaOpponentReplyDecision, classifyMaiaProviderStatus, evaluateMaiaSanityGuard, resolveMaiaSkillLevel, selectMaiaOpponentReply, withMaiaTimeout } from "@/lib/blundr/maia/maiaOpponentProvider";
 import { applyMaiaMoveOnRequestFen } from "@/lib/blundr/maia/maiaLegalityRequestFenContract";
 import { appendMaiaTimeline, createMaiaTimelineEvent, type MaiaTimelineEvent } from "@/lib/blundr/debug/maiaTimeline";
-import { BlundrDiagnosticsPanel } from "@/components/debug/BlundrDiagnosticsPanel";
 import { collectTrainerDebugSnapshot } from "@/lib/blundr/debug/trainerDebugCollector";
 import { buildTrainerFrameResolution } from "@/lib/blundr/debug/buildTrainerFrameResolution";
 import { computeInstructionFrameKey } from "@/lib/blundr/runtime/currentInstructionFrame";  // v2.7.39.1 Target Locking (Coach Perfection Gate)
@@ -103,6 +99,16 @@ import { analyzeBlundrPosition } from "@/lib/blundr/brain/analyzeBlundrPosition"
 import { appendDebugEvent } from "@/lib/blundr/debug/trainerDebugEventLog";
 import { isBlundrDebugEnabled } from "@/lib/blundr/debug/trainerDebugGuards";
 import type { DebugEvent } from "@/lib/blundr/debug/trainerDebugTypes";
+
+const CoachCard = dynamic(
+  () => import("@/components/coach/CoachCard").then((mod) => mod.CoachCard),
+  { ssr: false },
+);
+
+const BlundrDiagnosticsPanel = dynamic(
+  () => import("@/components/debug/BlundrDiagnosticsPanel").then((mod) => mod.BlundrDiagnosticsPanel),
+  { ssr: false },
+);
 
 type Tab = "home" | "train" | "review" | "progress" | "repertoire";
 type RepertoireColor = "white" | "black";
@@ -363,6 +369,16 @@ const OPENINGS: Repertoire[] = [
   { id:"kings-indian-black", name:"King's Indian as Black", color:"black", description:"Allow White's center, then counter with ...e5 or ...c5 and kingside activity.", lines:[["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Be2","e5","O-O","Nc6"],["d4","Nf6","c4","g6","Nf3","Bg7","g3","O-O","Bg2","d6","O-O","Nc6"]] }
 ];
 
+const RUNTIME_CATALOG_REPERTOIRES: Repertoire[] = STAGE2_OPENING_AVAILABILITY_MATRIX.map((opening) => ({
+  id: opening.openingId,
+  name: opening.displayName,
+  color: opening.learnerPerspective,
+  description: opening.leadingMvpCandidate
+    ? "Runtime-backed local crawled package line pool for the MVP opening."
+    : "Runtime-backed local crawled package line pool.",
+  lines: [],
+}));
+
 function classNames(...classes:Array<string|false|null|undefined>){return classes.filter(Boolean).join(" ")}
 function normalizeFen(fen:string){return fen.split(" ").slice(0,4).join(" ")}
 function buildRuntimeFrameKey(input:{fen:string;trainerPhase:string;trainerView:TrainerView;trainingMode:TrainingMode;isUserTurn:boolean;instructionTargetUci:string|null}){return `${normalizeFen(input.fen)}|${input.trainerPhase}|${input.trainerView}|${input.trainingMode}|${input.isUserTurn?"user":"opp"}|${input.instructionTargetUci??"none"}`}
@@ -398,50 +414,71 @@ function countMatchedRuntimeLinePlies(reference:string[], current:string[]):numb
   }
   return matched;
 }
-function buildRuntimeTrainingLineSelection(openingId:string,recentLineKeys:string[],seed:string,repertoire?:Repertoire):RuntimeWeightedTrainingLineSelection | null{
-  const runtimeRepertoire=getStage2RuntimeTrainableRepertoire(openingId);
-  const selection=selectRuntimeWeightedTrainingLineSelection({
-    openingId,
-    recentLineKeys,
-    seed,
-    repertoire: runtimeRepertoire ?? null,
+function buildRuntimeTrainingLineSelection(openingId:string,recentLineKeys:string[],seed:string,repertoire?:Repertoire | LoadedRuntimeTrainableRepertoire | null):RuntimeWeightedTrainingLineSelection | null{
+  if(!repertoire||!Array.isArray(repertoire.lines)||repertoire.lines.length===0)return null;
+  const recentKeys=recentLineKeys.map((entry)=>String(entry ?? "").trim()).filter((entry)=>entry.length>0).slice(0,2);
+  const thirdConsecutiveRepeatLineKey=recentKeys.length===2&&recentKeys[0]===recentKeys[1]?recentKeys[0]:null;
+  const runtimeLineWeights=Array.isArray((repertoire as LoadedRuntimeTrainableRepertoire).runtimeLineWeights)
+    ? (repertoire as LoadedRuntimeTrainableRepertoire).runtimeLineWeights
+    : null;
+  const lineSummaries=repertoire.lines.map((line,lineIndex)=>{
+    const playSequenceUci=buildRuntimePlayKeyBeforeFromSanHistory(line)?.split(",").filter(Boolean) ?? [];
+    const playKey=playSequenceUci.join(",");
+    const lineId=`${repertoire.id}:${lineIndex}`;
+    const lineKey=`${lineId}:${playKey}`;
+    const weight=Math.max(1, runtimeLineWeights?.[lineIndex] ?? playSequenceUci.length ?? line.length);
+    return {
+      openingId:repertoire.id,
+      lineId,
+      lineKey,
+      lineIndex,
+      playKey,
+      moveCount:playSequenceUci.length,
+      weight,
+      selectedPlaySequenceUci:playSequenceUci,
+    };
   });
-  if(selection)return selection;
-  const line=repertoire?.lines[0] ?? [];
-  const playSequenceUci=buildRuntimePlayKeyBeforeFromSanHistory(line)?.split(",").filter(Boolean) ?? [];
-  const playKey=playSequenceUci.join(",");
-  const lineId=`${openingId}:0`;
-  const lineKey=`${lineId}:${playKey}`;
+  const eligibleLineSummaries=thirdConsecutiveRepeatLineKey
+    ? lineSummaries.filter((line)=>line.lineKey!==thirdConsecutiveRepeatLineKey)
+    : lineSummaries;
+  const blockedThirdRepeatLineKeys=thirdConsecutiveRepeatLineKey?[thirdConsecutiveRepeatLineKey]:[];
+  const repeatUnavoidable=Boolean(thirdConsecutiveRepeatLineKey&&eligibleLineSummaries.length===0);
+  const weightedCandidates=eligibleLineSummaries.length>0?eligibleLineSummaries:lineSummaries;
+  const selected=pickWeighted(weightedCandidates,`${seed}:${repertoire.id}:${recentKeys.join("|")}`);
   return {
     mode:"runtime_weighted_line",
     source:"local_runtime_package",
     openingId,
-    selectedLineId:lineId,
-    selectedLineKey:lineKey,
-    selectedLineIndex:0,
-    selectedPlayKey:playKey,
-    selectedPlaySequenceUci:playSequenceUci,
-    eligibleCount:line.length>0?1:0,
-    eligibleLineIds:line.length>0?[lineId]:[],
-    eligibleLineKeys:line.length>0?[lineKey]:[],
+    selectedLineId:selected.lineId,
+    selectedLineKey:selected.lineKey,
+    selectedLineIndex:selected.lineIndex,
+    selectedPlayKey:selected.playKey,
+    selectedPlaySequenceUci:selected.selectedPlaySequenceUci,
+    eligibleCount:eligibleLineSummaries.length,
+    eligibleLineIds:eligibleLineSummaries.map((line)=>line.lineId),
+    eligibleLineKeys:eligibleLineSummaries.map((line)=>line.lineKey),
     weighted:true,
-    recentLineKeys:recentLineKeys.slice(0,2),
-    blockedRecentLineKeys:[],
-    blockedThirdRepeatLineKeys:[],
-    variationReason:line.length>0?"fallback_curated_line":"no_runtime_line_available",
-    repeatUnavoidable:false,
+    recentLineKeys:recentKeys,
+    blockedRecentLineKeys:blockedThirdRepeatLineKeys,
+    blockedThirdRepeatLineKeys,
+    variationReason:repeatUnavoidable
+      ? "repeat_unavoidable_no_alternative"
+      : (blockedThirdRepeatLineKeys.length>0?"third_consecutive_repeat_excluded":"fresh_line_selection"),
+    repeatUnavoidable,
     selectionSeed:seed,
-    lineWeightsSummary:line.length>0?[{
+    lineWeightsSummary:lineSummaries.map(({ openingId, lineId, lineKey, lineIndex, playKey, moveCount, weight }) => ({
       openingId,
       lineId,
       lineKey,
-      lineIndex:0,
+      lineIndex,
       playKey,
-      moveCount:playSequenceUci.length,
-      weight:Math.max(1, playSequenceUci.length),
-    }]:[],
+      moveCount,
+      weight,
+    })),
   };
 }
+function isRuntimeCatalogRepertoireId(openingId:string){return STAGE2_OPENING_AVAILABILITY_MATRIX.some((entry)=>entry.openingId===openingId)}
+function getRuntimeCatalogCount(rep:Repertoire){return rep.lines.length>0?countPositions(rep):(STAGE2_OPENING_AVAILABILITY_MATRIX.find((entry)=>entry.openingId===rep.id)?.runtimeNodeCount ?? 0)}
 function isValidSquare(square:string){return /^[a-h][1-8]$/.test(square)}
 // v2.7.40 P1 Fix 3: shared reverse guard (also in continuedPlay policy) to break emergency legal fallback loops (Ra1<->Ra2 etc)
 function isImmediateReverseOf(prevUci:string|null|undefined, candidateUci:string):boolean{
@@ -455,7 +492,7 @@ function visualCueKind(role?:string,kind?:SquareCue["kind"]):SquareCue["kind"]{i
 function visualAnimationClass(name?:string){const known=new Set(["quiet-development-glow","diagonal-pressure-glow","knight-pressure-center","center-break-pulse","castle-safety-aura","weak-square-pulse","pin-line-tension","fork-spark","defensive-shield","open-file-radar","queen-danger-warning","continuation-ghost-plan"]);return known.has(name??"")?`blundr-anim-${name}`:"blundr-anim-quiet-development-glow"}
 function getPiece(game:Chess,square:string){return game.get(square as any)}
 function isOwnPiece(game:Chess,square:string,color:ChessColor){const p=getPiece(game,square);return Boolean(p&&p.color===color)}
-function pickWeighted<T extends {weight:number}>(items:T[]){const total=items.reduce((s,i)=>s+Math.max(0,i.weight),0);if(total<=0)return items[0];let roll=Math.random()*total;for(const item of items){roll-=Math.max(0,item.weight);if(roll<=0)return item}return items[0]}
+function pickWeighted<T extends {weight:number}>(items:T[],seed?:string){const total=items.reduce((s,i)=>s+Math.max(0,i.weight),0);if(total<=0)return items[0];let roll:number;if(typeof seed==="string"){let hash=2166136261;for(let index=0;index<seed.length;index+=1){hash^=seed.charCodeAt(index);hash=Math.imul(hash,16777619)}let state=hash>>>0||0x9e3779b9;state^=state<<13;state^=state>>>17;state^=state<<5;roll=((state>>>0)%0x100000000)/0x100000000*total}else roll=Math.random()*total;for(const item of items){roll-=Math.max(0,item.weight);if(roll<=0)return item}return items[0]}
 function ratingPreset(value:string){return RATING_PRESETS.find(p=>p.value===value)??RATING_PRESETS[3]}
 function buildTree(rep:Repertoire){const tree:Record<string,Continuation[]>={};for(const line of rep.lines){const game=new Chess();for(const san of line){const key=normalizeFen(game.fen());try{const move=game.move(san);if(!move)break;const cont={san:move.san,uci:moveToUci(move),color:move.color as ChessColor,resultingFen:game.fen()};const ex=tree[key]??[];tree[key]=ex.some(x=>x.uci===cont.uci)?ex:[...ex,cont]}catch{break}}}return tree}
 function repertoireLineInputs(rep:Repertoire):RepertoireLineInput[]{return rep.lines.map((line,index)=>({openingId:rep.id,lineId:`${rep.id}:${index}`,openingName:rep.name,sideToTrain:rep.color,movesSan:line}))}
@@ -1107,17 +1144,15 @@ async function runBrowserStockfish(fen:string,skill:number,movetime=750,multiPv=
 export default function App(){
   const initialFen=useMemo(()=>new Chess().fen(),[]);
   const [trainingSessionId] = useState(()=>createLearningSessionId());
-  const runtimeOpeningSelection=useMemo(
-    ()=>selectRuntimeWeightedOpeningSelection(trainingSessionId),
-    [trainingSessionId],
-  );
   const [activeTab,setActiveTab]=useState<Tab>("home");
   const [customRepertoires,setCustomRepertoires]=useState<Repertoire[]>([]);
-  const [selectedRepertoireId,setSelectedRepertoireId]=useState(runtimeOpeningSelection.selectedOpeningId);
+  const [selectedRepertoireId,setSelectedRepertoireId]=useState<string>(OPENINGS[0].id);
   const [runtimeTrainingSessionId,setRuntimeTrainingSessionId]=useState<string>(()=>createLearningSessionId());
+  const runtimeOpeningSelection=useMemo(()=>selectRuntimeWeightedOpeningSelection(trainingSessionId),[trainingSessionId]);
+  const [runtimeRepertoire,setRuntimeRepertoire]=useState<LoadedRuntimeTrainableRepertoire | null>(null);
   const [continuationSessionId,setContinuationSessionId]=useState<string|null>(null);
   const [recentRuntimeTrainingLineKeys,setRecentRuntimeTrainingLineKeys]=useState<string[]>([]);
-  const [selectedRuntimeTrainingLineSelection,setSelectedRuntimeTrainingLineSelection]=useState<RuntimeWeightedTrainingLineSelection | null>(()=>buildRuntimeTrainingLineSelection(runtimeOpeningSelection.selectedOpeningId,[],runtimeTrainingSessionId));
+  const [selectedRuntimeTrainingLineSelection,setSelectedRuntimeTrainingLineSelection]=useState<RuntimeWeightedTrainingLineSelection | null>(()=>buildRuntimeTrainingLineSelection(OPENINGS[0].id,[],runtimeTrainingSessionId,OPENINGS[0]));
   const [fen,setFen]=useState(initialFen);
   const [positionHistory,setPositionHistory]=useState<string[]>([initialFen]);
   const [historyIndex,setHistoryIndex]=useState(0);
@@ -1312,22 +1347,40 @@ export default function App(){
   const opponentReplyTimeoutRef=useRef<number|null>(null);
   const brainAbortRef=useRef<AbortController|null>(null);
   const visualAbortRef=useRef<AbortController|null>(null);
-  useEffect(()=>{setBlundrDebugEnabled(isBlundrDebugEnabled())},[]);
+  const curatedRepertoires=useMemo(()=>[...OPENINGS,...customRepertoires], [customRepertoires]);
   const repertoires=useMemo(()=>{
     const merged=new Map<string,Repertoire>();
-    for(const repertoire of OPENINGS) merged.set(repertoire.id,repertoire);
-    for(const repertoire of STAGE2_RUNTIME_TRAINABLE_REPERTOIRES) merged.set(repertoire.id,repertoire);
-    for(const repertoire of customRepertoires) merged.set(repertoire.id,repertoire);
+    for(const repertoire of RUNTIME_CATALOG_REPERTOIRES) merged.set(repertoire.id,repertoire);
+    for(const repertoire of curatedRepertoires) merged.set(repertoire.id,repertoire);
     return [...merged.values()];
-  },[customRepertoires]);
-  function refreshRuntimeTrainingLineSelection(nextOpeningId:string, recentLineKeys:string[] = recentRuntimeTrainingLineKeys, sessionId:string = runtimeTrainingSessionId){
-    const nextSelection=buildRuntimeTrainingLineSelection(nextOpeningId,recentLineKeys,sessionId,repertoires.find((candidate)=>candidate.id===nextOpeningId));
-    setSelectedRuntimeTrainingLineSelection(nextSelection);
-    if(nextSelection?.selectedLineKey){
-      setRecentRuntimeTrainingLineKeys((current)=>updateRuntimeTrainingLineKeys(current,nextSelection.selectedLineKey));
+  },[curatedRepertoires]);
+  useEffect(()=>{
+    const canonicalSelection=selectRuntimeWeightedOpeningSelection(trainingSessionId);
+    setSelectedRepertoireId(canonicalSelection.selectedOpeningId);
+  },[trainingSessionId]);
+  useEffect(()=>{
+    const selectedRepertoire=repertoires.find((candidate)=>candidate.id===selectedRepertoireId)??null;
+    if(selectedRepertoire?.lines.length){
+      if(runtimeRepertoire!==null)setRuntimeRepertoire(null);
+      return;
     }
-    return nextSelection;
-  }
+    if(!isRuntimeCatalogRepertoireId(selectedRepertoireId)){
+      if(runtimeRepertoire!==null)setRuntimeRepertoire(null);
+      return;
+    }
+    let cancelled=false;
+    if(runtimeRepertoire?.id===selectedRepertoireId){
+      setSelectedRuntimeTrainingLineSelection(buildRuntimeTrainingLineSelection(selectedRepertoireId,recentRuntimeTrainingLineKeys,runtimeTrainingSessionId,runtimeRepertoire));
+      return()=>{cancelled=true};
+    }
+    void loadRuntimeTrainableRepertoire(selectedRepertoireId).then((loaded)=>{
+      if(cancelled)return;
+      setRuntimeRepertoire(loaded);
+      setSelectedRuntimeTrainingLineSelection(buildRuntimeTrainingLineSelection(selectedRepertoireId,recentRuntimeTrainingLineKeys,runtimeTrainingSessionId,loaded));
+    });
+    return()=>{cancelled=true};
+  },[selectedRepertoireId,runtimeTrainingSessionId,recentRuntimeTrainingLineKeys.join("|"),runtimeRepertoire?.id,repertoires,runtimeRepertoire]);
+  useEffect(()=>{setBlundrDebugEnabled(isBlundrDebugEnabled())},[]);
   const canonicalSelectedRepertoireId=useMemo(
     ()=>resolveStage2CanonicalOpeningId(selectedRepertoireId)??selectedRepertoireId,
     [selectedRepertoireId],
@@ -1353,7 +1406,8 @@ export default function App(){
   const hardRailDetected=selectedRuntimeLinePlyLength>0&&selectedRuntimeLinePlyLength<stage2OpeningDepthTargetPly;
   const hardRailBlockedReason=hardRailDetected?"runtime_line_shorter_than_opening_depth_target":null;
   const lineSelectionPreviousTwoSame=recentRuntimeTrainingLineKeys.length>=2&&recentRuntimeTrainingLineKeys[0]===recentRuntimeTrainingLineKeys[1];
-  const repertoire=repertoires.find(r=>r.id===canonicalSelectedRepertoireId)??repertoires[0];
+  const selectedCuratedRepertoire=repertoires.find(r=>r.id===canonicalSelectedRepertoireId)??repertoires[0];
+  const repertoire=runtimeRepertoire??(selectedCuratedRepertoire.lines.length>0?selectedCuratedRepertoire:repertoires[0]);
   const openingTree=useMemo(()=>buildOpeningTree(repertoireLineInputs(repertoire)),[repertoire]);
   const game=useMemo(()=>new Chess(fen),[fen]);
   const userColor:ChessColor=repertoire.color==="white"?"w":"b";
@@ -4738,8 +4792,8 @@ export default function App(){
     maiaOpponentRequestSeqRef.current=0;
     maiaTimelineSeqRef.current=0;
   }
-  function selectRepertoire(id:string){const startFen=new Chess().fen();const canonicalId=resolveStage2CanonicalOpeningId(id)??id;const nextLineSessionId=createLearningSessionId();setSelectedRepertoireId(canonicalId);setRuntimeTrainingSessionId(nextLineSessionId);refreshRuntimeTrainingLineSelection(canonicalId,recentRuntimeTrainingLineKeys,nextLineSessionId);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
-  function resetBoard(){const startFen=new Chess().fen();const nextLineSessionId=createLearningSessionId();setRuntimeTrainingSessionId(nextLineSessionId);refreshRuntimeTrainingLineSelection(selectedRepertoireId,recentRuntimeTrainingLineKeys,nextLineSessionId);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveTab("train");bumpRuntimeFrame()}
+  function selectRepertoire(id:string){const startFen=new Chess().fen();const canonicalId=resolveStage2CanonicalOpeningId(id)??id;const nextLineSessionId=createLearningSessionId();const nextRepertoire=repertoires.find((candidate)=>candidate.id===canonicalId)??null;setSelectedRepertoireId(canonicalId);setRuntimeTrainingSessionId(nextLineSessionId);setRuntimeRepertoire(null);setSelectedRuntimeTrainingLineSelection(buildRuntimeTrainingLineSelection(canonicalId,recentRuntimeTrainingLineKeys,nextLineSessionId,nextRepertoire));setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
+  function resetBoard(){const startFen=new Chess().fen();const nextLineSessionId=createLearningSessionId();const nextRepertoire=repertoires.find((candidate)=>candidate.id===selectedRepertoireId)??null;setRuntimeTrainingSessionId(nextLineSessionId);setRuntimeRepertoire(null);setSelectedRuntimeTrainingLineSelection(buildRuntimeTrainingLineSelection(selectedRepertoireId,recentRuntimeTrainingLineKeys,nextLineSessionId,nextRepertoire));setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveTab("train");bumpRuntimeFrame()}
   function recordPosition(nextFen:string){const nextIndex=historyIndex+1;setPositionHistory(prev=>[...prev.slice(0,nextIndex),nextFen]);setHistoryIndex(nextIndex)}
   function jumpHistory(direction:-1|1){const next=Math.max(0,Math.min(positionHistory.length-1,historyIndex+direction));if(next===historyIndex)return;setHistoryIndex(next);setFen(positionHistory[next]);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);clearPendingOpponentReplyRequest({clearStaleIssue:true});setOpponentCue(null);setOpponentVariationDebug(null);setBookComplete(false);setFeedback(next===positionHistory.length-1?"Returned to the live position.":`Reviewing previous position ${next} of ${positionHistory.length-1}. Use the arrows to return to live play.`);bumpRuntimeFrame()}
   async function playOpponentMove(request:PendingOpponentRequest){
@@ -6646,8 +6700,8 @@ export default function App(){
     surfaceTwoPieceMismatch: visibleTeachingSurface?.debug?.twoPieceTypeMismatch ?? false,
   }):null;
   return <main className="min-h-screen bg-[#f7f7f4] text-stone-950"><div className="mx-auto flex min-h-screen max-w-md flex-col px-4 pb-24 pt-5">
-    {activeTab==="home"&&<section className="space-y-6"><header className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-green-700 text-white shadow-sm"><Beaker size={20}/></div><div><h1 className="text-2xl font-bold tracking-tight">Blundr</h1><p className="text-sm text-stone-500">Visual opening training with a controlled trainer.</p></div></div><button onClick={()=>setShowSettings(true)} className="rounded-2xl bg-white p-3 shadow-sm"><Settings className="text-stone-500" size={20}/></button></header><div className="grid grid-cols-2 gap-3"><MetricCard label="Accuracy" value={`${accuracy}%`} sub="all time" icon={<Trophy size={19}/>}/><MetricCard label="Streak" value={String(progress.streak)} sub="correct" icon={<Flame size={19}/>}/><MetricCard label="Review" value={String(mistakes.length)} sub="mistakes" icon={<XCircle size={19}/>} warning/><MetricCard label="Runtime openings" value={String(STAGE2_OPENING_AVAILABILITY_MATRIX.length)} sub="local crawled" icon={<BookOpen size={19}/>}/></div><div className="rounded-3xl bg-stone-900 p-4 text-white shadow-sm"><div className="flex items-center gap-2 text-sm font-bold text-green-300"><Cloud size={17}/> v2.7.33</div><p className="mt-2 text-sm leading-6 text-stone-300">Training now uses rule-only visual cues by default. Blundr Brain is reserved for manual reveal/debug, so normal practice stays fast, deterministic, and inexpensive.</p></div><div className="space-y-3">{repertoires.slice(0,5).map(r=><button key={r.id} onClick={()=>selectRepertoire(r.id)} className="flex w-full items-center gap-3 rounded-3xl border border-stone-200 bg-white p-3 text-left shadow-sm"><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {countPositions(r)} positions</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>)}</div></section>}
-    {activeTab==="repertoire"&&<section className="space-y-5"><header className="flex items-start justify-between gap-3"><div><h1 className="text-2xl font-bold tracking-tight">Repertoires</h1><p className="text-sm text-stone-500">Reliable openings included in the app.</p></div><button onClick={()=>setShowAddLine(true)} className="rounded-2xl bg-green-700 px-4 py-2 text-sm font-black text-white">Add</button></header><div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-sm"><Search size={18} className="text-stone-400"/><span className="text-sm text-stone-400">Search repertoires</span></div><div className="space-y-3">{repertoires.map(r=><button key={r.id} onClick={()=>selectRepertoire(r.id)} className={classNames("flex w-full items-center gap-3 rounded-3xl border bg-white p-3 text-left shadow-sm",r.id===canonicalSelectedRepertoireId?"border-green-700":"border-stone-200")}><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {countPositions(r)} positions • {r.color}</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>)}</div><div className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm"><div className="mb-3 flex items-center justify-between gap-3"><div><h2 className="text-lg font-black tracking-tight">Runtime catalog</h2><p className="text-sm text-stone-500">Local crawled runtime package training lines for all 21 openings.</p></div><div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-600">{STAGE2_OPENING_AVAILABILITY_MATRIX.length} visible</div></div><div className="grid gap-2">{STAGE2_OPENING_AVAILABILITY_MATRIX.map((opening)=>{const trainable=repertoires.some((rep)=>rep.id===opening.openingId);return <button key={opening.openingId} onClick={()=>selectRepertoire(opening.openingId)} className={classNames("flex items-center justify-between gap-3 rounded-2xl border p-3 text-left shadow-sm",trainable?"border-green-200 bg-green-50":"border-stone-200 bg-stone-50 opacity-90",opening.openingId===canonicalSelectedRepertoireId?"ring-2 ring-green-700/30":"")}><div className="min-w-0"><div className="font-bold">{opening.displayName}</div><div className="text-xs text-stone-500">{opening.openingId} • {opening.learnerPerspective} • {opening.runtimeNodeCount.toLocaleString()} nodes • {opening.runtimeCandidateMoveCount.toLocaleString()} moves</div></div><div className="text-right text-xs font-black text-stone-500"><div>{opening.contentStatus}</div><div>{opening.qaStatus}</div></div></button>})}</div></div></section>}
+    {activeTab==="home"&&<section className="space-y-6"><header className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-green-700 text-white shadow-sm"><Beaker size={20}/></div><div><h1 className="text-2xl font-bold tracking-tight">Blundr</h1><p className="text-sm text-stone-500">Visual opening training with a controlled trainer.</p></div></div><button onClick={()=>setShowSettings(true)} className="rounded-2xl bg-white p-3 shadow-sm"><Settings className="text-stone-500" size={20}/></button></header><div className="grid grid-cols-2 gap-3"><MetricCard label="Accuracy" value={`${accuracy}%`} sub="all time" icon={<Trophy size={19}/>}/><MetricCard label="Streak" value={String(progress.streak)} sub="correct" icon={<Flame size={19}/>}/><MetricCard label="Review" value={String(mistakes.length)} sub="mistakes" icon={<XCircle size={19}/>} warning/><MetricCard label="Runtime openings" value={String(STAGE2_OPENING_AVAILABILITY_MATRIX.length)} sub="local crawled" icon={<BookOpen size={19}/>}/></div><div className="rounded-3xl bg-stone-900 p-4 text-white shadow-sm"><div className="flex items-center gap-2 text-sm font-bold text-green-300"><Cloud size={17}/> v2.7.33</div><p className="mt-2 text-sm leading-6 text-stone-300">Training now uses rule-only visual cues by default. Blundr Brain is reserved for manual reveal/debug, so normal practice stays fast, deterministic, and inexpensive.</p></div><div className="space-y-3">{repertoires.slice(0,5).map(r=><button key={r.id} onClick={()=>selectRepertoire(r.id)} className="flex w-full items-center gap-3 rounded-3xl border border-stone-200 bg-white p-3 text-left shadow-sm"><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {getRuntimeCatalogCount(r)} positions</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>)}</div></section>}
+    {activeTab==="repertoire"&&<section className="space-y-5"><header className="flex items-start justify-between gap-3"><div><h1 className="text-2xl font-bold tracking-tight">Repertoires</h1><p className="text-sm text-stone-500">Reliable openings included in the app.</p></div><button onClick={()=>setShowAddLine(true)} className="rounded-2xl bg-green-700 px-4 py-2 text-sm font-black text-white">Add</button></header><div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-sm"><Search size={18} className="text-stone-400"/><span className="text-sm text-stone-400">Search repertoires</span></div><div className="space-y-3">{repertoires.map(r=><button key={r.id} onClick={()=>selectRepertoire(r.id)} className={classNames("flex w-full items-center gap-3 rounded-3xl border bg-white p-3 text-left shadow-sm",r.id===canonicalSelectedRepertoireId?"border-green-700":"border-stone-200")}><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {getRuntimeCatalogCount(r)} positions • {r.color}</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>)}</div><div className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm"><div className="mb-3 flex items-center justify-between gap-3"><div><h2 className="text-lg font-black tracking-tight">Runtime catalog</h2><p className="text-sm text-stone-500">Local crawled runtime package training lines for all 21 openings.</p></div><div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-600">{STAGE2_OPENING_AVAILABILITY_MATRIX.length} visible</div></div><div className="grid gap-2">{STAGE2_OPENING_AVAILABILITY_MATRIX.map((opening)=>{const trainable=curatedRepertoires.some((rep)=>rep.id===opening.openingId);return <button key={opening.openingId} onClick={()=>selectRepertoire(opening.openingId)} className={classNames("flex items-center justify-between gap-3 rounded-2xl border p-3 text-left shadow-sm",trainable?"border-green-200 bg-green-50":"border-stone-200 bg-stone-50 opacity-90",opening.openingId===canonicalSelectedRepertoireId?"ring-2 ring-green-700/30":"")}><div className="min-w-0"><div className="font-bold">{opening.displayName}</div><div className="text-xs text-stone-500">{opening.openingId} • {opening.learnerPerspective} • {opening.runtimeNodeCount.toLocaleString()} nodes • {opening.runtimeCandidateMoveCount.toLocaleString()} moves</div></div><div className="text-right text-xs font-black text-stone-500"><div>{opening.contentStatus}</div><div>{opening.qaStatus}</div></div></button>})}</div></div></section>}
     {activeTab==="train"&&<section className="space-y-4">
       <header className="flex items-start justify-between gap-3">
         <div>
