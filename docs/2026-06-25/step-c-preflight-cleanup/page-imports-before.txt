@@ -1,0 +1,220 @@
+"use client";
+
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { Chess } from "chess.js";
+import { BarChart3, Beaker, BookOpen, CheckCircle2, ChevronRight, Cloud, Eye, Flame, Home, Plus, RotateCcw, Search, Settings, Target, Trophy, X, XCircle, Zap } from "lucide-react";
+import { getStockfishTopMovesForValidation } from "@/lib/blundr/engine/stockfishValidation";
+import { mapEngineLinesToStockfishTopMoves, rateContinuationUserMove, validateContinuationSuggestionAgainstStockfish } from "@/lib/blundr/engine/stockfishContinuationValidation";
+import type { ContinuationUserMoveRatingResult, MoveStrengthRating } from "@/lib/blundr/engine/stockfishEvaluationTypes";
+import {
+  MOVE_QUALITY_GATE_VERSION,
+  buildMoveQualityCacheKey,
+  evaluateTopTwoMatch,
+  type MoveQualityResult,
+} from "@/lib/blundr/teaching/moveQualityGate";
+import { orchestrateTeaching } from "@/lib/blundr/teaching/teachingOrchestrator";
+import { TEACHING_CUE_COMPILER_VERSION } from "@/lib/blundr/teaching/teachingCueTypes";
+import {
+  shouldRenderOpponentLastMoveHighlight,
+  type OverlayPhase,
+} from "@/lib/blundr/teaching/overlayLifecycle";
+import { adaptVisualRecipe } from "@/lib/blundr/visualRecipe/visualRecipeAdapter";
+import { compileVisualRecipe } from "@/lib/blundr/visualRecipe/visualRecipeCompiler";
+import { useVisualRecipePlayback } from "@/components/board/useVisualRecipePlayback";
+import { createLearningSessionId, recordLearningEvent } from "@/lib/blundr/learning/learningEvents";
+import type { LearningEvent } from "@/lib/blundr/learning/learningEvents";
+import { loadOpponentVariationMemory, recordOpponentChoice } from "@/lib/blundr/opponent/opponentVariationMemory";
+import { selectOpponentCandidateWithVariation } from "@/lib/blundr/opponent/opponentVariationPolicy";
+import { CoachCard } from "@/components/coach/CoachCard";
+import { buildCoachContext } from "@/lib/blundr/coach/coachContextBuilder";
+import { decideCoachOutput } from "@/lib/blundr/coach/coachDecisionEngine";
+import { buildCoachUtteranceRecordKey, loadCoachUtteranceMemory, readCoachUtteranceMemoryMeta, recordCoachUtterance } from "@/lib/blundr/coach/coachUtteranceMemory";
+import type { CoachButton } from "@/lib/blundr/coach/coachTypes";
+import { buildPositionEvidence } from "@/lib/blundr/liveCoach/positionEvidenceBuilder";
+import { profileCandidateMoves } from "@/lib/blundr/liveCoach/candidateMoveProfiler";
+import { rankPedagogicalOpportunities } from "@/lib/blundr/liveCoach/pedagogicalOpportunityEngine";
+import { selectBestLiveComment } from "@/lib/blundr/liveCoach/liveCoachCommentRanker";
+import { pickLiveCoachCopy } from "@/lib/blundr/liveCoach/liveCoachCopyLibrary";
+import { selectIntentForOpportunity } from "@/lib/blundr/liveCoach/liveCoachIntentSelector";
+import { shouldLiveCoachStaySilent } from "@/lib/blundr/liveCoach/liveCoachSilencePolicy";
+import { validateLiveCoachCopy } from "@/lib/blundr/liveCoach/liveCoachSafety";
+import { buildLiveCoachDebug } from "@/lib/blundr/liveCoach/liveCoachDebug";
+import { buildCoachExplanationPipeline, buildVerifiedUserFacingFallback, isDebugLeakText } from "@/lib/blundr/coachBrain/coachExplanationPipeline";
+import { filterLegacyMainUiLines } from "@/lib/blundr/visualRecipe/legacyVisualSuppression";
+import { selectContinuedPlayMove, shouldForceContinuationPause } from "@/lib/blundr/continuedPlay/continuedPlayMovePolicy";
+import { decideCoachSurfacePolicy } from "@/lib/blundr/coachSurface/coachSurfacePolicy";
+import { presentMoveImpact } from "@/lib/blundr/coachSurface/moveImpactPresenter";
+import { computeTrainerPresentationFrame } from "@/lib/blundr/presentation/trainerPresentationFrame";
+import { attributeLastMove, decideTrainerPhaseActionGate } from "@/lib/blundr/presentation/phaseActionGating";
+import { buildVisibleTeachingSurface } from "@/lib/blundr/presentation/buildVisibleTeachingSurface"; // v2.7.40 Agent 3: single visible owner surface
+import { buildLiveVisibleTeachingSurface } from "@/lib/blundr/presentation/buildLiveVisibleTeachingSurface";
+import { adaptVisibleSurfaceToBoardVisuals, adaptVisibleSurfaceToCoachUi } from "@/lib/blundr/presentation/uiSurfaceAdapter";
+import { isV28VisibleSurfaceEnabled } from "@/lib/blundr/presentation/featureFlags";
+import { buildContinuationCandidateVisual } from "@/lib/blundr/visual/continuationCandidateVisual";
+import { buildOpeningTree } from "@/lib/blundr/openings/openingTree";
+import { resolveExpectedMoveForFrame } from "@/lib/blundr/openings/expectedMoveResolver";
+import { buildOpeningResolverDebug } from "@/lib/blundr/openings/openingResolverDebug";
+import { STAGE2_OPENING_AVAILABILITY_MATRIX, getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
+import {
+  STAGE2_RUNTIME_TRAINABLE_REPERTOIRES,
+  getStage2RuntimeTrainableRepertoire,
+  selectRuntimeWeightedOpeningSelection,
+  selectRuntimeWeightedTrainingLineSelection,
+  updateRuntimeTrainingLineKeys,
+  type RuntimeWeightedTrainingLineSelection,
+} from "@/lib/blundr/openings/runtimeTrainableRepertoires";
+import { resolveStage2CanonicalOpeningId } from "@/lib/blundr/openings/openingIdentity";
+import {
+  resolveAdaptiveOpeningIdentity,
+  type AdaptiveOpeningIdentity,
+} from "@/lib/blundr/openings/adaptiveOpeningIdentity";
+import { decideGuidedCoveragePolicy } from "@/lib/blundr/openings/guidedCoveragePolicy";
+import type { RepertoireLineInput } from "@/lib/blundr/openings/openingTypes";
+import { buildCurrentInstructionFrame, isBookLikeInstructionTarget } from "@/lib/blundr/runtime/currentInstructionFrame";
+import { resolveBranchCompleteContract } from "@/lib/blundr/runtime/branchCompleteContract";
+import { resolveContinuationFlowContract } from "@/lib/blundr/runtime/continuationFlowContract";
+import { shouldFlagStaleOpponentReplyCommit } from "@/lib/blundr/runtime/opponentReplyGuard";
+import { resolveRestrictedOpponentReplyAuthority } from "@/lib/blundr/runtime/restrictedOpponentReplyAuthority";
+import { applyRuntimeUciMove } from "@/lib/blundr/runtime/uciReplay";
+import { DEFAULT_GUIDED_COVERAGE_THRESHOLDS } from "@/lib/blundr/openings/guidedCoveragePolicy";
+import { resolveRestrictedRuntimeBookHandoff } from "@/lib/blundr/runtime/restrictedRuntimeBookHandoff";
+import { resolveStage2TerminalProof } from "@/lib/blundr/runtime/terminalProof";
+import { getPendingPromotionFromAttempt, resolvePromotionAuthority, type PendingPromotion, type PromotionPiece } from "@/lib/blundr/runtime/promotionAuthority";
+import { classifyContinuationRuntimeState, type ContinuationRuntimeStatus } from "@/lib/blundr/runtime/continuationRuntimeState";
+import { resolveEffectiveContinuationCandidate } from "@/lib/blundr/runtime/resolveEffectiveContinuationCandidate";
+import {
+  STAGE2_APPROVED_CONTENT_ENABLED,
+  STAGE2_COACHING_RESOLVER_ENABLED,
+  STAGE2_SAFE_FALLBACK_ENABLED,
+  resolveStage2CoachRenderState,
+} from "@/lib/blundr/stage2Coaching";
+import type { MaiaMoveCandidate, MaiaOpponentReplyResult, MaiaProviderStatus, MaiaSkillLevel } from "@/lib/blundr/maia/maiaTypes";
+import { unavailableMaiaProvider } from "@/lib/blundr/maia/maiaProvider";
+import { MaiaApiClientProvider } from "@/lib/blundr/maia/maiaApiClientProvider";
+import { buildMaiaOpponentReplyDecision, classifyMaiaProviderStatus, evaluateMaiaSanityGuard, resolveMaiaSkillLevel, selectMaiaOpponentReply, withMaiaTimeout } from "@/lib/blundr/maia/maiaOpponentProvider";
+import { applyMaiaMoveOnRequestFen } from "@/lib/blundr/maia/maiaLegalityRequestFenContract";
+import { appendMaiaTimeline, createMaiaTimelineEvent, type MaiaTimelineEvent } from "@/lib/blundr/debug/maiaTimeline";
+import { BlundrDiagnosticsPanel } from "@/components/debug/BlundrDiagnosticsPanel";
+import { collectTrainerDebugSnapshot } from "@/lib/blundr/debug/trainerDebugCollector";
+import { buildTrainerFrameResolution } from "@/lib/blundr/debug/buildTrainerFrameResolution";
+import { computeInstructionFrameKey } from "@/lib/blundr/runtime/currentInstructionFrame";  // v2.7.39.1 Target Locking (Coach Perfection Gate)
+import { analyzeBlundrPosition } from "@/lib/blundr/brain/analyzeBlundrPosition";  // v2.7.39.2+ Brain facade for 2.7.39.3 coach migration
+import { appendDebugEvent } from "@/lib/blundr/debug/trainerDebugEventLog";
+import { isBlundrDebugEnabled } from "@/lib/blundr/debug/trainerDebugGuards";
+import type { DebugEvent } from "@/lib/blundr/debug/trainerDebugTypes";
+
+type Tab = "home" | "train" | "review" | "progress" | "repertoire";
+type RepertoireColor = "white" | "black";
+type ChessColor = "w" | "b";
+type ActiveBoardView = "attack" | "defense" | "plan";
+type TrainingMode = "restricted" | "continuation";
+type TrainerView = "assisted" | "plain";
+type SystemState = "off" | "ready" | "loading" | "active" | "cached" | "fallback" | "error" | "complete";
+type ThinkingStep = "idle" | "facts" | "engine" | "brain" | "gpt-receive" | "visual-update" | "ready" | "error";
+type PatternCueStatus = "ready" | "pending" | "suppressed" | "plain" | "wrong_move" | "manual_reveal";
+type PatternCue = {
+  title: string;
+  snippet: string;
+  next?: string;
+  status: PatternCueStatus;
+  source: "rule_visual" | "local_fast" | "plain" | "pending" | "suppressed" | "manual";
+  concept?: string;
+  selectedMove?: string;
+};
+type Repertoire = { id: string; name: string; color: RepertoireColor; lines: string[][]; description: string; custom?: boolean };
+type Continuation = { san: string; uci: string; color: ChessColor; resultingFen: string };
+type Mistake = { fen: string; expectedMove: string; playedMove: string; count: number; opening: string; repertoireId: string };
+type Progress = { attempts: number; correct: number; incorrect: number; streak: number; trainedPositions: Record<string, boolean>; mistakes: Record<string, Mistake> };
+type ExplorerMove = { uci: string; san: string; total: number; pct: number; averageRating?: number };
+type EngineLine = { san: string; uci: string; cp?: number; line: string };
+type LineKind = "attack" | "defense" | "plan" | "opponent";
+type ActiveLine = { from: string; to: string; kind: LineKind; label?: string };
+type SquareCue = { square: string; kind: "origin" | "target" | "support" | "danger" | "opponent" };
+type BoardView = { title: string; message: string; lines: ActiveLine[]; cues: SquareCue[] };
+type BrainAnnotation = { source: string; fallback: boolean; selectedView: ActiveBoardView; headline: string; mainExplanation: string; visualExplanation: string; planExplanation: string; nextPlan: string; keySquares: string[]; planArrows: ActiveLine[]; attack: BoardView; defense: BoardView; plan: BoardView; threatNote?: string; suppress?: string[]; confidence?: string; reason?: string };
+type BrainResponse = { pipeline: { facts: string; engine: string; gpt: string; visual: string; latencyMs: number }; engine: { source: string; fallback: boolean; pvs: EngineLine[] }; annotation: BrainAnnotation; candidates?: any; debug?: any };
+type VisualArrowRole = "move" | "pressure" | "defense" | "future" | "threat" | "capture" | "retreat" | "pin" | "castle" | string;
+type VisualSquareRole = "source" | "destination" | "weakness" | "center" | "defense" | "danger" | "future" | "soft_target" | "king_safety" | string;
+type VisualModelArrow = { from: string; to: string; role?: VisualArrowRole; kind?: LineKind; label?: string; reason?: string };
+type VisualModelSquare = { square: string; role?: VisualSquareRole; kind?: SquareCue["kind"]; reason?: string };
+type VisualModelContext = { headline: string; body: string; next: string; checkQuestion?: string; explanationMode?: string; concept?: string; selectedMove?: string };
+type VisualModelOutput = Partial<BrainAnnotation> & { arrows?: VisualModelArrow[]; squares?: VisualModelSquare[]; animation?: string; animationPackage?: { name: string; intensity?: number }; context?: VisualModelContext; suppress?: string[]; debug?: any };
+type VisualDebugSnapshot = {
+  requestKey: string | null;
+  requestPayload: Record<string, unknown> | null;
+  responseSummary: Record<string, unknown> | null;
+  responseDebug: Record<string, unknown> | null;
+  error: string | null;
+  durationMs: number | null;
+  updatedAt: number | null;
+};
+type LocalTelemetryEvent = {
+  id: number;
+  ts: number;
+  event: "visual_request" | "visual_response" | "visual_error" | "visual_suppressed";
+  details: Record<string, unknown>;
+};
+type LocalTelemetryStore = { enabled: boolean; events: LocalTelemetryEvent[]; updatedAt: number };
+type OpponentCue = { expiresAt: number; title: string; message: string; lines: ActiveLine[]; cues: SquareCue[]; committed: boolean; fen: string };
+type OpponentVariationDebug = {
+  opponentVariationApplied: boolean;
+  opponentVariationReason: string;
+  recentOpponentBranchKeys: string[];
+  selectedOpponentBranchKey?: string;
+  candidateOpponentBranches: Array<{ branchKey: string; uci: string; san?: string; baseWeight: number; adjustedWeight: number; source?: string; safetyStatus?: string; selectionScore?: number; blockedReason?: string }>;
+  blockedThirdRepeatBranches: string[];
+  fallbackUsed: boolean;
+  continuedPlaySelectedMoveInCandidateList?: boolean;
+  continuedPlaySelectionConsistency?: "consistent" | "inconsistent";
+  continuationMoveSafetySource?: string;
+};
+type PendingOpponentRequest = {
+  requestId: number;
+  baseFen: string;
+  mode: TrainingMode;
+  startedAt: number;
+};
+type RuntimeBookFrameCandidate = {
+  uci: string;
+  san?: string;
+  source: "book";
+  supported: true;
+  runtimeBookSource: "stage2-runtime-book";
+  rank?: number;
+  totalGames?: number;
+  playPct?: number;
+  profile?: string;
+  profiles?: string;
+  sourceDetail?: string;
+  sources?: string;
+};
+type RuntimeBookFrameQueryState = {
+  openingId: string | null;
+  playKeyBefore: string | null;
+  candidates: RuntimeBookFrameCandidate[];
+  hasRuntimeBookCandidates: boolean;
+  bookExhausted: boolean;
+  status: "idle" | "loading" | "ready" | "error";
+  error: string | null;
+};
+const HARD_CONTINUATION_BREAK_PLY = 22;
+const SUGGESTION_VALIDATION_MULTIPV = 10;
+const USER_MOVE_RATING_MULTIPV = 32;
+const MAIA_OPPONENT_TIMEOUT_MS = 1500;
+const MAIA_MAX_ALLOWED_OPPONENT_CP_LOSS = 500;
+const MAIA_OPPONENT_REPLY_SANITY_GUARD_ENABLED = true;
+const maiaApiClientEnabled = process.env.NEXT_PUBLIC_MAIA_API_ENABLED === "true";
+const maiaOpponentProvider = maiaApiClientEnabled ? new MaiaApiClientProvider() : unavailableMaiaProvider;
+type LiveBrain = { ratingLabel: string; ratingPool: string; book: SystemState; lichess: SystemState; engine: SystemState; gpt: SystemState; source: string; latency?: number; note?: string };
+type LastCoachRecord = {
+  frameId: number;
+  fen4: string;
+  trainerPhase: string;
+  trainingMode: string;
+  instructionTargetKind: string | null;
+  instructionTargetUci: string | null;
+  instructionTargetSan: string | null;
+  instructionTargetPieceType: string | null;
+  coachMoveUci: string | null;
+  coachPieceType: string | null;

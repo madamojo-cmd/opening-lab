@@ -1,0 +1,20 @@
+b9799f9 Document runtime cleanup regression recovery
+fab5c08 Revert "Lazy load runtime repertoire data from app shell"
+b979852 Lazy load runtime repertoire data from app shell
+91ddc58 Trim Lichess opening identity manifest
+9b8614f Add Lichess opening identity manifest
+db2076e Add adaptive opening identity display
+5a7c8da Polish Stage 2 board labels and settings
+f89c072 Fix Stage 2 runtime terminal continuation proof
+de8cd77 Fix universal Stage 2 runtime line pool and castling normalization
+706d232 Fix Stage 2 runtime line length and third-repeat memory
+ba119e0 Fix Stage 2 line selection third-repeat guard
+6db338e Repair Stage 2 line variation and runtime execution wiring
+7a0b279 Use runtimeBook candidates for restricted opponent replies
+cc3c5da Recover runtime-weighted Stage 2 training authority
+78d4586 Make terminal proof sole Stage 2 branch-complete authority
+21619e2 Harden selected line exhaustion terminal proof
+ff7f3f9 Fix pending opponent clear idempotency
+6d167f7 Require canonical opening identity for Stage 2 terminal proof
+41198f7 Require terminal proof for Stage 2 branch complete
+9ec4280 Separate Stage 2 target authority from coaching overlay

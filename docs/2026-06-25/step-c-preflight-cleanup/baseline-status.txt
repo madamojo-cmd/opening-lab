@@ -1,0 +1,5 @@
+?? docs/2026-06-25/runtime-cleanup-regression/b979852-stat.txt
+?? docs/2026-06-25/runtime-cleanup-regression/log-before-revert.txt
+?? docs/2026-06-25/runtime-cleanup-regression/status-before-revert.txt
+?? docs/2026-06-25/runtime-cleanup-regression/working-diff-before-revert.diff
+?? docs/2026-06-25/step-c-preflight-cleanup/

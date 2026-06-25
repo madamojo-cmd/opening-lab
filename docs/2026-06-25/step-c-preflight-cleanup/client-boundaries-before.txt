@@ -1,0 +1,9 @@
+app/page.tsx:1:"use client";
+components/board/useVisualRecipePlayback.ts:1:"use client";
+components/coach/CoachCard.tsx:1:"use client";
+components/debug/DebugCopyButton.tsx:1:"use client";
+components/debug/DebugEventTimeline.tsx:1:"use client";
+components/debug/DebugBadge.tsx:1:"use client";
+components/debug/DebugJsonViewer.tsx:1:"use client";
+components/debug/BlundrDiagnosticsPanel.tsx:1:"use client";
+components/debug/DebugSection.tsx:1:"use client";

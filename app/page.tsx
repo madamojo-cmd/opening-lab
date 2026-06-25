@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Chess } from "chess.js";
@@ -95,7 +96,6 @@ import { MaiaApiClientProvider } from "@/lib/blundr/maia/maiaApiClientProvider";
 import { buildMaiaOpponentReplyDecision, classifyMaiaProviderStatus, evaluateMaiaSanityGuard, resolveMaiaSkillLevel, selectMaiaOpponentReply, withMaiaTimeout } from "@/lib/blundr/maia/maiaOpponentProvider";
 import { applyMaiaMoveOnRequestFen } from "@/lib/blundr/maia/maiaLegalityRequestFenContract";
 import { appendMaiaTimeline, createMaiaTimelineEvent, type MaiaTimelineEvent } from "@/lib/blundr/debug/maiaTimeline";
-import { BlundrDiagnosticsPanel } from "@/components/debug/BlundrDiagnosticsPanel";
 import { collectTrainerDebugSnapshot } from "@/lib/blundr/debug/trainerDebugCollector";
 import { buildTrainerFrameResolution } from "@/lib/blundr/debug/buildTrainerFrameResolution";
 import { computeInstructionFrameKey } from "@/lib/blundr/runtime/currentInstructionFrame";  // v2.7.39.1 Target Locking (Coach Perfection Gate)
@@ -103,6 +103,11 @@ import { analyzeBlundrPosition } from "@/lib/blundr/brain/analyzeBlundrPosition"
 import { appendDebugEvent } from "@/lib/blundr/debug/trainerDebugEventLog";
 import { isBlundrDebugEnabled } from "@/lib/blundr/debug/trainerDebugGuards";
 import type { DebugEvent } from "@/lib/blundr/debug/trainerDebugTypes";
+
+const BlundrDiagnosticsPanel = dynamic(
+  () => import("@/components/debug/BlundrDiagnosticsPanel").then((mod) => mod.BlundrDiagnosticsPanel),
+  { ssr: false, loading: () => null },
+);
 
 type Tab = "home" | "train" | "review" | "progress" | "repertoire";
 type RepertoireColor = "white" | "black";

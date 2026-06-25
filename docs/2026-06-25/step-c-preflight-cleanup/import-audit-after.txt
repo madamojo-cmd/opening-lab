@@ -1,0 +1,23 @@
+===== app/page size =====
+6927 app/page.tsx
+428K app/page.tsx
+
+===== client boundaries =====
+app/page.tsx:1:"use client";
+components/board/useVisualRecipePlayback.ts:1:"use client";
+components/coach/CoachCard.tsx:1:"use client";
+components/debug/DebugCopyButton.tsx:1:"use client";
+components/debug/DebugEventTimeline.tsx:1:"use client";
+components/debug/DebugBadge.tsx:1:"use client";
+components/debug/DebugJsonViewer.tsx:1:"use client";
+components/debug/BlundrDiagnosticsPanel.tsx:1:"use client";
+components/debug/DebugSection.tsx:1:"use client";
+
+===== suspicious imports =====
+app/page.tsx:30:import { CoachCard } from "@/components/coach/CoachCard";
+app/page.tsx:67:} from "@/lib/blundr/openings/runtimeTrainableRepertoires";
+app/page.tsx:68:import { resolveStage2CanonicalOpeningId } from "@/lib/blundr/openings/openingIdentity";
+app/page.tsx:72:} from "@/lib/blundr/openings/adaptiveOpeningIdentity";
+app/page.tsx:98:import { collectTrainerDebugSnapshot } from "@/lib/blundr/debug/trainerDebugCollector";
+app/page.tsx:99:import { buildTrainerFrameResolution } from "@/lib/blundr/debug/buildTrainerFrameResolution";
+app/page.tsx:102:import { analyzeBlundrPosition } from "@/lib/blundr/brain/analyzeBlundrPosition";
