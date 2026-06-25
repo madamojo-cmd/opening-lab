@@ -3,6 +3,7 @@ import {
   type RuntimeOpeningIdentityLine,
 } from "./runtimeTrainableRepertoires";
 import { resolveStage2CanonicalOpeningId } from "./openingIdentity";
+import { resolveLichessOpeningIdentity } from "./lichessOpeningIdentity";
 
 export type AdaptiveOpeningIdentity = {
   selectedOpeningId: string;
@@ -11,6 +12,10 @@ export type AdaptiveOpeningIdentity = {
   currentOpeningName: string;
   matchedLineId: string;
   matchedPlayKey: string;
+  lichessOpeningEco?: string;
+  lichessOpeningName?: string;
+  openingFamilyName?: string;
+  opponentOpeningName?: string;
   transpositionDetected: boolean;
   transpositionLabel?: string;
   confidence: "exact" | "strong" | "partial";
@@ -39,6 +44,12 @@ function lineStartsWithHistory(lineMoves: readonly string[], history: readonly s
   return history.every((move, index) => normalizeUci(lineMoves[index]) === move);
 }
 
+function opponentNameFromVariation(variationName: string | null | undefined): string | undefined {
+  const text = String(variationName ?? "").trim();
+  if (!text) return undefined;
+  return text.split(",")[0]?.trim() || undefined;
+}
+
 export function resolveAdaptiveOpeningIdentity(
   input: ResolveAdaptiveOpeningIdentityInput,
 ): AdaptiveOpeningIdentity | null {
@@ -50,6 +61,8 @@ export function resolveAdaptiveOpeningIdentity(
 
   const moveHistoryUci = normalizeMoveHistory(input.moveHistoryUci);
   if (!moveHistoryUci.length) return null;
+
+  const lichessIdentity = resolveLichessOpeningIdentity({ moveHistoryUci });
 
   const selectedOpeningName = String(input.selectedOpeningName ?? "").trim();
   const runtimeIdentityLines =
@@ -80,6 +93,10 @@ export function resolveAdaptiveOpeningIdentity(
     currentOpeningName: best.openingName,
     matchedLineId: best.lineId,
     matchedPlayKey: best.playKey,
+    lichessOpeningEco: lichessIdentity?.eco,
+    lichessOpeningName: lichessIdentity?.name,
+    openingFamilyName: lichessIdentity?.familyName,
+    opponentOpeningName: opponentNameFromVariation(lichessIdentity?.variationName),
     transpositionDetected: false,
     confidence,
     source: "runtime_play_key",

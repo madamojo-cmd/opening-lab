@@ -6835,8 +6835,10 @@ function TapChessboard({game,orientation,selectedSquare,squareStyles,lines,trans
 
 function AdaptiveOpeningIdentityBadge({identity}:{identity:AdaptiveOpeningIdentity | null}){
   if(!identity)return null;
+  const openingName=identity.openingFamilyName??identity.currentOpeningName;
   return <div className="mx-1 mt-2 rounded-2xl border border-stone-200 bg-white/90 px-3 py-2 text-xs leading-5 text-stone-600 shadow-sm">
-    <div><span className="font-black text-stone-900">Opening: </span>{identity.currentOpeningName}</div>
+    <div><span className="font-black text-stone-900">Opening: </span>{openingName}</div>
+    {identity.opponentOpeningName?<div><span className="font-black text-stone-900">Opponent: </span>{identity.opponentOpeningName}</div>:null}
   </div>;
 }
 

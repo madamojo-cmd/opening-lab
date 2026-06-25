@@ -29,6 +29,19 @@ function mustResolve(identity: AdaptiveOpeningIdentity | null): AdaptiveOpeningI
 
 {
   const identity = mustResolve(resolveAdaptiveOpeningIdentity({
+    selectedOpeningId: "italian-white",
+    selectedOpeningName: "Italian Game",
+    moveHistoryUci: ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "g8f6"],
+  }));
+
+  assert.equal(identity.currentOpeningId, "italian-white");
+  assert.equal(identity.openingFamilyName, "Italian Game");
+  assert.equal(identity.opponentOpeningName, "Two Knights Defense");
+  assert.match(identity.lichessOpeningName ?? "", /Two Knights Defense/);
+}
+
+{
+  const identity = mustResolve(resolveAdaptiveOpeningIdentity({
     selectedOpeningId: "caro-kann-black",
     selectedOpeningName: "Caro-Kann Defense",
     moveHistoryUci: ["e2e4", "c7c6"],
