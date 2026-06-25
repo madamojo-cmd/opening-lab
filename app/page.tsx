@@ -27,7 +27,6 @@ import { createLearningSessionId, recordLearningEvent } from "@/lib/blundr/learn
 import type { LearningEvent } from "@/lib/blundr/learning/learningEvents";
 import { loadOpponentVariationMemory, recordOpponentChoice } from "@/lib/blundr/opponent/opponentVariationMemory";
 import { selectOpponentCandidateWithVariation } from "@/lib/blundr/opponent/opponentVariationPolicy";
-import { CoachCard } from "@/components/coach/CoachCard";
 import { buildCoachContext } from "@/lib/blundr/coach/coachContextBuilder";
 import { decideCoachOutput } from "@/lib/blundr/coach/coachDecisionEngine";
 import { buildCoachUtteranceRecordKey, loadCoachUtteranceMemory, readCoachUtteranceMemoryMeta, recordCoachUtterance } from "@/lib/blundr/coach/coachUtteranceMemory";
@@ -106,6 +105,10 @@ import type { DebugEvent } from "@/lib/blundr/debug/trainerDebugTypes";
 
 const BlundrDiagnosticsPanel = dynamic(
   () => import("@/components/debug/BlundrDiagnosticsPanel").then((mod) => mod.BlundrDiagnosticsPanel),
+  { ssr: false, loading: () => null },
+);
+const CoachCard = dynamic(
+  () => import("@/components/coach/CoachCard").then((mod) => mod.CoachCard),
   { ssr: false, loading: () => null },
 );
 

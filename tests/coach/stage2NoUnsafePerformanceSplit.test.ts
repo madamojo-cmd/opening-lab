@@ -8,6 +8,16 @@ export function testStage2NoUnsafePerformanceSplit(): void {
   const pageSource = fs.readFileSync(path.join(REPO_ROOT, "app", "page.tsx"), "utf8");
 
   assert.equal(
+    /from\s+["']@\/components\/coach\/CoachCard["']/.test(pageSource),
+    false,
+    "app_page_unsafe_static_coach_card_import",
+  );
+  assert.equal(
+    /const\s+CoachCard\s*=\s*dynamic\([\s\S]*?import\(\s*["']@\/components\/coach\/CoachCard["']\s*\)[\s\S]*?mod\.CoachCard[\s\S]*?ssr:\s*false[\s\S]*?loading:\s*\(\)\s*=>\s*null[\s\S]*?\)/.test(pageSource),
+    true,
+    "app_page_missing_lazy_coach_card_split",
+  );
+  assert.equal(
     /from\s+["']@\/lib\/blundr\/openings\/runtimeTrainableRepertoires["']/.test(pageSource),
     true,
     "app_page_missing_static_runtime_trainable_import",
@@ -21,6 +31,11 @@ export function testStage2NoUnsafePerformanceSplit(): void {
     /import\(\s*["']@\/lib\/blundr\/openings\/adaptiveOpeningIdentity["']\s*\)/.test(pageSource),
     false,
     "app_page_unsafe_adaptive_opening_identity_dynamic_import",
+  );
+  assert.equal(
+    /const\s+BlundrDiagnosticsPanel\s*=\s*dynamic\([\s\S]*?import\(\s*["']@\/components\/debug\/BlundrDiagnosticsPanel["']\s*\)[\s\S]*?mod\.BlundrDiagnosticsPanel[\s\S]*?ssr:\s*false[\s\S]*?loading:\s*\(\)\s*=>\s*null[\s\S]*?\)/.test(pageSource),
+    true,
+    "app_page_missing_lazy_diagnostics_split",
   );
   assert.equal(
     /runtimeOpeningSelection\s*=\s*useMemo\(/.test(pageSource),
