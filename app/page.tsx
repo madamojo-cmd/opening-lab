@@ -65,6 +65,10 @@ import {
   type RuntimeWeightedTrainingLineSelection,
 } from "@/lib/blundr/openings/runtimeTrainableRepertoires";
 import { resolveStage2CanonicalOpeningId } from "@/lib/blundr/openings/openingIdentity";
+import {
+  resolveAdaptiveOpeningIdentity,
+  type AdaptiveOpeningIdentity,
+} from "@/lib/blundr/openings/adaptiveOpeningIdentity";
 import { decideGuidedCoveragePolicy } from "@/lib/blundr/openings/guidedCoveragePolicy";
 import type { RepertoireLineInput } from "@/lib/blundr/openings/openingTypes";
 import { buildCurrentInstructionFrame, isBookLikeInstructionTarget } from "@/lib/blundr/runtime/currentInstructionFrame";
@@ -3563,6 +3567,15 @@ export default function App(){
   const whitePct=whiteEvalPercent(cpWhite);
   const evalText=advantageLabel(cpWhite);
   const captured=capturedSummary(game);
+  const adaptiveOpeningMoveHistoryUci = (buildRuntimePlayKeyBeforeFromSanHistory(moveHistory) ?? "")
+    .split(",")
+    .map((move) => move.trim())
+    .filter(Boolean);
+  const adaptiveOpeningIdentity = resolveAdaptiveOpeningIdentity({
+    selectedOpeningId: repertoire.id,
+    selectedOpeningName: repertoire.name,
+    moveHistoryUci: adaptiveOpeningMoveHistoryUci,
+  });
   const endingInfo=gameEndingInfo(game);
 
   // v2.7.40 Agent 3 (late placement after all frame deps): VisibleTeachingSurface — single owner.
@@ -6680,7 +6693,7 @@ export default function App(){
           <p className="mt-2 text-[11px] font-semibold text-stone-500">{trainerView==="assisted"?"Shows the visual pattern cue before the move.":"Hides pre-move hints for independent recall."}</p>
         </div>
         {blundrDebugEnabled && activeBoard && enabledViews.length>0 && <div className="mb-3 grid gap-2" style={{gridTemplateColumns:`repeat(${enabledViews.length}, minmax(0,1fr))`}}>{enabledViews.map(v=><button key={v} onClick={()=>setActiveBoardView(v)} className={classNames("rounded-full px-4 py-2 text-sm font-black capitalize",safeBoardView===v?"bg-green-700 text-white shadow-sm":"bg-white text-stone-500 ring-1 ring-stone-200")}>{v}</button>)}</div>}
-        <TapChessboard game={game} orientation={repertoire.color} selectedSquare={selectedSquare} squareStyles={squareStyles} lines={boardLinesToRender} transientLines={transientLinesToRender} onSquareTap={handleSquareTap} whitePct={whitePct} evalText={evalText} settings={boardSettings} captured={captured} userColor={userColor} animationName={visualAnimationName} pendingPromotion={pendingPromotion} onPromotionSelect={handlePromotionPieceSelection} onPromotionCancel={cancelPromotionSelection}/>
+        <TapChessboard game={game} orientation={repertoire.color} selectedSquare={selectedSquare} squareStyles={squareStyles} lines={boardLinesToRender} transientLines={transientLinesToRender} onSquareTap={handleSquareTap} whitePct={whitePct} evalText={evalText} settings={boardSettings} captured={captured} userColor={userColor} animationName={visualAnimationName} adaptiveOpeningIdentity={adaptiveOpeningIdentity} pendingPromotion={pendingPromotion} onPromotionSelect={handlePromotionPieceSelection} onPromotionCancel={cancelPromotionSelection}/>
         <HistoryControls index={historyIndex} total={positionHistory.length} onBack={()=>jumpHistory(-1)} onForward={()=>jumpHistory(1)}/>
       </div>
       {showDetails&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Coach Debug</div><div className="mt-2">coachMode: {coachDecision.mode}</div><div>coachAction: {coachDecision.action}</div><div>coachUtteranceId: {coachDecision.utteranceId??"none"}</div><div>coachUtteranceFamily: {coachDecision.utteranceFamily??"none"}</div><div>coachVariationReason: {String((coachDecision.debug as any)?.coachVariationReason??"n/a")}</div><div>coachHintStrength: {String((coachDecision.debug as any)?.coachHintStrength??"none")}</div><div>coachRevealRisk: {coachDecision.revealRisk}</div><div>coachGivesAnswer: {coachDecision.givesAnswer?"true":"false"}</div><div>coachButtons: {displayedCoachDecision.buttons.join(", ")||"none"}</div><div>coachShouldMarkReviewWorthy: {coachDecision.shouldMarkReviewWorthy?"true":"false"}</div><div>coachSuppressedReason: {coachDecision.suppressedReason??"none"}</div><div>coachFrameMatchesBoard: {coachContextResult.context?.recipeFrameMatchesBoard?"true":"false"}</div><div>coachFenMatchesBoard: {coachContextResult.context?.recipeFenMatchesBoard?"true":"false"}</div><div>recentCoachUtteranceIds: {coachUtteranceMemory.slice(-5).map((entry:any)=>entry.utteranceId).join(", ")||"none"}</div><div>coachSafetyWarnings: {JSON.stringify((coachDecision.debug as any)?.coachSafetyWarnings??[])}</div><div>coachReviewMarked: {coachReviewMarked?"true":"false"}</div><div>selectedOpportunity: {String((coachDecision.debug as any)?.selectedOpportunity??liveCoachState?.selected?.opportunity??"none")}</div><div>selectedIntent: {String((coachDecision.debug as any)?.selectedIntent??liveCoachState?.selected?.intent??"none")}</div><div>exactMoveAllowed: {coachContextResult.context?.exactMoveAllowed?"true":"false"}</div><div>claimTypes: {coachDecision.claimTypes.join(", ")||"none"}</div><div>blockedClaims: {String((coachDecision.debug as any)?.blockedClaims??"none")}</div><div>silenceReason: {String((coachDecision.debug as any)?.silenceReason??liveCoachState?.debug?.silenceReason??"none")}</div><div>branchTransitionSurfaceRendered: {branchTransitionSurface?.render?"true":"false"}</div><div>branchTransitionReason: {branchTransitionSurface?.reason??"none"}</div><div>continueFromHereAvailable: {branchTransitionSurface?.render?"true":"false"}</div><div>continueFromHereClicked: {continueFromHereClicked?"true":"false"}</div><div>coachSurfaceOwner: {coachSurfacePolicy.owner}</div><div>allowLegacyTrainingCard: {coachSurfacePolicy.allowLegacyTrainingCard?"true":"false"}</div><div>allowMoveImpactCard: {coachSurfacePolicy.allowMoveImpactCard?"true":"false"}</div><div>allowNextMoveText: {coachSurfacePolicy.allowNextMoveText?"true":"false"}</div><div>legacyCueSuppressedReason: {coachSurfacePolicy.reason}</div><div>moveImpactPresenterReason: {moveImpactPresentation.reason}</div></div>}
@@ -6748,7 +6761,7 @@ function coordTone(theme:BoardTheme,isDark:boolean){
   return isDark?"text-white/70":"text-stone-600/70";
 }
 
-function TapChessboard({game,orientation,selectedSquare,squareStyles,lines,transientLines,onSquareTap,whitePct,evalText,settings,captured,userColor,animationName,pendingPromotion,onPromotionSelect,onPromotionCancel}:{game:Chess;orientation:RepertoireColor;selectedSquare:string|null;squareStyles:Record<string,CSSProperties>;lines:ActiveLine[];transientLines:ActiveLine[];onSquareTap:(s:string)=>void;whitePct:number;evalText:string;settings:BoardSettings;captured:CapturedSummary;userColor:ChessColor;animationName?:string;pendingPromotion:PendingPromotion | null;onPromotionSelect:(piece:PromotionPiece)=>void;onPromotionCancel:()=>void;}){
+function TapChessboard({game,orientation,selectedSquare,squareStyles,lines,transientLines,onSquareTap,whitePct,evalText,settings,captured,userColor,animationName,adaptiveOpeningIdentity,pendingPromotion,onPromotionSelect,onPromotionCancel}:{game:Chess;orientation:RepertoireColor;selectedSquare:string|null;squareStyles:Record<string,CSSProperties>;lines:ActiveLine[];transientLines:ActiveLine[];onSquareTap:(s:string)=>void;whitePct:number;evalText:string;settings:BoardSettings;captured:CapturedSummary;userColor:ChessColor;animationName?:string;adaptiveOpeningIdentity:AdaptiveOpeningIdentity | null;pendingPromotion:PendingPromotion | null;onPromotionSelect:(piece:PromotionPiece)=>void;onPromotionCancel:()=>void;}){
   const ranks=orientation==="white"?[8,7,6,5,4,3,2,1]:[1,2,3,4,5,6,7,8];
   const files=orientation==="white"?FILES:[...FILES].reverse();
   const centerFor=(sq:string)=>{
@@ -6816,7 +6829,15 @@ function TapChessboard({game,orientation,selectedSquare,squareStyles,lines,trans
       </div>
     </div>
     {settings.showCaptured?<CapturedStrip color={bottomColor} captured={bottomColor==="w"?captured.blackCaptured:captured.whiteCaptured} advantage={captured.materialAdvantage.side===bottomColor?captured.materialAdvantage.value:0} label="You" settings={settings}/>:null}
+    <AdaptiveOpeningIdentityBadge identity={adaptiveOpeningIdentity}/>
   </div>
+}
+
+function AdaptiveOpeningIdentityBadge({identity}:{identity:AdaptiveOpeningIdentity | null}){
+  if(!identity)return null;
+  return <div className="mx-1 mt-2 rounded-2xl border border-stone-200 bg-white/90 px-3 py-2 text-xs leading-5 text-stone-600 shadow-sm">
+    <div><span className="font-black text-stone-900">Opening: </span>{identity.currentOpeningName}</div>
+  </div>;
 }
 
 function CapturedStrip({color,captured,advantage,label,settings}:{color:ChessColor;captured:string[];advantage:number;label:string;settings:BoardSettings}){

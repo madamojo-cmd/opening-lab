@@ -73,6 +73,16 @@ export type RuntimeWeightedTrainingLineSelection = {
   lineWeightsSummary: RuntimeWeightedTrainingLineSelectionSummary[];
 };
 
+export type RuntimeOpeningIdentityLine = {
+  openingId: string;
+  openingName: string;
+  lineId: string;
+  playKey: string;
+  playSequenceUci: string[];
+  moveCount: number;
+  totalGames: number;
+};
+
 type RuntimeTrainableLineData = {
   lineId: string;
   playKey: string;
@@ -301,6 +311,29 @@ export function selectRuntimeWeightedOpeningSelection(seed: string = RUNTIME_WEI
     openingSelectionWasPersisted: false,
     weightsSummary,
   };
+}
+
+export function getStage2RuntimeOpeningIdentityLines(openingId?: string | null): RuntimeOpeningIdentityLine[] {
+  const requestedOpeningId = String(openingId ?? "").trim();
+  const repertoires = requestedOpeningId
+    ? STAGE2_RUNTIME_TRAINABLE_REPERTOIRES.filter((repertoire) => repertoire.id === requestedOpeningId)
+    : STAGE2_RUNTIME_TRAINABLE_REPERTOIRES;
+
+  return repertoires.flatMap((repertoire) => {
+    const rawLines = lineDataForRepertoire(repertoire);
+    return rawLines.map((line, lineIndex) => {
+      const playSequenceUci = normalizeRuntimePlaySequenceUci(line.playSequenceUci);
+      return {
+        openingId: repertoire.id,
+        openingName: repertoire.name,
+        lineId: line.lineId || `${repertoire.id}:${lineIndex}`,
+        playKey: line.playKey || playSequenceUci.join(","),
+        playSequenceUci,
+        moveCount: playSequenceUci.length,
+        totalGames: Math.max(1, Number(line.totalGames ?? playSequenceUci.length)),
+      };
+    });
+  });
 }
 
 export const STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION = selectRuntimeWeightedOpeningSelection();
