@@ -1,4 +1,0 @@
-Observed after cleanup:
-- Dev server booted with `Ready in 324ms` on `127.0.0.1:3001`.
-- First clean request measured `dev_after status=200 connect=0.000812s ttfb=0.306254s total=0.309402s bytes=37079`.
-- The same session then served `GET / 200 in 308ms`.
