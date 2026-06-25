@@ -18,11 +18,6 @@ function normalizeHistory(moves: readonly string[]): string[] {
   return moves.map(normalizeUci).filter(Boolean);
 }
 
-function entryMatchesHistory(entryUci: readonly string[], history: readonly string[]): boolean {
-  if (!entryUci.length || entryUci.length > history.length) return false;
-  return entryUci.every((move, index) => normalizeUci(move) === history[index]);
-}
-
 export function resolveLichessOpeningIdentity(input: {
   moveHistoryUci: readonly string[];
   minPly?: number;
@@ -31,11 +26,13 @@ export function resolveLichessOpeningIdentity(input: {
   const minPly = input.minPly ?? 2;
   if (history.length < minPly) return null;
 
+  const historyKey = history.join(",");
+
   const match = LICHESS_OPENING_IDENTITY_MANIFEST
-    .filter((entry) => entry.uci.length >= minPly)
-    .filter((entry) => entryMatchesHistory(entry.uci, history))
+    .filter((entry) => entry.ply >= minPly)
+    .filter((entry) => historyKey === entry.uciKey || historyKey.startsWith(`${entry.uciKey},`))
     .sort((a, b) => {
-      if (a.uci.length !== b.uci.length) return b.uci.length - a.uci.length;
+      if (a.ply !== b.ply) return b.ply - a.ply;
       return a.name.localeCompare(b.name);
     })[0];
 
@@ -46,8 +43,8 @@ export function resolveLichessOpeningIdentity(input: {
     name: match.name,
     familyName: match.familyName,
     variationName: match.variationName,
-    ply: match.uci.length,
-    matchedUci: match.uci.map(String),
-    confidence: match.uci.length === history.length ? "exact" : "prefix",
+    ply: match.ply,
+    matchedUci: match.uciKey.split(",").filter(Boolean),
+    confidence: match.ply === history.length ? "exact" : "prefix",
   };
 }

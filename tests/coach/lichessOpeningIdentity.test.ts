@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { LICHESS_OPENING_IDENTITY_MANIFEST_COUNT } from "../../lib/blundr/openings/lichessOpeningIdentity.generated";
 import { resolveLichessOpeningIdentity } from "../../lib/blundr/openings/lichessOpeningIdentity";
 
-assert.ok(LICHESS_OPENING_IDENTITY_MANIFEST_COUNT >= 3000, "expected full lichess opening identity manifest");
+assert.ok(LICHESS_OPENING_IDENTITY_MANIFEST_COUNT >= 100, "expected curated lichess opening identity manifest");
 
 {
   const identity = resolveLichessOpeningIdentity({
