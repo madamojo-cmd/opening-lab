@@ -15,7 +15,7 @@ import {
   getStage2OpeningAvailability,
   getStage2OpeningAvailabilitySummary,
 } from "../openings/openingAvailability";
-import { STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION } from "../openings/runtimeTrainableRepertoires";
+import { selectRuntimeWeightedOpeningSelection } from "../openings/runtimeLineBodyLoader";
 import {
   resolveStage2CanonicalOpeningId,
   resolveStage2OpeningIdentity,
@@ -25,6 +25,8 @@ import {
   getStage2ApprovedContentInventorySummary,
 } from "../stage2Coaching/stage2ApprovedContentInventory.generated";
 import { normalizeRuntimeCastlingUci, normalizeRuntimePlayKey, normalizeRuntimePlaySequenceUci } from "../runtime/uciNormalization";
+
+const STAGE2_RUNTIME_WEIGHTED_OPENING_SELECTION = selectRuntimeWeightedOpeningSelection();
 
 function len(value: unknown): number {
   return Array.isArray(value) ? value.length : value && typeof value === "object" ? Object.keys(value as Record<string, unknown>).length : 0;

@@ -1,9 +1,6 @@
-import {
-  getStage2RuntimeOpeningIdentityLines,
-  type RuntimeOpeningIdentityLine,
-} from "./runtimeTrainableRepertoires";
 import { resolveStage2CanonicalOpeningId } from "./openingIdentity";
 import { resolveLichessOpeningIdentity } from "./lichessOpeningIdentity";
+import type { RuntimeOpeningIdentityLine } from "./runtimeLineBodyLoader";
 
 export type AdaptiveOpeningIdentity = {
   selectedOpeningId: string;
@@ -65,8 +62,7 @@ export function resolveAdaptiveOpeningIdentity(
   const lichessIdentity = resolveLichessOpeningIdentity({ moveHistoryUci });
 
   const selectedOpeningName = String(input.selectedOpeningName ?? "").trim();
-  const runtimeIdentityLines =
-    input.runtimeIdentityLines ?? getStage2RuntimeOpeningIdentityLines(selectedOpeningId);
+  const runtimeIdentityLines = input.runtimeIdentityLines ?? [];
 
   const matches = runtimeIdentityLines
     .filter((line) => line.openingId === selectedOpeningId)

@@ -18,9 +18,14 @@ export function testStage2NoUnsafePerformanceSplit(): void {
     "app_page_missing_lazy_coach_card_split",
   );
   assert.equal(
-    /from\s+["']@\/lib\/blundr\/openings\/runtimeTrainableRepertoires["']/.test(pageSource),
+    /from\s+["']@\/lib\/blundr\/openings\/runtimeLineBodyLoader["']/.test(pageSource),
     true,
-    "app_page_missing_static_runtime_trainable_import",
+    "app_page_missing_static_runtime_line_loader_import",
+  );
+  assert.equal(
+    /from\s+["']@\/lib\/blundr\/openings\/runtimeTrainableRepertoires["']/.test(pageSource),
+    false,
+    "app_page_unsafe_runtime_trainable_static_import",
   );
   assert.equal(
     /import\(\s*["']@\/lib\/blundr\/openings\/runtimeTrainableRepertoires["']\s*\)/.test(pageSource),

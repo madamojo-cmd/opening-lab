@@ -57,13 +57,15 @@ import { resolveExpectedMoveForFrame } from "@/lib/blundr/openings/expectedMoveR
 import { buildOpeningResolverDebug } from "@/lib/blundr/openings/openingResolverDebug";
 import { STAGE2_OPENING_AVAILABILITY_MATRIX, getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
 import {
-  STAGE2_RUNTIME_TRAINABLE_REPERTOIRES,
-  getStage2RuntimeTrainableRepertoire,
+  buildRuntimeOpeningIdentityLines,
+  getStage2RuntimeOpeningIndexEntries,
+  loadStage2RuntimeTrainableRepertoires,
   selectRuntimeWeightedOpeningSelection,
   selectRuntimeWeightedTrainingLineSelection,
   updateRuntimeTrainingLineKeys,
+  type RuntimeTrainableRepertoire,
   type RuntimeWeightedTrainingLineSelection,
-} from "@/lib/blundr/openings/runtimeTrainableRepertoires";
+} from "@/lib/blundr/openings/runtimeLineBodyLoader";
 import { resolveStage2CanonicalOpeningId } from "@/lib/blundr/openings/openingIdentity";
 import {
   resolveAdaptiveOpeningIdentity,
@@ -130,7 +132,7 @@ type PatternCue = {
   concept?: string;
   selectedMove?: string;
 };
-type Repertoire = { id: string; name: string; color: RepertoireColor; lines: string[][]; description: string; custom?: boolean };
+type Repertoire = { id: string; name: string; color: RepertoireColor; lines: string[][]; description: string; custom?: boolean; runtimeLoading?: boolean };
 type Continuation = { san: string; uci: string; color: ChessColor; resultingFen: string };
 type Mistake = { fen: string; expectedMove: string; playedMove: string; count: number; opening: string; repertoireId: string };
 type Progress = { attempts: number; correct: number; incorrect: number; streak: number; trainedPositions: Record<string, boolean>; mistakes: Record<string, Mistake> };
@@ -206,6 +208,24 @@ type RuntimeBookFrameQueryState = {
   status: "idle" | "loading" | "ready" | "error";
   error: string | null;
 };
+function buildRuntimePlaceholderRepertoires(): Repertoire[] {
+  return getStage2RuntimeOpeningIndexEntries().map((entry) => ({
+    id: entry.openingId,
+    name: entry.openingName,
+    color: entry.side,
+    description: `Runtime-backed local crawled package line pool loading for ${entry.openingName}.`,
+    lines: [],
+    runtimeLoading: true,
+  }));
+}
+
+function toAppRuntimeRepertoire(repertoire: RuntimeTrainableRepertoire): Repertoire {
+  return {
+    ...repertoire,
+    runtimeLoading: false,
+  };
+}
+
 const HARD_CONTINUATION_BREAK_PLY = 22;
 const SUGGESTION_VALIDATION_MULTIPV = 10;
 const USER_MOVE_RATING_MULTIPV = 32;
@@ -407,12 +427,11 @@ function countMatchedRuntimeLinePlies(reference:string[], current:string[]):numb
   return matched;
 }
 function buildRuntimeTrainingLineSelection(openingId:string,recentLineKeys:string[],seed:string,repertoire?:Repertoire):RuntimeWeightedTrainingLineSelection | null{
-  const runtimeRepertoire=getStage2RuntimeTrainableRepertoire(openingId);
   const selection=selectRuntimeWeightedTrainingLineSelection({
     openingId,
     recentLineKeys,
     seed,
-    repertoire: runtimeRepertoire ?? null,
+    repertoire: repertoire ?? null,
   });
   if(selection)return selection;
   const line=repertoire?.lines[0] ?? [];
@@ -1121,6 +1140,7 @@ export default function App(){
   );
   const [activeTab,setActiveTab]=useState<Tab>("home");
   const [customRepertoires,setCustomRepertoires]=useState<Repertoire[]>([]);
+  const [runtimeRepertoires,setRuntimeRepertoires]=useState<Repertoire[]>(()=>buildRuntimePlaceholderRepertoires());
   const [selectedRepertoireId,setSelectedRepertoireId]=useState(runtimeOpeningSelection.selectedOpeningId);
   const [runtimeTrainingSessionId,setRuntimeTrainingSessionId]=useState<string>(()=>createLearningSessionId());
   const [continuationSessionId,setContinuationSessionId]=useState<string|null>(null);
@@ -1324,10 +1344,18 @@ export default function App(){
   const repertoires=useMemo(()=>{
     const merged=new Map<string,Repertoire>();
     for(const repertoire of OPENINGS) merged.set(repertoire.id,repertoire);
-    for(const repertoire of STAGE2_RUNTIME_TRAINABLE_REPERTOIRES) merged.set(repertoire.id,repertoire);
+    for(const repertoire of runtimeRepertoires) merged.set(repertoire.id,repertoire);
     for(const repertoire of customRepertoires) merged.set(repertoire.id,repertoire);
     return [...merged.values()];
-  },[customRepertoires]);
+  },[customRepertoires,runtimeRepertoires]);
+  useEffect(()=>{
+    let cancelled=false;
+    void loadStage2RuntimeTrainableRepertoires().then((loaded)=>{
+      if(cancelled)return;
+      setRuntimeRepertoires(loaded.map(toAppRuntimeRepertoire));
+    });
+    return()=>{cancelled=true};
+  },[]);
   function refreshRuntimeTrainingLineSelection(nextOpeningId:string, recentLineKeys:string[] = recentRuntimeTrainingLineKeys, sessionId:string = runtimeTrainingSessionId){
     const nextSelection=buildRuntimeTrainingLineSelection(nextOpeningId,recentLineKeys,sessionId,repertoires.find((candidate)=>candidate.id===nextOpeningId));
     setSelectedRuntimeTrainingLineSelection(nextSelection);
@@ -1336,6 +1364,21 @@ export default function App(){
     }
     return nextSelection;
   }
+  useEffect(()=>{
+    const nextRepertoire=repertoires.find((candidate)=>candidate.id===selectedRepertoireId);
+    if(!nextRepertoire)return;
+    const nextSelection=buildRuntimeTrainingLineSelection(nextRepertoire.id,recentRuntimeTrainingLineKeys,runtimeTrainingSessionId,nextRepertoire);
+    setSelectedRuntimeTrainingLineSelection((current)=>{
+      if(
+        current?.selectedLineKey===nextSelection?.selectedLineKey &&
+        current?.selectedLineId===nextSelection?.selectedLineId &&
+        current?.openingId===nextSelection?.openingId
+      ){
+        return current;
+      }
+      return nextSelection;
+    });
+  },[repertoires,recentRuntimeTrainingLineKeys,runtimeTrainingSessionId,selectedRepertoireId]);
   const canonicalSelectedRepertoireId=useMemo(
     ()=>resolveStage2CanonicalOpeningId(selectedRepertoireId)??selectedRepertoireId,
     [selectedRepertoireId],
@@ -3579,10 +3622,15 @@ export default function App(){
     .split(",")
     .map((move) => move.trim())
     .filter(Boolean);
+  const runtimeIdentityLines = useMemo(
+    () => buildRuntimeOpeningIdentityLines(repertoire),
+    [repertoire],
+  );
   const adaptiveOpeningIdentity = resolveAdaptiveOpeningIdentity({
     selectedOpeningId: repertoire.id,
     selectedOpeningName: repertoire.name,
     moveHistoryUci: adaptiveOpeningMoveHistoryUci,
+    runtimeIdentityLines,
   });
   const endingInfo=gameEndingInfo(game);
 
