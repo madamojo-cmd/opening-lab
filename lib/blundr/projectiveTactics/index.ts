@@ -6,3 +6,4 @@ export * from "./knightLShapePath";
 export * from "./detectProjectiveTactics";
 export * from "./filterProjectiveTacticsForViewMode";
 export * from "./projectiveTacticLifecycle";
+export * from "./projectiveTacticMaterialGate";

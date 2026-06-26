@@ -12,6 +12,7 @@ import {
   getProjectiveTacticLabel,
   isProjectiveTacticEnabledInE,
 } from "./projectiveTacticRegistry";
+import { filterProjectiveTacticVisualForMaterialGate } from "./projectiveTacticMaterialGate";
 import type {
   ProjectiveTacticKind,
   ProjectiveTacticOwner,
@@ -174,7 +175,7 @@ function buildVisual(input: {
       ? (index % 2 === 0 ? "vertical_first" : "horizontal_first")
       : undefined,
   }));
-  return {
+  const visual: ProjectiveTacticVisual = {
     id: [
       "projective",
       input.kind,
@@ -198,6 +199,11 @@ function buildVisual(input: {
     revealRisk: "low",
     confidence: "high",
   };
+  return filterProjectiveTacticVisualForMaterialGate({
+    fen: input.fen,
+    visual,
+    movedColor: input.sourcePiece.color,
+  }).visual;
 }
 
 function detectFork(input: {

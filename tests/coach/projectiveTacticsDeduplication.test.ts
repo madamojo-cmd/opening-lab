@@ -34,7 +34,7 @@ const continuingFilter = filterNewProjectiveTactics({
 assert.equal(continuingFilter.newVisuals.length, 0);
 
 const fork = detectProjectiveTactics({
-  fen: "k2q4/8/8/8/3R3b/8/8/7K w - - 0 1",
+  fen: "k2q4/8/8/8/b2R4/8/8/7K w - - 0 1",
   lastMoveUci: "d1d4",
   learnerColor: "w",
   movedColor: "w",

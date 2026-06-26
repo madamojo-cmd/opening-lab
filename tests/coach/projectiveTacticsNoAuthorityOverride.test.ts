@@ -6,7 +6,7 @@ import { Chess } from "chess.js";
 
 import { detectProjectiveTactics } from "../../lib/blundr/projectiveTactics";
 
-const fen = "k2q4/8/8/8/3R3b/8/8/7K w - - 0 1";
+const fen = "k2q4/8/8/8/b2R4/8/8/7K w - - 0 1";
 const game = new Chess(fen);
 const beforeFen = game.fen();
 const beforeLegalMoves = game.moves().sort();
