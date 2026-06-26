@@ -23,6 +23,21 @@ export function testStage2NoUnsafePerformanceSplit(): void {
     "app_page_missing_static_runtime_line_loader_import",
   );
   assert.equal(
+    /loadStage2RuntimeTrainableRepertoires\b/.test(pageSource),
+    false,
+    "app_page_unsafe_all_runtime_body_loader_reference",
+  );
+  assert.equal(
+    /loadStage2RuntimeTrainableRepertoire\b/.test(pageSource),
+    true,
+    "app_page_missing_selected_runtime_body_loader_reference",
+  );
+  assert.equal(
+    /runtimeLines\/[^"']+\.generated/.test(pageSource),
+    false,
+    "app_page_unsafe_runtime_line_body_import",
+  );
+  assert.equal(
     /from\s+["']@\/lib\/blundr\/openings\/runtimeTrainableRepertoires["']/.test(pageSource),
     false,
     "app_page_unsafe_runtime_trainable_static_import",
@@ -41,6 +56,31 @@ export function testStage2NoUnsafePerformanceSplit(): void {
     /const\s+BlundrDiagnosticsPanel\s*=\s*dynamic\([\s\S]*?import\(\s*["']@\/components\/debug\/BlundrDiagnosticsPanel["']\s*\)[\s\S]*?mod\.BlundrDiagnosticsPanel[\s\S]*?ssr:\s*false[\s\S]*?loading:\s*\(\)\s*=>\s*null[\s\S]*?\)/.test(pageSource),
     true,
     "app_page_missing_lazy_diagnostics_split",
+  );
+  assert.equal(
+    /from\s+["']@\/lib\/blundr\/debug\/trainerDebugCollector["']/.test(pageSource),
+    false,
+    "app_page_unsafe_static_trainer_debug_collector_import",
+  );
+  assert.equal(
+    /from\s+["']@\/lib\/blundr\/debug\/trainerDebugSnapshot["']/.test(pageSource),
+    false,
+    "app_page_unsafe_static_trainer_debug_snapshot_import",
+  );
+  assert.equal(
+    /from\s+["']@\/lib\/blundr\/debug\/buildStage2FeatureTrace["']/.test(pageSource),
+    false,
+    "app_page_unsafe_static_stage2_feature_trace_import",
+  );
+  assert.equal(
+    /from\s+["']@\/lib\/blundr\/debug\/buildTrainerFrameResolution["']/.test(pageSource),
+    false,
+    "app_page_unsafe_static_trainer_frame_resolution_import",
+  );
+  assert.equal(
+    /import\(\s*["']@\/lib\/blundr\/debug\/trainerDebugCollector["']\s*\)/.test(pageSource),
+    true,
+    "app_page_missing_lazy_trainer_debug_collector_import",
   );
   assert.equal(
     /runtimeOpeningSelection\s*=\s*useMemo\(/.test(pageSource),

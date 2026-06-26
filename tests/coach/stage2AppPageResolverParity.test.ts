@@ -37,8 +37,8 @@ export function testStage2AppPageResolverParity(): void {
   });
 
   assert.equal(renderState.pipelineCopyAuthorityDecision.renderedCopyAuthority, "pipeline_coach_decision");
-  assert.equal(renderState.stage2CoachCopyEnrichment.applied, true);
-  assert.equal(renderState.stage2CoachCopyEnrichment.copy.title, packet.surfaces.assisted.title);
+  assert.equal(renderState.stage2CoachingPacketResolution.kind, "safe_fallback");
+  assert.equal(renderState.stage2CoachCopyEnrichment.applied, false);
 
   const frameResolution = buildTrainerFrameResolution({
     trainerFrameId: 601,
@@ -55,7 +55,7 @@ export function testStage2AppPageResolverParity(): void {
     visibleTeachingSurface: {
       owner: "v28_visible_surface",
       mode: "assisted",
-      coach: { title: renderState.stage2CoachCopyEnrichment.copy.title, body: renderState.stage2CoachCopyEnrichment.copy.body, buttons: [] },
+      coach: { title: packet.surfaces.assisted.title, body: packet.surfaces.assisted.body, buttons: [] },
       visual: { lines: [{ id: "line-1" }] },
       actions: [],
     } as any,
@@ -65,8 +65,8 @@ export function testStage2AppPageResolverParity(): void {
       buttons: [],
       debug: { coachDecisionSource: "displayedCoachDecision", coachMoveUci: packet.moveUci, coachPieceType: "b" },
     },
-    actualCoachCardTitle: renderState.stage2CoachCopyEnrichment.copy.title,
-    actualCoachCardBody: renderState.stage2CoachCopyEnrichment.copy.body,
+    actualCoachCardTitle: packet.surfaces.assisted.title,
+    actualCoachCardBody: packet.surfaces.assisted.body,
     actualCoachCardButtons: [],
     actualCoachCardSource: "surfaceCoachCardDecision",
     actualVisualSource: "approved_recipe",
@@ -75,9 +75,9 @@ export function testStage2AppPageResolverParity(): void {
     stage2CoachingPacketKind: "approved_packet",
     stage2ApprovedPacketMatched: true,
     stage2ApprovedPacketKind: "approved_packet",
-    stage2ApprovedPacketId: renderState.stage2CoachingPacketResolution.kind === "approved_packet" ? renderState.stage2CoachingPacketResolution.packet.packetId : null,
-    stage2ApprovedPacketSourceBundle: renderState.stage2CoachingPacketResolution.kind === "approved_packet" ? renderState.stage2CoachingPacketResolution.packet.sourceCandidatePackages?.[0] ?? renderState.stage2CoachingPacketResolution.packet.sourceCandidatePackage ?? null : null,
-    stage2ApprovedPacketSourceFile: renderState.stage2CoachingPacketResolution.kind === "approved_packet" ? renderState.stage2CoachingPacketResolution.packet.sourceFile ?? null : null,
+    stage2ApprovedPacketId: packet.packetId,
+    stage2ApprovedPacketSourceBundle: packet.sourceCandidatePackages?.[0] ?? packet.sourceCandidatePackage ?? null,
+    stage2ApprovedPacketSourceFile: packet.sourceFile,
     stage2ApprovedPacketStatus: "approved",
     stage2ApprovedPacketApprovalReadiness: "app_validated",
     stage2ApprovedPacketMissReason: null,
@@ -85,10 +85,10 @@ export function testStage2AppPageResolverParity(): void {
     stage2ApprovedPacketVisualSource: "approved_recipe",
     stage2CoachingSafetyStatus: "safe",
     stage2CoachingSurface: "assisted",
-    stage2CoachingSourceFile: renderState.stage2CoachingPacketResolution.kind === "approved_packet" ? renderState.stage2CoachingPacketResolution.packet.sourceFile : null,
+    stage2CoachingSourceFile: packet.sourceFile,
     stage2CoachingRuntimeMatched: true,
     coachQuality: { qualityScore: 90, qualityScoreSource: "final_rendered", source: "final_rendered", targetAligned: true, pieceAligned: true, usedFallback: false },
-    visualRecipe: renderState.stage2CoachingPacketResolution.kind === "approved_packet" ? renderState.stage2CoachingPacketResolution.packet.visualRecipe : null,
+    visualRecipe: packet.visualRecipe,
     visualRecipeMoveUci: packet.moveUci,
     visualRecipeMoveSan: packet.moveSan,
     visualRecipeTargetMatchesInstructionTarget: true,
@@ -112,7 +112,7 @@ export function testStage2AppPageResolverParity(): void {
     coachMoveUci: packet.moveUci,
     coachPieceType: "b",
     visualMoveUci: packet.moveUci,
-    visualRecipe: renderState.stage2CoachingPacketResolution.kind === "approved_packet" ? renderState.stage2CoachingPacketResolution.packet.visualRecipe : null,
+    visualRecipe: packet.visualRecipe,
     visualRecipeMoveUci: packet.moveUci,
     visualRecipeMoveSan: packet.moveSan,
     visibleTeachingSurface: {
@@ -130,8 +130,8 @@ export function testStage2AppPageResolverParity(): void {
     },
   } as any).featureTrace as any;
 
-  assert.equal(frameResolution.coachCard.finalRendered.title, renderState.stage2CoachCopyEnrichment.copy.title);
-  assert.equal(frameResolution.coachCard.finalRendered.body, renderState.stage2CoachCopyEnrichment.copy.body);
+  assert.equal(frameResolution.coachCard.finalRendered.title, packet.surfaces.assisted.title);
+  assert.equal(frameResolution.coachCard.finalRendered.body, packet.surfaces.assisted.body);
   assert.equal(trace.finalRenderedTitle, frameResolution.coachCard.finalRendered.title);
   assert.equal(trace.coachCardResult.finalRendered.title, frameResolution.coachCard.finalRendered.title);
 

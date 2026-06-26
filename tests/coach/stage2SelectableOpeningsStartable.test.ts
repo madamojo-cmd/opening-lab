@@ -1,27 +1,43 @@
 import assert from "node:assert/strict";
 
+import { Chess } from "chess.js";
+
+import { STAGE2_OPENING_AVAILABILITY_MATRIX } from "../../lib/blundr/openings/openingAvailability";
 import { STAGE2_RUNTIME_OPENING_IDS } from "../../lib/blundr/openings/openingIdentity";
 import {
-  STAGE2_RUNTIME_TRAINABLE_REPERTOIRES,
-  getStage2RuntimeTrainableRepertoire,
+  loadStage2RuntimeTrainableRepertoire,
   selectRuntimeWeightedOpeningSelection,
   selectRuntimeWeightedTrainingLineSelection,
-} from "../../lib/blundr/openings/runtimeTrainableRepertoires";
+} from "../../lib/blundr/openings/runtimeLineBodyLoader";
+import { applyRuntimeUciMove } from "../../lib/blundr/runtime/uciReplay";
 import { buildStage2RuntimeGraphSnapshot } from "./stage2RuntimeGraphTestHelpers";
 
-export function testStage2SelectableOpeningsStartable(): void {
-  assert.equal(
-    STAGE2_RUNTIME_TRAINABLE_REPERTOIRES.length,
-    STAGE2_RUNTIME_OPENING_IDS.length,
-    "runtime_trainable_repertoire_count_mismatch",
+function replayRuntimeLine(uciSequence: readonly string[]): boolean {
+  const game = new Chess();
+  for (const uci of uciSequence) {
+    const move = applyRuntimeUciMove(game, uci);
+    if (!move) return false;
+  }
+  return true;
+}
+
+export async function testStage2SelectableOpeningsStartable(): Promise<void> {
+  const runtimeAvailableOpeningIds = STAGE2_OPENING_AVAILABILITY_MATRIX
+    .filter((opening) => opening.runtimeAvailable)
+    .map((opening) => opening.openingId);
+
+  assert.deepEqual(
+    [...runtimeAvailableOpeningIds].sort(),
+    [...STAGE2_RUNTIME_OPENING_IDS].sort(),
+    "runtime_available_openings_must_match_split_loader_ids",
   );
 
   const missingStartableOpenings: string[] = [];
 
-  for (const openingId of STAGE2_RUNTIME_OPENING_IDS) {
-    const repertoire = getStage2RuntimeTrainableRepertoire(openingId);
+  for (const openingId of runtimeAvailableOpeningIds) {
+    const repertoire = await loadStage2RuntimeTrainableRepertoire(openingId);
     if (!repertoire) {
-      missingStartableOpenings.push(`${openingId}:missing_runtime_repertoire`);
+      missingStartableOpenings.push(`${openingId}:missing_split_runtime_repertoire`);
       continue;
     }
 
@@ -41,15 +57,25 @@ export function testStage2SelectableOpeningsStartable(): void {
 
     const openingSelection = selectRuntimeWeightedOpeningSelection(`stage2-selectable:${openingId}`);
     assert.ok(openingSelection, `runtime_opening_selection_missing:${openingId}`);
+    assert.equal(
+      openingSelection.eligibleOpeningIds.includes(openingId),
+      true,
+      `runtime_opening_not_selectable_through_split_catalog:${openingId}`,
+    );
 
     const lineSelection = selectRuntimeWeightedTrainingLineSelection({
       openingId,
       repertoire,
       seed: `stage2-startable:${openingId}`,
+      ratingBandId: "club",
     });
 
     if (!lineSelection || lineSelection.selectedPlaySequenceUci.length === 0) {
       missingStartableOpenings.push(`${openingId}:missing_playable_start_line`);
+      continue;
+    }
+    if (!replayRuntimeLine(lineSelection.selectedPlaySequenceUci)) {
+      missingStartableOpenings.push(`${openingId}:illegal_split_runtime_start_line`);
       continue;
     }
 
@@ -82,5 +108,6 @@ export function testStage2SelectableOpeningsStartable(): void {
   assert.equal(missingStartableOpenings.length, 0, `missing_startable_openings:${missingStartableOpenings.join(" | ")}`);
 }
 
-testStage2SelectableOpeningsStartable();
-console.log("stage2SelectableOpeningsStartable ok");
+void testStage2SelectableOpeningsStartable().then(() => {
+  console.log("stage2SelectableOpeningsStartable ok");
+});

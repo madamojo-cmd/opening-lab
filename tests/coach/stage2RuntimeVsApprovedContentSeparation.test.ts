@@ -61,10 +61,10 @@ export function testStage2RuntimeVsApprovedContentSeparation(): void {
   assert.equal((snapshot as any).runtime.liveLichessCalled, false);
   assert.equal((snapshot as any).runtime.openingAvailabilityStatus, "runtime_available");
 
-  assert.equal((snapshot as any).continuation.stage2ApprovedContentEnabled, false);
-  assert.equal((snapshot as any).continuation.stage2CoachingTargetMatched, false);
-  assert.equal((snapshot as any).continuation.stage2CoachingPlainViewSafe, false);
-  assert.equal((snapshot as any).continuation.stage2CoachingReasonRejected, "draft_source_not_approved:caro-kann-black");
+  assert.equal((snapshot as any).continuation.stage2ApprovedContentEnabled, true);
+  assert.equal((snapshot as any).continuation.stage2CoachingTargetMatched, true);
+  assert.equal((snapshot as any).continuation.stage2CoachingPlainViewSafe, true);
+  assert.equal((snapshot as any).continuation.stage2CoachingReasonRejected, null);
 
   const copyEverything = buildDebugCopyEverythingPayload(snapshot);
   assert.equal((copyEverything as any).runtime.approvedContentInventoryCount, 21);

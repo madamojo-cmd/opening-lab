@@ -50,6 +50,7 @@ import { attributeLastMove, decideTrainerPhaseActionGate } from "@/lib/blundr/pr
 import { buildVisibleTeachingSurface } from "@/lib/blundr/presentation/buildVisibleTeachingSurface"; // v2.7.40 Agent 3: single visible owner surface
 import { buildLiveVisibleTeachingSurface } from "@/lib/blundr/presentation/buildLiveVisibleTeachingSurface";
 import { adaptVisibleSurfaceToBoardVisuals, adaptVisibleSurfaceToCoachUi } from "@/lib/blundr/presentation/uiSurfaceAdapter";
+import { buildTrainingBoardVisibilitySquares } from "@/lib/blundr/presentation/legalMoveDotVisibility";
 import { isV28VisibleSurfaceEnabled } from "@/lib/blundr/presentation/featureFlags";
 import { buildContinuationCandidateVisual } from "@/lib/blundr/visual/continuationCandidateVisual";
 import { buildOpeningTree } from "@/lib/blundr/openings/openingTree";
@@ -59,7 +60,7 @@ import { STAGE2_OPENING_AVAILABILITY_MATRIX, getStage2OpeningAvailability } from
 import {
   buildRuntimeOpeningIdentityLines,
   getStage2RuntimeOpeningIndexEntries,
-  loadStage2RuntimeTrainableRepertoires,
+  loadStage2RuntimeTrainableRepertoire,
   selectRuntimeWeightedOpeningSelection,
   selectRuntimeWeightedTrainingLineSelection,
   updateRuntimeTrainingLineKeys,
@@ -78,6 +79,8 @@ import { resolveBranchCompleteContract } from "@/lib/blundr/runtime/branchComple
 import { resolveContinuationFlowContract } from "@/lib/blundr/runtime/continuationFlowContract";
 import { shouldFlagStaleOpponentReplyCommit } from "@/lib/blundr/runtime/opponentReplyGuard";
 import { resolveRestrictedOpponentReplyAuthority } from "@/lib/blundr/runtime/restrictedOpponentReplyAuthority";
+import { shouldScheduleContinuationOpponentReply } from "@/lib/blundr/runtime/continuationOpponentReplyGate";
+import { resolveBlackOpeningInitialOpponentHandoff } from "@/lib/blundr/runtime/blackOpeningInitialOpponentHandoff";
 import { applyRuntimeUciMove } from "@/lib/blundr/runtime/uciReplay";
 import { DEFAULT_GUIDED_COVERAGE_THRESHOLDS } from "@/lib/blundr/openings/guidedCoveragePolicy";
 import { resolveRestrictedRuntimeBookHandoff } from "@/lib/blundr/runtime/restrictedRuntimeBookHandoff";
@@ -92,18 +95,22 @@ import {
   resolveStage2CoachRenderState,
 } from "@/lib/blundr/stage2Coaching";
 import type { MaiaMoveCandidate, MaiaOpponentReplyResult, MaiaProviderStatus, MaiaSkillLevel } from "@/lib/blundr/maia/maiaTypes";
+import {
+  DEFAULT_STAGE2_RATING_BAND_ID,
+  STAGE2_RATING_BANDS,
+  getStage2RatingBandByFilterValue,
+  type Stage2RatingBand,
+} from "@/lib/blundr/ratings/ratingBands";
 import { unavailableMaiaProvider } from "@/lib/blundr/maia/maiaProvider";
 import { MaiaApiClientProvider } from "@/lib/blundr/maia/maiaApiClientProvider";
 import { buildMaiaOpponentReplyDecision, classifyMaiaProviderStatus, evaluateMaiaSanityGuard, resolveMaiaSkillLevel, selectMaiaOpponentReply, withMaiaTimeout } from "@/lib/blundr/maia/maiaOpponentProvider";
 import { applyMaiaMoveOnRequestFen } from "@/lib/blundr/maia/maiaLegalityRequestFenContract";
 import { appendMaiaTimeline, createMaiaTimelineEvent, type MaiaTimelineEvent } from "@/lib/blundr/debug/maiaTimeline";
-import { collectTrainerDebugSnapshot } from "@/lib/blundr/debug/trainerDebugCollector";
-import { buildTrainerFrameResolution } from "@/lib/blundr/debug/buildTrainerFrameResolution";
 import { computeInstructionFrameKey } from "@/lib/blundr/runtime/currentInstructionFrame";  // v2.7.39.1 Target Locking (Coach Perfection Gate)
 import { analyzeBlundrPosition } from "@/lib/blundr/brain/analyzeBlundrPosition";  // v2.7.39.2+ Brain facade for 2.7.39.3 coach migration
 import { appendDebugEvent } from "@/lib/blundr/debug/trainerDebugEventLog";
 import { isBlundrDebugEnabled } from "@/lib/blundr/debug/trainerDebugGuards";
-import type { DebugEvent } from "@/lib/blundr/debug/trainerDebugTypes";
+import type { DebugEvent, TrainerDebugSnapshot } from "@/lib/blundr/debug/trainerDebugTypes";
 
 const BlundrDiagnosticsPanel = dynamic(
   () => import("@/components/debug/BlundrDiagnosticsPanel").then((mod) => mod.BlundrDiagnosticsPanel),
@@ -184,6 +191,8 @@ type PendingOpponentRequest = {
   baseFen: string;
   mode: TrainingMode;
   startedAt: number;
+  initialRestrictedOpponentMoveUci?: string;
+  initialRestrictedOpponentHandoffKey?: string;
 };
 type RuntimeBookFrameCandidate = {
   uci: string;
@@ -353,6 +362,95 @@ type CoachCardRenderTimelineEntry = {
   preAuthoritySurfaceOwner?: string | null;
   preAuthoritySurfaceReason?: string | null;
 };
+type DebugSnapshotCollector = (input: Record<string, unknown>) => TrainerDebugSnapshot;
+type DiagnosticsPlaceholderInput = {
+  debugEnabled: boolean;
+  trainerFrameId: number;
+  trainerPhase: OverlayPhase;
+  trainerView: TrainerView;
+  trainingMode: TrainingMode;
+  isUserTurn: boolean;
+  criticalIssues: string[];
+  warnings?: string[];
+  eventLog: DebugEvent[];
+};
+function buildDiagnosticsPlaceholder(input: DiagnosticsPlaceholderInput): TrainerDebugSnapshot {
+  return {
+    generatedAt: Date.now(),
+    build: {
+      environment: process.env.NODE_ENV === "production" ? "production" : process.env.NODE_ENV === "test" ? "test" : "development",
+      debugEnabled: input.debugEnabled,
+    },
+    frame: {
+      trainerFrameId: input.trainerFrameId,
+      trainerPhase: input.trainerPhase,
+      trainerView: input.trainerView,
+      trainingMode: input.trainingMode,
+      isUserTurn: input.isUserTurn,
+      debugSnapshotStatus: input.debugEnabled ? "loading_debug_collector" : "debug_disabled",
+    },
+    board: {},
+    visual: { visualFailureKind: "not_applicable" },
+    continuation: {},
+    runtime: {},
+    coach: { coachFailureKind: "none" },
+    actions: {},
+    features: {},
+    plans: {},
+    opportunities: {},
+    featureTrace: undefined,
+    featureTraceTimeline: [],
+    trainerFrameResolution: undefined,
+    explanation: {},
+    presentation: {},
+    legacy: { legacyBypassDetected: false },
+    cache: {},
+    performance: { debugSnapshotDeferred: true },
+    coachPipeline: {
+      selectedTheme: null,
+      selectedOpportunityId: null,
+      selectedOpportunityLayer: null,
+      selectedOpportunityScore: null,
+      selectedTemplateId: null,
+      source: null,
+      usedFallback: false,
+      fallbackReason: null,
+      evidenceTags: [],
+      qualityScore: null,
+      provenanceConsistent: true,
+      provenanceIssues: [],
+    },
+    coachTimelineSummary: {
+      totalFrames: 0,
+      instructionalFrames: 0,
+      fallbackCount: 0,
+      instructionalFallbackCount: 0,
+      opponentStatusFallbackCount: 0,
+      terminalFallbackCount: 0,
+      lowQualityCount: 0,
+      debugLeakCount: 0,
+      repeatedGenericCount: 0,
+      pieceMismatchCount: 0,
+      targetMismatchCount: 0,
+      averageInstructionalQualityScore: null,
+      uniqueThemes: [],
+    },
+    coachTimeline: [],
+    coachCardRenderTimeline: [],
+    surfaceModeTransitionTimeline: [],
+    actionTimeline: [],
+    visualRenderTimeline: [],
+    plainLeakTimeline: [],
+    maiaTimeline: [],
+    debugParity: { status: "deferred" },
+    health: {
+      criticalIssues: input.criticalIssues,
+      warnings: input.warnings ?? [],
+      passFail: { debugSnapshotLoaded: false },
+    },
+    eventLog: input.eventLog,
+  };
+}
 type BoardTheme = "classic" | "slate" | "blue" | "walnut";
 type PieceStyle = "unicode" | "letters" | "neo";
 type BoardSettings = { boardTheme: BoardTheme; pieceStyle: PieceStyle; showAttack: boolean; showDefense: boolean; showPlan: boolean; showMoveDots: boolean; showEvalBar: boolean; showCaptured: boolean; showOpponentCue: boolean };
@@ -370,16 +468,7 @@ const STAGE2_RUNTIME_TRAINING_LINE_MEMORY_KEY = "blundr-stage2-runtime-training-
 const MAX_LOCAL_TELEMETRY_EVENTS = 120;
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
 const FILE_TO_INDEX: Record<string, number> = Object.fromEntries(FILES.map((f, i) => [f, i]));
-const RATING_PRESETS = [
-  { label: "New", value: "1000", target: "<1000", skill: 800 },
-  { label: "Beginner", value: "1000,1200", target: "1000–1200", skill: 1100 },
-  { label: "Improver", value: "1000,1200,1400", target: "1000–1400", skill: 1300 },
-  { label: "Club", value: "1200,1400,1600", target: "1200–1600", skill: 1500 },
-  { label: "Strong", value: "1600,1800", target: "1600–1800", skill: 1700 },
-  { label: "Advanced", value: "1800,2000,2200", target: "1800–2200", skill: 2000 },
-  { label: "Expert+", value: "2200,2500", target: "2200+", skill: 2300 },
-  { label: "All", value: "1000,1200,1400,1600,1800,2000,2200,2500", target: "All", skill: 1600 },
-];
+const RATING_PRESETS = STAGE2_RATING_BANDS;
 const OPENINGS: Repertoire[] = [
   { id:"italian-white", name:"Italian Game", color:"white", description:"Develop fast, pressure f7, castle, and prepare c3–d4.", lines:[["e4","e5","Nf3","Nc6","Bc4","Bc5","c3","Nf6","d3","d6","O-O","O-O","Re1","a6","Bb3","Ba7","Nbd2"],["e4","e5","Nf3","Nc6","Bc4","Nf6","d3","Bc5","c3","d6","O-O","O-O","Re1"],["e4","e5","Nf3","Nf6","Nxe5","d6","Nf3","Nxe4","d4","d5","Bd3","Be7","O-O","O-O"],["e4","c5","Nf3","d6","d4","cxd4","Nxd4","Nf6","Nc3","a6","Be3","e5","Nb3","Be6","f3"],["e4","e6","d4","d5","Nc3","Nf6","e5","Nfd7","f4","c5","Nf3"],["e4","c6","d4","d5","Nc3","dxe4","Nxe4","Bf5","Ng3","Bg6","h4","h6"]] },
   { id:"ruy-white", name:"Ruy Lopez", color:"white", description:"Pressure e5, build with c3/Re1, and prepare d4.", lines:[["e4","e5","Nf3","Nc6","Bb5","a6","Ba4","Nf6","O-O","Be7","Re1","b5","Bb3","d6","c3","O-O","h3"],["e4","e5","Nf3","Nc6","Bb5","Nf6","O-O","Nxe4","d4","Nd6","Bxc6","dxc6","dxe5","Nf5"],["e4","e5","Nf3","Nc6","Bb5","a6","Ba4","Nf6","O-O","Nxe4","d4","b5","Bb3","d5"]] },
@@ -426,12 +515,14 @@ function countMatchedRuntimeLinePlies(reference:string[], current:string[]):numb
   }
   return matched;
 }
-function buildRuntimeTrainingLineSelection(openingId:string,recentLineKeys:string[],seed:string,repertoire?:Repertoire):RuntimeWeightedTrainingLineSelection | null{
+function buildRuntimeTrainingLineSelection(openingId:string,recentLineKeys:string[],seed:string,repertoire?:Repertoire,ratingFilterValue:string=getStage2RatingBandByFilterValue(DEFAULT_STAGE2_RATING_BAND_ID).value):RuntimeWeightedTrainingLineSelection | null{
+  if(!repertoire||repertoire.runtimeLoading)return null;
   const selection=selectRuntimeWeightedTrainingLineSelection({
     openingId,
     recentLineKeys,
     seed,
     repertoire: repertoire ?? null,
+    ratingBandId: getStage2RatingBandByFilterValue(ratingFilterValue).id,
   });
   if(selection)return selection;
   const line=repertoire?.lines[0] ?? [];
@@ -483,7 +574,7 @@ function visualAnimationClass(name?:string){const known=new Set(["quiet-developm
 function getPiece(game:Chess,square:string){return game.get(square as any)}
 function isOwnPiece(game:Chess,square:string,color:ChessColor){const p=getPiece(game,square);return Boolean(p&&p.color===color)}
 function pickWeighted<T extends {weight:number}>(items:T[]){const total=items.reduce((s,i)=>s+Math.max(0,i.weight),0);if(total<=0)return items[0];let roll=Math.random()*total;for(const item of items){roll-=Math.max(0,item.weight);if(roll<=0)return item}return items[0]}
-function ratingPreset(value:string){return RATING_PRESETS.find(p=>p.value===value)??RATING_PRESETS[3]}
+function ratingPreset(value:string){return getStage2RatingBandByFilterValue(value)}
 function buildTree(rep:Repertoire){const tree:Record<string,Continuation[]>={};for(const line of rep.lines){const game=new Chess();for(const san of line){const key=normalizeFen(game.fen());try{const move=game.move(san);if(!move)break;const cont={san:move.san,uci:moveToUci(move),color:move.color as ChessColor,resultingFen:game.fen()};const ex=tree[key]??[];tree[key]=ex.some(x=>x.uci===cont.uci)?ex:[...ex,cont]}catch{break}}}return tree}
 function repertoireLineInputs(rep:Repertoire):RepertoireLineInput[]{return rep.lines.map((line,index)=>({openingId:rep.id,lineId:`${rep.id}:${index}`,openingName:rep.name,sideToTrain:rep.color,movesSan:line}))}
 function countPositions(rep:Repertoire){return buildOpeningTree(repertoireLineInputs(rep)).nodeCount}
@@ -1135,7 +1226,7 @@ export default function App(){
   const initialFen=useMemo(()=>new Chess().fen(),[]);
   const [trainingSessionId] = useState(()=>createLearningSessionId());
   const runtimeOpeningSelection=useMemo(
-    ()=>selectRuntimeWeightedOpeningSelection(trainingSessionId),
+    ()=>selectRuntimeWeightedOpeningSelection(trainingSessionId, DEFAULT_STAGE2_RATING_BAND_ID),
     [trainingSessionId],
   );
   const [activeTab,setActiveTab]=useState<Tab>("home");
@@ -1180,7 +1271,7 @@ export default function App(){
   const [showMoreShown,setShowMoreShown]=useState(false);
   const [showSettings,setShowSettings]=useState(false);
   const [boardSettings,setBoardSettings]=useState<BoardSettings>(DEFAULT_BOARD_SETTINGS);
-  const [ratingFilter,setRatingFilter]=useState("1200,1400,1600");
+  const [ratingFilter,setRatingFilter]=useState(()=>getStage2RatingBandByFilterValue(DEFAULT_STAGE2_RATING_BAND_ID).value);
   const [speedFilter]=useState("blitz,rapid");
   const [trainingMode,setTrainingMode]=useState<TrainingMode>("restricted");
   const [trainerView,setTrainerView]=useState<TrainerView>("assisted");
@@ -1282,6 +1373,7 @@ export default function App(){
     continuationCandidateLockReason:string;
   }|null>(null);
   const [blundrDebugEnabled,setBlundrDebugEnabled]=useState(false);
+  const [debugSnapshotCollector,setDebugSnapshotCollector]=useState<DebugSnapshotCollector|null>(null);
   const [debugEventLog,setDebugEventLog]=useState<DebugEvent[]>([]);
   const [lastActionDebug,setLastActionDebug]=useState<Record<string,unknown>|null>(null);
   const [coachCardRenderTimeline,setCoachCardRenderTimeline]=useState<CoachCardRenderTimelineEntry[]>([]);
@@ -1335,12 +1427,29 @@ export default function App(){
   const maiaOpponentRequestSeqRef=useRef(0);
   const maiaTimelineSeqRef=useRef(0);
   const pendingOpponentRequestRef=useRef<PendingOpponentRequest|null>(null);
+  const runtimeRepertoireLoadSeqRef=useRef(0);
+  const debugCollectorLoadStartedRef=useRef(false);
+  const initialBlackOpponentHandoffKeyRef=useRef<string|null>(null);
   const branchCompleteBlockedOpponentRequestIdRef=useRef<number|null>(null);
   const branchCompleteLatchRef=useRef(branchCompleteLatch);
   const opponentReplyTimeoutRef=useRef<number|null>(null);
   const brainAbortRef=useRef<AbortController|null>(null);
   const visualAbortRef=useRef<AbortController|null>(null);
   useEffect(()=>{setBlundrDebugEnabled(isBlundrDebugEnabled())},[]);
+  useEffect(()=>{
+    if(!blundrDebugEnabled||debugSnapshotCollector||debugCollectorLoadStartedRef.current)return;
+    let cancelled=false;
+    debugCollectorLoadStartedRef.current=true;
+    void import("@/lib/blundr/debug/trainerDebugCollector")
+      .then((mod)=>{
+        if(cancelled)return;
+        setDebugSnapshotCollector(()=>mod.collectTrainerDebugSnapshot);
+      })
+      .catch(()=>{
+        debugCollectorLoadStartedRef.current=false;
+      });
+    return()=>{cancelled=true};
+  },[blundrDebugEnabled,debugSnapshotCollector]);
   const repertoires=useMemo(()=>{
     const merged=new Map<string,Repertoire>();
     for(const repertoire of OPENINGS) merged.set(repertoire.id,repertoire);
@@ -1348,26 +1457,18 @@ export default function App(){
     for(const repertoire of customRepertoires) merged.set(repertoire.id,repertoire);
     return [...merged.values()];
   },[customRepertoires,runtimeRepertoires]);
-  useEffect(()=>{
-    let cancelled=false;
-    void loadStage2RuntimeTrainableRepertoires().then((loaded)=>{
-      if(cancelled)return;
-      setRuntimeRepertoires(loaded.map(toAppRuntimeRepertoire));
+  function upsertRuntimeRepertoire(nextRepertoire:Repertoire){
+    setRuntimeRepertoires((current)=>{
+      const existingIndex=current.findIndex((candidate)=>candidate.id===nextRepertoire.id);
+      if(existingIndex<0)return [...current,nextRepertoire];
+      if(current[existingIndex]===nextRepertoire)return current;
+      const next=current.slice();
+      next[existingIndex]=nextRepertoire;
+      return next;
     });
-    return()=>{cancelled=true};
-  },[]);
-  function refreshRuntimeTrainingLineSelection(nextOpeningId:string, recentLineKeys:string[] = recentRuntimeTrainingLineKeys, sessionId:string = runtimeTrainingSessionId){
-    const nextSelection=buildRuntimeTrainingLineSelection(nextOpeningId,recentLineKeys,sessionId,repertoires.find((candidate)=>candidate.id===nextOpeningId));
-    setSelectedRuntimeTrainingLineSelection(nextSelection);
-    if(nextSelection?.selectedLineKey){
-      setRecentRuntimeTrainingLineKeys((current)=>updateRuntimeTrainingLineKeys(current,nextSelection.selectedLineKey));
-    }
-    return nextSelection;
   }
-  useEffect(()=>{
-    const nextRepertoire=repertoires.find((candidate)=>candidate.id===selectedRepertoireId);
-    if(!nextRepertoire)return;
-    const nextSelection=buildRuntimeTrainingLineSelection(nextRepertoire.id,recentRuntimeTrainingLineKeys,runtimeTrainingSessionId,nextRepertoire);
+  function commitRuntimeTrainingLineSelection(nextOpeningId:string,recentLineKeys:string[],sessionId:string,nextRepertoire:Repertoire,recordRecentLine:boolean){
+    const nextSelection=buildRuntimeTrainingLineSelection(nextOpeningId,recentLineKeys,sessionId,nextRepertoire,ratingFilter);
     setSelectedRuntimeTrainingLineSelection((current)=>{
       if(
         current?.selectedLineKey===nextSelection?.selectedLineKey &&
@@ -1378,7 +1479,39 @@ export default function App(){
       }
       return nextSelection;
     });
-  },[repertoires,recentRuntimeTrainingLineKeys,runtimeTrainingSessionId,selectedRepertoireId]);
+    if(recordRecentLine&&nextSelection?.selectedLineKey){
+      setRecentRuntimeTrainingLineKeys((current)=>updateRuntimeTrainingLineKeys(current,nextSelection.selectedLineKey));
+    }
+    return nextSelection;
+  }
+  function loadRuntimeRepertoireForSelection(nextOpeningId:string,recentLineKeys:string[],sessionId:string,recordRecentLine:boolean){
+    const canonicalId=resolveStage2CanonicalOpeningId(nextOpeningId)??nextOpeningId;
+    const requestId=++runtimeRepertoireLoadSeqRef.current;
+    return loadStage2RuntimeTrainableRepertoire(canonicalId).then((loaded)=>{
+      if(requestId!==runtimeRepertoireLoadSeqRef.current)return null;
+      if(!loaded)return null;
+      const nextRepertoire=toAppRuntimeRepertoire(loaded);
+      upsertRuntimeRepertoire(nextRepertoire);
+      commitRuntimeTrainingLineSelection(canonicalId,recentLineKeys,sessionId,nextRepertoire,recordRecentLine);
+      return nextRepertoire;
+    });
+  }
+  function refreshRuntimeTrainingLineSelection(nextOpeningId:string, recentLineKeys:string[] = recentRuntimeTrainingLineKeys, sessionId:string = runtimeTrainingSessionId, recordRecentLine=true){
+    const canonicalId=resolveStage2CanonicalOpeningId(nextOpeningId)??nextOpeningId;
+    const nextRepertoire=repertoires.find((candidate)=>candidate.id===canonicalId);
+    if(!nextRepertoire||nextRepertoire.runtimeLoading){
+      setSelectedRuntimeTrainingLineSelection(null);
+      void loadRuntimeRepertoireForSelection(canonicalId,recentLineKeys,sessionId,recordRecentLine);
+      return null;
+    }
+    runtimeRepertoireLoadSeqRef.current+=1;
+    return commitRuntimeTrainingLineSelection(canonicalId,recentLineKeys,sessionId,nextRepertoire,recordRecentLine);
+  }
+  useEffect(()=>{
+    const nextRepertoire=repertoires.find((candidate)=>candidate.id===selectedRepertoireId);
+    if(!nextRepertoire)return;
+    refreshRuntimeTrainingLineSelection(nextRepertoire.id,recentRuntimeTrainingLineKeys,runtimeTrainingSessionId,false);
+  },[repertoires,recentRuntimeTrainingLineKeys,runtimeTrainingSessionId,selectedRepertoireId,ratingFilter]);
   const canonicalSelectedRepertoireId=useMemo(
     ()=>resolveStage2CanonicalOpeningId(selectedRepertoireId)??selectedRepertoireId,
     [selectedRepertoireId],
@@ -4056,7 +4189,13 @@ export default function App(){
       return next;
     });
   }
-  function scheduleOpponentReply(input:{mode:TrainingMode;delayMs?:number;baseFen?:string}){
+  function scheduleOpponentReply(input:{
+    mode:TrainingMode;
+    delayMs?:number;
+    baseFen?:string;
+    initialRestrictedOpponentMoveUci?:string;
+    initialRestrictedOpponentHandoffKey?:string;
+  }){
     if((branchCompleteEligibleNow||stage2TerminalProof.proven)&&input.mode==="restricted"){
       clearPendingOpponentReplyRequest({clearStaleIssue:true});
       return null;
@@ -4073,6 +4212,8 @@ export default function App(){
       baseFen:baseFenNormalized,
       mode:input.mode,
       startedAt:Date.now(),
+      initialRestrictedOpponentMoveUci:input.initialRestrictedOpponentMoveUci,
+      initialRestrictedOpponentHandoffKey:input.initialRestrictedOpponentHandoffKey,
     };
     clearOpponentReplyTimeout();
     pendingOpponentRequestRef.current=request;
@@ -4123,7 +4264,12 @@ export default function App(){
   },[trainingMode,currentPlyCount,continuationHardStopAcknowledged]);
   useEffect(()=>localStorage.setItem("blundr-v22-progress",JSON.stringify(progress)),[progress]);
   useEffect(()=>localStorage.setItem("blundr-v22-custom",JSON.stringify(customRepertoires)),[customRepertoires]);
+  useEffect(()=>{
+    const savedRatingBand=localStorage.getItem("blundr-stage2-rating-band");
+    if(savedRatingBand)setRatingFilter(getStage2RatingBandByFilterValue(savedRatingBand).value);
+  },[]);
   useEffect(()=>localStorage.setItem("blundr-board-settings",JSON.stringify(boardSettings)),[boardSettings]);
+  useEffect(()=>localStorage.setItem("blundr-stage2-rating-band",rating.id),[rating.id]);
   useEffect(()=>localStorage.setItem(STAGE2_RUNTIME_TRAINING_LINE_MEMORY_KEY,JSON.stringify(recentRuntimeTrainingLineKeys.slice(0,2))),[recentRuntimeTrainingLineKeys]);
   useEffect(()=>{telemetryEnabledRef.current=telemetryEnabled},[telemetryEnabled]);
   useEffect(()=>{telemetryEventsRef.current=telemetryEvents},[telemetryEvents]);
@@ -4225,6 +4371,16 @@ export default function App(){
     if(presentationFrame.visual.shouldRender&&trainerPhase==="ready_for_user")setOverlayClearedOnPhaseChange(false);
   },[presentationFrame.visual.shouldRender,trainerPhase]);
   useEffect(()=>setBrain(p=>({...p,ratingLabel:rating.label,ratingPool:rating.target})),[rating.label,rating.target]);
+  useEffect(()=>{
+    // v2.9.1C ratingBandLineRefresh:
+    // Changing the rating band updates the next restricted line from the local package.
+    // It does not rewrite the current line mid-drill.
+    if(trainingMode!=="restricted")return;
+    if(moveHistory.length!==0)return;
+    const nextLineSessionId=createLearningSessionId();
+    setRuntimeTrainingSessionId(nextLineSessionId);
+    refreshRuntimeTrainingLineSelection(canonicalSelectedRepertoireId,recentRuntimeTrainingLineKeys,nextLineSessionId);
+  },[rating.id]);
   useEffect(()=>{
     fenRef.current=fen;
     const fen4=normalizeFen(fen);
@@ -4600,6 +4756,70 @@ export default function App(){
     }
   },[activeTab,trainingMode,isUserTurn,expectedUserOptions.length,expectedMoveResolution.source,expectedMoveResolution.reason,guidedCoveragePolicy.bookCompleteBlockedReason,guidedCoveragePolicy.guidedCompleteBlockedReason,bookComplete,fen,game.isGameOver()]);
   useEffect(()=>{
+    const selectedRuntimeLineLoaded=Boolean(
+      selectedRuntimeTrainingLineSelection?.source==="local_runtime_package"&&
+      selectedRuntimeTrainingLineSelection?.openingId===canonicalSelectedRepertoireId&&
+      selectedRuntimeLinePlaySequenceUci.length>0&&
+      !repertoire.runtimeLoading
+    );
+    const handoff=resolveBlackOpeningInitialOpponentHandoff({
+      activeTab,
+      trainingMode,
+      userExplicitlyEnteredContinuation,
+      userColor,
+      opponentColor,
+      turn:game.turn() as ChessColor,
+      gameOver:game.isGameOver()||game.moves().length===0,
+      selectedOpeningRuntimeAvailable:Boolean(selectedOpeningAvailability?.runtimeAvailable),
+      selectedRuntimeLineLoaded,
+      selectedOpeningId:canonicalSelectedRepertoireId,
+      selectedRuntimeLineOpeningId:selectedRuntimeTrainingLineSelection?.openingId??null,
+      selectedRuntimeLineKey,
+      selectedRuntimeLinePlaySequenceUci,
+      runtimeTrainingSessionId,
+      ratingBandId:rating.id,
+      fen4:normalizeFen(fen),
+      moveHistoryLength:moveHistory.length,
+      lastMoveUci:lastMove,
+      pendingOpponentRequestExists:Boolean(pendingOpponentRequest||pendingOpponentRequestRef.current),
+      handledHandoffKey:initialBlackOpponentHandoffKeyRef.current,
+      legalMoveUcis:continuationLegalMoveUcis,
+    });
+    if(handoff.kind!=="ready")return;
+    initialBlackOpponentHandoffKeyRef.current=handoff.handoffKey;
+    const request=scheduleOpponentReply({
+      mode:"restricted",
+      delayMs:250,
+      baseFen:fen,
+      initialRestrictedOpponentMoveUci:handoff.opponentMoveUci,
+      initialRestrictedOpponentHandoffKey:handoff.handoffKey,
+    });
+    if(!request&&initialBlackOpponentHandoffKeyRef.current===handoff.handoffKey){
+      initialBlackOpponentHandoffKeyRef.current=null;
+    }
+  },[
+    activeTab,
+    trainingMode,
+    userExplicitlyEnteredContinuation,
+    userColor,
+    opponentColor,
+    game,
+    selectedOpeningAvailability?.runtimeAvailable,
+    selectedRuntimeTrainingLineSelection?.source,
+    selectedRuntimeTrainingLineSelection?.openingId,
+    canonicalSelectedRepertoireId,
+    selectedRuntimeLineKey,
+    selectedRuntimeLinePlaySequenceUci.join("|"),
+    repertoire.runtimeLoading,
+    runtimeTrainingSessionId,
+    rating.id,
+    fen,
+    moveHistory.length,
+    lastMove,
+    pendingOpponentRequest?.requestId,
+    continuationLegalMoveUcis.join("|"),
+  ]);
+  useEffect(()=>{
     if(activeTab!=="train"||bookComplete||isReviewingHistory)return;
     if(game.isGameOver()){
       if(trainingMode==="continuation")setContinuationAnalysisStatus("terminal");
@@ -4608,12 +4828,27 @@ export default function App(){
       setFeedback((endingInfo?.title??"Game over")+". Restart the opening to train again.");
       return;
     }
-    if(branchCompleteEligibleNow){
+    if(branchCompleteEligibleNow&&trainingMode!=="continuation"){
       if(pendingOpponentRequest) return;
       if(!isUserTurn) setTrainerPhase("ready_for_user");
       return;
     }
     if(!isUserTurn){
+      const waitingForInitialBlackRuntimeHandoff=Boolean(
+        trainingMode==="restricted"&&
+        userColor==="b"&&
+        !userExplicitlyEnteredContinuation&&
+        moveHistory.length===0&&
+        !lastMove&&
+        selectedOpeningAvailability?.runtimeAvailable&&
+        (
+          repertoire.runtimeLoading||
+          selectedRuntimeTrainingLineSelection?.source!=="local_runtime_package"||
+          selectedRuntimeTrainingLineSelection?.openingId!==canonicalSelectedRepertoireId||
+          selectedRuntimeLinePlaySequenceUci.length===0
+        )
+      );
+      if(waitingForInitialBlackRuntimeHandoff)return;
       if(
         runtimeBookFrameShouldQuery &&
         runtimeBookFrameQuery.status!=="ready" &&
@@ -4626,7 +4861,7 @@ export default function App(){
       return;
     }
     if(pendingOpponentRequest) clearPendingOpponentReplyRequest({clearStaleIssue:true});
-  },[activeTab,fen,bookComplete,isUserTurn,isReviewingHistory,canonicalSelectedRepertoireId,trainingMode,ratingFilter,game,endingInfo?.title,trainerPhase,pendingOpponentRequest?.requestId,branchCompleteEligibleNow,runtimeBookFrameShouldQuery,runtimeBookFrameQuery.status]);
+  },[activeTab,fen,bookComplete,isUserTurn,isReviewingHistory,canonicalSelectedRepertoireId,trainingMode,ratingFilter,game,endingInfo?.title,trainerPhase,pendingOpponentRequest?.requestId,branchCompleteEligibleNow,runtimeBookFrameShouldQuery,runtimeBookFrameQuery.status,userColor,userExplicitlyEnteredContinuation,moveHistory.length,lastMove,selectedOpeningAvailability?.runtimeAvailable,repertoire.runtimeLoading,selectedRuntimeTrainingLineSelection?.source,selectedRuntimeTrainingLineSelection?.openingId,selectedRuntimeLinePlaySequenceUci.length]);
   async function loadExplorer(positionFen:string){
     const cacheKey=`${normalizeFen(positionFen)}|${ratingFilter}|${speedFilter}`;
     if(explorerCache.current[cacheKey]){
@@ -4778,6 +5013,7 @@ export default function App(){
     setMaiaApiRouteStatus("unknown");
     setMaiaTimeline([]);
     setBranchCompleteLatch({active:false,reason:null,fen4:null,lineId:null,ply:null,latchedAtFrameId:null});
+    initialBlackOpponentHandoffKeyRef.current=null;
     previousSelectedCandidateUciRef.current=null;
     candidateSyncDebugRef.current={
       currentSelectedCandidateUci:null,
@@ -4838,7 +5074,39 @@ export default function App(){
     let source="";
     let continuationPolicyDecision:ReturnType<typeof selectContinuedPlayMove>|null=null;
     if(mode==="restricted"){
-      if(!currentOpponentBookOptions.length){
+      const initialRestrictedOpponentMoveUci=request.initialRestrictedOpponentMoveUci?.trim().toLowerCase()??null;
+      if(initialRestrictedOpponentMoveUci){
+        const applied=applyUci(current.fen(),initialRestrictedOpponentMoveUci);
+        if(!applied||applied.color!==opponentColor){
+          clearPendingOpponentReplyRequest({clearStaleIssue:true});
+          pushRuntimeCriticalIssue("restricted_initial_black_opponent_handoff_illegal");
+          setTrainerPhase("error");
+          setFeedback("The selected runtime line's first opponent move could not be applied in the current position.");
+          setBrain(p=>({...p,book:"complete",source:"restricted_initial_black_handoff_apply_failed",lichess:"ready"}));
+          return;
+        }
+        clearPendingOpponentReplyRequest({clearStaleIssue:true});
+        chosen={san:applied.san,uci:applied.uci,fen:applied.fen};
+        source="Selected runtime line initial reply";
+        variationDebug={
+          ...variationDebug,
+          fallbackUsed:false,
+          opponentVariationApplied:true,
+          opponentVariationReason:"selected_runtime_line_initial_reply",
+          selectedOpponentBranchKey:`${positionKey}::${applied.uci}`,
+          candidateOpponentBranches:[{
+            branchKey:`${positionKey}::${applied.uci}`,
+            uci:applied.uci,
+            san:applied.san,
+            baseWeight:1,
+            adjustedWeight:1,
+            source:"selected_runtime_line",
+            safetyStatus:"runtime_line",
+            selectionScore:1,
+          }],
+          blockedThirdRepeatBranches:[],
+        };
+      }else if(!currentOpponentBookOptions.length){
         const runtimeBookMatchesFrame=runtimeBookFrameQuery.status==="ready"&&runtimeBookFrameQuery.openingId===runtimeOpeningIdForFrame&&runtimeBookFrameQuery.playKeyBefore===runtimePlayKeyBeforeForFrame;
         const runtimeBookRestrictedCandidates=runtimeBookMatchesFrame ? runtimeBookFrameQuery.candidates : [];
         const runtimeBookRestrictedTopCandidate=runtimeBookRestrictedCandidates.find((candidate)=>continuationLegalMoveUcis.includes(candidate.uci))??null;
@@ -4939,10 +5207,7 @@ export default function App(){
       const legalMovesVerbose=current.moves({verbose:true}) as any[];
       const legalMovesUci=legalMovesVerbose.map((move)=>moveToUci(move));
       const currentFen4=normalizeFen(current.fen());
-      const maiaSkill=resolveMaiaSkillLevel({
-        appDifficultyLevel:rating.label,
-        continuationDifficulty:rating.target,
-      });
+      const maiaSkill=rating.maiaSkill;
       const defaultMaiaStatus=classifyMaiaProviderStatus({isAvailable:maiaOpponentProvider.isAvailable()});
       const maiaGate=buildMaiaOpponentReplyDecision({
         trainingMode:"continuation",
@@ -4953,7 +5218,7 @@ export default function App(){
         continuationAnalysisStatus,
         continuationRuntimeStatus:continuationRuntimeState.status,
         selectedLineExhausted:Boolean(branchCompleteContract.selectedLineExhausted),
-        hasUserContinuationMove:Boolean(lastContinuationUserMoveRating?.moveUci),
+        hasUserContinuationMove:Boolean(lastContinuationUserMoveRating?.moveUci)||Boolean(trainingMode==="continuation"&&userExplicitlyEnteredContinuation&&current.turn()===opponentColor),
         terminalPosition:current.isGameOver()||legalMovesUci.length===0,
         legalMovesCount:legalMovesUci.length,
         providerStatus:defaultMaiaStatus,
@@ -5020,6 +5285,8 @@ export default function App(){
           maxCandidates:5,
           timeoutMs:MAIA_OPPONENT_TIMEOUT_MS,
           continuationSessionId:continuationSessionId ?? selectedRepertoireId ?? null,
+          ratingBandId:rating.id,
+          requestedRating:rating.maiaRating,
         };
         const maiaTimedResult=await withMaiaTimeout<MaiaOpponentReplyResult>(
           maiaOpponentProvider.getOpponentReplies(requestPayload),
@@ -5365,6 +5632,8 @@ export default function App(){
     const nextPhase:OverlayPhase=next.isGameOver()?"terminal":(next.turn()===userColor?"ready_for_user":"opponent_selecting");
     commitRuntimeFrame({nextFen:chosen.fen,nextPhase,recordHistory:true,clearPendingOpponentRequest:true});
     clearRuntimeCriticalIssue("stale_opponent_reply_commit");
+    clearRuntimeCriticalIssue("restricted_opponent_reply_missing_runtime_authority");
+    clearRuntimeCriticalIssue("restricted_initial_black_opponent_handoff_illegal");
     setLastMove(chosen.uci);setLastMoveSan(chosen.san);setLastMoveColor(opponentColor);setMoveHistory(prev=>[...prev,chosen.san]);setSelectedSquare(null);setShowAnswer(false);setOpponentCue(boardSettings.showOpponentCue?{expiresAt:Date.now()+2500,title:`Opponent: ${chosen.san}`,message:"Brief opponent cue. Your selected user-side view stays visible after this fades.",lines:[{from:chosen.uci.slice(0,2),to:chosen.uci.slice(2,4),kind:"opponent",label:chosen.san}],cues:[{square:chosen.uci.slice(2,4),kind:"opponent"}],committed:true,fen:normalizeFen(chosen.fen)}:null);setFeedback(`Opponent played ${chosen.san}. Source: ${source}. ${variationNote}`);setBrain(p=>({...p,source,lichess:source.includes("Lichess")?"active":p.lichess,note:variationNote}))
   }
   function handleTrainerViewChange(nextTrainerView:TrainerView){
@@ -5714,7 +5983,7 @@ export default function App(){
       runtimeBookStatus:null,
     });
     const nextBranchCompleteEligible=Boolean(nextBranchCompleteContract.branchCompleteEligible&&nextTerminalProof.proven);
-    const needsOpponentReply=!nextGame.isGameOver()&&nextGame.turn()!==userColor&&!nextBranchCompleteEligible;
+    const needsOpponentReply=shouldScheduleContinuationOpponentReply({trainingMode,gameOver:nextGame.isGameOver(),turn:nextGame.turn() as ChessColor,userColor,nextBranchCompleteEligible});
     commitRuntimeFrame({
       nextFen,
       nextPhase:nextGame.isGameOver()?"terminal":(needsOpponentReply?"opponent_selecting":"ready_for_user"),
@@ -5830,10 +6099,15 @@ export default function App(){
     return [primary];
   },[v28VisibleSurface,instructionTarget?.uci,instructionTarget?.from,instructionTarget?.to,instructionTarget?.san,rawBoardLines]);
   const suppressPlainPreTargetHighlights = v28VisibleSurface?.mode === "plain_before_show_more";
-  if(!instructionTarget?.uci || suppressPlainPreTargetHighlights){
+  if(suppressPlainPreTargetHighlights || (!instructionTarget?.uci && !selectedSquare && selectedLegalMoves.length===0)){
     for(const square of Object.keys(squareStyles))delete squareStyles[square];
   }else if(trainerPhase==="ready_for_user"&&isUserTurn){
-    const allowedSquares=new Set([instructionTarget.from,instructionTarget.to]);
+    const allowedSquares=buildTrainingBoardVisibilitySquares({
+      instructionTargetFrom: instructionTarget?.from ?? null,
+      instructionTargetTo: instructionTarget?.to ?? null,
+      selectedSquare,
+      selectedLegalMoveSquares: selectedLegalMoves.map((move)=>move.to),
+    });
     for(const square of Object.keys(squareStyles)){
       if(!allowedSquares.has(square))delete squareStyles[square];
     }
@@ -6164,94 +6438,6 @@ export default function App(){
     ? promotionDebugActive.acceptedPromotionUci??instructionTarget?.uci??null
     : instructionTarget?.uci??null;
   const promotionAuthorityTargetUci=expectedUserOptions[0]?.uci??instructionTarget?.uci??null;
-  const trainerFrameResolution=buildTrainerFrameResolution({
-    trainerFrameId,
-    trainerPhase,
-    trainerView,
-    trainingMode,
-    isUserTurn,
-    selectedOpeningId: canonicalSelectedRepertoireId,
-    selectedRepertoireId,
-    selectedOpeningRuntimeAvailable: selectedOpeningAvailability?.runtimeAvailable ?? null,
-    runtimeAvailable: selectedOpeningAvailability?.runtimeAvailable ?? false,
-    runtimeOpeningId: runtimeOpeningIdForFrame ?? null,
-    runtimeBookOpeningId: runtimeBookFrameQuery.openingId ?? runtimeOpeningIdForFrame ?? null,
-    instructionTargetUci: instructionTarget?.uci ?? null,
-    instructionTargetSan: instructionTarget?.san ?? null,
-    instructionTargetPieceType: instructionTarget?.pieceType ?? null,
-    coachMoveUci: (displayedCoachDecision?.debug as any)?.coachMoveUci ?? instructionTarget?.uci ?? null,
-    coachPieceType: (displayedCoachDecision?.debug as any)?.coachPieceType ?? instructionTarget?.pieceType ?? null,
-    acceptedTargetUci,
-    pendingPromotion,
-    promotionPickerRendered: Boolean(pendingPromotion),
-    promotionOptions: pendingPromotion?.legalPromotionUcis ?? [],
-    selectedPromotionPiece: promotionDebugActive?.selectedPromotionPiece ?? null,
-    attemptedPromotionUci: promotionDebugActive?.attemptedPromotionUci ?? null,
-    acceptedPromotionUci: promotionDebugActive?.acceptedPromotionUci ?? null,
-    promotionAuthorityMatched: promotionDebugActive?.promotionAuthorityMatched ?? null,
-    promotionAuthorityMismatchReason: promotionDebugActive?.promotionAuthorityMismatchReason ?? null,
-    promotionAuthorityTargetUci,
-    selectedLineCompleteConfirmed,
-    exactNodeHasChildren: selectedLineExactNodeHasChildren,
-    hasNextOpponentMove: hasNextOpponentMoveInSelectedLine,
-    hasNextUserMove: hasNextUserMoveInSelectedLine,
-    validBranchCompleteLatch: Boolean(branchCompleteLatch.active && branchCompleteLatch.lineId === selectedRuntimeLineId),
-    selectedRuntimeLinePlyLength,
-    selectedRuntimeLineCurrentPly,
-    selectedRuntimeLineExhausted,
-    terminalProofLineAuthority: stage2OpeningDepthReached ? "actual_runtime_branch_or_depth" : (selectedRuntimeTrainingLineSelection?.selectedLineKey ? "selected_runtime_line_play_sequence_uci" : "expected_move_resolution"),
-    terminalProofBlockedReason: stage2TerminalProof.blockedReasons[0] ?? null,
-    afterFinalUserMove: !isUserTurn && lastMoveColor === userColor,
-    runtimeBookBookExhausted: runtimeBookFrameQuery.bookExhausted,
-    runtimeBookCandidateCount: runtimeBookFrameQuery.candidates.length,
-    runtimeBookStatus: runtimeBookFrameQuery.status,
-    visibleTeachingSurface,
-    visibleSurfaceOwner: visibleTeachingSurface?.owner ?? null,
-    visibleSurfaceMode: v28VisibleSurface?.mode ?? visibleTeachingSurface?.mode ?? null,
-    displayedCoachDecision,
-    actualCoachCardTitle: surfaceCoachCardDecision?.title ?? null,
-    actualCoachCardBody: surfaceCoachCardDecision?.body ?? null,
-    actualCoachCardButtons: (surfaceCoachCardDecision?.buttons ?? []).map(String),
-    actualCoachCardSource: surfaceCoachCardDecision ? "surfaceCoachCardDecision" : null,
-    actualActionSource: v28SurfaceActive ? "visible_surface_v28" : "legacy_or_presentation",
-    actualVisualSource: v28SurfaceActive ? "visible_surface_v28" : String(presentationFrame?.visual?.source ?? "none"),
-    renderedQualityScore: renderedCoachQualityForDebug?.qualityScore ?? null,
-    renderedQualityScoreSource: renderedCoachQualityForDebug?.qualityScoreSource ?? null,
-    coachQuality: renderedCoachQualityForDebug,
-    visualRecipe,
-    visualRecipeMoveUci: visualRecipe?.moveUci ?? null,
-    visualRecipeMoveSan: visualRecipe?.moveSan ?? null,
-    visualRecipeTargetMatchesInstructionTarget: visualMoveUciForDebug ? visualMoveUciForDebug === instructionTarget?.uci : "unknown",
-    visualRecipeBlockedByTargetMismatch: Boolean(visualRecipeBlockedByTargetMismatch),
-    visualRecipeOverlay,
-    renderedVisualPrimitiveCount: boardLinesToRender.length,
-    surfaceVisualPrimitiveCount: (v28BoardVisualUiModel?.visualRecipes ?? []).length,
-    stage2ApprovedPacketMatched: stage2CoachingPacketResolution.kind === "approved_packet",
-    stage2ApprovedPacketKind: stage2CoachingPacketResolution.kind,
-    stage2ApprovedPacketId: stage2CoachingPacketResolution.kind === "approved_packet" ? stage2CoachingPacketResolution.packet.packetId : null,
-    stage2ApprovedPacketSourceBundle: stage2CoachingPacketResolution.kind === "approved_packet" ? stage2CoachingPacketResolution.packet.sourceCandidatePackages?.[0] ?? stage2CoachingPacketResolution.packet.sourceCandidatePackage ?? null : null,
-    stage2ApprovedPacketSourceFile: stage2CoachingPacketResolution.kind === "approved_packet" ? stage2CoachingPacketResolution.packet.sourceFile ?? null : null,
-    stage2ApprovedPacketSourceRuntimeMoveUci: stage2CoachingPacketResolution.kind === "approved_packet" ? stage2CoachingPacketResolution.packet.sourceRuntimeMoveUci ?? null : null,
-    stage2ApprovedPacketStatus: stage2CoachingPacketResolution.kind === "approved_packet" ? stage2CoachingPacketResolution.packet.status : null,
-    stage2ApprovedPacketApprovalReadiness: stage2CoachingPacketResolution.kind === "approved_packet" ? stage2CoachingPacketResolution.packet.approvalReadiness : null,
-    stage2ApprovedPacketMissReason:
-      stage2CoachingPacketResolution.kind === "approved_packet"
-        ? null
-        : stage2CoachingPacketResolution.kind === "safe_fallback"
-          ? "approved_packet_exact_match_not_found"
-          : stage2CoachingPacketResolution.reason,
-    stage2ApprovedPacketFallbackReason: null,
-    stage2ApprovedPacketVisualSource: v28SurfaceActive ? "visible_surface_v28" : String(presentationFrame?.visual?.source ?? "none"),
-    stage2CoachingPacketKind: stage2CoachingPacketResolution.kind,
-    stage2CoachingSafetyStatus: stage2CoachingPacketResolution.kind === "none" ? null : stage2CoachingPacketResolution.packet.safetyStatus,
-    stage2CoachingSurface: stage2CoachContext.surface,
-    stage2CoachingSourceFile: stage2CoachingPacketResolution.kind === "none" ? null : stage2CoachingPacketResolution.packet.sourceFile,
-    stage2CoachingRuntimeMatched: stage2CoachingPacketResolution.kind === "none" ? null : stage2CoachingPacketResolution.packet.runtimeReconciliation.status === "matched",
-    presentationFrame,
-    v28VisibleSurface,
-    expectedMoveUci: expectedUserOptions[0]?.uci ?? null,
-    expectedMoveSan: expectedUserOptions[0]?.san ?? null,
-  });
   const selectedContinuationCandidate=trainingMode==="continuation"&&currentSelectedCandidateUci?{uci:currentSelectedCandidateUci,san:currentSelectedCandidateSan??currentSelectedCandidateUci}:null;
   const lastMoveAttribution=attributeLastMove({lastMoveSan,lastMoveUci:lastMove,lastMoveColor,userColor});
   const legacyTrainingCardActuallyRendered=false;
@@ -6259,7 +6445,7 @@ export default function App(){
   const legacyMoveImpactActuallyRendered=false;
   const legacyNextTextActuallyRendered=false;
   const promotionPickerRendered=Boolean(pendingPromotion);
-  const diagnosticsSnapshot=blundrDebugEnabled?collectTrainerDebugSnapshot({
+  const diagnosticsSnapshot:TrainerDebugSnapshot=blundrDebugEnabled&&debugSnapshotCollector?debugSnapshotCollector({
     debugEnabled:blundrDebugEnabled,
     trainerFrameId,
     historyIndex,
@@ -6648,17 +6834,16 @@ export default function App(){
     visualRenderTimeline,
     plainLeakTimeline,
     maiaTimeline,
-    trainerFrameResolution,
-    actualCoachCardTitle: trainerFrameResolution.coachCard.finalRendered.title,
-    actualCoachCardBody: trainerFrameResolution.coachCard.finalRendered.body,
-    actualCoachCardButtons: trainerFrameResolution.coachCard.finalRendered.buttons,
-    actualCoachCardSource: trainerFrameResolution.coachCard.finalRendered.source ?? null,
-    actualActionSource: trainerFrameResolution.visual.renderedSource ?? (v28SurfaceActive ? "visible_surface_v28" : "legacy_or_presentation"),
-    actualVisualSource: trainerFrameResolution.visual.renderedSource ?? (v28SurfaceActive ? "visible_surface_v28" : String(presentationFrame?.visual?.source ?? "none")),
-    renderedActionIds: trainerFrameResolution.coachCard.finalRendered.buttons,
+    actualCoachCardTitle: surfaceCoachCardDecision?.title ?? null,
+    actualCoachCardBody: surfaceCoachCardDecision?.body ?? null,
+    actualCoachCardButtons: (surfaceCoachCardDecision?.buttons ?? []).map(String),
+    actualCoachCardSource: surfaceCoachCardDecision ? "surfaceCoachCardDecision" : null,
+    actualActionSource: v28SurfaceActive ? "visible_surface_v28" : "legacy_or_presentation",
+    actualVisualSource: v28SurfaceActive ? "visible_surface_v28" : String(presentationFrame?.visual?.source ?? "none"),
+    renderedActionIds: (surfaceCoachCardDecision?.buttons ?? []).map(String),
     surfaceActionIds: (v28CoachUiModel?.actions ?? []).filter((action)=>action.visible).map((action)=>String(action.kind)),
-    renderedVisualPrimitiveCount: trainerFrameResolution.visual.renderedPrimitiveCount,
-    surfaceVisualPrimitiveCount: trainerFrameResolution.visual.surfacePrimitiveCount,
+    renderedVisualPrimitiveCount: boardLinesToRender.length,
+    surfaceVisualPrimitiveCount: (v28BoardVisualUiModel?.visualRecipes ?? []).length,
     orchestrateTeachingVisibleBypass: Boolean(
       v28SurfaceActive &&
       teachingOrchestration &&
@@ -6700,7 +6885,17 @@ export default function App(){
     surfaceSafetyBlocked: visibleTeachingSurface?.safety?.blocked ?? false,
     surfaceFourTargetMismatch: visibleTeachingSurface?.debug?.fourTargetMismatch ?? false,
     surfaceTwoPieceMismatch: visibleTeachingSurface?.debug?.twoPieceTypeMismatch ?? false,
-  }):null;
+  }):buildDiagnosticsPlaceholder({
+    debugEnabled: blundrDebugEnabled,
+    trainerFrameId,
+    trainerPhase,
+    trainerView,
+    trainingMode,
+    isUserTurn,
+    criticalIssues: runtimeCriticalIssues,
+    warnings: [],
+    eventLog: debugEventLog,
+  });
   return <main className="min-h-screen bg-[#f7f7f4] text-stone-950"><div className="mx-auto flex min-h-screen max-w-md flex-col px-4 pb-24 pt-5">
     {activeTab==="home"&&<section className="space-y-6"><header className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-green-700 text-white shadow-sm"><Beaker size={20}/></div><div><h1 className="text-2xl font-bold tracking-tight">Blundr</h1><p className="text-sm text-stone-500">Visual opening training with a controlled trainer.</p></div></div><button onClick={()=>setShowSettings(true)} className="rounded-2xl bg-white p-3 shadow-sm"><Settings className="text-stone-500" size={20}/></button></header><div className="grid grid-cols-2 gap-3"><MetricCard label="Accuracy" value={`${accuracy}%`} sub="all time" icon={<Trophy size={19}/>}/><MetricCard label="Streak" value={String(progress.streak)} sub="correct" icon={<Flame size={19}/>}/><MetricCard label="Review" value={String(mistakes.length)} sub="mistakes" icon={<XCircle size={19}/>} warning/><MetricCard label="Runtime openings" value={String(STAGE2_OPENING_AVAILABILITY_MATRIX.length)} sub="local crawled" icon={<BookOpen size={19}/>}/></div><div className="rounded-3xl bg-stone-900 p-4 text-white shadow-sm"><div className="flex items-center gap-2 text-sm font-bold text-green-300"><Cloud size={17}/> v2.7.33</div><p className="mt-2 text-sm leading-6 text-stone-300">Training now uses rule-only visual cues by default. Blundr Brain is reserved for manual reveal/debug, so normal practice stays fast, deterministic, and inexpensive.</p></div><div className="space-y-3">{repertoires.slice(0,5).map(r=><button key={r.id} onClick={()=>selectRepertoire(r.id)} className="flex w-full items-center gap-3 rounded-3xl border border-stone-200 bg-white p-3 text-left shadow-sm"><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {countPositions(r)} positions</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>)}</div></section>}
     {activeTab==="repertoire"&&<section className="space-y-5"><header className="flex items-start justify-between gap-3"><div><h1 className="text-2xl font-bold tracking-tight">Repertoires</h1><p className="text-sm text-stone-500">Reliable openings included in the app.</p></div><button onClick={()=>setShowAddLine(true)} className="rounded-2xl bg-green-700 px-4 py-2 text-sm font-black text-white">Add</button></header><div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-sm"><Search size={18} className="text-stone-400"/><span className="text-sm text-stone-400">Search repertoires</span></div><div className="space-y-3">{repertoires.map(r=><button key={r.id} onClick={()=>selectRepertoire(r.id)} className={classNames("flex w-full items-center gap-3 rounded-3xl border bg-white p-3 text-left shadow-sm",r.id===canonicalSelectedRepertoireId?"border-green-700":"border-stone-200")}><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {countPositions(r)} positions • {r.color}</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>)}</div><div className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm"><div className="mb-3 flex items-center justify-between gap-3"><div><h2 className="text-lg font-black tracking-tight">Runtime catalog</h2><p className="text-sm text-stone-500">Local crawled runtime package training lines for all 21 openings.</p></div><div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-600">{STAGE2_OPENING_AVAILABILITY_MATRIX.length} visible</div></div><div className="grid gap-2">{STAGE2_OPENING_AVAILABILITY_MATRIX.map((opening)=>{const trainable=repertoires.some((rep)=>rep.id===opening.openingId);return <button key={opening.openingId} onClick={()=>selectRepertoire(opening.openingId)} className={classNames("flex items-center justify-between gap-3 rounded-2xl border p-3 text-left shadow-sm",trainable?"border-green-200 bg-green-50":"border-stone-200 bg-stone-50 opacity-90",opening.openingId===canonicalSelectedRepertoireId?"ring-2 ring-green-700/30":"")}><div className="min-w-0"><div className="font-bold">{opening.displayName}</div><div className="text-xs text-stone-500">{opening.openingId} • {opening.learnerPerspective} • {opening.runtimeNodeCount.toLocaleString()} nodes • {opening.runtimeCandidateMoveCount.toLocaleString()} moves</div></div><div className="text-right text-xs font-black text-stone-500"><div>{opening.contentStatus}</div><div>{opening.qaStatus}</div></div></button>})}</div></div></section>}
@@ -6708,7 +6903,7 @@ export default function App(){
       <header className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold tracking-tight">{repertoire.name}</h1>
-          <p className="text-sm font-semibold text-green-700">{trainingMode==="restricted"?"Restricted trainer":"Continuation"} • {rating.target}{isReviewingHistory?" • reviewing":""}</p>
+          <p className="text-sm font-semibold text-green-700">{trainingMode==="restricted"?`Restricted trainer • ${rating.label} band`:"Continuation"} • {rating.target}{isReviewingHistory?" • reviewing":""}</p>
         </div>
         <div className="flex gap-2">
           <button onClick={()=>setShowSettings(true)} className="rounded-2xl bg-white p-3 shadow-sm"><Settings size={20}/></button>
@@ -6803,7 +6998,7 @@ export default function App(){
     </section>}
     {activeTab==="review"&&<section className="space-y-5"><header><h1 className="text-2xl font-bold tracking-tight">Review Mistakes</h1><p className="text-sm text-stone-500">Wrong opening moves are saved here.</p></header>{mistakes.length===0?<div className="rounded-3xl bg-white p-6 text-center shadow-sm"><CheckCircle2 className="mx-auto mb-3 text-green-700" size={40}/><h2 className="text-lg font-bold">No mistakes due</h2><p className="mt-2 text-sm text-stone-500">Missed training positions will appear here.</p></div>:<div className="space-y-3">{mistakes.map(m=><button key={m.fen} onClick={()=>practiceMistake(m)} className="w-full rounded-3xl border border-stone-200 bg-white p-4 text-left shadow-sm"><div className="flex items-start justify-between gap-3"><div><div className="font-bold">{m.opening}</div><div className="mt-1 text-sm text-stone-500">Expected: <span className="font-bold text-green-700">{m.expectedMove}</span></div><div className="text-sm text-stone-500">You played: {m.playedMove}</div></div><span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">Missed {m.count}x</span></div></button>)}</div>}</section>}
     {activeTab==="progress"&&<section className="space-y-5"><header><h1 className="text-2xl font-bold tracking-tight">Progress</h1><p className="text-sm text-stone-500">Your training snapshot.</p></header><div className="grid grid-cols-3 gap-2"><MetricCard compact label="Accuracy" value={`${accuracy}%`} sub="overall" icon={<Target size={18}/>}/><MetricCard compact label="Trained" value={String(Object.keys(progress.trainedPositions).length)} sub="positions" icon={<BookOpen size={18}/>}/><MetricCard compact label="Review" value={String(mistakes.length)} sub="due" icon={<XCircle size={18}/>} warning/></div></section>}
-  </div>{showAddLine&&<div className="fixed inset-0 z-[60] flex items-end bg-black/35 p-4"><div className="mx-auto w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><h2 className="text-xl font-black">Add Custom Line</h2><button onClick={()=>setShowAddLine(false)} className="rounded-full bg-stone-100 p-2"><X size={18}/></button></div><label className="text-sm font-bold text-stone-700">Name</label><input value={newRepName} onChange={e=>setNewRepName(e.target.value)} className="mt-1 w-full rounded-2xl border border-stone-200 px-4 py-3 outline-none focus:border-green-700"/><label className="mt-4 block text-sm font-bold text-stone-700">Train as</label><div className="mt-1 grid grid-cols-2 rounded-2xl bg-stone-200 p-1 text-sm font-semibold"><button onClick={()=>setNewRepColor("white")} className={classNames("rounded-xl py-2",newRepColor==="white"?"bg-white text-green-700 shadow-sm":"text-stone-500")}>White</button><button onClick={()=>setNewRepColor("black")} className={classNames("rounded-xl py-2",newRepColor==="black"?"bg-white text-green-700 shadow-sm":"text-stone-500")}>Black</button></div><label className="mt-4 block text-sm font-bold text-stone-700">Line in SAN</label><textarea value={newLineText} onChange={e=>setNewLineText(e.target.value)} rows={5} className="mt-1 w-full rounded-2xl border border-stone-200 px-4 py-3 outline-none focus:border-green-700"/><button onClick={createCustomRepertoire} className="mt-4 w-full rounded-2xl bg-green-700 px-4 py-4 font-black text-white shadow-sm">Save and Train</button></div></div>}{showSettings&&<SettingsPanel settings={boardSettings} setSettings={setBoardSettings} onClose={()=>setShowSettings(false)}/>}<BottomNav activeTab={activeTab} setActiveTab={setActiveTab}/><BlundrDiagnosticsPanel snapshot={diagnosticsSnapshot} enabled={blundrDebugEnabled} onEnabledChange={setBlundrDebugEnabled} onClearEvents={()=>setDebugEventLog([])}/></main>
+  </div>{showAddLine&&<div className="fixed inset-0 z-[60] flex items-end bg-black/35 p-4"><div className="mx-auto w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><h2 className="text-xl font-black">Add Custom Line</h2><button onClick={()=>setShowAddLine(false)} className="rounded-full bg-stone-100 p-2"><X size={18}/></button></div><label className="text-sm font-bold text-stone-700">Name</label><input value={newRepName} onChange={e=>setNewRepName(e.target.value)} className="mt-1 w-full rounded-2xl border border-stone-200 px-4 py-3 outline-none focus:border-green-700"/><label className="mt-4 block text-sm font-bold text-stone-700">Train as</label><div className="mt-1 grid grid-cols-2 rounded-2xl bg-stone-200 p-1 text-sm font-semibold"><button onClick={()=>setNewRepColor("white")} className={classNames("rounded-xl py-2",newRepColor==="white"?"bg-white text-green-700 shadow-sm":"text-stone-500")}>White</button><button onClick={()=>setNewRepColor("black")} className={classNames("rounded-xl py-2",newRepColor==="black"?"bg-white text-green-700 shadow-sm":"text-stone-500")}>Black</button></div><label className="mt-4 block text-sm font-bold text-stone-700">Line in SAN</label><textarea value={newLineText} onChange={e=>setNewLineText(e.target.value)} rows={5} className="mt-1 w-full rounded-2xl border border-stone-200 px-4 py-3 outline-none focus:border-green-700"/><button onClick={createCustomRepertoire} className="mt-4 w-full rounded-2xl bg-green-700 px-4 py-4 font-black text-white shadow-sm">Save and Train</button></div></div>}{showSettings&&<SettingsPanel settings={boardSettings} setSettings={setBoardSettings} rating={rating} ratingBands={RATING_PRESETS} onRatingFilterChange={setRatingFilter} onClose={()=>setShowSettings(false)}/>}<BottomNav activeTab={activeTab} setActiveTab={setActiveTab}/>{blundrDebugEnabled&&<BlundrDiagnosticsPanel snapshot={diagnosticsSnapshot} enabled={blundrDebugEnabled} onEnabledChange={setBlundrDebugEnabled} onClearEvents={()=>setDebugEventLog([])}/>}</main>
 }
 
 function boardThemeClasses(theme:BoardTheme,isDark:boolean){
@@ -6920,12 +7115,12 @@ function BoardLines({lines,centerFor,transient}:{lines:ActiveLine[];centerFor:(s
 function HistoryControls({index,total,onBack,onForward}:{index:number;total:number;onBack:()=>void;onForward:()=>void}){return <div className="mt-3 flex items-center justify-between rounded-2xl bg-stone-50 px-3 py-2 text-xs font-black text-stone-500"><button disabled={index<=0} onClick={onBack} className="rounded-full bg-white px-3 py-2 text-stone-700 shadow-sm disabled:opacity-30">← Back</button><span>{total<=1?"Start position":`Move review ${index}/${total-1}`}</span><button disabled={index>=total-1} onClick={onForward} className="rounded-full bg-white px-3 py-2 text-stone-700 shadow-sm disabled:opacity-30">Forward →</button></div>}
 function GameEndCard({title,message,onRestart}:{title:string;message:string;onRestart:()=>void}){return <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-center shadow-sm"><div className="text-xs font-black uppercase tracking-wide text-amber-700">Game concluded</div><h2 className="mt-1 text-2xl font-black text-amber-950">{title}</h2><p className="mt-2 text-sm leading-6 text-amber-800">{message}</p><button onClick={onRestart} className="mt-4 w-full rounded-2xl bg-amber-600 px-4 py-3 font-black text-white shadow-sm">Restart</button></div>}
 
-function SettingsPanel({settings,setSettings,onClose}:{settings:BoardSettings;setSettings:(s:BoardSettings)=>void;onClose:()=>void}){
+function SettingsPanel({settings,setSettings,rating,ratingBands,onRatingFilterChange,onClose}:{settings:BoardSettings;setSettings:(s:BoardSettings)=>void;rating:Stage2RatingBand;ratingBands:readonly Stage2RatingBand[];onRatingFilterChange:(value:string)=>void;onClose:()=>void}){
   const update=<K extends keyof BoardSettings>(key:K,value:BoardSettings[K])=>setSettings({...settings,[key]:value});
   const toggle=(key:keyof Pick<BoardSettings,"showAttack"|"showDefense"|"showPlan"|"showMoveDots"|"showEvalBar"|"showCaptured"|"showOpponentCue">)=>setSettings({...settings,[key]:!settings[key]});
   const OptionButton=({active,label,onClick}:{active:boolean;label:string;onClick:()=>void})=><button onClick={onClick} className={classNames("rounded-2xl px-3 py-2 text-xs font-black",active?"bg-green-700 text-white":"bg-stone-100 text-stone-600")}>{label}</button>;
   const Toggle=({id,label}:{id:keyof Pick<BoardSettings,"showAttack"|"showDefense"|"showPlan"|"showMoveDots"|"showEvalBar"|"showCaptured"|"showOpponentCue">;label:string})=><button onClick={()=>toggle(id)} className={classNames("flex items-center justify-between rounded-2xl px-3 py-3 text-sm font-black",settings[id]?"bg-green-50 text-green-800":"bg-stone-100 text-stone-500")}><span>{label}</span><span>{settings[id]?"ON":"OFF"}</span></button>;
-  return <div className="fixed inset-0 z-[70] flex items-end bg-black/35 p-4"><div className="mx-auto max-h-[86vh] w-full max-w-md overflow-auto rounded-3xl bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><div><h2 className="text-xl font-black">Board Settings</h2><p className="text-xs font-semibold text-stone-500">Customize board, pieces, and active displays.</p></div><button onClick={onClose} className="rounded-full bg-stone-100 p-2"><X size={18}/></button></div><div className="space-y-5"><div><div className="mb-2 text-sm font-black">Board</div><div className="grid grid-cols-4 gap-2"><OptionButton active={settings.boardTheme==="classic"} label="Classic" onClick={()=>update("boardTheme","classic")}/><OptionButton active={settings.boardTheme==="slate"} label="Slate" onClick={()=>update("boardTheme","slate")}/><OptionButton active={settings.boardTheme==="blue"} label="Blue" onClick={()=>update("boardTheme","blue")}/><OptionButton active={settings.boardTheme==="walnut"} label="Walnut" onClick={()=>update("boardTheme","walnut")}/></div></div><div><div className="mb-2 text-sm font-black">Pieces</div><div className="grid grid-cols-3 gap-2"><OptionButton active={settings.pieceStyle==="unicode"} label="Classic" onClick={()=>update("pieceStyle","unicode")}/><OptionButton active={settings.pieceStyle==="neo"} label="Neo" onClick={()=>update("pieceStyle","neo")}/><OptionButton active={settings.pieceStyle==="letters"} label="Letters" onClick={()=>update("pieceStyle","letters")}/></div></div><div><div className="mb-2 text-sm font-black">Active displays</div><div className="grid grid-cols-2 gap-2"><Toggle id="showMoveDots" label="Legal move dots"/><Toggle id="showEvalBar" label="Advantage bar"/><Toggle id="showCaptured" label="Captured pieces"/><Toggle id="showOpponentCue" label="Show Last Opponent Move"/></div></div><button onClick={onClose} className="w-full rounded-2xl bg-stone-950 px-4 py-4 font-black text-white">Done</button></div></div></div>
+  return <div className="fixed inset-0 z-[70] flex items-end bg-black/35 p-4"><div className="mx-auto max-h-[86vh] w-full max-w-md overflow-auto rounded-3xl bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><div><h2 className="text-xl font-black">Board Settings</h2><p className="text-xs font-semibold text-stone-500">Customize board, pieces, and active displays.</p></div><button onClick={onClose} className="rounded-full bg-stone-100 p-2"><X size={18}/></button></div><div className="space-y-5"><div><div className="mb-2 text-sm font-black">Trainer rating band</div><select value={rating.value} onChange={(event)=>onRatingFilterChange(event.target.value)} className="w-full rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-black text-stone-800 outline-none focus:border-green-700">{ratingBands.map((band)=><option key={band.id} value={band.value}>{band.label} — {band.target}</option>)}</select><p className="mt-2 text-xs font-semibold leading-5 text-stone-500">Restricted Trainer uses this local-package rating band for line selection. Maia continuation maps to {rating.maiaSkill} / ~{rating.maiaRating}.</p></div><div><div className="mb-2 text-sm font-black">Board</div><div className="grid grid-cols-4 gap-2"><OptionButton active={settings.boardTheme==="classic"} label="Classic" onClick={()=>update("boardTheme","classic")}/><OptionButton active={settings.boardTheme==="slate"} label="Slate" onClick={()=>update("boardTheme","slate")}/><OptionButton active={settings.boardTheme==="blue"} label="Blue" onClick={()=>update("boardTheme","blue")}/><OptionButton active={settings.boardTheme==="walnut"} label="Walnut" onClick={()=>update("boardTheme","walnut")}/></div></div><div><div className="mb-2 text-sm font-black">Pieces</div><div className="grid grid-cols-3 gap-2"><OptionButton active={settings.pieceStyle==="unicode"} label="Classic" onClick={()=>update("pieceStyle","unicode")}/><OptionButton active={settings.pieceStyle==="neo"} label="Neo" onClick={()=>update("pieceStyle","neo")}/><OptionButton active={settings.pieceStyle==="letters"} label="Letters" onClick={()=>update("pieceStyle","letters")}/></div></div><div><div className="mb-2 text-sm font-black">Active displays</div><div className="grid grid-cols-2 gap-2"><Toggle id="showMoveDots" label="Legal move dots"/><Toggle id="showEvalBar" label="Advantage bar"/><Toggle id="showCaptured" label="Captured pieces"/><Toggle id="showOpponentCue" label="Show Last Opponent Move"/></div></div><button onClick={onClose} className="w-full rounded-2xl bg-stone-950 px-4 py-4 font-black text-white">Done</button></div></div></div>
 }
 
 function PipelineStatus({step,note}:{step:ThinkingStep;note:string}){const labels:Record<ThinkingStep,string>={idle:"Ready",facts:"Analyzing",engine:"Engine",brain:"Blundr Brain","gpt-receive":"Receiving","visual-update":"Updating",ready:"Ready",error:"Error"};const tone=step==="error"?"bg-red-50 text-red-700 ring-red-100":step==="ready"||step==="idle"?"bg-green-50 text-green-700 ring-green-100":"bg-blue-50 text-blue-700 ring-blue-100";return <div className={classNames("max-w-[190px] rounded-2xl px-3 py-2 text-right text-[11px] font-black leading-4 ring-1",tone)} title={note}><div>{labels[step]}</div><div className="truncate text-[10px] font-semibold opacity-75">{note}</div></div>}

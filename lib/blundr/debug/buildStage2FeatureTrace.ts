@@ -1244,7 +1244,7 @@ export function buildStage2FeatureTrace(input: FeatureTraceInput): Stage2Feature
   if (rankedOpportunities.length === 1 && rankedOpportunities[0]?.layer === "fallback") missingReasons.push("no_ranked_opportunities");
   if (!STAGE2_APPROVED_CONTENT_ENABLED) {
     missingReasons.push("approved_content_disabled");
-  } else if (stage2Resolution.kind !== "approved_packet") {
+  } else if (!approvedContentMatched && stage2Resolution.kind !== "approved_packet") {
     missingReasons.push("approved_content_not_matched");
   }
   if (visualRecipeResult.rendered !== true || visualRecipeResult.targetMatchesMoveUci !== true) missingReasons.push("visual_recipe_not_connected");
