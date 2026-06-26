@@ -2,45 +2,58 @@ node_modules/
 .next/
 .vercel/
 .vscode/
-*.zip
+.DS_Store
+
+# Environment files
 .env
 .env.local
-.DS_Store
+.env.*.local
+
+# TypeScript and package build artifacts
+*.tsbuildinfo
+*.tgz
+
+# Local Maia and engine assets. The app may use these on the server, but they
+# must not be committed or shipped to the browser.
 .maia/
+.maia/lc0
+.maia/*.tmp
 maia_weights/
 *.pb.gz
 *.onnx
 *.weights
 *.net
 
-# Block accidental heavyweight Stockfish artifacts
-
-# Blundr local/generated artifacts
+# Local/generated workspaces and scratch output
+vendor/
+artifacts/
+.tmp/
+tmp/
+checkpoint_artifacts/
 model/
 handoffs/
 generated_training_data/
+blundr-deploy-v*/
+blundr_takeover_*/
+blundr_*_bundle/
+
+# Diagnostics, review bundles, and performance audit output
+diagnostics/
+local-diagnostics/
+perf-diagnostics/
+perf-diagnostics-*/
+perf-*/
+*.diagnostics.json
+*.diagnostic.json
 *.jsonl
 *.zip
 REVIEW_*.txt
 REVIEW_*.patch
-blundr-deploy-v*/
 
-# Blundr local artifacts / generated bundles
-.tmp/
-checkpoint_artifacts/
-*.tgz
-*.zip
-*.tsbuildinfo
-blundr_takeover_*/
-blundr_*_bundle/
-
-# Local/generated artifacts
-.tmp/
-checkpoint_artifacts/
-*.tgz
-*.zip
-*.tsbuildinfo
-blundr_takeover_*/
-
-# TypeScript incremental build cache
-*.tsbuildinfo
+# Next.js panic logs and temporary root HTML captures
+next-panic-*.log
+next-panic-*
+blundr-root*.html
+blundr-debug*.html
+root*.html
+*.root.html
