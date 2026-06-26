@@ -1,0 +1,2 @@
+export const PROJECTIVE_TACTICS_ENABLED =
+  process.env.NEXT_PUBLIC_PROJECTIVE_TACTICS_ENABLED === "true";

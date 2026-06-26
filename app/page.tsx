@@ -23,6 +23,7 @@ import {
 import { adaptVisualRecipe } from "@/lib/blundr/visualRecipe/visualRecipeAdapter";
 import { compileVisualRecipe } from "@/lib/blundr/visualRecipe/visualRecipeCompiler";
 import { useVisualRecipePlayback } from "@/components/board/useVisualRecipePlayback";
+import { ProjectiveTacticalOverlay } from "@/components/board/ProjectiveTacticalOverlay";
 import { createLearningSessionId, recordLearningEvent } from "@/lib/blundr/learning/learningEvents";
 import type { LearningEvent } from "@/lib/blundr/learning/learningEvents";
 import { loadOpponentVariationMemory, recordOpponentChoice } from "@/lib/blundr/opponent/opponentVariationMemory";
@@ -51,6 +52,18 @@ import { buildVisibleTeachingSurface } from "@/lib/blundr/presentation/buildVisi
 import { buildLiveVisibleTeachingSurface } from "@/lib/blundr/presentation/buildLiveVisibleTeachingSurface";
 import { adaptVisibleSurfaceToBoardVisuals, adaptVisibleSurfaceToCoachUi } from "@/lib/blundr/presentation/uiSurfaceAdapter";
 import { buildTrainingBoardVisibilitySquares } from "@/lib/blundr/presentation/legalMoveDotVisibility";
+import {
+  DEFAULT_PROJECTIVE_TACTIC_DURATION_MS,
+  DEFAULT_PROJECTIVE_TACTIC_FADE_MS,
+  PROJECTIVE_TACTICS_ENABLED,
+  detectProjectiveTactics,
+  filterProjectiveTacticsForViewMode,
+  isStaleProjectiveTacticToken,
+  nextProjectiveTacticToken,
+  shouldClearProjectiveTacticsForBoardReset,
+  shouldClearProjectiveTacticsOnViewMode,
+  type ProjectiveTacticVisual,
+} from "@/lib/blundr/projectiveTactics";
 import { isV28VisibleSurfaceEnabled } from "@/lib/blundr/presentation/featureFlags";
 import { buildContinuationCandidateVisual } from "@/lib/blundr/visual/continuationCandidateVisual";
 import { buildOpeningTree } from "@/lib/blundr/openings/openingTree";
@@ -1279,6 +1292,8 @@ export default function App(){
   const [speedFilter]=useState("blitz,rapid");
   const [trainingMode,setTrainingMode]=useState<TrainingMode>("restricted");
   const [trainerView,setTrainerView]=useState<TrainerView>("assisted");
+  const [projectiveTacticVisuals,setProjectiveTacticVisuals]=useState<ProjectiveTacticVisual[]>([]);
+  const [projectiveTacticsFading,setProjectiveTacticsFading]=useState(false);
   const [bookComplete,setBookComplete]=useState(false);
   const [opponentCue,setOpponentCue]=useState<OpponentCue|null>(null);
   const [opponentVariationDebug,setOpponentVariationDebug]=useState<OpponentVariationDebug|null>(null);
@@ -1431,6 +1446,9 @@ export default function App(){
   const maiaOpponentRequestSeqRef=useRef(0);
   const maiaTimelineSeqRef=useRef(0);
   const pendingOpponentRequestRef=useRef<PendingOpponentRequest|null>(null);
+  const projectiveTacticTokenRef=useRef(0);
+  const projectiveTacticFadeTimeoutRef=useRef<number|null>(null);
+  const projectiveTacticClearTimeoutRef=useRef<number|null>(null);
   const runtimeRepertoireLoadSeqRef=useRef(0);
   const debugCollectorLoadStartedRef=useRef(false);
   const initialBlackOpponentHandoffKeyRef=useRef<string|null>(null);
@@ -1454,6 +1472,16 @@ export default function App(){
       });
     return()=>{cancelled=true};
   },[blundrDebugEnabled,debugSnapshotCollector]);
+  useEffect(()=>{
+    if(!PROJECTIVE_TACTICS_ENABLED)clearProjectiveTacticOverlay("feature_disabled");
+    return()=>clearProjectiveTacticOverlay("unmount");
+  },[]);
+  useEffect(()=>{
+    if(shouldClearProjectiveTacticsOnViewMode(trainerView))clearProjectiveTacticOverlay("view_mode_switch");
+  },[trainerView]);
+  useEffect(()=>{
+    clearProjectiveTacticOverlay("rating_band_switch");
+  },[ratingFilter]);
   const repertoires=useMemo(()=>{
     const merged=new Map<string,Repertoire>();
     for(const repertoire of OPENINGS) merged.set(repertoire.id,repertoire);
@@ -4066,6 +4094,11 @@ export default function App(){
 
   const isReviewingHistory=historyIndex<positionHistory.length-1;
   const selectedLegalMoves=selectedSquare&&boardSettings.showMoveDots&&isUserTurn&&!isReviewingHistory&&!game.isGameOver()?(game.moves({square:selectedSquare as any,verbose:true}) as any[]):[];
+  const filteredProjectiveTacticVisuals=useMemo(()=>filterProjectiveTacticsForViewMode({
+    enabled:PROJECTIVE_TACTICS_ENABLED,
+    viewMode:trainerView,
+    visuals:projectiveTacticVisuals,
+  }),[trainerView,projectiveTacticVisuals]);
   const gptDebugText=JSON.stringify({pipeline:brainResponse?.pipeline??null,engine:enginePreview??null,moveQuality,moveQualityPending,shouldValidateTrainingMove,debug:brainResponse?.debug??null},null,2);
   const visualDebugText=JSON.stringify(visualDebugSnapshot,null,2);
   const telemetryDebugText=JSON.stringify(telemetryEvents.slice(-30),null,2);
@@ -4166,6 +4199,63 @@ export default function App(){
     }
     if(options?.clearStaleIssue&&(hadPendingRef||hadPendingState))clearRuntimeCriticalIssue("stale_opponent_reply_commit");
     return true;
+  }
+  function clearProjectiveTacticTimers(){
+    if(projectiveTacticFadeTimeoutRef.current!==null){
+      window.clearTimeout(projectiveTacticFadeTimeoutRef.current);
+      projectiveTacticFadeTimeoutRef.current=null;
+    }
+    if(projectiveTacticClearTimeoutRef.current!==null){
+      window.clearTimeout(projectiveTacticClearTimeoutRef.current);
+      projectiveTacticClearTimeoutRef.current=null;
+    }
+  }
+  function clearProjectiveTacticOverlay(reason:string){
+    if(!shouldClearProjectiveTacticsForBoardReset(reason)&&reason!=="replace")return;
+    clearProjectiveTacticTimers();
+    projectiveTacticTokenRef.current=nextProjectiveTacticToken(projectiveTacticTokenRef.current);
+    setProjectiveTacticVisuals([]);
+    setProjectiveTacticsFading(false);
+  }
+  function showProjectiveTacticOverlay(visuals:ProjectiveTacticVisual[]){
+    const filtered=filterProjectiveTacticsForViewMode({
+      enabled:PROJECTIVE_TACTICS_ENABLED,
+      viewMode:trainerView,
+      visuals,
+    });
+    if(!filtered.length){
+      clearProjectiveTacticOverlay(PROJECTIVE_TACTICS_ENABLED?"replace":"feature_disabled");
+      return;
+    }
+    clearProjectiveTacticTimers();
+    const token=nextProjectiveTacticToken(projectiveTacticTokenRef.current);
+    projectiveTacticTokenRef.current=token;
+    setProjectiveTacticVisuals(filtered);
+    setProjectiveTacticsFading(false);
+    projectiveTacticFadeTimeoutRef.current=window.setTimeout(()=>{
+      if(isStaleProjectiveTacticToken(projectiveTacticTokenRef.current,token))return;
+      setProjectiveTacticsFading(true);
+    },Math.max(0,DEFAULT_PROJECTIVE_TACTIC_DURATION_MS-DEFAULT_PROJECTIVE_TACTIC_FADE_MS));
+    projectiveTacticClearTimeoutRef.current=window.setTimeout(()=>{
+      if(isStaleProjectiveTacticToken(projectiveTacticTokenRef.current,token))return;
+      setProjectiveTacticVisuals([]);
+      setProjectiveTacticsFading(false);
+      projectiveTacticFadeTimeoutRef.current=null;
+      projectiveTacticClearTimeoutRef.current=null;
+    },DEFAULT_PROJECTIVE_TACTIC_DURATION_MS);
+  }
+  function maybeShowProjectiveTacticsAfterMove(input:{nextFen:string;lastMoveUci:string;movedColor:ChessColor}){
+    if(!PROJECTIVE_TACTICS_ENABLED||trainerView!=="assisted"){
+      clearProjectiveTacticOverlay(PROJECTIVE_TACTICS_ENABLED?"plain_view":"feature_disabled");
+      return;
+    }
+    const detected=detectProjectiveTactics({
+      fen:input.nextFen,
+      lastMoveUci:input.lastMoveUci,
+      learnerColor:userColor,
+      movedColor:input.movedColor,
+    });
+    showProjectiveTacticOverlay(detected.visuals);
   }
   function commitRuntimeFrame(input:{
     nextFen?:string;
@@ -5034,10 +5124,10 @@ export default function App(){
     maiaOpponentRequestSeqRef.current=0;
     maiaTimelineSeqRef.current=0;
   }
-  function selectRepertoire(id:string){const startFen=new Chess().fen();const canonicalId=resolveStage2CanonicalOpeningId(id)??id;const nextLineSessionId=createLearningSessionId();setSelectedRepertoireId(canonicalId);setRuntimeTrainingSessionId(nextLineSessionId);refreshRuntimeTrainingLineSelection(canonicalId,recentRuntimeTrainingLineKeys,nextLineSessionId);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
-  function resetBoard(){const startFen=new Chess().fen();const nextLineSessionId=createLearningSessionId();setRuntimeTrainingSessionId(nextLineSessionId);refreshRuntimeTrainingLineSelection(selectedRepertoireId,recentRuntimeTrainingLineKeys,nextLineSessionId);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveTab("train");bumpRuntimeFrame()}
+  function selectRepertoire(id:string){const startFen=new Chess().fen();const canonicalId=resolveStage2CanonicalOpeningId(id)??id;const nextLineSessionId=createLearningSessionId();clearProjectiveTacticOverlay("opening_switch");setSelectedRepertoireId(canonicalId);setRuntimeTrainingSessionId(nextLineSessionId);refreshRuntimeTrainingLineSelection(canonicalId,recentRuntimeTrainingLineKeys,nextLineSessionId);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
+  function resetBoard(){const startFen=new Chess().fen();const nextLineSessionId=createLearningSessionId();clearProjectiveTacticOverlay("restart");setRuntimeTrainingSessionId(nextLineSessionId);refreshRuntimeTrainingLineSelection(selectedRepertoireId,recentRuntimeTrainingLineKeys,nextLineSessionId);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveTab("train");bumpRuntimeFrame()}
   function recordPosition(nextFen:string){const nextIndex=historyIndex+1;setPositionHistory(prev=>[...prev.slice(0,nextIndex),nextFen]);setHistoryIndex(nextIndex)}
-  function jumpHistory(direction:-1|1){const next=Math.max(0,Math.min(positionHistory.length-1,historyIndex+direction));if(next===historyIndex)return;setHistoryIndex(next);setFen(positionHistory[next]);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);clearPendingOpponentReplyRequest({clearStaleIssue:true});setOpponentCue(null);setOpponentVariationDebug(null);setBookComplete(false);setFeedback(next===positionHistory.length-1?"Returned to the live position.":`Reviewing previous position ${next} of ${positionHistory.length-1}. Use the arrows to return to live play.`);bumpRuntimeFrame()}
+  function jumpHistory(direction:-1|1){const next=Math.max(0,Math.min(positionHistory.length-1,historyIndex+direction));if(next===historyIndex)return;clearProjectiveTacticOverlay("reset");setHistoryIndex(next);setFen(positionHistory[next]);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);clearPendingOpponentReplyRequest({clearStaleIssue:true});setOpponentCue(null);setOpponentVariationDebug(null);setBookComplete(false);setFeedback(next===positionHistory.length-1?"Returned to the live position.":`Reviewing previous position ${next} of ${positionHistory.length-1}. Use the arrows to return to live play.`);bumpRuntimeFrame()}
   async function playOpponentMove(request:PendingOpponentRequest){
     const liveFenRaw=fenRef.current;
     const currentRequest=pendingOpponentRequestRef.current;
@@ -5638,10 +5728,11 @@ export default function App(){
     clearRuntimeCriticalIssue("stale_opponent_reply_commit");
     clearRuntimeCriticalIssue("restricted_opponent_reply_missing_runtime_authority");
     clearRuntimeCriticalIssue("restricted_initial_black_opponent_handoff_illegal");
-    setLastMove(chosen.uci);setLastMoveSan(chosen.san);setLastMoveColor(opponentColor);setMoveHistory(prev=>[...prev,chosen.san]);setSelectedSquare(null);setShowAnswer(false);setOpponentCue(boardSettings.showOpponentCue?{expiresAt:Date.now()+2500,title:`Opponent: ${chosen.san}`,message:"Brief opponent cue. Your selected user-side view stays visible after this fades.",lines:[{from:chosen.uci.slice(0,2),to:chosen.uci.slice(2,4),kind:"opponent",label:chosen.san}],cues:[{square:chosen.uci.slice(2,4),kind:"opponent"}],committed:true,fen:normalizeFen(chosen.fen)}:null);setFeedback(`Opponent played ${chosen.san}. Source: ${source}. ${variationNote}`);setBrain(p=>({...p,source,lichess:source.includes("Lichess")?"active":p.lichess,note:variationNote}))
+    setLastMove(chosen.uci);setLastMoveSan(chosen.san);setLastMoveColor(opponentColor);setMoveHistory(prev=>[...prev,chosen.san]);setSelectedSquare(null);setShowAnswer(false);setOpponentCue(boardSettings.showOpponentCue?{expiresAt:Date.now()+2500,title:`Opponent: ${chosen.san}`,message:"Brief opponent cue. Your selected user-side view stays visible after this fades.",lines:[{from:chosen.uci.slice(0,2),to:chosen.uci.slice(2,4),kind:"opponent",label:chosen.san}],cues:[{square:chosen.uci.slice(2,4),kind:"opponent"}],committed:true,fen:normalizeFen(chosen.fen)}:null);setFeedback(`Opponent played ${chosen.san}. Source: ${source}. ${variationNote}`);maybeShowProjectiveTacticsAfterMove({nextFen:chosen.fen,lastMoveUci:chosen.uci,movedColor:opponentColor});setBrain(p=>({...p,source,lichess:source.includes("Lichess")?"active":p.lichess,note:variationNote}))
   }
   function handleTrainerViewChange(nextTrainerView:TrainerView){
     if(nextTrainerView===trainerView)return;
+    if(shouldClearProjectiveTacticsOnViewMode(nextTrainerView))clearProjectiveTacticOverlay("view_mode_switch");
     setTrainerView(nextTrainerView);
     trackLearningEvent({
       type:"trainer_view_changed",
@@ -5676,6 +5767,7 @@ export default function App(){
     const legal=current.moves().length;
     const terminal=current.isGameOver()||legal===0;
     const nextContinuationSessionId=continuationSessionId??createLearningSessionId();
+    clearProjectiveTacticOverlay("continuation_enter");
     setUserExplicitlyEnteredContinuation(true);
     setContinueFromHereClicked(true);
     setContinuationPauseClicked(true);
@@ -6013,6 +6105,7 @@ export default function App(){
       });
     }
     setFeedback(trainingMode==="restricted"?`Correct: ${legal.san}.`:`Played ${legal.san}. Move will be evaluated.`);
+    maybeShowProjectiveTacticsAfterMove({nextFen,lastMoveUci:playedUci,movedColor:userColor});
     if(needsOpponentReply){
       scheduleOpponentReply({mode:trainingMode,delayMs:350,baseFen:nextFen});
     }
@@ -6046,8 +6139,8 @@ export default function App(){
     if(!pendingPromotion)return;
     void attemptMove(pendingPromotion.from,pendingPromotion.to,promotionPiece);
   }
-  function practiceMistake(m:Mistake){const rep=repertoires.find(r=>r.id===m.repertoireId);if(rep)setSelectedRepertoireId(resolveStage2CanonicalOpeningId(rep.id)??rep.id);setFen(m.fen);resetHistory(m.fen);setReviewingFen(normalizeFen(m.fen));setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Review this opening position. Play the expected move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setActiveTab("train");bumpRuntimeFrame()}
-  function createCustomRepertoire(){const moves=newLineText.replace(/\d+\./g," ").replace(/\s+/g," ").trim().split(" ").filter(Boolean);if(!moves.length)return;const test=new Chess();for(const move of moves){try{if(!test.move(move)){setFeedback(`Could not parse move: ${move}`);return}}catch{setFeedback(`Could not parse move: ${move}`);return}}const rep:Repertoire={id:`custom-${Date.now()}`,name:newRepName.trim()||"My Custom Repertoire",color:newRepColor,description:"Custom line saved on this device.",lines:[moves],custom:true};setCustomRepertoires(prev=>[...prev,rep]);setSelectedRepertoireId(rep.id);setShowAddLine(false);const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setTrainingMode("restricted");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setFeedback("Custom repertoire saved. Restricted training is active.");setActiveTab("train");bumpRuntimeFrame()}
+  function practiceMistake(m:Mistake){const rep=repertoires.find(r=>r.id===m.repertoireId);clearProjectiveTacticOverlay("reset");if(rep)setSelectedRepertoireId(resolveStage2CanonicalOpeningId(rep.id)??rep.id);setFen(m.fen);resetHistory(m.fen);setReviewingFen(normalizeFen(m.fen));setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Review this opening position. Play the expected move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setActiveTab("train");bumpRuntimeFrame()}
+  function createCustomRepertoire(){const moves=newLineText.replace(/\d+\./g," ").replace(/\s+/g," ").trim().split(" ").filter(Boolean);if(!moves.length)return;const test=new Chess();for(const move of moves){try{if(!test.move(move)){setFeedback(`Could not parse move: ${move}`);return}}catch{setFeedback(`Could not parse move: ${move}`);return}}const rep:Repertoire={id:`custom-${Date.now()}`,name:newRepName.trim()||"My Custom Repertoire",color:newRepColor,description:"Custom line saved on this device.",lines:[moves],custom:true};clearProjectiveTacticOverlay("opening_switch");setCustomRepertoires(prev=>[...prev,rep]);setSelectedRepertoireId(rep.id);setShowAddLine(false);const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setTrainingMode("restricted");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setFeedback("Custom repertoire saved. Restricted training is active.");setActiveTab("train");bumpRuntimeFrame()}
   const squareStyles:Record<string,CSSProperties>={};
   if(lastMove&&lastMove.length>=4){
     squareStyles[lastMove.slice(0,2)]={boxShadow:"inset 0 0 0 999px rgba(255,255,255,.12), inset 0 0 22px rgba(255,255,255,.5)"};
@@ -6948,7 +7041,7 @@ export default function App(){
           <p className="mt-2 text-[11px] font-semibold text-stone-500">{trainerView==="assisted"?"Shows the visual pattern cue before the move.":"Hides pre-move hints for independent recall."}</p>
         </div>
         {blundrDebugEnabled && activeBoard && enabledViews.length>0 && <div className="mb-3 grid gap-2" style={{gridTemplateColumns:`repeat(${enabledViews.length}, minmax(0,1fr))`}}>{enabledViews.map(v=><button key={v} onClick={()=>setActiveBoardView(v)} className={classNames("rounded-full px-4 py-2 text-sm font-black capitalize",safeBoardView===v?"bg-green-700 text-white shadow-sm":"bg-white text-stone-500 ring-1 ring-stone-200")}>{v}</button>)}</div>}
-        <TapChessboard game={game} orientation={repertoire.color} selectedSquare={selectedSquare} squareStyles={squareStyles} lines={boardLinesToRender} transientLines={transientLinesToRender} onSquareTap={handleSquareTap} whitePct={whitePct} evalText={evalText} settings={boardSettings} captured={captured} userColor={userColor} animationName={visualAnimationName} adaptiveOpeningIdentity={adaptiveOpeningIdentity} pendingPromotion={pendingPromotion} onPromotionSelect={handlePromotionPieceSelection} onPromotionCancel={cancelPromotionSelection}/>
+        <TapChessboard game={game} orientation={repertoire.color} selectedSquare={selectedSquare} squareStyles={squareStyles} lines={boardLinesToRender} transientLines={transientLinesToRender} projectiveTacticVisuals={filteredProjectiveTacticVisuals} projectiveTacticsFading={projectiveTacticsFading} onSquareTap={handleSquareTap} whitePct={whitePct} evalText={evalText} settings={boardSettings} captured={captured} userColor={userColor} animationName={visualAnimationName} adaptiveOpeningIdentity={adaptiveOpeningIdentity} pendingPromotion={pendingPromotion} onPromotionSelect={handlePromotionPieceSelection} onPromotionCancel={cancelPromotionSelection}/>
         <HistoryControls index={historyIndex} total={positionHistory.length} onBack={()=>jumpHistory(-1)} onForward={()=>jumpHistory(1)}/>
       </div>
       {showDetails&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Coach Debug</div><div className="mt-2">coachMode: {coachDecision.mode}</div><div>coachAction: {coachDecision.action}</div><div>coachUtteranceId: {coachDecision.utteranceId??"none"}</div><div>coachUtteranceFamily: {coachDecision.utteranceFamily??"none"}</div><div>coachVariationReason: {String((coachDecision.debug as any)?.coachVariationReason??"n/a")}</div><div>coachHintStrength: {String((coachDecision.debug as any)?.coachHintStrength??"none")}</div><div>coachRevealRisk: {coachDecision.revealRisk}</div><div>coachGivesAnswer: {coachDecision.givesAnswer?"true":"false"}</div><div>coachButtons: {displayedCoachDecision.buttons.join(", ")||"none"}</div><div>coachShouldMarkReviewWorthy: {coachDecision.shouldMarkReviewWorthy?"true":"false"}</div><div>coachSuppressedReason: {coachDecision.suppressedReason??"none"}</div><div>coachFrameMatchesBoard: {coachContextResult.context?.recipeFrameMatchesBoard?"true":"false"}</div><div>coachFenMatchesBoard: {coachContextResult.context?.recipeFenMatchesBoard?"true":"false"}</div><div>recentCoachUtteranceIds: {coachUtteranceMemory.slice(-5).map((entry:any)=>entry.utteranceId).join(", ")||"none"}</div><div>coachSafetyWarnings: {JSON.stringify((coachDecision.debug as any)?.coachSafetyWarnings??[])}</div><div>coachReviewMarked: {coachReviewMarked?"true":"false"}</div><div>selectedOpportunity: {String((coachDecision.debug as any)?.selectedOpportunity??liveCoachState?.selected?.opportunity??"none")}</div><div>selectedIntent: {String((coachDecision.debug as any)?.selectedIntent??liveCoachState?.selected?.intent??"none")}</div><div>exactMoveAllowed: {coachContextResult.context?.exactMoveAllowed?"true":"false"}</div><div>claimTypes: {coachDecision.claimTypes.join(", ")||"none"}</div><div>blockedClaims: {String((coachDecision.debug as any)?.blockedClaims??"none")}</div><div>silenceReason: {String((coachDecision.debug as any)?.silenceReason??liveCoachState?.debug?.silenceReason??"none")}</div><div>branchTransitionSurfaceRendered: {branchTransitionSurface?.render?"true":"false"}</div><div>branchTransitionReason: {branchTransitionSurface?.reason??"none"}</div><div>continueFromHereAvailable: {branchTransitionSurface?.render?"true":"false"}</div><div>continueFromHereClicked: {continueFromHereClicked?"true":"false"}</div><div>coachSurfaceOwner: {coachSurfacePolicy.owner}</div><div>allowLegacyTrainingCard: {coachSurfacePolicy.allowLegacyTrainingCard?"true":"false"}</div><div>allowMoveImpactCard: {coachSurfacePolicy.allowMoveImpactCard?"true":"false"}</div><div>allowNextMoveText: {coachSurfacePolicy.allowNextMoveText?"true":"false"}</div><div>legacyCueSuppressedReason: {coachSurfacePolicy.reason}</div><div>moveImpactPresenterReason: {moveImpactPresentation.reason}</div></div>}
@@ -7016,7 +7109,7 @@ function coordTone(theme:BoardTheme,isDark:boolean){
   return isDark?"text-white/70":"text-stone-600/70";
 }
 
-function TapChessboard({game,orientation,selectedSquare,squareStyles,lines,transientLines,onSquareTap,whitePct,evalText,settings,captured,userColor,animationName,adaptiveOpeningIdentity,pendingPromotion,onPromotionSelect,onPromotionCancel}:{game:Chess;orientation:RepertoireColor;selectedSquare:string|null;squareStyles:Record<string,CSSProperties>;lines:ActiveLine[];transientLines:ActiveLine[];onSquareTap:(s:string)=>void;whitePct:number;evalText:string;settings:BoardSettings;captured:CapturedSummary;userColor:ChessColor;animationName?:string;adaptiveOpeningIdentity:AdaptiveOpeningIdentity | null;pendingPromotion:PendingPromotion | null;onPromotionSelect:(piece:PromotionPiece)=>void;onPromotionCancel:()=>void;}){
+function TapChessboard({game,orientation,selectedSquare,squareStyles,lines,transientLines,projectiveTacticVisuals,projectiveTacticsFading,onSquareTap,whitePct,evalText,settings,captured,userColor,animationName,adaptiveOpeningIdentity,pendingPromotion,onPromotionSelect,onPromotionCancel}:{game:Chess;orientation:RepertoireColor;selectedSquare:string|null;squareStyles:Record<string,CSSProperties>;lines:ActiveLine[];transientLines:ActiveLine[];projectiveTacticVisuals:ProjectiveTacticVisual[];projectiveTacticsFading:boolean;onSquareTap:(s:string)=>void;whitePct:number;evalText:string;settings:BoardSettings;captured:CapturedSummary;userColor:ChessColor;animationName?:string;adaptiveOpeningIdentity:AdaptiveOpeningIdentity | null;pendingPromotion:PendingPromotion | null;onPromotionSelect:(piece:PromotionPiece)=>void;onPromotionCancel:()=>void;}){
   const ranks=orientation==="white"?[8,7,6,5,4,3,2,1]:[1,2,3,4,5,6,7,8];
   const files=orientation==="white"?FILES:[...FILES].reverse();
   const centerFor=(sq:string)=>{
@@ -7035,6 +7128,7 @@ function TapChessboard({game,orientation,selectedSquare,squareStyles,lines,trans
         <div className={classNames("relative aspect-square w-full overflow-hidden rounded-[18px] border border-stone-300 bg-stone-200",visualAnimationClass(animationName))}>
           <BoardLines lines={lines} centerFor={centerFor} transient={false}/>
           <BoardLines lines={transientLines} centerFor={centerFor} transient/>
+          <ProjectiveTacticalOverlay visuals={projectiveTacticVisuals} orientation={orientation} fading={projectiveTacticsFading}/>
           <div className="grid h-full w-full grid-cols-8 grid-rows-8">
             {ranks.flatMap((rank,rowIndex)=>files.map((file,colIndex)=>{
               const square=`${file}${rank}`;

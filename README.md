@@ -86,6 +86,14 @@ git push
 - If Maia traffic grows, prefer a persistent Maia service behind the app instead of direct per-request spawning.
 - Maia runtime env vars: `MAIA_ENABLED`, `MAIA_LC0_PATH`, `MAIA_WEIGHTS_PATH`, `MAIA_SKILL_LEVEL`, `MAIA_TIMEOUT_MS`, `MAIA_NODES`, `MAIA_CACHE_ENABLED`, `MAIA_MAX_CONCURRENT_REQUESTS`, `MAIA_BACKEND`.
 
+## v2.9.1E Projective Tactical Visualizations
+
+- Disabled by default; enable with `NEXT_PUBLIC_PROJECTIVE_TACTICS_ENABLED=true`.
+- Assisted View only; Plain View remains no-leak protected.
+- Visual-only overlays, not move authority.
+- Initial active motifs: fork, knight fork, and conservative pin.
+- Broader tactic taxonomy is registered for future motifs but disabled until tested.
+
 Launch deployment references:
 
 - `docs/DEPLOYMENT_ENV.md`
