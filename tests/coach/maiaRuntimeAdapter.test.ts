@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { MaiaLc0RuntimeAdapter } from "../../lib/blundr/maia/maiaLc0RuntimeAdapter";
 import type { MaiaRuntimeConfig } from "../../lib/blundr/maia/maiaRuntimeTypes";
 
-type SpawnMode = "ready" | "illegal" | "timeout" | "stderr_only";
+type SpawnMode = "ready" | "illegal" | "timeout" | "stderr_only" | "delayed_ready";
 
 function makeTempConfig(): MaiaRuntimeConfig {
   const dir = mkdtempSync(join(tmpdir(), "maia-test-"));
@@ -46,6 +46,9 @@ function createSpawn(mode: SpawnMode, capture: { cmd?: string; args?: string[]; 
         } else if (mode === "illegal") {
           setTimeout(() => child.stdout.emit("data", "uciok\nreadyok\nbestmove h7h5\n"), 5);
           setTimeout(() => child.emit("exit", 0), 10);
+        } else if (mode === "delayed_ready") {
+          setTimeout(() => child.stdout.emit("data", "uciok\nreadyok\nbestmove e2e4 ponder e7e5\n"), 40);
+          setTimeout(() => child.emit("exit", 0), 50);
         } else if (mode === "stderr_only") {
           setTimeout(() => child.stderr.emit("data", "engine warning"), 5);
           setTimeout(() => child.emit("exit", 0), 10);
@@ -127,6 +130,31 @@ async function testTimeoutAndSpawnSafety() {
     timeoutMs: 50,
   });
   assert.equal(timeout.status, "timeout", "lc0_timeout_returns_timeout");
+  assert.equal(timeout.errorReason, "timeout");
+
+  const overloadedConfig = { ...config, maxConcurrentRequests: 1 };
+  const firstCapture = { called: 0 } as any;
+  const overloadedAdapter = new MaiaLc0RuntimeAdapter(overloadedConfig, { spawn: createSpawn("delayed_ready", firstCapture) as any });
+  const firstPromise = overloadedAdapter.getBestMove({
+    requestId: 40,
+    fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    fen4: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -",
+    legalMovesUci: ["e2e4", "d2d4"],
+    skillLevel: "maia-1500",
+    timeoutMs: 200,
+  });
+  const overloaded = await overloadedAdapter.getBestMove({
+    requestId: 41,
+    fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    fen4: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -",
+    legalMovesUci: ["e2e4", "d2d4"],
+    skillLevel: "maia-1500",
+    timeoutMs: 200,
+  });
+  assert.equal(overloaded.status, "error");
+  assert.equal(overloaded.errorReason, "overloaded", "concurrency_limit_returns_overloaded");
+  const firstResult = await firstPromise;
+  assert.equal(firstResult.status, "ready");
 
   const readyCapture = { called: 0 } as any;
   const adapter = new MaiaLc0RuntimeAdapter(config, { spawn: createSpawn("ready", readyCapture) as any });
@@ -140,6 +168,19 @@ async function testTimeoutAndSpawnSafety() {
   });
   assert.equal(Array.isArray(readyCapture.args), true, "spawn_uses_args_array_not_shell_string");
   assert.equal(readyCapture.options?.shell, false);
+
+  const spawnFailureAdapter = new MaiaLc0RuntimeAdapter(config, {
+    spawn: (() => { throw new Error("spawn_failed"); }) as any,
+  });
+  const spawnFailure = await spawnFailureAdapter.getBestMove({
+    requestId: 42,
+    fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    fen4: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -",
+    legalMovesUci: ["e2e4", "d2d4"],
+    skillLevel: "maia-1500",
+    timeoutMs: 100,
+  });
+  assert.equal(spawnFailure.errorReason, "spawn_failed");
 }
 
 async function testStderrAndFenSanitization() {
@@ -153,7 +194,8 @@ async function testStderrAndFenSanitization() {
     skillLevel: "maia-1500",
     timeoutMs: 100,
   });
-  assert.equal(["uci_not_ready", "error"].includes(stderr.status), true, "lc0_stderr_does_not_throw_to_ui");
+  assert.equal(stderr.status, "error", "lc0_stderr_does_not_throw_to_ui");
+  assert.equal(stderr.errorReason, "provider_error");
 
   const capture = { called: 0 } as any;
   const fenAdapter = new MaiaLc0RuntimeAdapter(config, { spawn: createSpawn("ready", capture) as any });

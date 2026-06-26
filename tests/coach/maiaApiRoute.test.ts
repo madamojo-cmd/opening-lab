@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
-import { POST, validateOpponentReplyPayload } from "../../app/api/maia/opponent-reply/route";
+import { POST } from "../../app/api/maia/opponent-reply/route";
+import { validateOpponentReplyPayload } from "../../lib/blundr/maia/opponentReplyPayload";
 import { MaiaLc0RuntimeAdapter } from "../../lib/blundr/maia/maiaLc0RuntimeAdapter";
 
 function jsonRequest(payload: unknown): Request {
@@ -27,14 +28,25 @@ async function testDisabledAndInvalid() {
   }));
   const d = await readJson(disabled);
   assert.equal(d.status, "disabled", "disabled_route_returns_disabled");
+  assert.equal(d.errorReason, "disabled", "disabled_route_returns_disabled_reason");
 
   const invalid = await POST(jsonRequest({ bad: true }));
   assert.equal(invalid.status, 400, "invalid_payload_returns_400");
 
+  const invalidFen = await POST(jsonRequest({
+    requestId: 2,
+    fen: "bad fen",
+    fen4: "bad fen",
+    legalMovesUci: ["e2e4"],
+    skillLevel: "maia-1500",
+    timeoutMs: 1500,
+  }));
+  assert.equal(invalidFen.status, 400, "invalid_fen_returns_400");
+
   const validated = validateOpponentReplyPayload({
     requestId: 1,
-    fen: "f",
-    fen4: "f",
+    fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    fen4: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -",
     legalMovesUci: ["e2e4"],
     skillLevel: "maia-1500",
     timeoutMs: 1500,
@@ -78,7 +90,7 @@ async function testRouteShapesWithMockedRuntime() {
         skillLevel: request.skillLevel,
         bestMoveUci: null,
         legal: false,
-        errorReason: "runtime_timeout",
+        errorReason: "timeout",
         runtimeMs: 1500,
       };
     };
@@ -91,7 +103,7 @@ async function testRouteShapesWithMockedRuntime() {
       timeoutMs: 1500,
     }));
     const t = await readJson(timeout);
-    assert.equal(t.status, "timeout", "runtime_timeout_returns_timeout_payload");
+    assert.equal(t.status, "timeout", "timeout_returns_timeout_payload");
 
     MaiaLc0RuntimeAdapter.prototype.getBestMove = async function (request: any): Promise<any> {
       return {
@@ -125,9 +137,33 @@ async function testRouteShapesWithMockedRuntime() {
   }
 }
 
+async function testRouteFallbackOnUnexpectedError() {
+  const original = MaiaLc0RuntimeAdapter.prototype.getBestMove;
+  try {
+    MaiaLc0RuntimeAdapter.prototype.getBestMove = async function (): Promise<any> {
+      throw new Error("unexpected_maia_failure");
+    };
+    const response = await POST(jsonRequest({
+      requestId: 12,
+      fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      fen4: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -",
+      legalMovesUci: ["e2e4"],
+      skillLevel: "maia-1500",
+      timeoutMs: 1500,
+    }));
+    const payload = await readJson(response);
+    assert.equal(response.status, 503, "unexpected_maia_error_returns_stable_fallback");
+    assert.equal(payload.status, "unavailable");
+    assert.equal(payload.errorReason, "provider_error");
+  } finally {
+    MaiaLc0RuntimeAdapter.prototype.getBestMove = original;
+  }
+}
+
 async function main() {
   await testDisabledAndInvalid();
   await testRouteShapesWithMockedRuntime();
+  await testRouteFallbackOnUnexpectedError();
   console.log("maiaApiRoute ok");
 }
 

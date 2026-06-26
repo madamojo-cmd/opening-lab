@@ -52,6 +52,7 @@ This release focuses on making the trainer truthful and reliable rather than add
 
 ```bash
 npm install --registry=https://registry.npmjs.org/
+npm run build:launch
 npm run build
 npm run dev
 ```
@@ -77,6 +78,19 @@ git add .gitignore .npmrc README.md app public scripts package.json package-lock
 git commit -m "Add Blundr v2.7 professional repair"
 git push
 ```
+
+## Maia deployment note
+
+- Local `lc0` plus weights is fine for development and container-based testing.
+- Serverless hosts, including Vercel-style environments, may not be a good fit for spawning `lc0` directly.
+- If Maia traffic grows, prefer a persistent Maia service behind the app instead of direct per-request spawning.
+- Maia runtime env vars: `MAIA_ENABLED`, `MAIA_LC0_PATH`, `MAIA_WEIGHTS_PATH`, `MAIA_SKILL_LEVEL`, `MAIA_TIMEOUT_MS`, `MAIA_NODES`, `MAIA_CACHE_ENABLED`, `MAIA_MAX_CONCURRENT_REQUESTS`, `MAIA_BACKEND`.
+
+Launch deployment references:
+
+- `docs/DEPLOYMENT_ENV.md`
+- `docs/LAUNCH_CHECKLIST.md`
+- `docs/ROLLBACK_PLAN.md`
 
 ## Vercel environment variables
 

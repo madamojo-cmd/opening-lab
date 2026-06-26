@@ -1,11 +1,23 @@
 import { existsSync } from "node:fs";
 import { spawn as spawnChild } from "node:child_process";
-import { Chess, validateFen } from "chess.js";
+import { validateFen } from "chess.js";
 
 import type { MaiaRuntimeConfig, MaiaRuntimeHealth, MaiaRuntimeMoveRequest, MaiaRuntimeMoveResult } from "./maiaRuntimeTypes";
 import { buildMaiaRuntimeHealth, evaluateMaiaRuntimeConfig } from "./maiaRuntimeConfig";
 
 type SpawnFn = typeof spawnChild;
+let activeMaiaRuntimeRequests = 0;
+
+function tryAcquireMaiaRuntimeRequest(maxConcurrentRequests: number): (() => void) | null {
+  if (activeMaiaRuntimeRequests >= Math.max(1, maxConcurrentRequests)) return null;
+  activeMaiaRuntimeRequests += 1;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    activeMaiaRuntimeRequests = Math.max(0, activeMaiaRuntimeRequests - 1);
+  };
+}
 
 function normalizeUci(uci: string): string | null {
   const value = String(uci ?? "").trim().toLowerCase();
@@ -15,10 +27,6 @@ function normalizeUci(uci: string): string | null {
 function validateRequestFen(fen: string): boolean {
   const result = validateFen(String(fen ?? ""));
   return Boolean((result as any)?.ok);
-}
-
-function toFen4(fen: string): string {
-  return String(fen || "").split(" ").slice(0, 4).join(" ");
 }
 
 function createErrorResult(request: MaiaRuntimeMoveRequest, status: MaiaRuntimeMoveResult["status"], runtimeMs: number, errorReason: string): MaiaRuntimeMoveResult {
@@ -45,22 +53,7 @@ export class MaiaLc0RuntimeAdapter {
 
   async health(): Promise<MaiaRuntimeHealth> {
     const evaluated = evaluateMaiaRuntimeConfig(this.config);
-    if (evaluated.status !== "ready") {
-      return buildMaiaRuntimeHealth(this.config, { status: evaluated.status, lastError: evaluated.errorReason });
-    }
-    const request: MaiaRuntimeMoveRequest = {
-      requestId: 0,
-      fen: new Chess().fen(),
-      fen4: toFen4(new Chess().fen()),
-      legalMovesUci: ["e2e4", "d2d4", "g1f3", "c2c4"],
-      skillLevel: this.config.skillLevel,
-      timeoutMs: Math.min(1200, this.config.timeoutMs),
-    };
-    const result = await this.getBestMove(request);
-    if (result.status !== "ready") {
-      return buildMaiaRuntimeHealth(this.config, { status: result.status, lastError: result.errorReason });
-    }
-    return buildMaiaRuntimeHealth(this.config, { status: "ready", lastError: null });
+    return buildMaiaRuntimeHealth(this.config, { status: evaluated.status, lastError: evaluated.errorReason });
   }
 
   async getBestMove(request: MaiaRuntimeMoveRequest): Promise<MaiaRuntimeMoveResult> {
@@ -74,7 +67,11 @@ export class MaiaLc0RuntimeAdapter {
     }
     const legalUciSet = new Set((request.legalMovesUci ?? []).map((move) => normalizeUci(move)).filter(Boolean) as string[]);
     if (!legalUciSet.size) {
-      return createErrorResult(request, "error", Date.now() - started, "empty_legal_moves");
+      return createErrorResult(request, "error", Date.now() - started, "no_legal_moves");
+    }
+    const releaseRequest = tryAcquireMaiaRuntimeRequest(this.config.maxConcurrentRequests);
+    if (!releaseRequest) {
+      return createErrorResult(request, "error", Date.now() - started, "overloaded");
     }
 
     const spawn = this.deps.spawn ?? spawnChild;
@@ -83,34 +80,37 @@ export class MaiaLc0RuntimeAdapter {
 
     return new Promise<MaiaRuntimeMoveResult>((resolve) => {
       let settled = false;
-      let sawUciOk = false;
-      let sawReadyOk = false;
       let rawBestMoveLine: string | null = null;
       const timeoutMs = Math.max(250, Math.min(5000, request.timeoutMs || this.config.timeoutMs));
       let stderrText = "";
       let stdoutText = "";
-
-      const child = spawn(this.config.lc0Path as string, args, {
-        stdio: ["pipe", "pipe", "pipe"],
-        shell: false,
-      });
+      let child: ReturnType<SpawnFn> | null = null;
 
       const finalize = (result: MaiaRuntimeMoveResult) => {
         if (settled) return;
         settled = true;
-        try { child.kill("SIGKILL"); } catch {}
+        clearTimeout(timer);
+        releaseRequest();
+        try { child?.kill("SIGKILL"); } catch {}
         resolve(result);
       };
 
       const timer = setTimeout(() => {
-        finalize(createErrorResult(request, "timeout", Date.now() - started, "runtime_timeout"));
+        finalize(createErrorResult(request, "timeout", Date.now() - started, "timeout"));
       }, timeoutMs);
 
-      const cleanupTimer = () => clearTimeout(timer);
+      try {
+        child = spawn(this.config.lc0Path as string, args, {
+          stdio: ["pipe", "pipe", "pipe"],
+          shell: false,
+        });
+      } catch (err) {
+        finalize(createErrorResult(request, "error", Date.now() - started, "spawn_failed"));
+        return;
+      }
 
       child.on("error", (err) => {
-        cleanupTimer();
-        finalize(createErrorResult(request, "startup_failed", Date.now() - started, err instanceof Error ? err.message : "startup_failed"));
+        finalize(createErrorResult(request, "error", Date.now() - started, "spawn_failed"));
       });
 
       child.stderr.on("data", (chunk) => {
@@ -122,17 +122,14 @@ export class MaiaLc0RuntimeAdapter {
         stdoutText += text;
         const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
         for (const line of lines) {
-          if (line === "uciok") sawUciOk = true;
-          if (line === "readyok") sawReadyOk = true;
           if (line.startsWith("bestmove ")) {
             rawBestMoveLine = line;
             const match = /^bestmove\s+([a-h][1-8][a-h][1-8][qrbn]?)(?:\s+ponder\s+([a-h][1-8][a-h][1-8][qrbn]?))?/i.exec(line);
             const bestMoveUci = normalizeUci(match?.[1] ?? "");
             const ponderUci = normalizeUci(match?.[2] ?? "");
             const legal = Boolean(bestMoveUci && legalUciSet.has(bestMoveUci));
-            cleanupTimer();
             if (!bestMoveUci) {
-              finalize(createErrorResult(request, "error", Date.now() - started, "bestmove_missing"));
+              finalize(createErrorResult(request, "error", Date.now() - started, "provider_error"));
               return;
             }
             if (!legal) {
@@ -169,12 +166,7 @@ export class MaiaLc0RuntimeAdapter {
 
       child.on("exit", () => {
         if (settled) return;
-        cleanupTimer();
-        if (!sawUciOk || !sawReadyOk) {
-          finalize(createErrorResult(request, "uci_not_ready", Date.now() - started, stderrText || "uci_not_ready"));
-          return;
-        }
-        finalize(createErrorResult(request, "error", Date.now() - started, rawBestMoveLine ? "bestmove_parse_failed" : (stderrText || stdoutText || "runtime_exit_without_bestmove")));
+        finalize(createErrorResult(request, "error", Date.now() - started, "provider_error"));
       });
 
       try {
@@ -183,8 +175,7 @@ export class MaiaLc0RuntimeAdapter {
         child.stdin.write(`position fen ${request.fen}\n`);
         child.stdin.write(`go nodes ${Math.max(1, this.config.nodes)}\n`);
       } catch (err) {
-        cleanupTimer();
-        finalize(createErrorResult(request, "startup_failed", Date.now() - started, err instanceof Error ? err.message : "stdin_write_failed"));
+        finalize(createErrorResult(request, "error", Date.now() - started, "spawn_failed"));
       }
     });
   }

@@ -6,6 +6,8 @@ const REPO_ROOT = path.resolve(__dirname, "..", "..");
 
 export function testStage2NoUnsafePerformanceSplit(): void {
   const pageSource = fs.readFileSync(path.join(REPO_ROOT, "app", "page.tsx"), "utf8");
+  const homeSection = pageSource.match(/activeTab==="home"&&<section[\s\S]*?<\/section>/)?.[0] ?? "";
+  const repertoireSection = pageSource.match(/activeTab==="repertoire"&&<section[\s\S]*?<\/section>/)?.[0] ?? "";
 
   assert.equal(
     /from\s+["']@\/components\/coach\/CoachCard["']/.test(pageSource),
@@ -26,6 +28,11 @@ export function testStage2NoUnsafePerformanceSplit(): void {
     /loadStage2RuntimeTrainableRepertoires\b/.test(pageSource),
     false,
     "app_page_unsafe_all_runtime_body_loader_reference",
+  );
+  assert.equal(
+    /countPositions\s*\(/.test(pageSource),
+    false,
+    "app_page_unsafe_render_time_count_positions_call",
   );
   assert.equal(
     /loadStage2RuntimeTrainableRepertoire\b/.test(pageSource),
@@ -78,6 +85,16 @@ export function testStage2NoUnsafePerformanceSplit(): void {
     "app_page_unsafe_static_trainer_frame_resolution_import",
   );
   assert.equal(
+    /from\s+["']@\/lib\/blundr\/maia\/maiaRuntimeConfig["']/.test(pageSource),
+    false,
+    "app_page_unsafe_static_maia_runtime_config_import",
+  );
+  assert.equal(
+    /from\s+["']@\/lib\/blundr\/maia\/maiaLc0RuntimeAdapter["']/.test(pageSource),
+    false,
+    "app_page_unsafe_static_maia_runtime_adapter_import",
+  );
+  assert.equal(
     /import\(\s*["']@\/lib\/blundr\/debug\/trainerDebugCollector["']\s*\)/.test(pageSource),
     true,
     "app_page_missing_lazy_trainer_debug_collector_import",
@@ -86,6 +103,21 @@ export function testStage2NoUnsafePerformanceSplit(): void {
     /runtimeOpeningSelection\s*=\s*useMemo\(/.test(pageSource),
     true,
     "app_page_missing_runtime_opening_selection_usememo",
+  );
+  assert.equal(
+    homeSection.includes("buildOpeningTree("),
+    false,
+    "app_page_home_section_unsafe_tree_building",
+  );
+  assert.equal(
+    repertoireSection.includes("buildOpeningTree("),
+    false,
+    "app_page_repertoire_section_unsafe_tree_building",
+  );
+  assert.equal(
+    /getRepertoirePositionCount\s*\(/.test(pageSource),
+    true,
+    "app_page_missing_catalog_metadata_position_helper",
   );
   assert.equal(
     /buildRuntimeTrainingLineSelection\(runtimeOpeningSelection\.selectedOpeningId,\s*\[\],\s*runtimeTrainingSessionId\)/.test(pageSource),

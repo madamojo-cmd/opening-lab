@@ -11,6 +11,11 @@ async function main(): Promise<void> {
   const stage2PackageSource = fs.readFileSync(path.join(REPO_ROOT, "lib/blundr/stage2ApprovedContent/stage2ApprovedContentPackage.ts"), "utf8");
 
   assert.equal(appPageSource.includes("node:fs"), false);
+  assert.equal(appPageSource.includes("node:child_process"), false);
+  assert.equal(appPageSource.includes("MAIA_LC0_PATH"), false);
+  assert.equal(appPageSource.includes("MAIA_WEIGHTS_PATH"), false);
+  assert.equal(appPageSource.includes("maiaRuntimeConfig"), false);
+  assert.equal(appPageSource.includes("maiaLc0RuntimeAdapter"), false);
   assert.equal(appPageSource.includes("stage2ApprovedContentPackage.server"), false);
 
   assert.equal(stage2CoachingIndexSource.includes("stage2ApprovedContentPackage.server"), false);

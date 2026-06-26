@@ -59,7 +59,7 @@ export function readMaiaRuntimeConfig(): MaiaRuntimeConfig {
 }
 
 export function evaluateMaiaRuntimeConfig(config: MaiaRuntimeConfig): { status: MaiaRuntimeStatus; errorReason: string | null } {
-  if (!config.enabled) return { status: "disabled", errorReason: "runtime_disabled" };
+  if (!config.enabled) return { status: "disabled", errorReason: "disabled" };
   if (!config.lc0Path) return { status: "missing_lc0_path", errorReason: "missing_lc0_path" };
   if (!config.weightsPath) return { status: "missing_weights_path", errorReason: "missing_weights_path" };
   if (!existsSync(config.lc0Path)) return { status: "lc0_not_found", errorReason: "lc0_not_found" };
@@ -70,12 +70,22 @@ export function evaluateMaiaRuntimeConfig(config: MaiaRuntimeConfig): { status: 
 export function buildMaiaRuntimeHealth(config: MaiaRuntimeConfig, input?: { status?: MaiaRuntimeStatus; lastError?: string | null }): MaiaRuntimeHealth {
   const evaluated = evaluateMaiaRuntimeConfig(config);
   const status = input?.status ?? evaluated.status;
+  const lc0Configured = Boolean(config.lc0Path);
+  const weightsConfigured = Boolean(config.weightsPath);
+  const lc0Exists = Boolean(config.lc0Path && existsSync(config.lc0Path));
   const weightsExists = Boolean(config.weightsPath && existsSync(config.weightsPath));
   return {
     status,
     ready: status === "ready",
     providerName: "maia-lc0-runtime",
     providerVersion: "14B",
+    enabled: config.enabled,
+    configured: lc0Configured && weightsConfigured,
+    lc0Configured,
+    weightsConfigured,
+    lc0Exists,
+    cacheEnabled: config.cacheEnabled,
+    maxConcurrentRequests: config.maxConcurrentRequests,
     lc0Path: config.lc0Path,
     weightsPath: config.weightsPath,
     weightsExists,
@@ -89,6 +99,7 @@ export function buildMaiaRuntimeHealth(config: MaiaRuntimeConfig, input?: { stat
 export function getRedactedMaiaRuntimeSummary(config: MaiaRuntimeConfig, health: MaiaRuntimeHealth): Record<string, unknown> {
   return {
     enabled: config.enabled,
+    configured: health.configured,
     status: health.status,
     ready: health.ready,
     providerName: health.providerName,
@@ -96,8 +107,9 @@ export function getRedactedMaiaRuntimeSummary(config: MaiaRuntimeConfig, health:
     skillLevel: config.skillLevel,
     timeoutMs: config.timeoutMs,
     nodes: config.nodes,
-    lc0Configured: Boolean(config.lc0Path),
-    weightsConfigured: Boolean(config.weightsPath),
+    lc0Configured: health.lc0Configured,
+    weightsConfigured: health.weightsConfigured,
+    lc0Exists: health.lc0Exists,
     weightsExists: health.weightsExists,
     cacheEnabled: config.cacheEnabled,
     maxConcurrentRequests: config.maxConcurrentRequests,

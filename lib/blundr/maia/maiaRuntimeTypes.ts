@@ -29,6 +29,13 @@ export interface MaiaRuntimeHealth {
   ready: boolean;
   providerName: string;
   providerVersion: string;
+  enabled: boolean;
+  configured: boolean;
+  lc0Configured: boolean;
+  weightsConfigured: boolean;
+  lc0Exists: boolean;
+  cacheEnabled: boolean;
+  maxConcurrentRequests: number;
   lc0Path: string | null;
   weightsPath: string | null;
   weightsExists: boolean;
@@ -45,6 +52,8 @@ export interface MaiaRuntimeMoveRequest {
   legalMovesUci: string[];
   skillLevel: MaiaSkillLevel;
   timeoutMs: number;
+  ratingBandId?: string | null;
+  requestedRating?: number | null;
 }
 
 export interface MaiaRuntimeMoveResult {

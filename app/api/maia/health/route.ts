@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 
-import { MaiaLc0RuntimeAdapter } from "@/lib/blundr/maia/maiaLc0RuntimeAdapter";
 import { buildMaiaRuntimeHealth, getRedactedMaiaRuntimeSummary, readMaiaRuntimeConfig } from "@/lib/blundr/maia/maiaRuntimeConfig";
 
 function jsonNoStore(body: unknown, init?: ResponseInit): NextResponse {
@@ -11,14 +10,12 @@ function jsonNoStore(body: unknown, init?: ResponseInit): NextResponse {
 
 export async function GET(): Promise<Response> {
   const config = readMaiaRuntimeConfig();
-  const adapter = new MaiaLc0RuntimeAdapter(config);
-  let health = buildMaiaRuntimeHealth(config);
-  if (config.enabled) {
-    health = await adapter.health();
-  }
+  const health = buildMaiaRuntimeHealth(config);
   const summary = getRedactedMaiaRuntimeSummary(config, health);
 
   return jsonNoStore({
+    enabled: config.enabled,
+    configured: health.configured,
     status: health.status,
     ready: health.ready,
     providerName: health.providerName,
@@ -26,8 +23,11 @@ export async function GET(): Promise<Response> {
     skillLevel: config.skillLevel,
     nodes: config.nodes,
     timeoutMs: config.timeoutMs,
-    weightsConfigured: Boolean(config.weightsPath),
-    lc0Configured: Boolean(config.lc0Path),
+    cacheEnabled: config.cacheEnabled,
+    maxConcurrentRequests: config.maxConcurrentRequests,
+    lc0Configured: health.lc0Configured,
+    weightsConfigured: health.weightsConfigured,
+    lc0Exists: health.lc0Exists,
     weightsExists: health.weightsExists,
     lastError: health.lastError,
     summary,
