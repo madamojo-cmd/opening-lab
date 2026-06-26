@@ -39,6 +39,8 @@ export interface MaiaOpponentReplyRequest {
   maxCandidates: number;
   timeoutMs: number;
   continuationSessionId: string | null;
+  ratingBandId?: string | null;
+  requestedRating?: number | null;
 }
 
 export interface MaiaOpponentReplyResult {

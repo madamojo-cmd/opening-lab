@@ -29,6 +29,8 @@ export class MaiaApiClientProvider implements MaiaProvider {
         legalMovesUci: request.legalMovesUci,
         skillLevel: request.skillLevel,
         timeoutMs: request.timeoutMs,
+        ratingBandId: request.ratingBandId ?? null,
+        requestedRating: request.requestedRating ?? null,
       };
       const result = await timeoutFetch<MaiaOpponentReplyResult>(
         "/api/maia/opponent-reply",

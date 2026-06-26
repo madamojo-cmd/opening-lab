@@ -11,6 +11,12 @@ import {
 } from "./runtimeOpeningIndex.generated";
 import { applyRuntimeUciMove } from "../runtime/uciReplay";
 import { normalizeRuntimePlaySequenceUci } from "../runtime/uciNormalization";
+import {
+  buildStage2RatingAwareSeed,
+  getStage2RatingBand,
+  stage2RatingBandMatchesLocalMetadata,
+  type Stage2RatingBandId,
+} from "../ratings/ratingBands";
 
 export type RuntimeTrainableRepertoire = {
   id: string;
@@ -42,6 +48,10 @@ export type RuntimeWeightedOpeningSelection = {
   openingSelectionSeed: string | null;
   openingSelectionWasPersisted: boolean;
   weightsSummary: RuntimeWeightedOpeningSelectionSummary[];
+  ratingBandId?: Stage2RatingBandId | string | null;
+  ratingBandLabel?: string | null;
+  ratingBandTarget?: string | null;
+  ratingAware?: boolean;
 };
 
 export type RuntimeWeightedTrainingLineSelectionSummary = {
@@ -74,6 +84,11 @@ export type RuntimeWeightedTrainingLineSelection = {
   repeatUnavoidable: boolean;
   selectionSeed: string | null;
   lineWeightsSummary: RuntimeWeightedTrainingLineSelectionSummary[];
+  ratingBandId?: Stage2RatingBandId | string | null;
+  ratingBandLabel?: string | null;
+  ratingBandTarget?: string | null;
+  ratingAware?: boolean;
+  ratingGateFallbackUsed?: boolean;
 };
 
 export type RuntimeOpeningIdentityLine = {
@@ -84,6 +99,10 @@ export type RuntimeOpeningIdentityLine = {
   playSequenceUci: string[];
   moveCount: number;
   totalGames: number;
+  averageRating?: number | string | null;
+  profileId?: string | null;
+  profile?: string | null;
+  profiles?: string | null;
 };
 
 type RuntimeTrainableLineData = {
@@ -92,6 +111,10 @@ type RuntimeTrainableLineData = {
   playSequenceUci: readonly string[];
   movesSan: readonly string[];
   totalGames: number;
+  averageRating?: number | string | null;
+  profileId?: string | null;
+  profile?: string | null;
+  profiles?: string | null;
 };
 
 type RuntimeLineBodyModule = {
@@ -260,7 +283,12 @@ export async function loadStage2RuntimeTrainableRepertoires(): Promise<RuntimeTr
   return loaded.filter((entry): entry is RuntimeTrainableRepertoire => Boolean(entry));
 }
 
-export function selectRuntimeWeightedOpeningSelection(seed: string = "stage2-runtime-weighted-opening-selection-v1"): RuntimeWeightedOpeningSelection {
+export function selectRuntimeWeightedOpeningSelection(
+  seed: string = "stage2-runtime-weighted-opening-selection-v1",
+  ratingBandId?: Stage2RatingBandId | string | null,
+): RuntimeWeightedOpeningSelection {
+  const ratingBandExplicit = Boolean(ratingBandId);
+  const ratingBand = getStage2RatingBand(ratingBandId);
   const eligibleOpenings = STAGE2_OPENING_AVAILABILITY_MATRIX.filter((entry) => entry.runtimeAvailable && Boolean(STAGE2_RUNTIME_OPENING_INDEX_BY_ID[entry.openingId]));
   const weightsSummary: RuntimeWeightedOpeningSelectionSummary[] = eligibleOpenings.map((entry) => ({
     openingId: entry.openingId,
@@ -268,10 +296,14 @@ export function selectRuntimeWeightedOpeningSelection(seed: string = "stage2-run
     runtimeCandidateMoveCount: entry.runtimeCandidateMoveCount,
     weight: Math.max(1, entry.runtimeCandidateMoveCount),
   }));
-  const selected = pickWeighted(weightsSummary, normalizeSeed(seed));
+  const selected = pickWeighted(weightsSummary, ratingBandExplicit ? buildStage2RatingAwareSeed(normalizeSeed(seed), ratingBand.id) : normalizeSeed(seed));
   return {
     mode: "runtime_weighted",
     source: "local_runtime_package",
+    ratingBandId: ratingBandExplicit ? ratingBand.id : null,
+    ratingBandLabel: ratingBandExplicit ? ratingBand.label : null,
+    ratingBandTarget: ratingBandExplicit ? ratingBand.target : null,
+    ratingAware: ratingBandExplicit,
     selectedOpeningId: selected.openingId,
     eligibleCount: eligibleOpenings.length,
     eligibleOpeningIds: eligibleOpenings.map((entry) => entry.openingId),
@@ -301,7 +333,10 @@ export function selectRuntimeWeightedTrainingLineSelection(input: {
   recentLineKeys?: string[] | null;
   seed?: string | null;
   repertoire?: RuntimeTrainableRepertoire | null;
+  ratingBandId?: Stage2RatingBandId | string | null;
 }): RuntimeWeightedTrainingLineSelection | null {
+  const ratingBandExplicit = Boolean(input.ratingBandId);
+  const ratingBand = getStage2RatingBand(input.ratingBandId);
   const repertoire = input.repertoire ?? null;
   if (!repertoire || !Array.isArray(repertoire.lines) || repertoire.lines.length === 0) {
     return null;
@@ -310,18 +345,27 @@ export function selectRuntimeWeightedTrainingLineSelection(input: {
   if (!rawLines || rawLines.length === 0) {
     return null;
   }
+
   const recentLineKeys = (input.recentLineKeys ?? [])
     .map((entry) => String(entry ?? "").trim())
     .filter(Boolean)
     .slice(0, 2);
-  const thirdConsecutiveRepeatLineKey = recentLineKeys.length === 2 && recentLineKeys[0] === recentLineKeys[1] ? recentLineKeys[0] : null;
+
+  const thirdConsecutiveRepeatLineKey =
+    recentLineKeys.length === 2 && recentLineKeys[0] === recentLineKeys[1]
+      ? recentLineKeys[0]
+      : null;
+
   const lineSummaries = repertoire.lines.map((line, lineIndex) => {
     const sourceLine = rawLines[lineIndex];
-    const normalizedPlaySequenceUci = sourceLine?.playSequenceUci ? normalizeRuntimePlaySequenceUci(sourceLine.playSequenceUci) : buildUciSequenceFromSanLine(line);
+    const normalizedPlaySequenceUci = sourceLine?.playSequenceUci
+      ? normalizeRuntimePlaySequenceUci(sourceLine.playSequenceUci)
+      : buildUciSequenceFromSanLine(line);
     const playKey = sourceLine?.playKey ?? normalizedPlaySequenceUci.join(",");
     const lineId = sourceLine?.lineId ?? `${repertoire.id}:${lineIndex}`;
     const lineKey = `${lineId}:${playKey}`;
     const totalGames = sourceLine?.totalGames ?? normalizedPlaySequenceUci.length;
+
     return {
       openingId: repertoire.id,
       lineId,
@@ -331,16 +375,50 @@ export function selectRuntimeWeightedTrainingLineSelection(input: {
       moveCount: normalizedPlaySequenceUci.length,
       weight: Math.max(1, totalGames),
       selectedPlaySequenceUci: normalizedPlaySequenceUci,
+      averageRating: sourceLine?.averageRating ?? null,
+      profileId: sourceLine?.profileId ?? null,
+      profile: sourceLine?.profile ?? null,
+      profiles: sourceLine?.profiles ?? null,
     };
   });
-  const eligibleLineSummaries = thirdConsecutiveRepeatLineKey ? lineSummaries.filter((line) => line.lineKey !== thirdConsecutiveRepeatLineKey) : lineSummaries;
+
+  const ratingMatchedLineSummaries = ratingBandExplicit
+    ? lineSummaries.filter((line) =>
+        stage2RatingBandMatchesLocalMetadata({
+          bandId: ratingBand.id,
+          averageRating: line.averageRating,
+          profileId: line.profileId,
+          profile: line.profile,
+          profiles: line.profiles,
+        }),
+      )
+    : lineSummaries;
+
+  const ratingGateFallbackUsed = ratingBandExplicit && ratingMatchedLineSummaries.length === 0;
+  const ratingCandidateLineSummaries = ratingGateFallbackUsed ? lineSummaries : ratingMatchedLineSummaries;
+
+  const eligibleLineSummaries = thirdConsecutiveRepeatLineKey
+    ? ratingCandidateLineSummaries.filter((line) => line.lineKey !== thirdConsecutiveRepeatLineKey)
+    : ratingCandidateLineSummaries;
+
   const blockedThirdRepeatLineKeys = thirdConsecutiveRepeatLineKey ? [thirdConsecutiveRepeatLineKey] : [];
   const repeatUnavoidable = Boolean(thirdConsecutiveRepeatLineKey && eligibleLineSummaries.length === 0);
-  const weightedCandidates = eligibleLineSummaries.length > 0 ? eligibleLineSummaries : lineSummaries;
-  const selected = pickWeighted(weightedCandidates, `${normalizeSeed(input.seed)}:${repertoire.id}:${recentLineKeys.join("|")}`);
+  const weightedCandidates = eligibleLineSummaries.length > 0 ? eligibleLineSummaries : ratingCandidateLineSummaries;
+
+  const selectionSeed = ratingBandExplicit
+    ? buildStage2RatingAwareSeed(normalizeSeed(input.seed), ratingBand.id)
+    : normalizeSeed(input.seed);
+
+  const selected = pickWeighted(weightedCandidates, `${selectionSeed}:${repertoire.id}:${recentLineKeys.join("|")}`);
+
   return {
     mode: "runtime_weighted_line",
     source: "local_runtime_package",
+    ratingBandId: ratingBandExplicit ? ratingBand.id : null,
+    ratingBandLabel: ratingBandExplicit ? ratingBand.label : null,
+    ratingBandTarget: ratingBandExplicit ? ratingBand.target : null,
+    ratingAware: ratingBandExplicit,
+    ratingGateFallbackUsed,
     openingId: repertoire.id,
     selectedLineId: selected.lineId,
     selectedLineKey: selected.lineKey,
@@ -354,7 +432,11 @@ export function selectRuntimeWeightedTrainingLineSelection(input: {
     recentLineKeys,
     blockedRecentLineKeys: blockedThirdRepeatLineKeys,
     blockedThirdRepeatLineKeys,
-    variationReason: repeatUnavoidable ? "repeat_unavoidable_no_alternative" : (blockedThirdRepeatLineKeys.length > 0 ? "third_consecutive_repeat_excluded" : "fresh_line_selection"),
+    variationReason: repeatUnavoidable
+      ? "repeat_unavoidable_no_alternative"
+      : blockedThirdRepeatLineKeys.length > 0
+        ? "third_consecutive_repeat_excluded"
+        : "fresh_line_selection",
     repeatUnavoidable,
     selectionSeed: normalizeSeed(input.seed),
     lineWeightsSummary: lineSummaries.map(({ openingId, lineId, lineKey, lineIndex, playKey, moveCount, weight }) => ({

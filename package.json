@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
+    "build:launch": "next build --webpack",
     "start": "next start",
     "copy-stockfish": "node scripts/copy-stockfish.js",
     "postinstall": "node scripts/copy-stockfish.js",
