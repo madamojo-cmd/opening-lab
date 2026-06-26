@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { filterProjectiveTacticsForViewMode, type ProjectiveTacticVisual } from "../../lib/blundr/projectiveTactics";
+import { filterProjectiveTacticsForViewMode, resolveProjectiveTacticDisplay, type ProjectiveTacticVisual } from "../../lib/blundr/projectiveTactics";
 
 const baseVisual: ProjectiveTacticVisual = {
   id: "test",
@@ -34,5 +34,8 @@ assert.deepEqual(filterProjectiveTacticsForViewMode({
   viewMode: "assisted",
   visuals: [{ ...baseVisual, confidence: "medium" }],
 }), []);
+assert.equal(resolveProjectiveTacticDisplay({ enabled: false, viewMode: "assisted", visuals: [baseVisual], showLines: true, showLabels: true }).shouldRender, false);
+assert.equal(resolveProjectiveTacticDisplay({ enabled: true, viewMode: "assisted", visuals: [baseVisual], showLines: true, showLabels: true }).shouldRender, true);
+assert.equal(resolveProjectiveTacticDisplay({ enabled: true, viewMode: "plain", visuals: [baseVisual], showLines: true, showLabels: true }).shouldRender, false);
 
 console.log("projectiveTacticsAssistedOnly ok");

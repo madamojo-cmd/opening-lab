@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { Chess } from "chess.js";
 
 import { buildTrainingBoardVisibilitySquares } from "../../lib/blundr/presentation/legalMoveDotVisibility";
-import { detectProjectiveTactics, filterProjectiveTacticsForViewMode } from "../../lib/blundr/projectiveTactics";
+import { detectProjectiveTactics, filterProjectiveTacticsForViewMode, resolveProjectiveTacticDisplay } from "../../lib/blundr/projectiveTactics";
 
 const detected = detectProjectiveTactics({
   fen: "3rk2q/5N2/8/8/8/8/8/K7 b - - 0 1",
@@ -14,6 +14,7 @@ const detected = detectProjectiveTactics({
 
 assert.equal(detected.visuals.length, 1);
 assert.deepEqual(filterProjectiveTacticsForViewMode({ enabled: true, viewMode: "plain", visuals: detected.visuals }), []);
+assert.equal(resolveProjectiveTacticDisplay({ enabled: true, viewMode: "plain", visuals: detected.visuals, showLines: true, showLabels: true }).shouldRender, false);
 
 const game = new Chess();
 const legalMoveSquares = (game.moves({ square: "g1", verbose: true }) as Array<{ to: string }>).map((move) => move.to);

@@ -92,6 +92,8 @@ git push
 - Assisted View only; Plain View remains no-leak protected.
 - Visual-only overlays, not move authority.
 - Initial active motifs: fork, knight fork, and conservative pin.
+- Tactic overlays last about 10 seconds; normal next-move lines can return after about 7 seconds.
+- When enabled, Board Settings has independent tactic line and tactic label toggles.
 - Broader tactic taxonomy is registered for future motifs but disabled until tested.
 
 Launch deployment references:

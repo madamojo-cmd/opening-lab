@@ -35,6 +35,16 @@ assertKnightPath("b1", "c3", "white");
 assertKnightPath("f3", "g1", "black");
 assert.equal(buildKnightLShapePath({ from: "g1", to: "g3", orientation: "white" }), null);
 
+const verticalFirst = buildKnightLShapePath({ from: "g1", to: "f3", orientation: "white", bendPreference: "vertical_first" });
+const horizontalFirst = buildKnightLShapePath({ from: "g1", to: "f3", orientation: "white", bendPreference: "horizontal_first" });
+assert.ok(verticalFirst);
+assert.ok(horizontalFirst);
+assert.notDeepEqual(verticalFirst[1], horizontalFirst[1]);
+assertOrthogonal(verticalFirst);
+assertOrthogonal(horizontalFirst);
+assert.deepEqual(segmentLengths(verticalFirst).sort((a, b) => a - b), [1, 2]);
+assert.deepEqual(segmentLengths(horizontalFirst).sort((a, b) => a - b), [1, 2]);
+
 const detected = detectProjectiveTactics({
   fen: "3rk2q/5N2/8/8/8/8/8/K7 b - - 0 1",
   lastMoveUci: "h6f7",
@@ -49,5 +59,6 @@ assert.equal(detected.visuals[0].targetSquares.length >= 2, true);
 assert.equal(detected.visuals[0].confidence, "high");
 assert.equal(detected.visuals[0].lineSegments.every((segment) => segment.shape === "knight_l"), true);
 assert.equal(detected.visuals[0].lineSegments.some((segment) => segment.shape === "straight"), false);
+assert.deepEqual(new Set(detected.visuals[0].lineSegments.map((segment) => segment.bendPreference)), new Set(["vertical_first", "horizontal_first"]));
 
 console.log("projectiveTacticsKnightLShape ok");

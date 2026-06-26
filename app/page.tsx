@@ -55,11 +55,15 @@ import { buildTrainingBoardVisibilitySquares } from "@/lib/blundr/presentation/l
 import {
   DEFAULT_PROJECTIVE_TACTIC_DURATION_MS,
   DEFAULT_PROJECTIVE_TACTIC_FADE_MS,
+  PROJECTIVE_TACTIC_NEXT_VISUALS_ALLOWED_AFTER_MS,
   PROJECTIVE_TACTICS_ENABLED,
   detectProjectiveTactics,
   filterProjectiveTacticsForViewMode,
+  filterNewProjectiveTactics,
   isStaleProjectiveTacticToken,
   nextProjectiveTacticToken,
+  resolveProjectiveTacticDisplay,
+  shouldSuppressProjectiveTacticsForCheckmate,
   shouldClearProjectiveTacticsForBoardReset,
   shouldClearProjectiveTacticsOnViewMode,
   type ProjectiveTacticVisual,
@@ -466,7 +470,7 @@ function buildDiagnosticsPlaceholder(input: DiagnosticsPlaceholderInput): Traine
 }
 type BoardTheme = "classic" | "slate" | "blue" | "walnut";
 type PieceStyle = "unicode" | "letters" | "neo";
-type BoardSettings = { boardTheme: BoardTheme; pieceStyle: PieceStyle; showAttack: boolean; showDefense: boolean; showPlan: boolean; showMoveDots: boolean; showEvalBar: boolean; showCaptured: boolean; showOpponentCue: boolean };
+type BoardSettings = { boardTheme: BoardTheme; pieceStyle: PieceStyle; showAttack: boolean; showDefense: boolean; showPlan: boolean; showMoveDots: boolean; showEvalBar: boolean; showCaptured: boolean; showOpponentCue: boolean; projectiveTacticLinesEnabled: boolean; projectiveTacticLabelsEnabled: boolean };
 type CapturedSummary = { whiteCaptured: string[]; blackCaptured: string[]; materialAdvantage: { side: ChessColor | null; value: number } };
 
 const DEFAULT_PROGRESS: Progress = { attempts: 0, correct: 0, incorrect: 0, streak: 0, trainedPositions: {}, mistakes: {} };
@@ -475,7 +479,7 @@ const LETTER_PIECES: Record<string, string> = { wp:"P", wn:"N", wb:"B", wr:"R", 
 const NEO_PIECES: Record<string, string> = { wp:"♙", wn:"♘", wb:"♗", wr:"♖", wq:"♕", wk:"♔", bp:"♟", bn:"♞", bb:"♝", br:"♜", bq:"♛", bk:"♚" };
 const PIECE_VALUES: Record<string, number> = { p:1, n:3, b:3, r:5, q:9, k:0 };
 const INITIAL_COUNTS: Record<ChessColor, Record<string, number>> = { w:{p:8,n:2,b:2,r:2,q:1,k:1}, b:{p:8,n:2,b:2,r:2,q:1,k:1} };
-const DEFAULT_BOARD_SETTINGS: BoardSettings = { boardTheme:"classic", pieceStyle:"unicode", showAttack:true, showDefense:true, showPlan:true, showMoveDots:true, showEvalBar:true, showCaptured:true, showOpponentCue:true };
+const DEFAULT_BOARD_SETTINGS: BoardSettings = { boardTheme:"classic", pieceStyle:"unicode", showAttack:true, showDefense:true, showPlan:true, showMoveDots:true, showEvalBar:true, showCaptured:true, showOpponentCue:true, projectiveTacticLinesEnabled:true, projectiveTacticLabelsEnabled:true };
 const LOCAL_TELEMETRY_KEY = "blundr-v27-local-telemetry";
 const STAGE2_RUNTIME_TRAINING_LINE_MEMORY_KEY = "blundr-stage2-runtime-training-line-memory-v1";
 const MAX_LOCAL_TELEMETRY_EVENTS = 120;
@@ -1294,6 +1298,7 @@ export default function App(){
   const [trainerView,setTrainerView]=useState<TrainerView>("assisted");
   const [projectiveTacticVisuals,setProjectiveTacticVisuals]=useState<ProjectiveTacticVisual[]>([]);
   const [projectiveTacticsFading,setProjectiveTacticsFading]=useState(false);
+  const [projectiveTacticsAllowNextVisuals,setProjectiveTacticsAllowNextVisuals]=useState(true);
   const [bookComplete,setBookComplete]=useState(false);
   const [opponentCue,setOpponentCue]=useState<OpponentCue|null>(null);
   const [opponentVariationDebug,setOpponentVariationDebug]=useState<OpponentVariationDebug|null>(null);
@@ -1449,6 +1454,8 @@ export default function App(){
   const projectiveTacticTokenRef=useRef(0);
   const projectiveTacticFadeTimeoutRef=useRef<number|null>(null);
   const projectiveTacticClearTimeoutRef=useRef<number|null>(null);
+  const projectiveTacticNextVisualsTimeoutRef=useRef<number|null>(null);
+  const projectiveTacticSeenKeysRef=useRef<Set<string>>(new Set());
   const runtimeRepertoireLoadSeqRef=useRef(0);
   const debugCollectorLoadStartedRef=useRef(false);
   const initialBlackOpponentHandoffKeyRef=useRef<string|null>(null);
@@ -4094,11 +4101,14 @@ export default function App(){
 
   const isReviewingHistory=historyIndex<positionHistory.length-1;
   const selectedLegalMoves=selectedSquare&&boardSettings.showMoveDots&&isUserTurn&&!isReviewingHistory&&!game.isGameOver()?(game.moves({square:selectedSquare as any,verbose:true}) as any[]):[];
-  const filteredProjectiveTacticVisuals=useMemo(()=>filterProjectiveTacticsForViewMode({
+  const projectiveTacticDisplay=useMemo(()=>resolveProjectiveTacticDisplay({
     enabled:PROJECTIVE_TACTICS_ENABLED,
     viewMode:trainerView,
     visuals:projectiveTacticVisuals,
-  }),[trainerView,projectiveTacticVisuals]);
+    showLines:boardSettings.projectiveTacticLinesEnabled,
+    showLabels:boardSettings.projectiveTacticLabelsEnabled,
+  }),[trainerView,projectiveTacticVisuals,boardSettings.projectiveTacticLinesEnabled,boardSettings.projectiveTacticLabelsEnabled]);
+  const projectiveTacticsVisualPriorityActive=projectiveTacticDisplay.shouldRender&&!projectiveTacticsAllowNextVisuals;
   const gptDebugText=JSON.stringify({pipeline:brainResponse?.pipeline??null,engine:enginePreview??null,moveQuality,moveQualityPending,shouldValidateTrainingMove,debug:brainResponse?.debug??null},null,2);
   const visualDebugText=JSON.stringify(visualDebugSnapshot,null,2);
   const telemetryDebugText=JSON.stringify(telemetryEvents.slice(-30),null,2);
@@ -4209,6 +4219,10 @@ export default function App(){
       window.clearTimeout(projectiveTacticClearTimeoutRef.current);
       projectiveTacticClearTimeoutRef.current=null;
     }
+    if(projectiveTacticNextVisualsTimeoutRef.current!==null){
+      window.clearTimeout(projectiveTacticNextVisualsTimeoutRef.current);
+      projectiveTacticNextVisualsTimeoutRef.current=null;
+    }
   }
   function clearProjectiveTacticOverlay(reason:string){
     if(!shouldClearProjectiveTacticsForBoardReset(reason)&&reason!=="replace")return;
@@ -4216,6 +4230,10 @@ export default function App(){
     projectiveTacticTokenRef.current=nextProjectiveTacticToken(projectiveTacticTokenRef.current);
     setProjectiveTacticVisuals([]);
     setProjectiveTacticsFading(false);
+    setProjectiveTacticsAllowNextVisuals(true);
+    if(reason!=="replace"&&reason!=="plain_view"&&reason!=="feature_disabled"){
+      projectiveTacticSeenKeysRef.current=new Set();
+    }
   }
   function showProjectiveTacticOverlay(visuals:ProjectiveTacticVisual[]){
     const filtered=filterProjectiveTacticsForViewMode({
@@ -4223,7 +4241,14 @@ export default function App(){
       viewMode:trainerView,
       visuals,
     });
-    if(!filtered.length){
+    const display=resolveProjectiveTacticDisplay({
+      enabled:PROJECTIVE_TACTICS_ENABLED,
+      viewMode:trainerView,
+      visuals:filtered,
+      showLines:boardSettings.projectiveTacticLinesEnabled,
+      showLabels:boardSettings.projectiveTacticLabelsEnabled,
+    });
+    if(!filtered.length||!display.shouldRender){
       clearProjectiveTacticOverlay(PROJECTIVE_TACTICS_ENABLED?"replace":"feature_disabled");
       return;
     }
@@ -4232,6 +4257,12 @@ export default function App(){
     projectiveTacticTokenRef.current=token;
     setProjectiveTacticVisuals(filtered);
     setProjectiveTacticsFading(false);
+    setProjectiveTacticsAllowNextVisuals(false);
+    projectiveTacticNextVisualsTimeoutRef.current=window.setTimeout(()=>{
+      if(isStaleProjectiveTacticToken(projectiveTacticTokenRef.current,token))return;
+      setProjectiveTacticsAllowNextVisuals(true);
+      projectiveTacticNextVisualsTimeoutRef.current=null;
+    },PROJECTIVE_TACTIC_NEXT_VISUALS_ALLOWED_AFTER_MS);
     projectiveTacticFadeTimeoutRef.current=window.setTimeout(()=>{
       if(isStaleProjectiveTacticToken(projectiveTacticTokenRef.current,token))return;
       setProjectiveTacticsFading(true);
@@ -4240,6 +4271,7 @@ export default function App(){
       if(isStaleProjectiveTacticToken(projectiveTacticTokenRef.current,token))return;
       setProjectiveTacticVisuals([]);
       setProjectiveTacticsFading(false);
+      setProjectiveTacticsAllowNextVisuals(true);
       projectiveTacticFadeTimeoutRef.current=null;
       projectiveTacticClearTimeoutRef.current=null;
     },DEFAULT_PROJECTIVE_TACTIC_DURATION_MS);
@@ -4249,13 +4281,29 @@ export default function App(){
       clearProjectiveTacticOverlay(PROJECTIVE_TACTICS_ENABLED?"plain_view":"feature_disabled");
       return;
     }
+    try{
+      const nextGame=new Chess(input.nextFen);
+      if(shouldSuppressProjectiveTacticsForCheckmate({isCheckmate:nextGame.isCheckmate()})){
+        clearProjectiveTacticOverlay("replace");
+        projectiveTacticSeenKeysRef.current=new Set();
+        return;
+      }
+    }catch{
+      clearProjectiveTacticOverlay("replace");
+      return;
+    }
     const detected=detectProjectiveTactics({
       fen:input.nextFen,
       lastMoveUci:input.lastMoveUci,
       learnerColor:userColor,
       movedColor:input.movedColor,
     });
-    showProjectiveTacticOverlay(detected.visuals);
+    const novelty=filterNewProjectiveTactics({
+      visuals:detected.visuals,
+      seenKeys:projectiveTacticSeenKeysRef.current,
+    });
+    projectiveTacticSeenKeysRef.current=novelty.nextSeenKeys;
+    showProjectiveTacticOverlay(novelty.newVisuals);
   }
   function commitRuntimeFrame(input:{
     nextFen?:string;
@@ -7041,7 +7089,7 @@ export default function App(){
           <p className="mt-2 text-[11px] font-semibold text-stone-500">{trainerView==="assisted"?"Shows the visual pattern cue before the move.":"Hides pre-move hints for independent recall."}</p>
         </div>
         {blundrDebugEnabled && activeBoard && enabledViews.length>0 && <div className="mb-3 grid gap-2" style={{gridTemplateColumns:`repeat(${enabledViews.length}, minmax(0,1fr))`}}>{enabledViews.map(v=><button key={v} onClick={()=>setActiveBoardView(v)} className={classNames("rounded-full px-4 py-2 text-sm font-black capitalize",safeBoardView===v?"bg-green-700 text-white shadow-sm":"bg-white text-stone-500 ring-1 ring-stone-200")}>{v}</button>)}</div>}
-        <TapChessboard game={game} orientation={repertoire.color} selectedSquare={selectedSquare} squareStyles={squareStyles} lines={boardLinesToRender} transientLines={transientLinesToRender} projectiveTacticVisuals={filteredProjectiveTacticVisuals} projectiveTacticsFading={projectiveTacticsFading} onSquareTap={handleSquareTap} whitePct={whitePct} evalText={evalText} settings={boardSettings} captured={captured} userColor={userColor} animationName={visualAnimationName} adaptiveOpeningIdentity={adaptiveOpeningIdentity} pendingPromotion={pendingPromotion} onPromotionSelect={handlePromotionPieceSelection} onPromotionCancel={cancelPromotionSelection}/>
+        <TapChessboard game={game} orientation={repertoire.color} selectedSquare={selectedSquare} squareStyles={squareStyles} lines={projectiveTacticsVisualPriorityActive?[]:boardLinesToRender} transientLines={transientLinesToRender} projectiveTacticVisuals={projectiveTacticDisplay.visuals} projectiveTacticsFading={projectiveTacticsFading} projectiveTacticShowLines={projectiveTacticDisplay.showLines} projectiveTacticShowLabels={projectiveTacticDisplay.showLabels} onSquareTap={handleSquareTap} whitePct={whitePct} evalText={evalText} settings={boardSettings} captured={captured} userColor={userColor} animationName={visualAnimationName} adaptiveOpeningIdentity={adaptiveOpeningIdentity} pendingPromotion={pendingPromotion} onPromotionSelect={handlePromotionPieceSelection} onPromotionCancel={cancelPromotionSelection}/>
         <HistoryControls index={historyIndex} total={positionHistory.length} onBack={()=>jumpHistory(-1)} onForward={()=>jumpHistory(1)}/>
       </div>
       {showDetails&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Coach Debug</div><div className="mt-2">coachMode: {coachDecision.mode}</div><div>coachAction: {coachDecision.action}</div><div>coachUtteranceId: {coachDecision.utteranceId??"none"}</div><div>coachUtteranceFamily: {coachDecision.utteranceFamily??"none"}</div><div>coachVariationReason: {String((coachDecision.debug as any)?.coachVariationReason??"n/a")}</div><div>coachHintStrength: {String((coachDecision.debug as any)?.coachHintStrength??"none")}</div><div>coachRevealRisk: {coachDecision.revealRisk}</div><div>coachGivesAnswer: {coachDecision.givesAnswer?"true":"false"}</div><div>coachButtons: {displayedCoachDecision.buttons.join(", ")||"none"}</div><div>coachShouldMarkReviewWorthy: {coachDecision.shouldMarkReviewWorthy?"true":"false"}</div><div>coachSuppressedReason: {coachDecision.suppressedReason??"none"}</div><div>coachFrameMatchesBoard: {coachContextResult.context?.recipeFrameMatchesBoard?"true":"false"}</div><div>coachFenMatchesBoard: {coachContextResult.context?.recipeFenMatchesBoard?"true":"false"}</div><div>recentCoachUtteranceIds: {coachUtteranceMemory.slice(-5).map((entry:any)=>entry.utteranceId).join(", ")||"none"}</div><div>coachSafetyWarnings: {JSON.stringify((coachDecision.debug as any)?.coachSafetyWarnings??[])}</div><div>coachReviewMarked: {coachReviewMarked?"true":"false"}</div><div>selectedOpportunity: {String((coachDecision.debug as any)?.selectedOpportunity??liveCoachState?.selected?.opportunity??"none")}</div><div>selectedIntent: {String((coachDecision.debug as any)?.selectedIntent??liveCoachState?.selected?.intent??"none")}</div><div>exactMoveAllowed: {coachContextResult.context?.exactMoveAllowed?"true":"false"}</div><div>claimTypes: {coachDecision.claimTypes.join(", ")||"none"}</div><div>blockedClaims: {String((coachDecision.debug as any)?.blockedClaims??"none")}</div><div>silenceReason: {String((coachDecision.debug as any)?.silenceReason??liveCoachState?.debug?.silenceReason??"none")}</div><div>branchTransitionSurfaceRendered: {branchTransitionSurface?.render?"true":"false"}</div><div>branchTransitionReason: {branchTransitionSurface?.reason??"none"}</div><div>continueFromHereAvailable: {branchTransitionSurface?.render?"true":"false"}</div><div>continueFromHereClicked: {continueFromHereClicked?"true":"false"}</div><div>coachSurfaceOwner: {coachSurfacePolicy.owner}</div><div>allowLegacyTrainingCard: {coachSurfacePolicy.allowLegacyTrainingCard?"true":"false"}</div><div>allowMoveImpactCard: {coachSurfacePolicy.allowMoveImpactCard?"true":"false"}</div><div>allowNextMoveText: {coachSurfacePolicy.allowNextMoveText?"true":"false"}</div><div>legacyCueSuppressedReason: {coachSurfacePolicy.reason}</div><div>moveImpactPresenterReason: {moveImpactPresentation.reason}</div></div>}
@@ -7109,7 +7157,7 @@ function coordTone(theme:BoardTheme,isDark:boolean){
   return isDark?"text-white/70":"text-stone-600/70";
 }
 
-function TapChessboard({game,orientation,selectedSquare,squareStyles,lines,transientLines,projectiveTacticVisuals,projectiveTacticsFading,onSquareTap,whitePct,evalText,settings,captured,userColor,animationName,adaptiveOpeningIdentity,pendingPromotion,onPromotionSelect,onPromotionCancel}:{game:Chess;orientation:RepertoireColor;selectedSquare:string|null;squareStyles:Record<string,CSSProperties>;lines:ActiveLine[];transientLines:ActiveLine[];projectiveTacticVisuals:ProjectiveTacticVisual[];projectiveTacticsFading:boolean;onSquareTap:(s:string)=>void;whitePct:number;evalText:string;settings:BoardSettings;captured:CapturedSummary;userColor:ChessColor;animationName?:string;adaptiveOpeningIdentity:AdaptiveOpeningIdentity | null;pendingPromotion:PendingPromotion | null;onPromotionSelect:(piece:PromotionPiece)=>void;onPromotionCancel:()=>void;}){
+function TapChessboard({game,orientation,selectedSquare,squareStyles,lines,transientLines,projectiveTacticVisuals,projectiveTacticsFading,projectiveTacticShowLines,projectiveTacticShowLabels,onSquareTap,whitePct,evalText,settings,captured,userColor,animationName,adaptiveOpeningIdentity,pendingPromotion,onPromotionSelect,onPromotionCancel}:{game:Chess;orientation:RepertoireColor;selectedSquare:string|null;squareStyles:Record<string,CSSProperties>;lines:ActiveLine[];transientLines:ActiveLine[];projectiveTacticVisuals:ProjectiveTacticVisual[];projectiveTacticsFading:boolean;projectiveTacticShowLines:boolean;projectiveTacticShowLabels:boolean;onSquareTap:(s:string)=>void;whitePct:number;evalText:string;settings:BoardSettings;captured:CapturedSummary;userColor:ChessColor;animationName?:string;adaptiveOpeningIdentity:AdaptiveOpeningIdentity | null;pendingPromotion:PendingPromotion | null;onPromotionSelect:(piece:PromotionPiece)=>void;onPromotionCancel:()=>void;}){
   const ranks=orientation==="white"?[8,7,6,5,4,3,2,1]:[1,2,3,4,5,6,7,8];
   const files=orientation==="white"?FILES:[...FILES].reverse();
   const centerFor=(sq:string)=>{
@@ -7128,7 +7176,7 @@ function TapChessboard({game,orientation,selectedSquare,squareStyles,lines,trans
         <div className={classNames("relative aspect-square w-full overflow-hidden rounded-[18px] border border-stone-300 bg-stone-200",visualAnimationClass(animationName))}>
           <BoardLines lines={lines} centerFor={centerFor} transient={false}/>
           <BoardLines lines={transientLines} centerFor={centerFor} transient/>
-          <ProjectiveTacticalOverlay visuals={projectiveTacticVisuals} orientation={orientation} fading={projectiveTacticsFading}/>
+          <ProjectiveTacticalOverlay visuals={projectiveTacticVisuals} orientation={orientation} fading={projectiveTacticsFading} showLines={projectiveTacticShowLines} showLabels={projectiveTacticShowLabels}/>
           <div className="grid h-full w-full grid-cols-8 grid-rows-8">
             {ranks.flatMap((rank,rowIndex)=>files.map((file,colIndex)=>{
               const square=`${file}${rank}`;
@@ -7208,17 +7256,17 @@ function EvalBar({whitePct,evalText}:{whitePct:number;evalText:string}){
 }
 
 function temporalGateColor(line:ActiveLine,transient:boolean){if(transient||line.kind==="opponent")return{primary:"#b884ff",secondary:"#d2b0ff",danger:"#f0e5ff",soft:"rgba(184,132,255,.14)"};if(line.kind==="defense")return{primary:"#21b8a6",secondary:"#84e8dd",danger:"#d8faf4",soft:"rgba(33,184,166,.14)"};if(line.kind==="attack")return{primary:"#ff7a59",secondary:"#ffc26a",danger:"#ffe3b0",soft:"rgba(255,122,89,.14)"};return{primary:"#5e7eff",secondary:"#9cb7ff",danger:"#dce6ff",soft:"rgba(94,126,255,.14)"}}
-function BoardLines({lines,centerFor,transient}:{lines:ActiveLine[];centerFor:(s:string)=>{x:number;y:number};transient:boolean}){const visible=lines.filter(l=>isValidSquare(l.from)&&isValidSquare(l.to)).slice(0,transient?1:2);if(!visible.length)return null;return <svg className="pointer-events-none absolute inset-0 z-20 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none"><defs>{visible.map((l,i)=>{const c=temporalGateColor(l,transient);return <linearGradient key={i} id={`tg-${transient?"t":"p"}-${i}`} x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor={c.primary} stopOpacity=".22"/><stop offset="54%" stopColor={c.secondary} stopOpacity=".92"/><stop offset="100%" stopColor={c.primary} stopOpacity=".76"/></linearGradient>})}</defs>{visible.map((l,i)=>{const f=centerFor(l.from),t=centerFor(l.to),c=temporalGateColor(l,transient);const knight=isKnightGeometry(l.from,l.to);const corner={x:t.x,y:f.y};const d=knight?`M ${f.x} ${f.y} L ${corner.x} ${corner.y} L ${t.x} ${t.y}`:`M ${f.x} ${f.y} Q ${(f.x+t.x)/2} ${(f.y+t.y)/2-3.2} ${t.x} ${t.y}`;const points=`${f.x},${f.y} ${corner.x},${corner.y} ${t.x},${t.y}`;const dash=transient?"2.4 1.8":undefined;return <g key={`${l.from}-${l.to}-${i}`} className={transient?"blundr-opponent-line":"blundr-intent-line"}><circle cx={f.x} cy={f.y} r="4.0" fill={c.soft} opacity=".95"/><circle cx={f.x} cy={f.y} r="3.15" fill="none" stroke={c.primary} strokeWidth=".72" opacity=".9"/><circle cx={t.x} cy={t.y} r="6.1" fill={c.soft} opacity=".95"/><circle cx={t.x} cy={t.y} r="4.7" fill="none" stroke={c.primary} strokeWidth=".82" opacity=".96"/><circle cx={t.x} cy={t.y} r="2.15" fill={c.primary} opacity=".22"/>{knight?<><polyline points={points} fill="none" stroke={c.soft} strokeWidth={transient?"2.4":"2.15"} strokeLinecap="round" strokeLinejoin="round" opacity=".9"/><polyline points={points} fill="none" stroke={`url(#tg-${transient?"t":"p"}-${i})`} strokeWidth={transient?"1.2":"1.02"} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={dash}/></>:<><path d={d} fill="none" stroke={c.soft} strokeWidth={transient?"2.3":"2.0"} strokeLinecap="round" opacity=".9"/><path d={d} fill="none" stroke={`url(#tg-${transient?"t":"p"}-${i})`} strokeWidth={transient?"1.12":".98"} strokeLinecap="round" strokeDasharray={dash}/></>}</g>})}</svg>}
+function BoardLines({lines,centerFor,transient}:{lines:ActiveLine[];centerFor:(s:string)=>{x:number;y:number};transient:boolean}){const visible=lines.filter(l=>isValidSquare(l.from)&&isValidSquare(l.to)).slice(0,transient?1:2);if(!visible.length)return null;return <svg className="pointer-events-none absolute inset-0 z-20 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none"><defs>{visible.map((l,i)=>{const c=temporalGateColor(l,transient);return <linearGradient key={i} id={`tg-${transient?"t":"p"}-${i}`} x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor={c.primary} stopOpacity=".22"/><stop offset="54%" stopColor={c.secondary} stopOpacity=".92"/><stop offset="100%" stopColor={c.primary} stopOpacity=".76"/></linearGradient>})}</defs>{visible.map((l,i)=>{const f=centerFor(l.from),t=centerFor(l.to),c=temporalGateColor(l,transient);const knight=isKnightGeometry(l.from,l.to);const corner={x:t.x,y:f.y};const d=knight?`M ${f.x} ${f.y} L ${corner.x} ${corner.y} L ${t.x} ${t.y}`:`M ${f.x} ${f.y} Q ${(f.x+t.x)/2} ${(f.y+t.y)/2-3.2} ${t.x} ${t.y}`;const points=`${f.x},${f.y} ${corner.x},${corner.y} ${t.x},${t.y}`;return <g key={`${l.from}-${l.to}-${i}`} className={transient?"blundr-opponent-line":"blundr-intent-line"}><circle cx={f.x} cy={f.y} r="4.0" fill={c.soft} opacity=".95"/><circle cx={f.x} cy={f.y} r="3.15" fill="none" stroke={c.primary} strokeWidth=".72" opacity=".9"/><circle cx={t.x} cy={t.y} r="6.1" fill={c.soft} opacity=".95"/><circle cx={t.x} cy={t.y} r="4.7" fill="none" stroke={c.primary} strokeWidth=".82" opacity=".96"/><circle cx={t.x} cy={t.y} r="2.15" fill={c.primary} opacity=".22"/>{knight?<><polyline points={points} fill="none" stroke={c.soft} strokeWidth={transient?"2.4":"2.15"} strokeLinecap="round" strokeLinejoin="round" opacity=".9"/><polyline points={points} fill="none" stroke={`url(#tg-${transient?"t":"p"}-${i})`} strokeWidth={transient?"1.2":"1.02"} strokeLinecap="round" strokeLinejoin="round"/></>:<><path d={d} fill="none" stroke={c.soft} strokeWidth={transient?"2.3":"2.0"} strokeLinecap="round" opacity=".9"/><path d={d} fill="none" stroke={`url(#tg-${transient?"t":"p"}-${i})`} strokeWidth={transient?"1.12":".98"} strokeLinecap="round"/></>}</g>})}</svg>}
 
 function HistoryControls({index,total,onBack,onForward}:{index:number;total:number;onBack:()=>void;onForward:()=>void}){return <div className="mt-3 flex items-center justify-between rounded-2xl bg-stone-50 px-3 py-2 text-xs font-black text-stone-500"><button disabled={index<=0} onClick={onBack} className="rounded-full bg-white px-3 py-2 text-stone-700 shadow-sm disabled:opacity-30">← Back</button><span>{total<=1?"Start position":`Move review ${index}/${total-1}`}</span><button disabled={index>=total-1} onClick={onForward} className="rounded-full bg-white px-3 py-2 text-stone-700 shadow-sm disabled:opacity-30">Forward →</button></div>}
 function GameEndCard({title,message,onRestart}:{title:string;message:string;onRestart:()=>void}){return <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-center shadow-sm"><div className="text-xs font-black uppercase tracking-wide text-amber-700">Game concluded</div><h2 className="mt-1 text-2xl font-black text-amber-950">{title}</h2><p className="mt-2 text-sm leading-6 text-amber-800">{message}</p><button onClick={onRestart} className="mt-4 w-full rounded-2xl bg-amber-600 px-4 py-3 font-black text-white shadow-sm">Restart</button></div>}
 
 function SettingsPanel({settings,setSettings,rating,ratingBands,onRatingFilterChange,onClose}:{settings:BoardSettings;setSettings:(s:BoardSettings)=>void;rating:Stage2RatingBand;ratingBands:readonly Stage2RatingBand[];onRatingFilterChange:(value:string)=>void;onClose:()=>void}){
   const update=<K extends keyof BoardSettings>(key:K,value:BoardSettings[K])=>setSettings({...settings,[key]:value});
-  const toggle=(key:keyof Pick<BoardSettings,"showAttack"|"showDefense"|"showPlan"|"showMoveDots"|"showEvalBar"|"showCaptured"|"showOpponentCue">)=>setSettings({...settings,[key]:!settings[key]});
+  const toggle=(key:keyof Pick<BoardSettings,"showAttack"|"showDefense"|"showPlan"|"showMoveDots"|"showEvalBar"|"showCaptured"|"showOpponentCue"|"projectiveTacticLinesEnabled"|"projectiveTacticLabelsEnabled">)=>setSettings({...settings,[key]:!settings[key]});
   const OptionButton=({active,label,onClick}:{active:boolean;label:string;onClick:()=>void})=><button onClick={onClick} className={classNames("rounded-2xl px-3 py-2 text-xs font-black",active?"bg-green-700 text-white":"bg-stone-100 text-stone-600")}>{label}</button>;
-  const Toggle=({id,label}:{id:keyof Pick<BoardSettings,"showAttack"|"showDefense"|"showPlan"|"showMoveDots"|"showEvalBar"|"showCaptured"|"showOpponentCue">;label:string})=><button onClick={()=>toggle(id)} className={classNames("flex items-center justify-between rounded-2xl px-3 py-3 text-sm font-black",settings[id]?"bg-green-50 text-green-800":"bg-stone-100 text-stone-500")}><span>{label}</span><span>{settings[id]?"ON":"OFF"}</span></button>;
-  return <div className="fixed inset-0 z-[70] flex items-end bg-black/35 p-4"><div className="mx-auto max-h-[86vh] w-full max-w-md overflow-auto rounded-3xl bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><div><h2 className="text-xl font-black">Board Settings</h2><p className="text-xs font-semibold text-stone-500">Customize board, pieces, and active displays.</p></div><button onClick={onClose} className="rounded-full bg-stone-100 p-2"><X size={18}/></button></div><div className="space-y-5"><div><div className="mb-2 text-sm font-black">Trainer rating band</div><select value={rating.value} onChange={(event)=>onRatingFilterChange(event.target.value)} className="w-full rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-black text-stone-800 outline-none focus:border-green-700">{ratingBands.map((band)=><option key={band.id} value={band.value}>{band.label} — {band.target}</option>)}</select><p className="mt-2 text-xs font-semibold leading-5 text-stone-500">Restricted Trainer uses this local-package rating band for line selection. Maia continuation maps to {rating.maiaSkill} / ~{rating.maiaRating}.</p></div><div><div className="mb-2 text-sm font-black">Board</div><div className="grid grid-cols-4 gap-2"><OptionButton active={settings.boardTheme==="classic"} label="Classic" onClick={()=>update("boardTheme","classic")}/><OptionButton active={settings.boardTheme==="slate"} label="Slate" onClick={()=>update("boardTheme","slate")}/><OptionButton active={settings.boardTheme==="blue"} label="Blue" onClick={()=>update("boardTheme","blue")}/><OptionButton active={settings.boardTheme==="walnut"} label="Walnut" onClick={()=>update("boardTheme","walnut")}/></div></div><div><div className="mb-2 text-sm font-black">Pieces</div><div className="grid grid-cols-3 gap-2"><OptionButton active={settings.pieceStyle==="unicode"} label="Classic" onClick={()=>update("pieceStyle","unicode")}/><OptionButton active={settings.pieceStyle==="neo"} label="Neo" onClick={()=>update("pieceStyle","neo")}/><OptionButton active={settings.pieceStyle==="letters"} label="Letters" onClick={()=>update("pieceStyle","letters")}/></div></div><div><div className="mb-2 text-sm font-black">Active displays</div><div className="grid grid-cols-2 gap-2"><Toggle id="showMoveDots" label="Legal move dots"/><Toggle id="showEvalBar" label="Advantage bar"/><Toggle id="showCaptured" label="Captured pieces"/><Toggle id="showOpponentCue" label="Show Last Opponent Move"/></div></div><button onClick={onClose} className="w-full rounded-2xl bg-stone-950 px-4 py-4 font-black text-white">Done</button></div></div></div>
+  const Toggle=({id,label}:{id:keyof Pick<BoardSettings,"showAttack"|"showDefense"|"showPlan"|"showMoveDots"|"showEvalBar"|"showCaptured"|"showOpponentCue"|"projectiveTacticLinesEnabled"|"projectiveTacticLabelsEnabled">;label:string})=><button onClick={()=>toggle(id)} className={classNames("flex items-center justify-between rounded-2xl px-3 py-3 text-sm font-black",settings[id]?"bg-green-50 text-green-800":"bg-stone-100 text-stone-500")}><span>{label}</span><span>{settings[id]?"ON":"OFF"}</span></button>;
+  return <div className="fixed inset-0 z-[70] flex items-end bg-black/35 p-4"><div className="mx-auto max-h-[86vh] w-full max-w-md overflow-auto rounded-3xl bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><div><h2 className="text-xl font-black">Board Settings</h2><p className="text-xs font-semibold text-stone-500">Customize board, pieces, and active displays.</p></div><button onClick={onClose} className="rounded-full bg-stone-100 p-2"><X size={18}/></button></div><div className="space-y-5"><div><div className="mb-2 text-sm font-black">Trainer rating band</div><select value={rating.value} onChange={(event)=>onRatingFilterChange(event.target.value)} className="w-full rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-black text-stone-800 outline-none focus:border-green-700">{ratingBands.map((band)=><option key={band.id} value={band.value}>{band.label} — {band.target}</option>)}</select><p className="mt-2 text-xs font-semibold leading-5 text-stone-500">Restricted Trainer uses this local-package rating band for line selection. Maia continuation maps to {rating.maiaSkill} / ~{rating.maiaRating}.</p></div><div><div className="mb-2 text-sm font-black">Board</div><div className="grid grid-cols-4 gap-2"><OptionButton active={settings.boardTheme==="classic"} label="Classic" onClick={()=>update("boardTheme","classic")}/><OptionButton active={settings.boardTheme==="slate"} label="Slate" onClick={()=>update("boardTheme","slate")}/><OptionButton active={settings.boardTheme==="blue"} label="Blue" onClick={()=>update("boardTheme","blue")}/><OptionButton active={settings.boardTheme==="walnut"} label="Walnut" onClick={()=>update("boardTheme","walnut")}/></div></div><div><div className="mb-2 text-sm font-black">Pieces</div><div className="grid grid-cols-3 gap-2"><OptionButton active={settings.pieceStyle==="unicode"} label="Classic" onClick={()=>update("pieceStyle","unicode")}/><OptionButton active={settings.pieceStyle==="neo"} label="Neo" onClick={()=>update("pieceStyle","neo")}/><OptionButton active={settings.pieceStyle==="letters"} label="Letters" onClick={()=>update("pieceStyle","letters")}/></div></div><div><div className="mb-2 text-sm font-black">Active displays</div><div className="grid grid-cols-2 gap-2"><Toggle id="showMoveDots" label="Legal move dots"/><Toggle id="showEvalBar" label="Advantage bar"/><Toggle id="showCaptured" label="Captured pieces"/><Toggle id="showOpponentCue" label="Show Last Opponent Move"/>{PROJECTIVE_TACTICS_ENABLED?<><Toggle id="projectiveTacticLinesEnabled" label="Tactic lines"/><Toggle id="projectiveTacticLabelsEnabled" label="Tactic labels"/></>:null}</div></div><button onClick={onClose} className="w-full rounded-2xl bg-stone-950 px-4 py-4 font-black text-white">Done</button></div></div></div>
 }
 
 function PipelineStatus({step,note}:{step:ThinkingStep;note:string}){const labels:Record<ThinkingStep,string>={idle:"Ready",facts:"Analyzing",engine:"Engine",brain:"Blundr Brain","gpt-receive":"Receiving","visual-update":"Updating",ready:"Ready",error:"Error"};const tone=step==="error"?"bg-red-50 text-red-700 ring-red-100":step==="ready"||step==="idle"?"bg-green-50 text-green-700 ring-green-100":"bg-blue-50 text-blue-700 ring-blue-100";return <div className={classNames("max-w-[190px] rounded-2xl px-3 py-2 text-right text-[11px] font-black leading-4 ring-1",tone)} title={note}><div>{labels[step]}</div><div className="truncate text-[10px] font-semibold opacity-75">{note}</div></div>}

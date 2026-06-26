@@ -12,6 +12,8 @@ type ProjectiveTacticalOverlayProps = {
   visuals: ProjectiveTacticVisual[];
   orientation: BoardOrientation;
   fading?: boolean;
+  showLines: boolean;
+  showLabels: boolean;
 };
 
 function pct(value: number): string {
@@ -22,15 +24,22 @@ export function ProjectiveTacticalOverlay({
   visuals,
   orientation,
   fading = false,
+  showLines,
+  showLabels,
 }: ProjectiveTacticalOverlayProps): ReactElement | null {
   const visible = visuals.filter((visual) => visual.confidence === "high" && isProjectiveTacticEnabledInE(visual.kind));
-  if (!visible.length) return null;
+  if (!visible.length || (!showLines && !showLabels)) return null;
 
   const lineElements: ReactElement[] = [];
-  for (const visual of visible) {
+  if (showLines) for (const visual of visible) {
     visual.lineSegments.forEach((segment, index) => {
       if (segment.shape === "knight_l") {
-        const points = buildKnightLShapePath({ from: segment.from, to: segment.to, orientation });
+        const points = buildKnightLShapePath({
+          from: segment.from,
+          to: segment.to,
+          orientation,
+          bendPreference: segment.bendPreference,
+        });
         if (!points) return;
         lineElements.push(
           <g key={`${visual.id}-knight-${index}`} className="projective-tactic-line projective-tactic-line--knight">
@@ -61,20 +70,7 @@ export function ProjectiveTacticalOverlay({
       <svg className="projective-tactic-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
         {lineElements}
       </svg>
-      {visible.flatMap((visual) =>
-        visual.targetSquares.map((square, index) => {
-          const point = squareToBoardPoint(square, orientation);
-          if (!point) return [];
-          return (
-            <span
-              key={`${visual.id}-target-${square}-${index}`}
-              className="projective-tactic-target"
-              style={{ left: pct(point.x), top: pct(point.y) }}
-            />
-          );
-        }),
-      )}
-      {visible.map((visual) => {
+      {showLabels ? visible.map((visual) => {
         const point = squareToBoardPoint(visual.tagSquare, orientation);
         if (!point) return null;
         return (
@@ -86,7 +82,7 @@ export function ProjectiveTacticalOverlay({
             {visual.label}
           </span>
         );
-      })}
+      }) : null}
     </div>
   );
 }

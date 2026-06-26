@@ -36,6 +36,8 @@ export type ProjectiveTacticConfidence = "high" | "medium" | "experimental";
 
 export type ProjectiveTacticLineShape = "straight" | "knight_l";
 
+export type KnightLShapeBendPreference = "vertical_first" | "horizontal_first";
+
 export type ProjectiveTacticTargetPiece = {
   square: Square;
   piece: string;
@@ -46,6 +48,7 @@ export type ProjectiveTacticLineSegment = {
   from: Square;
   to: Square;
   shape: ProjectiveTacticLineShape;
+  bendPreference?: KnightLShapeBendPreference;
 };
 
 export type ProjectiveTacticVisual = {

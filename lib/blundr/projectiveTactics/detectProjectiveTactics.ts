@@ -166,10 +166,13 @@ function buildVisual(input: {
   segments?: ProjectiveTacticVisual["lineSegments"];
 }): ProjectiveTacticVisual | null {
   if (!isProjectiveTacticEnabledInE(input.kind)) return null;
-  const lineSegments = input.segments ?? input.targets.map((target) => ({
+  const lineSegments = input.segments ?? input.targets.map((target, index) => ({
     from: input.source,
     to: target.square,
     shape: input.lineShape,
+    bendPreference: input.lineShape === "knight_l"
+      ? (index % 2 === 0 ? "vertical_first" : "horizontal_first")
+      : undefined,
   }));
   return {
     id: [
