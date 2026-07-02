@@ -7,9 +7,14 @@ import type { FormEvent } from "react";
 import { ArrowLeft, BadgeCheck, BookOpen, CheckCircle2, ChevronRight, Clock3, Flame, Sparkles, Target, Trophy, XCircle } from "lucide-react";
 import { loadDailyBlundrOverview } from "@/lib/blundr/daily/dailyBlundrReadModel";
 import { buildDailyBlundrProgressAfterCompletion, addDailyBlundrAttempt, markDailyBlundrSessionCardComplete, markDailyBlundrSessionStarted, saveDailyBlundrStore } from "@/lib/blundr/daily/dailyBlundrStorage";
+import { buildDailyBlundrReviewStats } from "@/lib/blundr/daily/dailyBlundrReviewStats";
+import { makeDailyBlundrReviewCardFromAttempt, upsertDailyBlundrReviewCards as mergeDailyBlundrReviewCards } from "@/lib/blundr/daily/dailyBlundrReviewCards";
+import { gradeDailyBlundrAttempt } from "@/lib/blundr/daily/dailyBlundrSrs";
+import { writeDailyBlundrReviewAttempts, writeDailyBlundrReviewCards } from "@/lib/blundr/daily/dailyBlundrReviewStorage";
 import { summarizeDailyBlundrMastery, updateDailyBlundrMastery } from "@/lib/blundr/daily/dailyBlundrMastery";
 import { gradeDailyBlundrMove } from "@/lib/blundr/daily/dailyMoveGrader";
 import type { DailyBlundrAttempt, DailyBlundrCard, DailyBlundrSession } from "@/lib/blundr/daily/dailyBlundrTypes";
+import type { DailyBlundrReviewAttempt, DailyBlundrReviewCard } from "@/lib/blundr/daily/dailyBlundrReviewTypes";
 import { buildDailyBlundrPositionKey } from "@/lib/blundr/daily/adapters/progressMistakeAdapter";
 
 type Orientation = "white" | "black";
@@ -125,20 +130,41 @@ export function DailyBlundrScreen() {
   const [moveInput, setMoveInput] = useState("");
   const [feedback, setFeedback] = useState<string>(EMPTY_STATE_COPY);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const cardStartedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     const next = loadDailyBlundrOverview(5);
     setOverview(next);
-    setFeedback(next.deck.isEmpty ? EMPTY_STATE_COPY : "Tempo picked today’s smartest training.");
+    if (next.deck.isEmpty) {
+      setFeedback(EMPTY_STATE_COPY);
+    } else if (next.reviewStats.dueToday > 0) {
+      setFeedback(`Tempo found ${next.reviewStats.dueToday} reviews ready.`);
+    } else {
+      setFeedback("Queue clear. Tempo is using a small bootstrap set.");
+    }
   }, []);
 
   useEffect(() => {
     if (!overview) return;
     saveDailyBlundrStore(overview.store);
+    writeDailyBlundrReviewCards(overview.reviewCards);
+    writeDailyBlundrReviewAttempts(overview.reviewAttempts);
   }, [overview]);
 
   const deck = overview?.deck.cards ?? [];
   const session = overview?.currentSession ?? null;
+  const reviewStats = overview?.reviewStats ?? {
+    totalReviewCards: 0,
+    dueToday: 0,
+    overdue: 0,
+    completedToday: 0,
+    savedForReview: 0,
+    mastered: 0,
+    leech: 0,
+    suspended: 0,
+    readyToday: 0,
+    selectedToday: 0,
+  };
   const masterySummary = summarizeDailyBlundrMastery(overview?.store.mastery ?? null);
   const currentCard = session && deck.length ? getCurrentCard(session, deck) : null;
   const complete = Boolean(session && isSessionComplete(session, deck));
@@ -149,13 +175,14 @@ export function DailyBlundrScreen() {
   const primaryStateLabel = !hasCards ? "Start" : pendingCompletion ? "Complete" : started ? "Resume" : "Start";
   const primaryActionLabel = !hasCards ? "Back to Home" : pendingCompletion ? "Complete Daily BLUNDR" : started ? "Resume Daily BLUNDR" : "Start Daily BLUNDR";
   const canClaim = Boolean(pendingCompletion && session);
-  const requiredCount = deck.length;
-  const completedCount = session?.completedCardIds.length ?? 0;
   const upcomingCards = hasCards ? deck.filter((card) => card.cardKey !== currentCard?.cardKey).slice(0, 3) : [];
 
   useEffect(() => {
     if (currentCard && inputRef.current && !complete) {
       inputRef.current.focus();
+    }
+    if (currentCard && !complete) {
+      cardStartedAtRef.current = Date.now();
     }
   }, [currentCard?.cardKey, complete]);
 
@@ -163,12 +190,27 @@ export function DailyBlundrScreen() {
     session?: DailyBlundrSession;
     progress?: ReturnType<typeof loadDailyBlundrOverview>["store"]["progress"];
     mastery?: ReturnType<typeof loadDailyBlundrOverview>["store"]["mastery"];
+    reviewCards?: DailyBlundrReviewCard[];
+    reviewAttempts?: DailyBlundrReviewAttempt[];
     feedback?: string;
     clearInput?: boolean;
   }) {
     if (!overview) return;
     const sessionToSave = next.session ?? session;
     if (!sessionToSave) return;
+    const reviewCardsToSave = next.reviewCards ?? overview.reviewCards;
+    const reviewAttemptsToSave = next.reviewAttempts ?? overview.reviewAttempts;
+    const nextReviewStats = buildDailyBlundrReviewStats({
+      reviewCards: reviewCardsToSave,
+      reviewAttempts: reviewAttemptsToSave,
+      currentSession: sessionToSave,
+      deck: {
+        dueReviewCount: overview.deck.dueReviewCount,
+        selectedReviewCards: overview.deck.selectedReviewCards,
+        selectionMode: overview.deck.selectionMode,
+      },
+      now: nowIso(),
+    });
     const store = {
       ...overview.store,
       sessions: {
@@ -182,11 +224,21 @@ export function DailyBlundrScreen() {
       progress: next.progress ?? overview.store.progress,
       mastery: next.mastery ?? overview.store.mastery,
     };
+    const nextDeck = {
+      ...overview.deck,
+      reviewCards: reviewCardsToSave,
+      reviewAttempts: reviewAttemptsToSave,
+      reviewStats: nextReviewStats,
+    };
     setOverview((prev) =>
       prev
         ? {
             ...prev,
             currentSession: sessionToSave,
+            reviewCards: reviewCardsToSave,
+            reviewAttempts: reviewAttemptsToSave,
+            reviewStats: nextReviewStats,
+            deck: nextDeck,
             store,
           }
         : prev,
@@ -197,6 +249,7 @@ export function DailyBlundrScreen() {
     if (next.clearInput ?? true) {
       setMoveInput("");
     }
+    cardStartedAtRef.current = null;
   }
 
   function startOrResume() {
@@ -207,6 +260,7 @@ export function DailyBlundrScreen() {
         session: next,
         feedback: "Tempo picked today’s smartest training.",
       });
+      cardStartedAtRef.current = Date.now();
       return;
     }
     inputRef.current?.focus();
@@ -245,6 +299,8 @@ export function DailyBlundrScreen() {
   function submitAttempt(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!overview || !session || !currentCard || complete) return;
+    const startedAt = cardStartedAtRef.current;
+    const responseTimeMs = startedAt ? Math.max(0, Date.now() - startedAt) : null;
     const graded = gradeDailyBlundrMove({
       fen: currentCard.fen,
       expectedMoveUci: currentCard.expectedMoveUci,
@@ -267,7 +323,7 @@ export function DailyBlundrScreen() {
       expectedMoveUci: graded.expectedMoveUci,
       expectedMoveSan: graded.expectedMoveSan,
       usedReveal: false,
-      responseTimeMs: null,
+      responseTimeMs,
       note: graded.reason,
     };
     const withAttempt = addDailyBlundrAttempt(session, attempt);
@@ -276,40 +332,58 @@ export function DailyBlundrScreen() {
       card: currentCard,
       attempt,
     });
-    let nextSession = withAttempt;
-    let nextFeedback = graded.outcome === "correct"
-      ? `Correct. ${graded.attemptedMoveSan ?? graded.attemptedMoveUci ?? "Tempo"} is locked in.`
-      : `Not quite. Tempo was looking for ${currentCard.expectedMoveSan ?? currentCard.expectedMoveUci ?? "the saved move"}.`;
-
-    if (graded.outcome === "correct") {
-      nextSession = markDailyBlundrSessionCardComplete(withAttempt, currentCard.cardKey, now);
-      if (nextSession.completedCardIds.length === nextSession.cardOrder.length && nextSession.cardOrder.length > 0) {
-        nextFeedback = "All required cards are complete. Tap Complete Daily BLUNDR.";
-      }
-    }
-
-    setOverview((prev) => {
-      if (!prev) return prev;
-      const sessionsByDate = {
-        ...prev.store.sessions.sessionsByDate,
-        [prev.dateKey]: nextSession,
-      };
-      return {
-        ...prev,
-        currentSession: nextSession,
-        store: {
-          ...prev.store,
-          sessions: {
-            ...prev.store.sessions,
-            sessionsByDate,
-            updatedAt: now,
-          },
-          mastery,
-        },
-      };
+    const reviewCardId = currentCard.reviewCardId ?? currentCard.cardKey;
+    const existingReviewCard = overview.reviewCards.find((card) => card.id === reviewCardId || card.dedupeKey === currentCard.reviewDedupeKey || card.id === currentCard.reviewCardId) ?? null;
+    const reviewUpdate = makeDailyBlundrReviewCardFromAttempt({
+      sourceCard: currentCard,
+      attempt,
+      existingCard: existingReviewCard,
+      now,
     });
-    setFeedback(nextFeedback);
-    setMoveInput("");
+    const reviewGrade = gradeDailyBlundrAttempt({
+      promptKind: currentCard.reviewPromptKind ?? reviewUpdate.promptKind,
+      correct: attempt.correct,
+      partialCredit: attempt.usedReveal ? 0.55 : attempt.correct ? 1 : 0,
+      usedReveal: Boolean(attempt.usedReveal),
+      responseTimeMs,
+      previousCorrectStreak: existingReviewCard?.correctStreak ?? 0,
+      expectedFastMs: currentCard.reviewPromptKind === "target_move_recall" ? 3_500 : 2_500,
+    });
+    const reviewAttempt: DailyBlundrReviewAttempt = {
+      schemaVersion: 1,
+      id: `review-attempt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      reviewCardId: reviewUpdate.id,
+      sessionId: overview.dateKey,
+      cardId: currentCard.cardKey,
+      startedAt: startedAt ? new Date(startedAt).toISOString() : undefined,
+      completedAt: now,
+      grade: reviewGrade,
+      score: reviewGrade === "AGAIN" ? 0 : reviewGrade === "HARD" ? 0.45 : reviewGrade === "GOOD" ? 0.8 : 1,
+      correct: attempt.correct,
+      partialCredit: attempt.usedReveal ? 0.55 : attempt.correct ? 1 : 0,
+      responseMoveUci: attempt.responseMoveUci ?? attempt.attemptedMoveUci ?? null,
+      usedReveal: Boolean(attempt.usedReveal),
+      responseTimeMs,
+      failureType: reviewUpdate.failureType,
+    };
+    const nextReviewCards = mergeDailyBlundrReviewCards(overview.reviewCards, [reviewUpdate]);
+    const nextReviewAttempts = [...overview.reviewAttempts, reviewAttempt];
+    const nextSession = markDailyBlundrSessionCardComplete(withAttempt, currentCard.cardKey, now);
+    const nextFeedback =
+      reviewGrade === "AGAIN" || reviewGrade === "HARD"
+        ? "Tempo saved this for review."
+        : `Correct. ${graded.attemptedMoveSan ?? graded.attemptedMoveUci ?? "Tempo"} is locked in.`;
+    const finalFeedback = nextSession.completedCardIds.length === nextSession.cardOrder.length && nextSession.cardOrder.length > 0
+      ? "All required cards are complete. Tap Complete Daily BLUNDR."
+      : nextFeedback;
+
+    persist({
+      session: nextSession,
+      mastery,
+      reviewCards: nextReviewCards,
+      reviewAttempts: nextReviewAttempts,
+      feedback: finalFeedback,
+    });
   }
 
   function revealCurrentCard() {
@@ -320,6 +394,8 @@ export function DailyBlundrScreen() {
   function markReviewedCurrentCard() {
     if (!overview || !session || !currentCard || complete) return;
     const now = nowIso();
+    const startedAt = cardStartedAtRef.current;
+    const responseTimeMs = startedAt ? Math.max(0, Date.now() - startedAt) : null;
     const attempt: DailyBlundrAttempt = {
       id: `daily-attempt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       cardId: currentCard.cardKey,
@@ -335,7 +411,7 @@ export function DailyBlundrScreen() {
       expectedMoveUci: currentCard.expectedMoveUci,
       expectedMoveSan: currentCard.expectedMoveSan,
       usedReveal: true,
-      responseTimeMs: null,
+      responseTimeMs,
       note: "manual_review",
     };
     const withAttempt = addDailyBlundrAttempt(session, attempt);
@@ -344,11 +420,51 @@ export function DailyBlundrScreen() {
       card: currentCard,
       attempt,
     });
+    const reviewCardId = currentCard.reviewCardId ?? currentCard.cardKey;
+    const existingReviewCard = overview.reviewCards.find((card) => card.id === reviewCardId || card.dedupeKey === currentCard.reviewDedupeKey || card.id === currentCard.reviewCardId) ?? null;
+    const reviewUpdate = makeDailyBlundrReviewCardFromAttempt({
+      sourceCard: currentCard,
+      attempt,
+      existingCard: existingReviewCard,
+      now,
+    });
+    const reviewGrade = gradeDailyBlundrAttempt({
+      promptKind: currentCard.reviewPromptKind ?? reviewUpdate.promptKind,
+      correct: attempt.correct,
+      partialCredit: 0.55,
+      usedReveal: true,
+      responseTimeMs,
+      previousCorrectStreak: existingReviewCard?.correctStreak ?? 0,
+      expectedFastMs: currentCard.reviewPromptKind === "target_move_recall" ? 3_500 : 2_500,
+    });
+    const reviewAttempt: DailyBlundrReviewAttempt = {
+      schemaVersion: 1,
+      id: `review-attempt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      reviewCardId: reviewUpdate.id,
+      sessionId: overview.dateKey,
+      cardId: currentCard.cardKey,
+      startedAt: startedAt ? new Date(startedAt).toISOString() : undefined,
+      completedAt: now,
+      grade: reviewGrade,
+      score: reviewGrade === "AGAIN" ? 0 : reviewGrade === "HARD" ? 0.45 : reviewGrade === "GOOD" ? 0.8 : 1,
+      correct: attempt.correct,
+      partialCredit: 0.55,
+      responseMoveUci: null,
+      usedReveal: true,
+      responseTimeMs,
+      failureType: reviewUpdate.failureType,
+    };
     const nextSession = markDailyBlundrSessionCardComplete(withAttempt, currentCard.cardKey, now);
+    const nextReviewCards = mergeDailyBlundrReviewCards(overview.reviewCards, [reviewUpdate]);
+    const nextReviewAttempts = [...overview.reviewAttempts, reviewAttempt];
     persist({
       session: nextSession,
       mastery,
-      feedback: `Reviewed. Tempo was looking for ${currentCard.expectedMoveSan ?? currentCard.expectedMoveUci ?? "the saved move"}.`,
+      reviewCards: nextReviewCards,
+      reviewAttempts: nextReviewAttempts,
+      feedback: reviewGrade === "AGAIN" || reviewGrade === "HARD"
+        ? "Tempo saved this for review."
+        : `Reviewed. Tempo was looking for ${currentCard.expectedMoveSan ?? currentCard.expectedMoveUci ?? "the saved move"}.`,
     });
   }
 
@@ -386,10 +502,17 @@ export function DailyBlundrScreen() {
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-2xl bg-white/8 p-3">
               <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-stone-400">
-                <Target size={14} /> Deck
+                <Target size={14} /> Due today
               </div>
-              <div className="mt-2 text-lg font-black">{requiredCount}</div>
-              <div className="text-xs text-stone-400">recall cards</div>
+              <div className="mt-2 text-lg font-black">{reviewStats.dueToday}</div>
+              <div className="text-xs text-stone-400">reviews ready</div>
+            </div>
+            <div className="rounded-2xl bg-white/8 p-3">
+              <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-stone-400">
+                <CheckCircle2 size={14} /> Completed
+              </div>
+              <div className="mt-2 text-lg font-black">{reviewStats.completedToday}</div>
+              <div className="text-xs text-stone-400">today</div>
             </div>
             <div className="rounded-2xl bg-white/8 p-3">
               <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-stone-400">
@@ -400,17 +523,17 @@ export function DailyBlundrScreen() {
             </div>
             <div className="rounded-2xl bg-white/8 p-3">
               <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-stone-400">
-                <CheckCircle2 size={14} /> Done
+                <BadgeCheck size={14} /> Saved
               </div>
-              <div className="mt-2 text-lg font-black">{completedCount}</div>
-              <div className="text-xs text-stone-400">of {requiredCount || 0}</div>
+              <div className="mt-2 text-lg font-black">{reviewStats.savedForReview}</div>
+              <div className="text-xs text-stone-400">for review</div>
             </div>
             <div className="rounded-2xl bg-white/8 p-3">
               <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-stone-400">
-                <BadgeCheck size={14} /> Mastery
+                <BadgeCheck size={14} /> Mastered
               </div>
-              <div className="mt-2 text-lg font-black">{masterySummary.total}</div>
-              <div className="text-xs text-stone-400">{masterySummary.mastered} mastered</div>
+              <div className="mt-2 text-lg font-black">{reviewStats.mastered}</div>
+              <div className="text-xs text-stone-400">review cards</div>
             </div>
           </div>
 

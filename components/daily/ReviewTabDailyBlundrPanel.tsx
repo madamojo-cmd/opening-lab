@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, BadgeCheck, ChevronRight, Sparkles } from "lucide-react";
+import { ArrowRight, BadgeCheck, CheckCircle2, ChevronRight, Flame, Sparkles, Target } from "lucide-react";
 import { loadDailyBlundrOverview } from "@/lib/blundr/daily/dailyBlundrReadModel";
 
 function resolvePrimaryLabel(hasCards: boolean, started: boolean, pendingCompletion: boolean): string {
@@ -27,6 +27,18 @@ export function ReviewTabDailyBlundrPanel() {
   const rewardClaimed = Boolean(overview && session?.rewardClaimedAt && overview.store.progress.lastRewardDateKey === overview.dateKey);
   const pendingCompletion = Boolean(complete && !rewardClaimed);
   const primaryLabel = resolvePrimaryLabel(hasCards, started, pendingCompletion);
+  const reviewStats = overview?.reviewStats ?? {
+    totalReviewCards: 0,
+    dueToday: 0,
+    overdue: 0,
+    completedToday: 0,
+    savedForReview: 0,
+    mastered: 0,
+    leech: 0,
+    suspended: 0,
+    readyToday: 0,
+    selectedToday: 0,
+  };
   const dailyStreak = overview?.store.progress.currentDailyStreak ?? overview?.store.progress.dailyStreak ?? 0;
 
   return (
@@ -38,7 +50,11 @@ export function ReviewTabDailyBlundrPanel() {
             Daily BLUNDR
           </div>
           <h2 className="mt-3 text-lg font-black tracking-tight text-stone-950">Tempo picked today’s smartest training.</h2>
-          <p className="mt-1 text-sm leading-6 text-stone-600">Today’s smart reviews are built from the positions most likely to slip.</p>
+          <p className="mt-1 text-sm leading-6 text-stone-600">
+            {reviewStats.dueToday > 0
+              ? `Tempo found ${reviewStats.dueToday} reviews ready.`
+              : "Queue clear. Tempo is using a small bootstrap set."}
+          </p>
         </div>
         <div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-600">{primaryLabel}</div>
       </div>
@@ -52,19 +68,30 @@ export function ReviewTabDailyBlundrPanel() {
       </div>
 
       <div className="mt-3 flex items-center justify-between rounded-2xl bg-green-50 px-3 py-3 text-sm font-semibold text-green-900">
-          <span>{hasCards ? `${deck.length} recall cards ready` : "Queue clear for today"}</span>
+        <span>{reviewStats.dueToday > 0 ? `Tempo found ${reviewStats.dueToday} reviews ready.` : "Queue clear"}</span>
         <span className="inline-flex items-center gap-1 text-xs font-black uppercase tracking-wide">
           {primaryLabel}
           <ChevronRight size={14} />
         </span>
       </div>
 
-      <div className="mt-3 rounded-2xl bg-stone-50 px-3 py-3 text-sm leading-6 text-stone-600">
-        Later: mastery, weak spots, mini-game mastery, training-game mastery.
-      </div>
-
-      <div className="mt-3 rounded-2xl bg-green-50 px-3 py-3 text-sm font-semibold text-green-900">
-        Daily streak {dailyStreak}
+      <div className="mt-3 grid grid-cols-2 gap-2 text-center text-xs font-black">
+        <div className="rounded-2xl bg-stone-50 px-2 py-3 text-stone-700">
+          <Target size={15} className="mx-auto mb-1 text-green-700" />
+          {reviewStats.completedToday} done
+        </div>
+        <div className="rounded-2xl bg-stone-50 px-2 py-3 text-stone-700">
+          <Flame size={15} className="mx-auto mb-1 text-orange-600" />
+          {dailyStreak} streak
+        </div>
+        <div className="rounded-2xl bg-stone-50 px-2 py-3 text-stone-700">
+          <CheckCircle2 size={15} className="mx-auto mb-1 text-green-700" />
+          {reviewStats.savedForReview} saved
+        </div>
+        <div className="rounded-2xl bg-stone-50 px-2 py-3 text-stone-700">
+          <BadgeCheck size={15} className="mx-auto mb-1 text-green-700" />
+          {reviewStats.mastered} mastered
+        </div>
       </div>
 
       <Link href="/daily" className="mt-4 inline-flex w-full items-center justify-between rounded-2xl bg-stone-950 px-4 py-3 text-sm font-black text-white shadow-sm">

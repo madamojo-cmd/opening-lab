@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ChevronRight, Sparkles, Target, Flame, CheckCircle2 } from "lucide-react";
+import { BadgeCheck, ChevronRight, Sparkles, Target, Flame, CheckCircle2 } from "lucide-react";
 import { loadDailyBlundrOverview } from "@/lib/blundr/daily/dailyBlundrReadModel";
 
 function resolvePrimaryLabel(hasCards: boolean, started: boolean, pendingCompletion: boolean): string {
@@ -27,8 +27,19 @@ export function TempoDailyBlundrCard() {
   const rewardClaimed = Boolean(overview && session?.rewardClaimedAt && overview.store.progress.lastRewardDateKey === overview.dateKey);
   const pendingCompletion = Boolean(complete && !rewardClaimed);
   const primaryLabel = resolvePrimaryLabel(hasCards, started, pendingCompletion);
-  const cardCount = deck.length;
-  const doneCount = session?.completedCardIds.length ?? 0;
+  const reviewStats = overview?.reviewStats ?? {
+    totalReviewCards: 0,
+    dueToday: 0,
+    overdue: 0,
+    completedToday: 0,
+    savedForReview: 0,
+    mastered: 0,
+    leech: 0,
+    suspended: 0,
+    readyToday: 0,
+    selectedToday: 0,
+  };
+  const streak = overview?.store.progress.currentDailyStreak ?? overview?.store.progress.dailyStreak ?? 0;
 
   return (
     <section className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-stone-200">
@@ -39,23 +50,31 @@ export function TempoDailyBlundrCard() {
             Daily BLUNDR
           </div>
           <h2 className="mt-3 text-lg font-black text-stone-950">Tempo picked today’s smartest training.</h2>
-          <p className="mt-1 text-sm leading-6 text-stone-500">A small local recall deck built from the positions most likely to slip.</p>
+          <p className="mt-1 text-sm leading-6 text-stone-500">
+            {reviewStats.dueToday > 0
+              ? `Tempo found ${reviewStats.dueToday} reviews ready.`
+              : "Queue clear. Tempo is using a small bootstrap set."}
+          </p>
         </div>
         <div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-600">{primaryLabel}</div>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs font-black">
+      <div className="mt-4 grid grid-cols-2 gap-2 text-center text-xs font-black">
         <div className="rounded-2xl bg-stone-50 px-2 py-3 text-stone-700">
           <Target size={15} className="mx-auto mb-1 text-green-700" />
-          {cardCount} cards
+          {reviewStats.dueToday} due
         </div>
         <div className="rounded-2xl bg-stone-50 px-2 py-3 text-stone-700">
           <Flame size={15} className="mx-auto mb-1 text-orange-600" />
-          {overview?.store.progress.currentDailyStreak ?? overview?.store.progress.dailyStreak ?? 0} streak
+          {streak} streak
         </div>
         <div className="rounded-2xl bg-stone-50 px-2 py-3 text-stone-700">
           <CheckCircle2 size={15} className="mx-auto mb-1 text-green-700" />
-          {doneCount}/{cardCount || 0}
+          {reviewStats.completedToday} done
+        </div>
+        <div className="rounded-2xl bg-stone-50 px-2 py-3 text-stone-700">
+          <BadgeCheck size={15} className="mx-auto mb-1 text-green-700" />
+          {reviewStats.savedForReview} saved
         </div>
       </div>
 
@@ -64,7 +83,9 @@ export function TempoDailyBlundrCard() {
         <ChevronRight size={18} />
       </Link>
 
-      {!hasCards ? <p className="mt-3 text-xs leading-5 text-stone-400">Queue clear for now. Train an opening and Tempo will start building today’s recall deck.</p> : null}
+      <p className="mt-3 text-xs leading-5 text-stone-400">
+        {reviewStats.dueToday > 0 ? "Tempo is prioritizing the reviews most likely to slip." : "Queue clear for now. Train an opening and Tempo will keep building the review loop."}
+      </p>
     </section>
   );
 }

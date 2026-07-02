@@ -8,22 +8,29 @@ import type {
 } from "./dailyBlundrTypes";
 import { adaptLearningEventsToDailySeeds } from "./adapters/learningEventAdapter";
 import { adaptProgressMistakesToDailySeeds, type LegacyProgressSnapshot } from "./adapters/progressMistakeAdapter";
+import { buildDailyBlundrDeckFromReviews, type DailyBlundrReviewDeckBuildResult } from "./dailyBlundrReviewSelector";
+import { buildDailyBlundrReviewStats, type DailyBlundrReviewStats } from "./dailyBlundrReviewStats";
+import type { DailyBlundrReviewAttempt, DailyBlundrReviewCard } from "./dailyBlundrReviewTypes";
 
 export type DailyBlundrDeckBuildInput = {
   progress: LegacyProgressSnapshot | null;
   learningEvents: readonly LearningEvent[] | null;
   mastery?: DailyBlundrMasteryState | null;
+  reviewCards?: readonly DailyBlundrReviewCard[] | null;
+  reviewAttempts?: readonly DailyBlundrReviewAttempt[] | null;
   dateKey?: string;
+  now?: string;
   limit?: number;
 };
 
-export type DailyBlundrDeckBuildResult = {
+export type DailyBlundrDeckBuildResult = DailyBlundrReviewDeckBuildResult & {
   dateKey: string;
   fingerprint: string;
-  cards: DailyBlundrCard[];
   seeds: DailyBlundrSeed[];
   summary: DailyBlundrDeckSummary;
   isEmpty: boolean;
+  reviewAttempts: DailyBlundrReviewAttempt[];
+  reviewStats: DailyBlundrReviewStats;
 };
 
 const DEFAULT_LIMIT = 5;
@@ -169,22 +176,12 @@ function buildCardSummary(seed: DailyBlundrSeed, sourceCount: number): string {
 
 export function buildDailyBlundrDeck(input: DailyBlundrDeckBuildInput): DailyBlundrDeckBuildResult {
   const dateKey = input.dateKey ?? nowDateKey();
-  const limit = Math.max(1, Number(input.limit ?? DEFAULT_LIMIT) || DEFAULT_LIMIT);
+  const limit = Math.max(1, Math.min(5, Number(input.limit ?? DEFAULT_LIMIT) || DEFAULT_LIMIT));
+  const now = input.now ?? new Date().toISOString();
   const progressSeeds = adaptProgressMistakesToDailySeeds(input.progress);
   const eventSeeds = adaptLearningEventsToDailySeeds(input.learningEvents);
   const rawSeeds = [...eventSeeds, ...progressSeeds];
   const mergedSeeds = mergeSeeds(rawSeeds);
-
-  if (!mergedSeeds.length) {
-    return {
-      dateKey,
-      fingerprint: "",
-      cards: [],
-      seeds: [],
-      summary: buildSummary([], []),
-      isEmpty: true,
-    };
-  }
 
   const rankedSeeds = mergedSeeds
     .map((seed) => ({ seed, priority: scoreSeed(seed, input.mastery, dateKey) }))
@@ -197,7 +194,7 @@ export function buildDailyBlundrDeck(input: DailyBlundrDeckBuildInput): DailyBlu
     )
     .slice(0, limit);
 
-  const cards: DailyBlundrCard[] = rankedSeeds.map(({ seed, priority }, index) => ({
+  const candidateCards: DailyBlundrCard[] = rankedSeeds.map(({ seed, priority }, index) => ({
     ...seed,
     id: seed.cardKey,
     kind: "recall",
@@ -213,14 +210,39 @@ export function buildDailyBlundrDeck(input: DailyBlundrDeckBuildInput): DailyBlu
     summary: buildCardSummary(seed, seed.count),
   }));
 
-  const fingerprint = cards.map((card) => card.cardKey).join("|");
+  const reviewDeck = buildDailyBlundrDeckFromReviews({
+    dateKey,
+    existingReviewCards: input.reviewCards ?? [],
+    candidateDailyCards: candidateCards,
+    mastery: input.mastery ?? null,
+    limit,
+    now,
+  });
+  const reviewStats = buildDailyBlundrReviewStats({
+    reviewCards: reviewDeck.reviewCards,
+    reviewAttempts: input.reviewAttempts ?? [],
+    now,
+    deck: {
+      dueReviewCount: reviewDeck.dueReviewCount,
+      selectedReviewCards: reviewDeck.selectedReviewCards,
+      selectionMode: reviewDeck.selectionMode,
+    },
+  });
+  const fingerprint = reviewDeck.cards.map((card) => card.cardKey).join("|");
 
   return {
     dateKey,
     fingerprint,
-    cards,
+    cards: reviewDeck.cards,
     seeds: mergedSeeds,
-    summary: buildSummary(rawSeeds, cards),
-    isEmpty: cards.length === 0,
+    summary: buildSummary(rawSeeds, reviewDeck.cards),
+    isEmpty: reviewDeck.cards.length === 0,
+    reviewCards: reviewDeck.reviewCards,
+    reviewAttempts: input.reviewAttempts ? [...input.reviewAttempts] : [],
+    selectedReviewCards: reviewDeck.selectedReviewCards,
+    dueReviewCount: reviewDeck.dueReviewCount,
+    bootstrapUsed: reviewDeck.bootstrapUsed,
+    selectionMode: reviewDeck.selectionMode,
+    reviewStats,
   };
 }

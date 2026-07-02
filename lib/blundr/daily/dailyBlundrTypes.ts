@@ -1,7 +1,7 @@
 export const DAILY_BLUNDR_SCHEMA_VERSION = 1 as const;
 
 export type DailyBlundrCardKind = "recall" | "mastery" | "weak_spot" | "mini_game" | "training_game";
-export type DailyBlundrCardSource = "learning_event" | "progress_mistake" | "merged";
+export type DailyBlundrCardSource = "learning_event" | "progress_mistake" | "merged" | "daily_attempt";
 export type DailyBlundrAttemptOutcome = "correct" | "incorrect" | "skip" | "reveal";
 
 export type DailyBlundrDomain =
@@ -61,6 +61,11 @@ export type DailyBlundrCard = DailyBlundrSeed & {
   playedMoveUci: string | null;
   playedMoveSan: string | null;
   repertoireId?: string | null;
+  reviewCardId?: string | null;
+  reviewDedupeKey?: string | null;
+  reviewPromptKind?: "target_move_recall" | "review_prompt" | "reveal_review" | null;
+  reviewStatus?: "new" | "learning" | "review" | "mastered" | "leech" | "suspended" | null;
+  reviewDueAt?: string | null;
   deckRank: number;
   priority: number;
   masteryKey: string;

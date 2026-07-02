@@ -170,6 +170,24 @@ function normalizeCard(raw: unknown): DailyBlundrCard | null {
     title: normalizeText(card.title) || normalizeText(card.openingName) || "Daily recall",
     prompt: normalizeText(card.prompt) || "Recall the move.",
     repertoireId: normalizeText(card.repertoireId) || null,
+    reviewCardId: normalizeText(card.reviewCardId) || null,
+    reviewDedupeKey: normalizeText(card.reviewDedupeKey) || null,
+    reviewPromptKind:
+      card.reviewPromptKind === "target_move_recall" ||
+      card.reviewPromptKind === "review_prompt" ||
+      card.reviewPromptKind === "reveal_review"
+        ? card.reviewPromptKind
+        : null,
+    reviewStatus:
+      card.reviewStatus === "new" ||
+      card.reviewStatus === "learning" ||
+      card.reviewStatus === "review" ||
+      card.reviewStatus === "mastered" ||
+      card.reviewStatus === "leech" ||
+      card.reviewStatus === "suspended"
+        ? card.reviewStatus
+        : null,
+    reviewDueAt: normalizeText(card.reviewDueAt) || null,
     deckRank: Math.max(0, Number(card.deckRank ?? 0) || 0),
     priority: Math.max(0, Number(card.priority ?? 0) || 0),
     masteryKey: normalizeText(card.masteryKey) || cardKey,
