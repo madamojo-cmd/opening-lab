@@ -85,6 +85,7 @@ export function DailyBlundrScreen() {
   const reviewStats = overview?.reviewStats ?? EMPTY_REVIEW_STATS;
   const masterySummary = summarizeDailyBlundrMastery(overview?.store.mastery ?? null);
   const hasMiniGame = deck.some((card) => card.kind === "mini_game");
+  const hasTrainingTarget = deck.some((card) => card.kind === "training_target");
   const hasCards = deck.length > 0;
   const started = Boolean(session?.startedAt);
   const complete = Boolean(session && isDailyBlundrSessionComplete(session));
@@ -178,7 +179,9 @@ export function DailyBlundrScreen() {
               <p className="mt-3 text-sm leading-6 text-stone-300">
                 {reviewStats.dueToday > 0
                   ? "Today’s smart reviews are built from the positions most likely to slip."
-                  : hasMiniGame
+                  : hasTrainingTarget
+                    ? "Queue clear. Tempo found a training target from your recent openings."
+                    : hasMiniGame
                     ? "Queue clear. Tempo picked a skill game to sharpen your board vision."
                     : "Queue clear. Tempo is waiting for a fresh training seed."}
               </p>

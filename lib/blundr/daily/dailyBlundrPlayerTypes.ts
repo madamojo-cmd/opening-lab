@@ -5,6 +5,7 @@ import type { DailyBlundrAttemptScoringResult } from "./dailyBlundrAttemptScorin
 import type { DailyBlundrReviewStats } from "./dailyBlundrReviewStats";
 import type { DailyBlundrCardPlayMode } from "./dailyBlundrTypes";
 import type { DailyMiniGameAdvanceResult, DailyMiniGameState } from "./miniGames/dailyMiniGameTypes";
+import type { DailyTrainingTargetAdvanceResult, DailyTrainingTargetState } from "./trainingTargets/dailyTrainingTargetTypes";
 
 export type { DailyBlundrCardPlayMode } from "./dailyBlundrTypes";
 
@@ -36,6 +37,7 @@ export type DailyBlundrPlayerAttemptCommit = {
   feedback: string;
   sessionComplete: boolean;
   miniGameResult?: DailyMiniGameAdvanceResult | null;
+  trainingTargetResult?: DailyTrainingTargetAdvanceResult | null;
 };
 
 export type DailyBlundrPlayerProps = {
@@ -55,9 +57,12 @@ export type DailyBlundrCardPlayerProps = {
   support: DailyBlundrSupportState;
   locked: boolean;
   miniGameState?: DailyMiniGameState | null;
+  trainingTargetState?: DailyTrainingTargetState | null;
   onMoveInputChange: (value: string) => void;
   onSubmitMove: (value: string) => void;
   onBoardMoveAttempt: (attempt: DailyBlundrBoardMoveAttempt) => void;
+  onSquareClick?: (square: string) => void;
+  onChoiceSelect?: (choiceUci: string) => void;
   onReveal: () => void;
   onShowAnswer: () => void;
   onMarkReviewed: () => void;
@@ -67,6 +72,8 @@ export type DailyBlundrBoardProps = {
   fen: string;
   disabled?: boolean;
   onMoveAttempt?: (attempt: DailyBlundrBoardMoveAttempt) => void;
+  onSquareClick?: (square: string, piece: { type: string; color: string } | null) => void;
+  squareClickMode?: boolean;
 };
 
 export type DailyBlundrSupportControlsProps = {
@@ -93,6 +100,11 @@ export type DailyBlundrSessionSummaryProps = {
 
 export function resolveDailyBlundrCardPlayMode(card: DailyBlundrCard): DailyBlundrCardPlayMode {
   if (card.kind === "mini_game") return "uci_graded";
+  if (card.kind === "training_target") {
+    const interactionKind = card.trainingTarget?.interactionKind;
+    if (interactionKind === "move_input" || interactionKind === "sequence") return "uci_graded";
+    return "reveal_only";
+  }
   if (card.reviewPromptKind === "target_move_recall" && card.expectedMoveUci) return "uci_graded";
   return "reveal_only";
 }

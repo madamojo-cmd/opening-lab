@@ -12,6 +12,10 @@ import {
   type DailyBlundrStore,
 } from "./dailyBlundrTypes";
 import type { DailyMiniGameState } from "./miniGames/dailyMiniGameTypes";
+import type {
+  DailyTrainingTargetCandidateMove,
+  DailyTrainingTargetState,
+} from "./trainingTargets/dailyTrainingTargetTypes";
 
 export type { DailyBlundrStore } from "./dailyBlundrTypes";
 
@@ -156,10 +160,97 @@ function normalizeMiniGameState(raw: unknown): DailyMiniGameState | null {
   };
 }
 
+function normalizeTrainingTargetId(value: unknown): DailyTrainingTargetState["trainingTargetId"] | null {
+  return value === "reply_radar" ||
+    value === "opening_branch_builder" ||
+    value === "opponent_reply_trainer" ||
+    value === "break_timing_drill" ||
+    value === "key_square_click"
+    ? value
+    : null;
+}
+
+function normalizeTrainingTargetSkillId(value: unknown): DailyTrainingTargetState["skillIds"][number] | null {
+  return value === "candidate_move_recognition" ||
+    value === "opponent_reply_recognition" ||
+    value === "branch_memory" ||
+    value === "move_order_precision" ||
+    value === "common_reply" ||
+    value === "break_timing" ||
+    value === "pawn_break" ||
+    value === "key_square_awareness" ||
+    value === "square_control"
+    ? value
+    : null;
+}
+
+function normalizeTrainingTargetInteractionKind(value: unknown): DailyTrainingTargetState["interactionKind"] | null {
+  return value === "move_input" || value === "multiple_choice" || value === "square_click" || value === "sequence" ? value : null;
+}
+
+function normalizeTrainingTargetCandidateMove(raw: unknown): DailyTrainingTargetCandidateMove | null {
+  if (!raw || typeof raw !== "object") return null;
+  const candidate = raw as Partial<DailyTrainingTargetCandidateMove>;
+  const uci = normalizeText(candidate.uci);
+  if (!uci) return null;
+  return {
+    uci,
+    san: normalizeText(candidate.san) || null,
+    label: normalizeText(candidate.label) || null,
+    isCorrect: Boolean(candidate.isCorrect),
+    explanation: normalizeText(candidate.explanation) || null,
+  };
+}
+
+function normalizeTrainingTargetState(raw: unknown): DailyTrainingTargetState | null {
+  if (!raw || typeof raw !== "object") return null;
+  const state = raw as Partial<DailyTrainingTargetState> & Record<string, unknown>;
+  const trainingTargetId = normalizeTrainingTargetId(state.trainingTargetId);
+  const startFen = normalizeText(state.startFen);
+  const currentFen = normalizeText(state.currentFen);
+  if (!trainingTargetId || !startFen || !currentFen) return null;
+  const skillIds = Array.isArray(state.skillIds)
+    ? state.skillIds.map((entry) => normalizeTrainingTargetSkillId(entry)).filter((entry): entry is DailyTrainingTargetState["skillIds"][number] => Boolean(entry))
+    : [];
+  const candidateMoves = Array.isArray(state.candidateMoves)
+    ? state.candidateMoves.map(normalizeTrainingTargetCandidateMove).filter((entry): entry is NonNullable<ReturnType<typeof normalizeTrainingTargetCandidateMove>> => Boolean(entry))
+    : undefined;
+  return {
+    trainingTargetId,
+    skillIds,
+    difficulty: normalizeDifficulty(state.difficulty),
+    interactionKind: normalizeTrainingTargetInteractionKind(state.interactionKind) ?? "move_input",
+    startFen,
+    currentFen,
+    learnerSide: state.learnerSide === "black" ? "black" : "white",
+    sideToMove: state.sideToMove === "b" ? "b" : "w",
+    prompt: normalizeText(state.prompt) || "Tempo found a focused drill for today.",
+    expectedMoveUci: normalizeText(state.expectedMoveUci) || null,
+    expectedMoveSan: normalizeText(state.expectedMoveSan) || null,
+    expectedSequenceUci: Array.isArray(state.expectedSequenceUci) ? state.expectedSequenceUci.map((entry) => normalizeText(entry)).filter(Boolean) : undefined,
+    candidateMoves,
+    targetSquares: Array.isArray(state.targetSquares) ? state.targetSquares.map((entry) => normalizeText(entry)).filter(Boolean) : undefined,
+    correctSquareKeys: Array.isArray(state.correctSquareKeys) ? state.correctSquareKeys.map((entry) => normalizeText(entry)).filter(Boolean) : undefined,
+    selectedSquares: Array.isArray(state.selectedSquares) ? state.selectedSquares.map((entry) => normalizeText(entry)).filter(Boolean) : undefined,
+    moveLimit: typeof state.moveLimit === "number" && Number.isFinite(state.moveLimit) ? Math.max(1, state.moveLimit) : undefined,
+    plyCount: Math.max(0, Number(state.plyCount ?? 0) || 0),
+    completed: Boolean(state.completed),
+    won: typeof state.won === "boolean" ? state.won : undefined,
+    bestKnownScore: typeof state.bestKnownScore === "number" && Number.isFinite(state.bestKnownScore) ? state.bestKnownScore : undefined,
+    formationHash: normalizeText(state.formationHash) || `${trainingTargetId}:${currentFen}`,
+    noveltyKey: normalizeText(state.noveltyKey) || `${trainingTargetId}:${currentFen}`,
+    sourceCardKey: normalizeText(state.sourceCardKey) || null,
+    sourceLabel: normalizeText(state.sourceLabel) || null,
+    lastMoveUci: normalizeText(state.lastMoveUci) || null,
+    lastMoveSan: normalizeText(state.lastMoveSan) || null,
+  };
+}
+
 function normalizeDomain(value: unknown): DailyBlundrDomain {
   return value === "opening_review" ||
     value === "daily_recall" ||
     value === "mini_game" ||
+    value === "training_target" ||
     value === "training_game" ||
     value === "pawn_structure" ||
     value === "key_square" ||
@@ -196,6 +287,7 @@ function normalizeCard(raw: unknown): DailyBlundrCard | null {
   const confidence = card.confidence === "high" || card.confidence === "medium" || card.confidence === "low" ? card.confidence : "medium";
   const difficulty = normalizeDifficulty(card.difficulty);
   const miniGame = normalizeMiniGameState(card.miniGame);
+  const trainingTarget = normalizeTrainingTargetState(card.trainingTarget);
 
   return {
     source:
@@ -225,7 +317,7 @@ function normalizeCard(raw: unknown): DailyBlundrCard | null {
     confidence,
     difficulty,
     id: normalizeText(card.id) || cardKey,
-    kind: card.kind === "recall" || card.kind === "mastery" || card.kind === "weak_spot" || card.kind === "mini_game" || card.kind === "training_game" ? card.kind : "recall",
+    kind: card.kind === "recall" || card.kind === "mastery" || card.kind === "weak_spot" || card.kind === "mini_game" || card.kind === "training_target" || card.kind === "training_game" ? card.kind : "recall",
     title: normalizeText(card.title) || normalizeText(card.openingName) || "Daily recall",
     prompt: normalizeText(card.prompt) || "Recall the move.",
     repertoireId: normalizeText(card.repertoireId) || null,
@@ -253,6 +345,7 @@ function normalizeCard(raw: unknown): DailyBlundrCard | null {
     sourceCount: Math.max(0, Number(card.sourceCount ?? 0) || 0),
     summary: normalizeText(card.summary) || normalizeText(card.title) || "Daily recall",
     miniGame,
+    trainingTarget,
   };
 }
 
@@ -310,6 +403,9 @@ function normalizeAttempt(raw: unknown): DailyBlundrSession["attempts"][number] 
     responseMoveSan,
     expectedMoveUci: normalizeText(entry.expectedMoveUci) || null,
     expectedMoveSan: normalizeText(entry.expectedMoveSan) || null,
+    selectedChoiceUci: normalizeText(entry.selectedChoiceUci) || null,
+    selectedSquare: normalizeText(entry.selectedSquare) || null,
+    selectionKind: normalizeText(entry.selectionKind) || null,
     usedReveal: Boolean(entry.usedReveal ?? outcome === "reveal"),
     responseTimeMs: typeof entry.responseTimeMs === "number" && Number.isFinite(entry.responseTimeMs) ? entry.responseTimeMs : null,
     note: normalizeText(entry.note) || null,
@@ -435,6 +531,7 @@ function normalizeMastery(raw: unknown): DailyBlundrMasteryState {
         record.domain === "opening_review" ||
         record.domain === "daily_recall" ||
         record.domain === "mini_game" ||
+        record.domain === "training_target" ||
         record.domain === "training_game" ||
         record.domain === "pawn_structure" ||
         record.domain === "key_square" ||
@@ -448,6 +545,7 @@ function normalizeMastery(raw: unknown): DailyBlundrMasteryState {
         record.cardKind === "mastery" ||
         record.cardKind === "weak_spot" ||
         record.cardKind === "mini_game" ||
+        record.cardKind === "training_target" ||
         record.cardKind === "training_game"
           ? record.cardKind
           : "recall",

@@ -27,7 +27,7 @@ function describeCoordinate(square: string): string {
   return square;
 }
 
-export function DailyBlundrBoard({ fen, disabled, onMoveAttempt }: DailyBlundrBoardProps) {
+export function DailyBlundrBoard({ fen, disabled, onMoveAttempt, onSquareClick, squareClickMode }: DailyBlundrBoardProps) {
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const game = useMemo(() => {
     try {
@@ -86,6 +86,10 @@ export function DailyBlundrBoard({ fen, disabled, onMoveAttempt }: DailyBlundrBo
                 disabled={disabled}
                 onClick={() => {
                   if (disabled) return;
+                  if (squareClickMode) {
+                    onSquareClick?.(square, piece);
+                    return;
+                  }
                   if (!selectedSquare) {
                     if (piece && piece.color === game.turn()) {
                       setSelectedSquare(square);
@@ -115,7 +119,7 @@ export function DailyBlundrBoard({ fen, disabled, onMoveAttempt }: DailyBlundrBo
                   });
                   setSelectedSquare(null);
                 }}
-                className={`relative flex aspect-square items-center justify-center text-2xl font-black transition ${isDark ? "bg-[#8a6d4f] text-white" : "bg-[#e8dcc8] text-stone-900"} ${isSelected ? "ring-4 ring-inset ring-green-800" : ""} ${isTarget ? "after:absolute after:h-3 after:w-3 after:rounded-full after:bg-green-600/75 after:content-['']" : ""}`}
+                className={`relative flex aspect-square items-center justify-center text-2xl font-black transition ${isDark ? "bg-[#8a6d4f] text-white" : "bg-[#e8dcc8] text-stone-900"} ${isSelected ? "ring-4 ring-inset ring-green-800" : ""} ${isTarget && !squareClickMode ? "after:absolute after:h-3 after:w-3 after:rounded-full after:bg-green-600/75 after:content-['']" : ""} ${squareClickMode ? "cursor-pointer" : ""}`}
                 aria-label={describeCoordinate(square)}
               >
                 <span aria-hidden>{pieceGlyph(piece)}</span>
@@ -126,7 +130,9 @@ export function DailyBlundrBoard({ fen, disabled, onMoveAttempt }: DailyBlundrBo
       </div>
       <div className="flex items-center justify-between bg-stone-50 px-3 py-2 text-[11px] font-black uppercase tracking-[0.2em] text-stone-500">
         <span>{orientation === "white" ? "White at bottom" : "Black at bottom"}</span>
-        <span>{selectedSquare ? `Selected ${selectedSquare}` : "Tap a piece to move"}</span>
+        <span>
+          {squareClickMode ? "Click the key square" : selectedSquare ? `Selected ${selectedSquare}` : "Tap a piece to move"}
+        </span>
       </div>
     </div>
   );

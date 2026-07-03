@@ -58,6 +58,7 @@ function normalizeDomain(value: unknown): DailyBlundrDomain {
   return value === "opening_review" ||
     value === "daily_recall" ||
     value === "mini_game" ||
+    value === "training_target" ||
     value === "training_game" ||
     value === "pawn_structure" ||
     value === "key_square" ||

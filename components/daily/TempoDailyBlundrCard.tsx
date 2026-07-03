@@ -40,6 +40,7 @@ export function TempoDailyBlundrCard() {
     selectedToday: 0,
   };
   const streak = overview?.store.progress.currentDailyStreak ?? overview?.store.progress.dailyStreak ?? 0;
+  const hasTrainingTarget = deck.some((card) => card.kind === "training_target");
   const hasMiniGame = deck.some((card) => card.kind === "mini_game");
 
   return (
@@ -54,7 +55,9 @@ export function TempoDailyBlundrCard() {
           <p className="mt-1 text-sm leading-6 text-stone-500">
             {reviewStats.dueToday > 0
               ? `Tempo found ${reviewStats.dueToday} reviews ready.`
-              : hasMiniGame
+              : hasTrainingTarget
+                ? "Queue clear. Tempo found a training target from your recent openings."
+                : hasMiniGame
                 ? "Queue clear. Tempo picked a skill game to sharpen your board vision."
                 : "Queue clear. Tempo is waiting for a fresh training seed."}
           </p>
@@ -89,7 +92,9 @@ export function TempoDailyBlundrCard() {
       <p className="mt-3 text-xs leading-5 text-stone-400">
         {reviewStats.dueToday > 0
           ? "Tempo is prioritizing the reviews most likely to slip."
-          : hasMiniGame
+          : hasTrainingTarget
+            ? "Tempo picked a focused drill from recent openings."
+            : hasMiniGame
             ? "Tempo picked a compact skill game instead of crowding out the queue."
             : "Queue clear for now. Train an opening and Tempo will keep building the review loop."}
       </p>

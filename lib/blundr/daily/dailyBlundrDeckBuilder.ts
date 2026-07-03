@@ -1,6 +1,8 @@
 import type { LearningEvent } from "@/lib/blundr/learning/learningEvents";
 import { selectDailyMiniGame } from "./miniGames/dailyMiniGameSelector";
 import type { DailyBlundrMiniGameCard } from "./miniGames/dailyMiniGameTypes";
+import { selectDailyTrainingTarget } from "./trainingTargets/dailyTrainingTargetSelector";
+import type { DailyBlundrTrainingTargetCard } from "./trainingTargets/dailyTrainingTargetTypes";
 import type {
   DailyBlundrCard,
   DailyBlundrDeckSummary,
@@ -231,19 +233,51 @@ export function buildDailyBlundrDeck(input: DailyBlundrDeckBuildInput): DailyBlu
       selectionMode: reviewDeck.selectionMode,
     },
   });
+  const reviewFenKeys = reviewDeck.cards.map((card) => normalizeText(card.fen)).filter(Boolean);
+  const trainingTargetSelection =
+    reviewDeck.selectedReviewCards.length <= 1
+      ? selectDailyTrainingTarget({
+          mastery: input.mastery ?? null,
+          dateKey,
+          now,
+          difficulty: "intro",
+          currentMastery: 0,
+          confidence: 0,
+          dueReviewCount: reviewDeck.dueReviewCount,
+          selectedReviewCount: reviewDeck.selectedReviewCards.length,
+          reviewCards: reviewDeck.reviewCards,
+          reviewAttempts: input.reviewAttempts ?? [],
+          candidateDailyCards: candidateCards,
+          recentTrainingTargetIds: [],
+          recentFenKeys: reviewFenKeys,
+          sessionTrainingTargetIds: [],
+        })
+      : null;
+  const cards: DailyBlundrCard[] = [...reviewDeck.cards];
+  if (trainingTargetSelection && cards.length < limit) {
+    const trainingTargetCard = trainingTargetSelection.card;
+    cards.push({
+      ...trainingTargetCard,
+      deckRank: cards.length + 1,
+      priority: trainingTargetCard.priority,
+      summary: trainingTargetCard.summary,
+    } as DailyBlundrTrainingTargetCard);
+  }
   const miniGameSelection = selectDailyMiniGame({
     mastery: input.mastery ?? null,
     dateKey,
     now,
     dueReviewCount: reviewDeck.dueReviewCount,
-    selectedReviewCount: reviewDeck.selectedReviewCards.length,
+    selectedReviewCount: reviewDeck.selectedReviewCards.length + (trainingTargetSelection ? 1 : 0),
     recentMiniGameIds: [],
-    recentFenKeys: [],
+    recentFenKeys: [
+      ...reviewFenKeys,
+      normalizeText(trainingTargetSelection?.card.fen),
+    ].filter(Boolean),
     sessionMiniGameIds: [],
     excludedMiniGameIds: [],
   });
 
-  const cards: DailyBlundrCard[] = [...reviewDeck.cards];
   if (miniGameSelection && (reviewDeck.dueReviewCount === 0 || cards.length < limit)) {
     const miniGameCard = miniGameSelection.card;
     cards.push({

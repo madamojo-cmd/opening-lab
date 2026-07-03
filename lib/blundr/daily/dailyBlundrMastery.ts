@@ -27,15 +27,17 @@ function uniqueSources(existing: readonly string[] | undefined, next: string): D
 }
 
 function uniqueTargets(card: DailyBlundrCard): DailyBlundrMasteryTarget[] {
-  const targets = [
-    {
-      conceptKey: card.masteryKey,
-      domain: "daily_recall" as const,
-      label: card.title || card.summary,
-      difficultyHint: card.difficulty,
-    },
-    ...card.masteryTargets,
-  ];
+  const targets = card.kind === "recall" || card.kind === "mastery" || card.kind === "weak_spot" || card.kind === "training_game"
+    ? [
+        {
+          conceptKey: card.masteryKey,
+          domain: "daily_recall" as const,
+          label: card.title || card.summary,
+          difficultyHint: card.difficulty,
+        },
+        ...card.masteryTargets,
+      ]
+    : [...card.masteryTargets];
   const seen = new Set<string>();
   return targets.filter((target) => {
     if (seen.has(target.conceptKey)) return false;

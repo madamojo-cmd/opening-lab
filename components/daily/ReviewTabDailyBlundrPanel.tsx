@@ -40,6 +40,7 @@ export function ReviewTabDailyBlundrPanel() {
     selectedToday: 0,
   };
   const dailyStreak = overview?.store.progress.currentDailyStreak ?? overview?.store.progress.dailyStreak ?? 0;
+  const hasTrainingTarget = deck.some((card) => card.kind === "training_target");
   const hasMiniGame = deck.some((card) => card.kind === "mini_game");
 
   return (
@@ -54,7 +55,9 @@ export function ReviewTabDailyBlundrPanel() {
           <p className="mt-1 text-sm leading-6 text-stone-600">
             {reviewStats.dueToday > 0
               ? `Tempo found ${reviewStats.dueToday} reviews ready.`
-              : hasMiniGame
+              : hasTrainingTarget
+                ? "Queue clear. Tempo found a training target from your recent openings."
+                : hasMiniGame
                 ? "Queue clear. Tempo picked a skill game to sharpen your board vision."
                 : "Queue clear. Tempo is waiting for a fresh training seed."}
           </p>

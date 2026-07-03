@@ -1,8 +1,9 @@
 import type { DailyMiniGameState } from "./miniGames/dailyMiniGameTypes";
+import type { DailyTrainingTargetState } from "./trainingTargets/dailyTrainingTargetTypes";
 
 export const DAILY_BLUNDR_SCHEMA_VERSION = 1 as const;
 
-export type DailyBlundrCardKind = "recall" | "mastery" | "weak_spot" | "mini_game" | "training_game";
+export type DailyBlundrCardKind = "recall" | "mastery" | "weak_spot" | "mini_game" | "training_target" | "training_game";
 export type DailyBlundrCardPlayMode = "uci_graded" | "reveal_only";
 export type DailyBlundrCardSource = "learning_event" | "progress_mistake" | "merged" | "daily_attempt";
 export type DailyBlundrAttemptOutcome = "correct" | "incorrect" | "skip" | "reveal";
@@ -11,6 +12,7 @@ export type DailyBlundrDomain =
   | "opening_review"
   | "daily_recall"
   | "mini_game"
+  | "training_target"
   | "training_game"
   | "pawn_structure"
   | "key_square"
@@ -75,6 +77,7 @@ export type DailyBlundrCard = DailyBlundrSeed & {
   sourceCount: number;
   summary: string;
   miniGame?: DailyMiniGameState | null;
+  trainingTarget?: DailyTrainingTargetState | null;
 };
 
 export type DailyBlundrAttempt = {
@@ -89,6 +92,9 @@ export type DailyBlundrAttempt = {
   attemptedMoveSan: string | null;
   responseMoveUci?: string | null;
   responseMoveSan?: string | null;
+  selectedChoiceUci?: string | null;
+  selectedSquare?: string | null;
+  selectionKind?: string | null;
   expectedMoveUci: string | null;
   expectedMoveSan: string | null;
   usedReveal?: boolean;
