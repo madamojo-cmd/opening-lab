@@ -1,4 +1,6 @@
 import type { LearningEvent } from "@/lib/blundr/learning/learningEvents";
+import { selectDailyMiniGame } from "./miniGames/dailyMiniGameSelector";
+import type { DailyBlundrMiniGameCard } from "./miniGames/dailyMiniGameTypes";
 import type {
   DailyBlundrCard,
   DailyBlundrDeckSummary,
@@ -217,6 +219,7 @@ export function buildDailyBlundrDeck(input: DailyBlundrDeckBuildInput): DailyBlu
     mastery: input.mastery ?? null,
     limit,
     now,
+    allowBootstrap: false,
   });
   const reviewStats = buildDailyBlundrReviewStats({
     reviewCards: reviewDeck.reviewCards,
@@ -228,15 +231,38 @@ export function buildDailyBlundrDeck(input: DailyBlundrDeckBuildInput): DailyBlu
       selectionMode: reviewDeck.selectionMode,
     },
   });
-  const fingerprint = reviewDeck.cards.map((card) => card.cardKey).join("|");
+  const miniGameSelection = selectDailyMiniGame({
+    mastery: input.mastery ?? null,
+    dateKey,
+    now,
+    dueReviewCount: reviewDeck.dueReviewCount,
+    selectedReviewCount: reviewDeck.selectedReviewCards.length,
+    recentMiniGameIds: [],
+    recentFenKeys: [],
+    sessionMiniGameIds: [],
+    excludedMiniGameIds: [],
+  });
+
+  const cards: DailyBlundrCard[] = [...reviewDeck.cards];
+  if (miniGameSelection && (reviewDeck.dueReviewCount === 0 || cards.length < limit)) {
+    const miniGameCard = miniGameSelection.card;
+    cards.push({
+      ...miniGameCard,
+      deckRank: cards.length + 1,
+      priority: miniGameCard.priority,
+      summary: miniGameCard.summary,
+    } as DailyBlundrMiniGameCard);
+  }
+
+  const fingerprint = cards.map((card) => card.cardKey).join("|");
 
   return {
     dateKey,
     fingerprint,
-    cards: reviewDeck.cards,
+    cards,
     seeds: mergedSeeds,
-    summary: buildSummary(rawSeeds, reviewDeck.cards),
-    isEmpty: reviewDeck.cards.length === 0,
+    summary: buildSummary(rawSeeds, cards),
+    isEmpty: cards.length === 0,
     reviewCards: reviewDeck.reviewCards,
     reviewAttempts: input.reviewAttempts ? [...input.reviewAttempts] : [],
     selectedReviewCards: reviewDeck.selectedReviewCards,

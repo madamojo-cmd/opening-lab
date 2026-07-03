@@ -11,6 +11,7 @@ export type DailyBlundrReviewDeckBuildInput = {
   mastery?: DailyBlundrMasteryState | null;
   limit?: number;
   now?: string;
+  allowBootstrap?: boolean;
 };
 
 export type DailyBlundrReviewDeckBuildResult = {
@@ -144,6 +145,7 @@ export function selectDueDailyBlundrReviewCards(input: {
 export function buildDailyBlundrDeckFromReviews(input: DailyBlundrReviewDeckBuildInput): DailyBlundrReviewDeckBuildResult {
   const now = normalizeText(input.now) || nowIso();
   const limit = clampLimit(input.limit ?? 5);
+  const allowBootstrap = input.allowBootstrap ?? true;
   const candidateReviewCards = input.candidateDailyCards.map((card) =>
     makeDailyBlundrReviewCardFromDailyCard({
       sourceCard: card,
@@ -158,7 +160,7 @@ export function buildDailyBlundrDeckFromReviews(input: DailyBlundrReviewDeckBuil
     limit,
   });
 
-  const selectedReviewCards = dueReviewCards.length > 0 ? dueReviewCards : bootstrapReviewCards(candidateReviewCards, input.mastery ?? null, now, limit);
+  const selectedReviewCards = dueReviewCards.length > 0 ? dueReviewCards : allowBootstrap ? bootstrapReviewCards(candidateReviewCards, input.mastery ?? null, now, limit) : [];
   const cards = selectedReviewCards.map((reviewCard, index) => {
     const dailyCard = dailyBlundrReviewCardToDailyCard(reviewCard);
     return {
@@ -178,7 +180,7 @@ export function buildDailyBlundrDeckFromReviews(input: DailyBlundrReviewDeckBuil
     selectedReviewCards,
     cards,
     dueReviewCount: dueReviewCards.length,
-    bootstrapUsed: dueReviewCards.length === 0 && selectedReviewCards.length > 0,
+    bootstrapUsed: allowBootstrap && dueReviewCards.length === 0 && selectedReviewCards.length > 0,
     selectionMode: dueReviewCards.length > 0 ? "due" : selectedReviewCards.length > 0 ? "bootstrap" : "empty",
   };
 }

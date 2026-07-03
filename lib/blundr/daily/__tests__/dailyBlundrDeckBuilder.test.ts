@@ -187,8 +187,10 @@ export function testDailyBlundrDeckBuilder(): void {
     limit: 5,
   });
 
-  assert.equal(mergedRun.cards.length, 2);
-  assert.equal(mergedRun.summary.mergedCards, 1);
+  assert.equal(mergedRun.cards.length, 3);
+  assert.equal(mergedRun.summary.mergedCards, 0);
+  assert.equal(mergedRun.cards[2].kind, "mini_game");
+  assert.ok(Boolean(mergedRun.cards[2].miniGame));
   assert.ok(mergedRun.cards[0].source === "merged" || mergedRun.cards[0].source === "learning_event" || mergedRun.cards[0].source === "progress_mistake");
 }
 

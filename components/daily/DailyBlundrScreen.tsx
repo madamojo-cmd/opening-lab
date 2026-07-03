@@ -39,21 +39,21 @@ function mergeDailyBlundrOverview(
     session: DailyBlundrOverview["currentSession"];
     progress?: DailyBlundrOverview["store"]["progress"];
     mastery?: DailyBlundrOverview["store"]["mastery"];
-    reviewCards?: DailyBlundrOverview["reviewCards"];
-    reviewAttempts?: DailyBlundrOverview["reviewAttempts"];
+    reviewCards?: readonly DailyBlundrOverview["reviewCards"][number][];
+    reviewAttempts?: readonly DailyBlundrOverview["reviewAttempts"][number][];
     reviewStats?: DailyBlundrOverview["reviewStats"];
   },
 ): DailyBlundrOverview {
   return {
     ...previous,
     currentSession: next.session,
-    reviewCards: next.reviewCards ?? previous.reviewCards,
-    reviewAttempts: next.reviewAttempts ?? previous.reviewAttempts,
+    reviewCards: next.reviewCards ? [...next.reviewCards] : previous.reviewCards,
+    reviewAttempts: next.reviewAttempts ? [...next.reviewAttempts] : previous.reviewAttempts,
     reviewStats: next.reviewStats ?? previous.reviewStats,
     deck: {
       ...previous.deck,
-      reviewCards: next.reviewCards ?? previous.deck.reviewCards,
-      reviewAttempts: next.reviewAttempts ?? previous.deck.reviewAttempts,
+      reviewCards: next.reviewCards ? [...next.reviewCards] : previous.deck.reviewCards,
+      reviewAttempts: next.reviewAttempts ? [...next.reviewAttempts] : previous.deck.reviewAttempts,
       reviewStats: next.reviewStats ?? previous.deck.reviewStats,
     },
     store: {
@@ -84,6 +84,7 @@ export function DailyBlundrScreen() {
   const session = overview?.currentSession ?? null;
   const reviewStats = overview?.reviewStats ?? EMPTY_REVIEW_STATS;
   const masterySummary = summarizeDailyBlundrMastery(overview?.store.mastery ?? null);
+  const hasMiniGame = deck.some((card) => card.kind === "mini_game");
   const hasCards = deck.length > 0;
   const started = Boolean(session?.startedAt);
   const complete = Boolean(session && isDailyBlundrSessionComplete(session));
@@ -98,8 +99,8 @@ export function DailyBlundrScreen() {
     session: DailyBlundrOverview["currentSession"];
     progress?: DailyBlundrOverview["store"]["progress"];
     mastery?: DailyBlundrOverview["store"]["mastery"];
-    reviewCards?: DailyBlundrOverview["reviewCards"];
-    reviewAttempts?: DailyBlundrOverview["reviewAttempts"];
+    reviewCards?: readonly DailyBlundrOverview["reviewCards"][number][];
+    reviewAttempts?: readonly DailyBlundrOverview["reviewAttempts"][number][];
     reviewStats?: DailyBlundrOverview["reviewStats"];
   }) {
     setOverview((previous) => {
@@ -174,7 +175,13 @@ export function DailyBlundrScreen() {
                 <Sparkles size={14} />
                 Today’s Smart Reviews
               </div>
-              <p className="mt-3 text-sm leading-6 text-stone-300">Today’s smart reviews are built from the positions most likely to slip.</p>
+              <p className="mt-3 text-sm leading-6 text-stone-300">
+                {reviewStats.dueToday > 0
+                  ? "Today’s smart reviews are built from the positions most likely to slip."
+                  : hasMiniGame
+                    ? "Queue clear. Tempo picked a skill game to sharpen your board vision."
+                    : "Queue clear. Tempo is waiting for a fresh training seed."}
+              </p>
             </div>
             <div className="rounded-full bg-white/10 px-3 py-1 text-xs font-black text-white">{primaryStateLabel}</div>
           </div>

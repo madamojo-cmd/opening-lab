@@ -1,3 +1,5 @@
+import type { DailyMiniGameState } from "./miniGames/dailyMiniGameTypes";
+
 export const DAILY_BLUNDR_SCHEMA_VERSION = 1 as const;
 
 export type DailyBlundrCardKind = "recall" | "mastery" | "weak_spot" | "mini_game" | "training_game";
@@ -72,6 +74,7 @@ export type DailyBlundrCard = DailyBlundrSeed & {
   masteryKey: string;
   sourceCount: number;
   summary: string;
+  miniGame?: DailyMiniGameState | null;
 };
 
 export type DailyBlundrAttempt = {

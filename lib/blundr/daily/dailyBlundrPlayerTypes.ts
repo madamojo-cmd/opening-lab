@@ -4,6 +4,7 @@ import type { DailyBlundrReviewAttempt, DailyBlundrReviewCard } from "./dailyBlu
 import type { DailyBlundrAttemptScoringResult } from "./dailyBlundrAttemptScoring";
 import type { DailyBlundrReviewStats } from "./dailyBlundrReviewStats";
 import type { DailyBlundrCardPlayMode } from "./dailyBlundrTypes";
+import type { DailyMiniGameAdvanceResult, DailyMiniGameState } from "./miniGames/dailyMiniGameTypes";
 
 export type { DailyBlundrCardPlayMode } from "./dailyBlundrTypes";
 
@@ -25,15 +26,16 @@ export type DailyBlundrBoardMoveAttempt = {
 export type DailyBlundrPlayerAttemptCommit = {
   card: DailyBlundrCard;
   attempt: DailyBlundrAttempt;
-  reviewAttempt: DailyBlundrReviewAttempt;
+  reviewAttempt?: DailyBlundrReviewAttempt | null;
   session: DailyBlundrSession;
   mastery: DailyBlundrMasteryState;
-  reviewCards: DailyBlundrReviewCard[];
-  reviewAttempts: DailyBlundrReviewAttempt[];
+  reviewCards: readonly DailyBlundrReviewCard[];
+  reviewAttempts: readonly DailyBlundrReviewAttempt[];
   reviewStats: DailyBlundrReviewStats;
   scoring: DailyBlundrAttemptScoringResult;
   feedback: string;
   sessionComplete: boolean;
+  miniGameResult?: DailyMiniGameAdvanceResult | null;
 };
 
 export type DailyBlundrPlayerProps = {
@@ -52,6 +54,7 @@ export type DailyBlundrCardPlayerProps = {
   moveInput: string;
   support: DailyBlundrSupportState;
   locked: boolean;
+  miniGameState?: DailyMiniGameState | null;
   onMoveInputChange: (value: string) => void;
   onSubmitMove: (value: string) => void;
   onBoardMoveAttempt: (attempt: DailyBlundrBoardMoveAttempt) => void;
@@ -89,6 +92,7 @@ export type DailyBlundrSessionSummaryProps = {
 };
 
 export function resolveDailyBlundrCardPlayMode(card: DailyBlundrCard): DailyBlundrCardPlayMode {
+  if (card.kind === "mini_game") return "uci_graded";
   if (card.reviewPromptKind === "target_move_recall" && card.expectedMoveUci) return "uci_graded";
   return "reveal_only";
 }

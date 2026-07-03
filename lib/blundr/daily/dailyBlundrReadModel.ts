@@ -25,7 +25,8 @@ export function loadDailyBlundrOverview(limit = 5): DailyBlundrOverview {
   const learningEvents = getLocalLearningEvents();
   const store = loadDailyBlundrStore();
   const reviewStore = loadDailyBlundrReviewStore();
-  const deck = buildDailyBlundrDeck({
+  const existingSession = store.sessions.sessionsByDate[dateKey] ?? null;
+  const freshDeck = buildDailyBlundrDeck({
     progress: legacyProgress,
     learningEvents,
     mastery: store.mastery,
@@ -35,11 +36,24 @@ export function loadDailyBlundrOverview(limit = 5): DailyBlundrOverview {
     now,
     limit,
   });
+  const sessionCards = existingSession?.cards?.length ? existingSession.cards : freshDeck.cards;
   const currentSession = reconcileDailyBlundrSession({
     dateKey,
-    deck: deck.cards,
-    existing: store.sessions.sessionsByDate[dateKey] ?? null,
+    deck: sessionCards,
+    existing: existingSession,
   });
+  const deck = existingSession?.cards?.length
+    ? {
+        ...freshDeck,
+        cards: sessionCards,
+        fingerprint: currentSession.deckFingerprint || freshDeck.fingerprint,
+        isEmpty: sessionCards.length === 0,
+        summary: {
+          ...freshDeck.summary,
+          totalCards: sessionCards.length,
+        },
+      }
+    : freshDeck;
   const reviewStats = buildDailyBlundrReviewStats({
     reviewCards: deck.reviewCards,
     reviewAttempts: deck.reviewAttempts,

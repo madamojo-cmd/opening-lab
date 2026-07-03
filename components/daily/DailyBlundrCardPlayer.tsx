@@ -15,6 +15,7 @@ export function DailyBlundrCardPlayer({
   moveInput,
   support,
   locked,
+  miniGameState,
   onMoveInputChange,
   onSubmitMove,
   onBoardMoveAttempt,
@@ -22,14 +23,19 @@ export function DailyBlundrCardPlayer({
   onShowAnswer,
   onMarkReviewed,
 }: DailyBlundrCardPlayerProps) {
+  const isMiniGame = card.kind === "mini_game";
+  const activeMiniGameState = isMiniGame ? miniGameState ?? card.miniGame ?? null : null;
+  const boardFen = isMiniGame ? activeMiniGameState?.currentFen ?? card.miniGame?.currentFen ?? card.fen : card.fen;
   const answerVisible = support.answerShown || support.usedReveal;
   const expectedMove = resolveExpectedMoveLabel(card.expectedMoveUci, card.expectedMoveSan);
+  const movesRemaining = isMiniGame && activeMiniGameState ? Math.max(0, activeMiniGameState.moveLimit - activeMiniGameState.plyCount) : null;
+  const objectiveLine = isMiniGame && activeMiniGameState ? card.prompt : card.summary;
 
   return (
     <section className="space-y-4 rounded-3xl bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-xs font-black uppercase tracking-[0.22em] text-green-700">Recall card</div>
+          <div className="text-xs font-black uppercase tracking-[0.22em] text-green-700">{isMiniGame ? "Mini-game" : "Recall card"}</div>
           <h2 className="mt-1 text-lg font-black text-stone-950">{card.openingName || "Daily BLUNDR"}</h2>
           <p className="mt-1 text-sm leading-6 text-stone-500">{card.summary}</p>
         </div>
@@ -38,69 +44,94 @@ export function DailyBlundrCardPlayer({
         </div>
       </div>
 
-      <DailyBlundrBoard fen={card.fen} disabled={locked || mode === "reveal_only"} onMoveAttempt={onBoardMoveAttempt} />
+      <DailyBlundrBoard fen={boardFen} disabled={locked || Boolean(isMiniGame && activeMiniGameState?.completed) || (!isMiniGame && mode === "reveal_only")} onMoveAttempt={onBoardMoveAttempt} />
 
-      {answerVisible ? (
-        <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-          <div className="text-xs font-black uppercase tracking-[0.22em] text-amber-700">Answer</div>
-          <p className="mt-2 font-semibold">Tempo was looking for {expectedMove}.</p>
-        </div>
-      ) : null}
-
-      {mode === "uci_graded" ? (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            onSubmitMove(moveInput);
-          }}
-          className="space-y-3"
-        >
-          <div className="rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600">
-            Enter the move in UCI, or SAN if that is the move you remember. UCI is preferred for grading.
-          </div>
+      {isMiniGame ? (
+        <div className="space-y-3 rounded-3xl border border-stone-200 bg-stone-50 p-4 text-sm leading-6 text-stone-600">
           <div>
-            <label htmlFor={`daily-blundr-move-${card.cardKey}`} className="text-xs font-black uppercase tracking-wide text-stone-500">
-              Your move
-            </label>
-            <div className="mt-2 flex items-center gap-2">
-              <input
-                id={`daily-blundr-move-${card.cardKey}`}
-                value={moveInput}
-                onChange={(event) => onMoveInputChange(event.target.value)}
-                placeholder={card.expectedMoveUci ?? card.expectedMoveSan ?? "e2e4"}
-                className="min-w-0 flex-1 rounded-2xl border border-stone-200 bg-white px-4 py-3 text-base font-semibold outline-none ring-0 focus:border-green-700"
-              />
-              <button type="submit" className="rounded-2xl bg-green-700 px-4 py-3 font-black text-white shadow-sm">
-                Check
-              </button>
+            <div className="text-xs font-black uppercase tracking-[0.22em] text-stone-500">Objective</div>
+            <p className="mt-2 font-semibold text-stone-800">{objectiveLine}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs font-black uppercase tracking-wide text-stone-600">
+            <div className="rounded-2xl bg-white px-3 py-3">
+              Moves left
+              <div className="mt-1 text-lg font-black text-stone-900">{movesRemaining ?? card.miniGame?.moveLimit ?? 0}</div>
+            </div>
+            <div className="rounded-2xl bg-white px-3 py-3">
+              Best route
+              <div className="mt-1 text-lg font-black text-stone-900">{card.miniGame?.bestKnownScore ?? "?"}</div>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => onMoveInputChange(card.expectedMoveUci ?? card.expectedMoveSan ?? "")}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-stone-100 px-4 py-3 font-black text-stone-700"
-            >
-              <Keyboard size={15} />
-              Fill answer
-            </button>
+          <div className="rounded-2xl bg-white px-3 py-3 text-xs font-semibold text-stone-500">
+            {card.miniGame?.goalSquares?.length ? `Goal: ${card.miniGame.goalSquares.join(", ")}` : "Goal: solve the route."}
+            {card.miniGame?.targetSquares?.length ? ` Targets: ${card.miniGame.targetSquares.join(", ")}` : ""}
           </div>
-        </form>
-      ) : (
-        <div className="rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600">
-          Tempo can reveal this review, then mark it as reviewed without forcing a move entry.
         </div>
-      )}
+      ) : (
+        <>
+          {answerVisible ? (
+            <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+              <div className="text-xs font-black uppercase tracking-[0.22em] text-amber-700">Answer</div>
+              <p className="mt-2 font-semibold">Tempo was looking for {expectedMove}.</p>
+            </div>
+          ) : null}
 
-      <DailyBlundrSupportControls
-        usedReveal={support.usedReveal}
-        answerShown={support.answerShown}
-        revealedAt={support.revealedAt}
-        disabled={locked}
-        onReveal={onReveal}
-        onShowAnswer={onShowAnswer}
-        onMarkReviewed={onMarkReviewed}
-      />
+          {mode === "uci_graded" ? (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                onSubmitMove(moveInput);
+              }}
+              className="space-y-3"
+            >
+              <div className="rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600">
+                Enter the move in UCI, or SAN if that is the move you remember. UCI is preferred for grading.
+              </div>
+              <div>
+                <label htmlFor={`daily-blundr-move-${card.cardKey}`} className="text-xs font-black uppercase tracking-wide text-stone-500">
+                  Your move
+                </label>
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    id={`daily-blundr-move-${card.cardKey}`}
+                    value={moveInput}
+                    onChange={(event) => onMoveInputChange(event.target.value)}
+                    placeholder={card.expectedMoveUci ?? card.expectedMoveSan ?? "e2e4"}
+                    className="min-w-0 flex-1 rounded-2xl border border-stone-200 bg-white px-4 py-3 text-base font-semibold outline-none ring-0 focus:border-green-700"
+                  />
+                  <button type="submit" className="rounded-2xl bg-green-700 px-4 py-3 font-black text-white shadow-sm">
+                    Check
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => onMoveInputChange(card.expectedMoveUci ?? card.expectedMoveSan ?? "")}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-stone-100 px-4 py-3 font-black text-stone-700"
+                >
+                  <Keyboard size={15} />
+                  Fill answer
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600">
+              Tempo can reveal this review, then mark it as reviewed without forcing a move entry.
+            </div>
+          )}
+
+          <DailyBlundrSupportControls
+            usedReveal={support.usedReveal}
+            answerShown={support.answerShown}
+            revealedAt={support.revealedAt}
+            disabled={locked}
+            onReveal={onReveal}
+            onShowAnswer={onShowAnswer}
+            onMarkReviewed={onMarkReviewed}
+          />
+        </>
+      )}
     </section>
   );
 }

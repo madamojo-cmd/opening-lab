@@ -11,6 +11,7 @@ import {
   type DailyBlundrSessionStore,
   type DailyBlundrStore,
 } from "./dailyBlundrTypes";
+import type { DailyMiniGameState } from "./miniGames/dailyMiniGameTypes";
 
 export type { DailyBlundrStore } from "./dailyBlundrTypes";
 
@@ -103,6 +104,58 @@ function normalizeDifficulty(value: unknown): DailyBlundrDifficulty {
     : "beginner";
 }
 
+function normalizeMiniGameId(value: unknown): DailyMiniGameState["miniGameId"] | null {
+  return value === "king_race" || value === "knight_gymnasium" || value === "pawn_wars" ? value : null;
+}
+
+function normalizeMiniGameSkillId(value: unknown): DailyMiniGameState["skillIds"][number] | null {
+  return value === "king_pathing" ||
+    value === "opposition" ||
+    value === "goal_zone" ||
+    value === "knight_geometry" ||
+    value === "shortest_path" ||
+    value === "pawn_race" ||
+    value === "promotion" ||
+    value === "passed_pawn"
+    ? value
+    : null;
+}
+
+function normalizeMiniGameState(raw: unknown): DailyMiniGameState | null {
+  if (!raw || typeof raw !== "object") return null;
+  const state = raw as Partial<DailyMiniGameState> & Record<string, unknown>;
+  const miniGameId = normalizeMiniGameId(state.miniGameId);
+  const startFen = normalizeText(state.startFen);
+  const currentFen = normalizeText(state.currentFen);
+  if (!miniGameId || !startFen || !currentFen) return null;
+  const skillIds = Array.isArray(state.skillIds)
+    ? state.skillIds.map((entry) => normalizeMiniGameSkillId(entry)).filter((entry): entry is DailyMiniGameState["skillIds"][number] => Boolean(entry))
+    : [];
+  return {
+    miniGameId,
+    skillIds,
+    difficulty: normalizeDifficulty(state.difficulty),
+    startFen,
+    currentFen,
+    sideToMove: state.sideToMove === "b" ? "b" : "w",
+    learnerSide: state.learnerSide === "black" ? "black" : "white",
+    goalSquares: Array.isArray(state.goalSquares) ? state.goalSquares.map((entry) => normalizeText(entry)).filter(Boolean) : undefined,
+    targetSquares: Array.isArray(state.targetSquares) ? state.targetSquares.map((entry) => normalizeText(entry)).filter(Boolean) : undefined,
+    flagSquares: Array.isArray(state.flagSquares) ? state.flagSquares.map((entry) => normalizeText(entry)).filter(Boolean) : undefined,
+    moveLimit: Math.max(1, Number(state.moveLimit ?? 1) || 1),
+    plyCount: Math.max(0, Number(state.plyCount ?? 0) || 0),
+    bestKnownScore: typeof state.bestKnownScore === "number" && Number.isFinite(state.bestKnownScore) ? state.bestKnownScore : undefined,
+    completed: Boolean(state.completed),
+    won: typeof state.won === "boolean" ? state.won : undefined,
+    capturedTargetSquares: Array.isArray(state.capturedTargetSquares) ? state.capturedTargetSquares.map((entry) => normalizeText(entry)).filter(Boolean) : undefined,
+    visitedGoalSquares: Array.isArray(state.visitedGoalSquares) ? state.visitedGoalSquares.map((entry) => normalizeText(entry)).filter(Boolean) : undefined,
+    formationHash: normalizeText(state.formationHash) || `${miniGameId}:${currentFen}`,
+    noveltyKey: normalizeText(state.noveltyKey) || `${miniGameId}:${currentFen}`,
+    lastMoveUci: normalizeText(state.lastMoveUci) || null,
+    lastMoveSan: normalizeText(state.lastMoveSan) || null,
+  };
+}
+
 function normalizeDomain(value: unknown): DailyBlundrDomain {
   return value === "opening_review" ||
     value === "daily_recall" ||
@@ -140,12 +193,18 @@ function normalizeCard(raw: unknown): DailyBlundrCard | null {
     ? card.masteryTargets.map(normalizeMasteryTarget).filter((entry): entry is NonNullable<ReturnType<typeof normalizeMasteryTarget>> => Boolean(entry))
     : [];
   const signals = Array.isArray(card.signals) ? card.signals.map((entry) => normalizeText(entry)).filter(Boolean) : [];
-  const source = card.source === "learning_event" || card.source === "progress_mistake" || card.source === "merged" ? card.source : "progress_mistake";
   const confidence = card.confidence === "high" || card.confidence === "medium" || card.confidence === "low" ? card.confidence : "medium";
   const difficulty = normalizeDifficulty(card.difficulty);
+  const miniGame = normalizeMiniGameState(card.miniGame);
 
   return {
-    source,
+    source:
+      card.source === "learning_event" ||
+      card.source === "progress_mistake" ||
+      card.source === "merged" ||
+      card.source === "daily_attempt"
+        ? card.source
+        : "progress_mistake",
     cardKey,
     positionKey: normalizeText(card.positionKey) || cardKey,
     fen,
@@ -193,6 +252,7 @@ function normalizeCard(raw: unknown): DailyBlundrCard | null {
     masteryKey: normalizeText(card.masteryKey) || cardKey,
     sourceCount: Math.max(0, Number(card.sourceCount ?? 0) || 0),
     summary: normalizeText(card.summary) || normalizeText(card.title) || "Daily recall",
+    miniGame,
   };
 }
 
@@ -233,7 +293,13 @@ function normalizeAttempt(raw: unknown): DailyBlundrSession["attempts"][number] 
   return {
     id,
     cardId,
-    source: entry.source === "learning_event" || entry.source === "progress_mistake" || entry.source === "merged" ? entry.source : "progress_mistake",
+    source:
+      entry.source === "learning_event" ||
+      entry.source === "progress_mistake" ||
+      entry.source === "merged" ||
+      entry.source === "daily_attempt"
+        ? entry.source
+        : "progress_mistake",
     createdAt: normalizeText(entry.createdAt) || completedAt,
     completedAt,
     outcome,
@@ -382,11 +448,11 @@ function normalizeMastery(raw: unknown): DailyBlundrMasteryState {
         record.cardKind === "mastery" ||
         record.cardKind === "weak_spot" ||
         record.cardKind === "mini_game" ||
-          record.cardKind === "training_game"
+        record.cardKind === "training_game"
           ? record.cardKind
           : "recall",
       sources: Array.isArray(record.sources)
-        ? record.sources.filter((source): source is DailyBlundrMasteryState["records"][string]["sources"][number] => source === "learning_event" || source === "progress_mistake" || source === "merged")
+        ? record.sources.filter((source): source is DailyBlundrMasteryState["records"][string]["sources"][number] => source === "learning_event" || source === "progress_mistake" || source === "merged" || source === "daily_attempt")
         : [],
       exposureCount: Math.max(0, Number(record.exposureCount ?? attempts) || 0),
       attemptCount: attempts,
