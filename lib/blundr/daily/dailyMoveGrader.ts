@@ -50,6 +50,21 @@ function applyUciForSan(fen: string, uci: string): string | null {
   }
 }
 
+function isLegalUciMove(fen: string, uci: string): boolean {
+  try {
+    const chess = new Chess(fen);
+    return Boolean(
+      chess.move({
+        from: uci.slice(0, 2),
+        to: uci.slice(2, 4),
+        promotion: uci.length > 4 ? uci.slice(4, 5) : undefined,
+      }),
+    );
+  } catch {
+    return false;
+  }
+}
+
 function resolveExpectedUci(fen: string, expectedMoveUci: string | null, expectedMoveSan: string | null): string | null {
   const direct = toCanonicalUci(expectedMoveUci);
   if (direct) return direct;
@@ -77,29 +92,35 @@ export function gradeDailyBlundrMove(input: DailyBlundrMoveGradeInput): DailyBlu
 
   if (isUciLike(attemptedMove)) {
     const attemptedMoveUci = toCanonicalUci(attemptedMove);
-    const attemptedMoveSan = attemptedMoveUci ? applyUciForSan(input.fen, attemptedMoveUci) : null;
+    const legal = attemptedMoveUci ? isLegalUciMove(input.fen, attemptedMoveUci) : false;
+    const attemptedMoveSan = attemptedMoveUci && legal ? applyUciForSan(input.fen, attemptedMoveUci) : null;
     return {
-      outcome: attemptedMoveUci && expectedMoveUci && attemptedMoveUci === expectedMoveUci ? "correct" : "incorrect",
+      outcome: legal && attemptedMoveUci && expectedMoveUci && attemptedMoveUci === expectedMoveUci ? "correct" : "incorrect",
       attemptedMoveUci,
       attemptedMoveSan,
       expectedMoveUci,
       expectedMoveSan,
-      reason: attemptedMoveUci && expectedMoveUci && attemptedMoveUci === expectedMoveUci ? "matched_expected_move" : "uci_mismatch",
+      reason: !legal
+        ? "illegal_move_attempt"
+        : attemptedMoveUci && expectedMoveUci && attemptedMoveUci === expectedMoveUci
+          ? "matched_expected_move"
+          : "uci_mismatch",
     };
   }
 
   const attemptedMoveUci = sanToUci(input.fen, attemptedMove);
   const attemptedMoveUciCanonical = toCanonicalUci(attemptedMoveUci);
-  const attemptedMoveSan = attemptedMoveUciCanonical ? applyUciForSan(input.fen, attemptedMoveUciCanonical) : null;
+  const legal = attemptedMoveUciCanonical ? isLegalUciMove(input.fen, attemptedMoveUciCanonical) : false;
+  const attemptedMoveSan = attemptedMoveUciCanonical && legal ? applyUciForSan(input.fen, attemptedMoveUciCanonical) : null;
 
-  if (!attemptedMoveUciCanonical) {
+  if (!attemptedMoveUciCanonical || !legal) {
     return {
       outcome: "incorrect",
-      attemptedMoveUci: null,
+      attemptedMoveUci: attemptedMoveUciCanonical,
       attemptedMoveSan: attemptedMove || null,
       expectedMoveUci,
       expectedMoveSan,
-      reason: "unrecognized_move_input",
+      reason: !attemptedMoveUciCanonical ? "unrecognized_move_input" : "illegal_move_attempt",
     };
   }
 
@@ -112,4 +133,3 @@ export function gradeDailyBlundrMove(input: DailyBlundrMoveGradeInput): DailyBlu
     reason: expectedMoveUci && attemptedMoveUciCanonical === expectedMoveUci ? "matched_expected_move" : "san_mismatch",
   };
 }
-

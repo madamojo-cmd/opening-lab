@@ -526,6 +526,17 @@ export function saveDailyBlundrStore(store: DailyBlundrStore): void {
   saveDailyBlundrMastery(store.mastery);
 }
 
+export function upsertDailyBlundrSessionStore(store: DailyBlundrSessionStore, session: DailyBlundrSession): DailyBlundrSessionStore {
+  return {
+    ...store,
+    sessionsByDate: {
+      ...store.sessionsByDate,
+      [session.dateKey]: session,
+    },
+    updatedAt: session.updatedAt ?? store.updatedAt ?? nowIso(),
+  };
+}
+
 export function createEmptyDailyBlundrSession(dateKey: string, deckFingerprint = ""): DailyBlundrSession {
   return {
     schemaVersion: DAILY_BLUNDR_SCHEMA_VERSION,

@@ -1,6 +1,7 @@
 export const DAILY_BLUNDR_SCHEMA_VERSION = 1 as const;
 
 export type DailyBlundrCardKind = "recall" | "mastery" | "weak_spot" | "mini_game" | "training_game";
+export type DailyBlundrCardPlayMode = "uci_graded" | "reveal_only";
 export type DailyBlundrCardSource = "learning_event" | "progress_mistake" | "merged" | "daily_attempt";
 export type DailyBlundrAttemptOutcome = "correct" | "incorrect" | "skip" | "reveal";
 

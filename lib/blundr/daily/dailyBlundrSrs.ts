@@ -118,7 +118,7 @@ function determineFailureType(input: DailyBlundrScheduleInput, promptKind: Daily
   const expectedFastMs = input.expectedFastMs ?? defaultExpectedFastMs(promptKind);
   if (responseTimeMs !== null && responseTimeMs > expectedFastMs * 2.5) return "slow_recall";
   const moveReason = normalizeText(input.moveReason);
-  if (moveReason === "unrecognized_move_input") return "illegal_move_attempt";
+  if (moveReason === "unrecognized_move_input" || moveReason === "illegal_move_attempt") return "illegal_move_attempt";
   if (!correct && grade === "AGAIN" && partialCredit < 0.5) return promptKind === "target_move_recall" ? "wrong_book_move" : "hint_dependency";
   if (promptKind !== "target_move_recall") return "hint_dependency";
   return "other";
@@ -143,8 +143,8 @@ export function gradeDailyBlundrAttempt(input: DailyBlundrAttemptGradeInput): Da
   const previousCorrectStreak = Math.max(0, Number(input.previousCorrectStreak ?? 0) || 0);
   const correct = Boolean(input.correct);
 
-  if (!correct && partialCredit < 0.5) return "AGAIN";
   if (usedReveal) return "HARD";
+  if (!correct && partialCredit < 0.5) return "AGAIN";
   if (responseTimeMs !== null && responseTimeMs > expectedFastMs * 2.5) return "HARD";
 
   if (correct && previousCorrectStreak >= 2 && responseTimeMs !== null && responseTimeMs <= expectedFastMs) {
