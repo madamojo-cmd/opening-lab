@@ -13,6 +13,7 @@ import { validateDifficultyDistribution } from "./dailyDifficultyCoverage";
 import { validateMiniGameRegistry, validateGeneratedMiniGames } from "./dailyMiniGameValidation";
 import { validateNoveltyKeys } from "./dailyNoveltyValidation";
 import { validateTrainingTargetRegistry, validateGeneratedTrainingTargets } from "./dailyTrainingTargetValidation";
+import type { ValidationSnapshot } from "../../accounts/accountTypes";
 
 export type DailyBlundrValidationInput = {
   dateKey?: string;
@@ -162,4 +163,18 @@ export function getDailyBlundrValidationMiniGameCount(): number {
 
 export function getDailyBlundrValidationTrainingTargetCount(): number {
   return DAILY_TRAINING_TARGET_REGISTRY.length;
+}
+
+export function createDailyBlundrValidationSnapshot(report: DailyCoverageReport, userId?: string): ValidationSnapshot {
+  const generatedAt = report.generatedAt || new Date().toISOString();
+  return {
+    id: `${userId ?? "daily"}:validation:${generatedAt}`,
+    userId,
+    generatedAt,
+    valid: Boolean(report.valid),
+    issueCount: report.summary.issueCount,
+    errorCount: report.summary.errorCount,
+    warningCount: report.summary.warningCount,
+    reportJson: report,
+  };
 }

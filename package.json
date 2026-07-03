@@ -17,20 +17,21 @@
     "test:multi-move-qa": "RUN_MULTI_MOVE_QA=1 tsx lib/blundr/debug/testMultiMoveTrainingQa.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.0",
     "@tailwindcss/postcss": "latest",
     "chess.js": "latest",
     "lucide-react": "latest",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "tailwindcss": "latest",
-    "stockfish": "latest"
+    "stockfish": "latest",
+    "tailwindcss": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
-    "typescript": "latest",
-    "tsx": "^4.22.3"
+    "tsx": "^4.22.3",
+    "typescript": "latest"
   }
 }

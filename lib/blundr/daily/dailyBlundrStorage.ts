@@ -18,8 +18,16 @@ import type {
 } from "./trainingTargets/dailyTrainingTargetTypes";
 import { normalizeConceptId } from "./concepts/dailyConceptTagging";
 import { validateDailyCard } from "./validation/dailyCardValidation";
+import { loadDailyBlundrReviewStore } from "./dailyBlundrReviewStorage";
 
 export type { DailyBlundrStore } from "./dailyBlundrTypes";
+
+export type DailyBlundrLocalState = {
+  dateKey: string;
+  store: DailyBlundrStore;
+  reviewCards: ReturnType<typeof loadDailyBlundrReviewStore>["reviewCards"];
+  reviewAttempts: ReturnType<typeof loadDailyBlundrReviewStore>["reviewAttempts"];
+};
 
 export const DAILY_BLUNDR_SESSIONS_KEY = "blundr.daily.sessions.v1";
 export const DAILY_BLUNDR_PROGRESS_KEY = "blundr.daily.progress.v1";
@@ -648,6 +656,17 @@ export function getDailyBlundrStorageBundle(): DailyBlundrStore {
 
 export function loadDailyBlundrStore(): DailyBlundrStore {
   return getDailyBlundrStorageBundle();
+}
+
+export function readLocalDailyBlundrState(dateKey = getDailyBlundrDateKey()): DailyBlundrLocalState {
+  const store = loadDailyBlundrStore();
+  const reviewStore = loadDailyBlundrReviewStore();
+  return {
+    dateKey,
+    store,
+    reviewCards: reviewStore.reviewCards,
+    reviewAttempts: reviewStore.reviewAttempts,
+  };
 }
 
 export function loadDailyBlundrSessionStore(): DailyBlundrSessionStore {
