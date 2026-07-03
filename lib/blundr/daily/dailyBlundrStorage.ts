@@ -17,6 +17,7 @@ import type {
   DailyTrainingTargetState,
 } from "./trainingTargets/dailyTrainingTargetTypes";
 import { normalizeConceptId } from "./concepts/dailyConceptTagging";
+import { validateDailyCard } from "./validation/dailyCardValidation";
 
 export type { DailyBlundrStore } from "./dailyBlundrTypes";
 
@@ -774,10 +775,11 @@ export function reconcileDailyBlundrSession(input: {
   deck: DailyBlundrCard[];
   existing?: DailyBlundrSession | null;
 }): DailyBlundrSession {
-  const deckFingerprint = buildDeckFingerprint(input.deck.map((card) => card.id ?? card.cardKey));
-  const deckIds = input.deck.map((card) => card.id ?? card.cardKey);
+  const deck = input.deck.filter((card) => validateDailyCard(card).valid);
+  const deckFingerprint = buildDeckFingerprint(deck.map((card) => card.id ?? card.cardKey));
+  const deckIds = deck.map((card) => card.id ?? card.cardKey);
   const existing = input.existing && input.existing.dateKey === input.dateKey ? input.existing : null;
-  const cardOrder = existing ? uniqueNonEmpty([...existing.cardOrder, ...deckIds]) : deckIds;
+  const cardOrder = existing ? uniqueNonEmpty([...existing.cardOrder, ...deckIds]).filter((cardId) => deckIds.includes(cardId)) : deckIds;
   const completedCardIds = existing ? uniqueNonEmpty(existing.completedCardIds.filter((cardId) => cardOrder.includes(cardId))) : [];
   const cardProgressById: Record<string, DailyBlundrCardProgress> = {};
 
@@ -790,7 +792,7 @@ export function reconcileDailyBlundrSession(input: {
     }
   }
 
-  const currentCards = input.deck.map((card) => ({ ...card }));
+  const currentCards = deck.map((card) => ({ ...card }));
   const status = deriveSessionStatus({
     cardOrder,
     completedCardIds,

@@ -1,7 +1,7 @@
 import { Chess, validateFen as chessValidateFen } from "chess.js";
 
 import type { DailyBlundrCard } from "../dailyBlundrTypes";
-import type { DailyValidationResult } from "./dailyValidationTypes";
+import type { DailyValidationIssue, DailyValidationResult } from "./dailyValidationTypes";
 import { makeValidationIssue, normalizeText, toValidationResult } from "./dailyValidationUtils";
 
 type FenPieceCounts = {
@@ -61,7 +61,7 @@ function prefixIssues(result: DailyValidationResult, path: string, fen?: string)
 
 export function validateFen(fen: string | null | undefined): DailyValidationResult {
   const text = normalizeText(fen);
-  const issues = [];
+  const issues: DailyValidationIssue[] = [];
   if (!text) {
     issues.push(
       makeValidationIssue({
@@ -153,7 +153,7 @@ export function validateFenHasKings(fen: string | null | undefined): DailyValida
     ]);
   }
 
-  const issues = [];
+  const issues: DailyValidationIssue[] = [];
   if (counts.whiteKings !== 1) {
     issues.push(
       makeValidationIssue({
@@ -195,7 +195,7 @@ export function validateFenPieceCounts(fen: string | null | undefined): DailyVal
     ]);
   }
 
-  const issues = [];
+  const issues: DailyValidationIssue[] = [];
   if (counts.whitePieces > 16) {
     issues.push(
       makeValidationIssue({
@@ -244,7 +244,7 @@ export function validateFenPieceCounts(fen: string | null | undefined): DailyVal
 }
 
 export function validateDailyCardFen(card: Pick<DailyBlundrCard, "id" | "kind" | "fen" | "miniGame" | "trainingTarget">): DailyValidationResult {
-  const issues = [];
+  const issues: DailyValidationIssue[] = [];
   const cardFen = validateFen(card.fen);
   issues.push(
     ...cardFen.issues.map((issue) => ({
@@ -274,4 +274,3 @@ export function validateDailyCardFen(card: Pick<DailyBlundrCard, "id" | "kind" |
 
   return toValidationResult(issues);
 }
-

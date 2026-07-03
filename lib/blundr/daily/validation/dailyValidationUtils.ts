@@ -1,13 +1,26 @@
 import type {
   DailyCoverageBucket,
   DailyValidationCategory,
+  DailyValidationContentItem,
   DailyValidationIssue,
+  DailyValidationIssueCounts,
+  DailyValidationSurface,
   DailyValidationResult,
   DailyValidationSeverity,
 } from "./dailyValidationTypes";
 
 export function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+export function isDailyBlundrDifficulty(value: unknown): value is import("../dailyBlundrTypes").DailyBlundrDifficulty {
+  return value === "intro" || value === "beginner" || value === "early_intermediate" || value === "intermediate" || value === "advanced" || value === "expert";
+}
+
+export function normalizeValidationSurface(value: unknown): DailyValidationSurface {
+  const text = normalizeText(value);
+  if (text === "mini_game" || text === "training_target" || text === "future_content_bank") return text;
+  return "recall";
 }
 
 export function uniqueStrings(values: readonly (string | null | undefined)[]): string[] {
@@ -86,6 +99,26 @@ export function countIssuesBySeverity(issues: readonly DailyValidationIssue[]): 
   );
 }
 
+export function countIssuesByCategory(issues: readonly DailyValidationIssue[]): Record<DailyValidationCategory, number> {
+  return issues.reduce(
+    (acc, issue) => {
+      acc[issue.category] += 1;
+      return acc;
+    },
+    {
+      fen: 0,
+      concept: 0,
+      card: 0,
+      mini_game: 0,
+      training_target: 0,
+      novelty: 0,
+      difficulty: 0,
+      coverage: 0,
+      registry: 0,
+    } as Record<DailyValidationCategory, number>,
+  );
+}
+
 export function sortIssuesBySeverity(issues: readonly DailyValidationIssue[]): DailyValidationIssue[] {
   return [...issues].sort((a, b) => severityRank(b.severity) - severityRank(a.severity) || a.category.localeCompare(b.category) || a.code.localeCompare(b.code) || a.id.localeCompare(b.id));
 }
@@ -123,3 +156,24 @@ export function bucketFromCount(key: string, label: string, count: number, total
   };
 }
 
+export function getContentSurface(item: Pick<DailyValidationContentItem, "kind">): DailyValidationSurface {
+  return normalizeValidationSurface(item.kind);
+}
+
+export function getContentDifficulty(item: Pick<DailyValidationContentItem, "difficulty">): string {
+  return isDailyBlundrDifficulty(item.difficulty) ? item.difficulty : "unknown";
+}
+
+export function sortByCountDesc<T extends { key: string; count: number }>(buckets: readonly T[]): T[] {
+  return [...buckets].sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+}
+
+export function topItemsByCount<T>(items: readonly T[], score: (item: T) => number, limit = 5): T[] {
+  return [...items]
+    .sort((a, b) => score(b) - score(a))
+    .slice(0, Math.max(0, limit));
+}
+
+export function summarizeIssueCounts(issues: readonly DailyValidationIssue[]): DailyValidationIssueCounts {
+  return countIssuesBySeverity(issues);
+}

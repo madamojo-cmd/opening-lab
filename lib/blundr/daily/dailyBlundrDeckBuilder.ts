@@ -17,6 +17,7 @@ import { adaptProgressMistakesToDailySeeds, type LegacyProgressSnapshot } from "
 import { buildDailyBlundrDeckFromReviews, type DailyBlundrReviewDeckBuildResult } from "./dailyBlundrReviewSelector";
 import { buildDailyBlundrReviewStats, type DailyBlundrReviewStats } from "./dailyBlundrReviewStats";
 import type { DailyBlundrReviewAttempt, DailyBlundrReviewCard } from "./dailyBlundrReviewTypes";
+import { validateDailyCard } from "./validation/dailyCardValidation";
 
 export type DailyBlundrDeckBuildInput = {
   progress: LegacyProgressSnapshot | null;
@@ -180,6 +181,10 @@ function buildCardSummary(seed: DailyBlundrSeed, sourceCount: number): string {
   return `${opening} • ${sourceCount} ${signalLabel}`;
 }
 
+function isValidDailyCard(card: DailyBlundrCard): boolean {
+  return validateDailyCard(card).valid;
+}
+
 export function buildDailyBlundrDeck(input: DailyBlundrDeckBuildInput): DailyBlundrDeckBuildResult {
   const dateKey = input.dateKey ?? nowDateKey();
   const limit = Math.max(1, Math.min(5, Number(input.limit ?? DEFAULT_LIMIT) || DEFAULT_LIMIT));
@@ -215,7 +220,9 @@ export function buildDailyBlundrDeck(input: DailyBlundrDeckBuildInput): DailyBlu
     sourceCount: seed.count,
     summary: buildCardSummary(seed, seed.count),
   }));
-  const taggedCandidateCards = candidateCards.map((card) => attachConceptTagsToDailyCard(card, getConceptSuggestionsForDailyCard(card)));
+  const taggedCandidateCards = candidateCards
+    .map((card) => attachConceptTagsToDailyCard(card, getConceptSuggestionsForDailyCard(card)))
+    .filter(isValidDailyCard);
 
   const reviewDeck = buildDailyBlundrDeckFromReviews({
     dateKey,
@@ -236,7 +243,8 @@ export function buildDailyBlundrDeck(input: DailyBlundrDeckBuildInput): DailyBlu
       selectionMode: reviewDeck.selectionMode,
     },
   });
-  const reviewFenKeys = reviewDeck.cards.map((card) => normalizeText(card.fen)).filter(Boolean);
+  const validReviewCards = reviewDeck.cards.filter(isValidDailyCard);
+  const reviewFenKeys = validReviewCards.map((card) => normalizeText(card.fen)).filter(Boolean);
   const trainingTargetSelection =
     reviewDeck.selectedReviewCards.length <= 1
       ? selectDailyTrainingTarget({
@@ -256,15 +264,18 @@ export function buildDailyBlundrDeck(input: DailyBlundrDeckBuildInput): DailyBlu
           sessionTrainingTargetIds: [],
         })
       : null;
-  const cards: DailyBlundrCard[] = [...reviewDeck.cards];
+  const cards: DailyBlundrCard[] = [...validReviewCards];
   if (trainingTargetSelection && cards.length < limit) {
     const trainingTargetCard = trainingTargetSelection.card;
-    cards.push({
+    const nextTrainingTargetCard = {
       ...trainingTargetCard,
       deckRank: cards.length + 1,
       priority: trainingTargetCard.priority,
       summary: trainingTargetCard.summary,
-    } as DailyBlundrTrainingTargetCard);
+    } as DailyBlundrTrainingTargetCard;
+    if (isValidDailyCard(nextTrainingTargetCard)) {
+      cards.push(nextTrainingTargetCard);
+    }
   }
   const miniGameSelection = selectDailyMiniGame({
     mastery: input.mastery ?? null,
@@ -283,12 +294,15 @@ export function buildDailyBlundrDeck(input: DailyBlundrDeckBuildInput): DailyBlu
 
   if (miniGameSelection && (reviewDeck.dueReviewCount === 0 || cards.length < limit)) {
     const miniGameCard = miniGameSelection.card;
-    cards.push({
+    const nextMiniGameCard = {
       ...miniGameCard,
       deckRank: cards.length + 1,
       priority: miniGameCard.priority,
       summary: miniGameCard.summary,
-    } as DailyBlundrMiniGameCard);
+    } as DailyBlundrMiniGameCard;
+    if (isValidDailyCard(nextMiniGameCard)) {
+      cards.push(nextMiniGameCard);
+    }
   }
 
   const fingerprint = cards.map((card) => card.cardKey).join("|");
