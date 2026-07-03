@@ -16,6 +16,7 @@ import type {
   DailyTrainingTargetCandidateMove,
   DailyTrainingTargetState,
 } from "./trainingTargets/dailyTrainingTargetTypes";
+import { normalizeConceptId } from "./concepts/dailyConceptTagging";
 
 export type { DailyBlundrStore } from "./dailyBlundrTypes";
 
@@ -256,9 +257,25 @@ function normalizeDomain(value: unknown): DailyBlundrDomain {
     value === "key_square" ||
     value === "piece_imbalance" ||
     value === "tactical_idea" ||
-    value === "special_technique"
+    value === "special_technique" ||
+    value === "pawn_structures" ||
+    value === "key_squares" ||
+    value === "piece_imbalances" ||
+    value === "tactical_ideas" ||
+    value === "special_techniques"
     ? value
     : "daily_recall";
+}
+
+function normalizeConceptIds(values: unknown): DailyBlundrCard["conceptIds"] {
+  if (!Array.isArray(values)) return undefined;
+  return Array.from(
+    new Set(
+      values
+        .map((entry) => normalizeConceptId(entry))
+        .filter((entry): entry is NonNullable<DailyBlundrCard["conceptIds"]>[number] => Boolean(entry)),
+    ),
+  );
 }
 
 function normalizeMasteryTarget(raw: unknown): DailyBlundrMasteryTarget | null {
@@ -288,6 +305,11 @@ function normalizeCard(raw: unknown): DailyBlundrCard | null {
   const difficulty = normalizeDifficulty(card.difficulty);
   const miniGame = normalizeMiniGameState(card.miniGame);
   const trainingTarget = normalizeTrainingTargetState(card.trainingTarget);
+  const conceptIds = normalizeConceptIds(card.conceptIds);
+  const primaryConceptId = normalizeConceptId(card.primaryConceptId ?? null) || null;
+  const conceptMasteryKeys = Array.isArray(card.conceptMasteryKeys)
+    ? Array.from(new Set(card.conceptMasteryKeys.map((entry) => normalizeText(entry)).filter(Boolean)))
+    : undefined;
 
   return {
     source:
@@ -346,6 +368,9 @@ function normalizeCard(raw: unknown): DailyBlundrCard | null {
     summary: normalizeText(card.summary) || normalizeText(card.title) || "Daily recall",
     miniGame,
     trainingTarget,
+    conceptIds,
+    primaryConceptId,
+    conceptMasteryKeys,
   };
 }
 

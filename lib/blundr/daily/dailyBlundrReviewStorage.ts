@@ -64,7 +64,12 @@ function normalizeDomain(value: unknown): DailyBlundrDomain {
     value === "key_square" ||
     value === "piece_imbalance" ||
     value === "tactical_idea" ||
-    value === "special_technique"
+    value === "special_technique" ||
+    value === "pawn_structures" ||
+    value === "key_squares" ||
+    value === "piece_imbalances" ||
+    value === "tactical_ideas" ||
+    value === "special_techniques"
     ? value
     : "daily_recall";
 }

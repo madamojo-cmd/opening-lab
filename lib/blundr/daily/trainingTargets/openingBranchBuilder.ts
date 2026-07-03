@@ -22,6 +22,7 @@ import {
   pickBestLegalMove,
 } from "./trainingTargetUtils";
 import { scoreDailyTrainingTargetAttempt } from "./dailyTrainingTargetScoring";
+import { attachConceptTagsToDailyCard, inferConceptTagsForTrainingTarget } from "../concepts/dailyConceptTagging";
 import { gradeDailyBlundrMove } from "../dailyMoveGrader";
 
 type BranchBuilderScenario = {
@@ -143,7 +144,7 @@ export function generateOpeningBranchBuilderTrainingTargetCard(ctx: DailyTrainin
   const state = built.state;
   const currentMastery = Math.max(0, Math.min(1, ctx.currentMastery));
   const confidence = Math.max(0, Math.min(1, ctx.confidence));
-  return buildTrainingTargetCard({
+  return attachConceptTagsToDailyCard(buildTrainingTargetCard({
     source: built.sourceCard?.source ?? "daily_attempt",
     cardKey: `target:opening_branch_builder:${state.formationHash}`,
     positionKey: state.formationHash,
@@ -193,7 +194,7 @@ export function generateOpeningBranchBuilderTrainingTargetCard(ctx: DailyTrainin
     sourceCount: 1,
     summary: built.sourceLabel ? `Branch builder from ${built.sourceLabel}` : "Branch builder drill",
     trainingTarget: state,
-  });
+  }), inferConceptTagsForTrainingTarget("opening_branch_builder", ["branch_memory", "move_order_precision"]));
 }
 
 function resolveAttemptMove(state: DailyTrainingTargetState, attempt: { from?: string | null; to?: string | null; uci?: string | null; san?: string | null; choiceUci?: string | null }) {

@@ -3,6 +3,8 @@ import type { DailyBlundrReviewAttempt } from "../dailyBlundrReviewTypes";
 import type { DailyTrainingTargetDefinition, DailyTrainingTargetGenerationContext, DailyTrainingTargetSelection } from "./dailyTrainingTargetTypes";
 import { DAILY_TRAINING_TARGET_REGISTRY } from "./dailyTrainingTargetRegistry";
 import { chooseTrainingTargetDifficulty, clamp01, normalizeText, pickDailyBlundrCard, isPawnMove } from "./trainingTargetUtils";
+import { getConceptMasteryRecord } from "../concepts/dailyConceptMastery";
+import { inferConceptTagsForTrainingTarget } from "../concepts/dailyConceptTagging";
 
 function parseIso(value: string | null | undefined): number {
   if (!value) return 0;
@@ -24,8 +26,11 @@ function resolveMasterySnapshot(definition: DailyTrainingTargetDefinition, maste
   confidence: number;
   lastSeenAt: string | null;
 } {
-  const records = definition.skillIds
-    .map((skillId) => mastery?.records[`target:${definition.id}:${skillId}`] ?? null)
+  const conceptIds = inferConceptTagsForTrainingTarget(definition.id, definition.skillIds);
+  const records = [
+    ...definition.skillIds.map((skillId) => mastery?.records[`target:${definition.id}:${skillId}`] ?? null),
+    ...conceptIds.map((conceptId) => getConceptMasteryRecord(mastery, conceptId)),
+  ]
     .filter((record): record is NonNullable<typeof record> => Boolean(record));
 
   if (!records.length) {

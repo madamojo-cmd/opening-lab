@@ -3,6 +3,8 @@ import { selectDailyMiniGame } from "./miniGames/dailyMiniGameSelector";
 import type { DailyBlundrMiniGameCard } from "./miniGames/dailyMiniGameTypes";
 import { selectDailyTrainingTarget } from "./trainingTargets/dailyTrainingTargetSelector";
 import type { DailyBlundrTrainingTargetCard } from "./trainingTargets/dailyTrainingTargetTypes";
+import { getConceptSuggestionsForDailyCard } from "./concepts/dailyConceptSearch";
+import { attachConceptTagsToDailyCard } from "./concepts/dailyConceptTagging";
 import type {
   DailyBlundrCard,
   DailyBlundrDeckSummary,
@@ -213,11 +215,12 @@ export function buildDailyBlundrDeck(input: DailyBlundrDeckBuildInput): DailyBlu
     sourceCount: seed.count,
     summary: buildCardSummary(seed, seed.count),
   }));
+  const taggedCandidateCards = candidateCards.map((card) => attachConceptTagsToDailyCard(card, getConceptSuggestionsForDailyCard(card)));
 
   const reviewDeck = buildDailyBlundrDeckFromReviews({
     dateKey,
     existingReviewCards: input.reviewCards ?? [],
-    candidateDailyCards: candidateCards,
+    candidateDailyCards: taggedCandidateCards,
     mastery: input.mastery ?? null,
     limit,
     now,
@@ -247,7 +250,7 @@ export function buildDailyBlundrDeck(input: DailyBlundrDeckBuildInput): DailyBlu
           selectedReviewCount: reviewDeck.selectedReviewCards.length,
           reviewCards: reviewDeck.reviewCards,
           reviewAttempts: input.reviewAttempts ?? [],
-          candidateDailyCards: candidateCards,
+          candidateDailyCards: taggedCandidateCards,
           recentTrainingTargetIds: [],
           recentFenKeys: reviewFenKeys,
           sessionTrainingTargetIds: [],

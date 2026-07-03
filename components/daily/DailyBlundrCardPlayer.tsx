@@ -4,6 +4,7 @@ import { Keyboard } from "lucide-react";
 import { DailyBlundrBoard } from "@/components/daily/DailyBlundrBoard";
 import { DailyBlundrSupportControls } from "@/components/daily/DailyBlundrSupportControls";
 import type { DailyBlundrCardPlayerProps } from "@/lib/blundr/daily/dailyBlundrPlayerTypes";
+import { getDailyConceptById } from "@/lib/blundr/daily/concepts/dailyConceptRegistry";
 
 function resolveExpectedMoveLabel(expectedMoveUci: string | null | undefined, expectedMoveSan: string | null | undefined): string {
   return expectedMoveUci || expectedMoveSan || "the saved move";
@@ -54,6 +55,7 @@ export function DailyBlundrCardPlayer({
   const trainingExpectedLabel = isTrainingTarget && activeTrainingTargetState ? resolveTrainingTargetExpectedLabel(card, activeTrainingTargetState) : null;
   const trainingChoices = isTrainingTarget ? activeTrainingTargetState?.candidateMoves ?? card.trainingTarget?.candidateMoves ?? [] : [];
   const trainingSquareTargets = isTrainingTarget ? activeTrainingTargetState?.correctSquareKeys ?? activeTrainingTargetState?.targetSquares ?? card.trainingTarget?.correctSquareKeys ?? card.trainingTarget?.targetSquares ?? [] : [];
+  const conceptLabels = (card.conceptIds ?? []).slice(0, 4).map((conceptId) => getDailyConceptById(conceptId)?.shortName || conceptId.split(":").pop() || conceptId);
 
   return (
     <section className="space-y-4 rounded-3xl bg-white p-4 shadow-sm">
@@ -64,6 +66,15 @@ export function DailyBlundrCardPlayer({
           </div>
           <h2 className="mt-1 text-lg font-black text-stone-950">{card.openingName || "Daily BLUNDR"}</h2>
           <p className="mt-1 text-sm leading-6 text-stone-500">{card.summary}</p>
+          {conceptLabels.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {conceptLabels.map((label) => (
+                <span key={label} className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-stone-600">
+                  {label}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
         <div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-600">{card.deckRank}</div>
       </div>

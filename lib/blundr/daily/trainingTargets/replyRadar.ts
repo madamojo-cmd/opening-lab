@@ -26,6 +26,7 @@ import {
   pickBestLegalMove,
 } from "./trainingTargetUtils";
 import { scoreDailyTrainingTargetAttempt } from "./dailyTrainingTargetScoring";
+import { attachConceptTagsToDailyCard, inferConceptTagsForTrainingTarget } from "../concepts/dailyConceptTagging";
 import { gradeDailyBlundrMove } from "../dailyMoveGrader";
 
 type ReplyRadarScenario = {
@@ -162,7 +163,7 @@ export function generateReplyRadarTrainingTargetCard(ctx: DailyTrainingTargetGen
   if (!state) return null;
   const currentMastery = Math.max(0, Math.min(1, ctx.currentMastery));
   const confidence = Math.max(0, Math.min(1, ctx.confidence));
-  return buildTrainingTargetCard({
+  return attachConceptTagsToDailyCard(buildTrainingTargetCard({
     source: sourceCard?.source ?? "daily_attempt",
     cardKey: `target:reply_radar:${state.formationHash}`,
     positionKey: state.formationHash,
@@ -211,7 +212,7 @@ export function generateReplyRadarTrainingTargetCard(ctx: DailyTrainingTargetGen
     sourceCount: 1,
     summary: sourceLabel ? `Reply radar from ${sourceLabel}` : "Reply radar drill",
     trainingTarget: state,
-  });
+  }), inferConceptTagsForTrainingTarget("reply_radar", ["candidate_move_recognition", "opponent_reply_recognition"]));
 }
 
 function resolveAttemptMove(state: DailyTrainingTargetState, input: { from?: string | null; to?: string | null; uci?: string | null; san?: string | null; choiceUci?: string | null }) {

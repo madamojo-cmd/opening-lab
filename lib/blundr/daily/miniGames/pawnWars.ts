@@ -2,6 +2,7 @@ import { Chess, type Move } from "chess.js";
 import type { DailyBlundrMiniGameCard, DailyMiniGameAdvanceResult, DailyMiniGameDefinition, DailyMiniGameGenerationContext, DailyMiniGameState } from "./dailyMiniGameTypes";
 import { scoreDailyMiniGameAttempt } from "./dailyMiniGameScoring";
 import { hashString, squareToCoords } from "./miniGameUtils";
+import { attachConceptTagsToDailyCard, inferConceptTagsForMiniGame } from "../concepts/dailyConceptTagging";
 
 type PawnWarsObjective = "promotion" | "passed_pawn";
 
@@ -209,7 +210,7 @@ export function generatePawnWarsMiniGameCard(ctx: DailyMiniGameGenerationContext
   const mastery = Math.max(0, Math.min(1, ctx.currentMastery));
   const confidence = Math.max(0, Math.min(1, ctx.confidence));
   const fileLabel = scenario.whitePawn[0].toUpperCase();
-  return {
+  return attachConceptTagsToDailyCard({
     source: "daily_attempt",
     cardKey: `mini:pawn_wars:${state.formationHash}`,
     positionKey: state.formationHash,
@@ -263,7 +264,7 @@ export function generatePawnWarsMiniGameCard(ctx: DailyMiniGameGenerationContext
       ? `Promotion race on the ${scenario.whitePawn[0]}-file`
       : `Passed pawn on the ${scenario.whitePawn[0]}-file`,
     miniGame: state,
-  };
+  }, inferConceptTagsForMiniGame("pawn_wars", state.skillIds));
 }
 
 function createFailedState(state: DailyMiniGameState, moveCount: number, reason: string, lastMoveUci: string, lastMoveSan: string | null, currentFen: string, capturedTargetSquares: string[] = []): DailyMiniGameState {

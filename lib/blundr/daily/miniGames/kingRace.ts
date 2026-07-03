@@ -2,6 +2,7 @@ import { Chess, type Move } from "chess.js";
 import type { DailyBlundrMiniGameCard, DailyMiniGameAdvanceResult, DailyMiniGameDefinition, DailyMiniGameGenerationContext, DailyMiniGameState } from "./dailyMiniGameTypes";
 import { scoreDailyMiniGameAttempt } from "./dailyMiniGameScoring";
 import { hashString, normalizeText, squareDistance } from "./miniGameUtils";
+import { attachConceptTagsToDailyCard, inferConceptTagsForMiniGame } from "../concepts/dailyConceptTagging";
 
 type KingRaceScenario = {
   whiteKing: string;
@@ -179,7 +180,7 @@ export function generateKingRaceMiniGameCard(ctx: DailyMiniGameGenerationContext
   const state = buildKingRaceState(ctx, scenario);
   const currentMastery = Math.max(0, Math.min(1, ctx.currentMastery));
   const confidence = Math.max(0, Math.min(1, ctx.confidence));
-  return {
+  return attachConceptTagsToDailyCard({
     source: "daily_attempt",
     cardKey: `mini:king_race:${state.formationHash}`,
     positionKey: state.formationHash,
@@ -228,7 +229,7 @@ export function generateKingRaceMiniGameCard(ctx: DailyMiniGameGenerationContext
     sourceCount: 1,
     summary: `White king to ${state.goalSquares?.[0] ?? "goal square"}`,
     miniGame: state,
-  };
+  }, inferConceptTagsForMiniGame("king_race", state.skillIds));
 }
 
 export function advanceKingRaceMiniGame(state: DailyMiniGameState, attempt: { from: string; to: string; uci: string; san: string | null; legal: boolean }): DailyMiniGameAdvanceResult {

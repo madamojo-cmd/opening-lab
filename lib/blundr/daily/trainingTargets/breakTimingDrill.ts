@@ -23,6 +23,7 @@ import {
   pickDailyBlundrCard,
 } from "./trainingTargetUtils";
 import { scoreDailyTrainingTargetAttempt } from "./dailyTrainingTargetScoring";
+import { attachConceptTagsToDailyCard, inferConceptTagsForTrainingTarget } from "../concepts/dailyConceptTagging";
 import { gradeDailyBlundrMove } from "../dailyMoveGrader";
 
 type BreakTimingScenario = {
@@ -203,7 +204,7 @@ export function generateBreakTimingDrillTrainingTargetCard(ctx: DailyTrainingTar
   const state = built.state;
   const currentMastery = Math.max(0, Math.min(1, ctx.currentMastery));
   const confidence = Math.max(0, Math.min(1, ctx.confidence));
-  return buildTrainingTargetCard({
+  return attachConceptTagsToDailyCard(buildTrainingTargetCard({
     source: built.sourceCard?.source ?? "daily_attempt",
     cardKey: `target:break_timing_drill:${state.formationHash}`,
     positionKey: state.formationHash,
@@ -252,7 +253,7 @@ export function generateBreakTimingDrillTrainingTargetCard(ctx: DailyTrainingTar
     sourceCount: 1,
     summary: built.sourceLabel ? `Break timing from ${built.sourceLabel}` : "Break timing drill",
     trainingTarget: state,
-  });
+  }), inferConceptTagsForTrainingTarget("break_timing_drill", ["break_timing", "pawn_break"]));
 }
 
 function resolveAttemptMove(state: DailyTrainingTargetState, attempt: { from?: string | null; to?: string | null; uci?: string | null; san?: string | null; choiceUci?: string | null }) {

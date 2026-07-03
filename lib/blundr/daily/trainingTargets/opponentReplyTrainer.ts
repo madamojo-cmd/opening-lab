@@ -22,6 +22,7 @@ import {
   pickBestLegalMove,
 } from "./trainingTargetUtils";
 import { scoreDailyTrainingTargetAttempt } from "./dailyTrainingTargetScoring";
+import { attachConceptTagsToDailyCard, inferConceptTagsForTrainingTarget } from "../concepts/dailyConceptTagging";
 import { gradeDailyBlundrMove } from "../dailyMoveGrader";
 
 type OpponentReplyScenario = {
@@ -143,7 +144,7 @@ export function generateOpponentReplyTrainerTrainingTargetCard(ctx: DailyTrainin
   const state = built.state;
   const currentMastery = Math.max(0, Math.min(1, ctx.currentMastery));
   const confidence = Math.max(0, Math.min(1, ctx.confidence));
-  return buildTrainingTargetCard({
+  return attachConceptTagsToDailyCard(buildTrainingTargetCard({
     source: built.sourceCard?.source ?? "daily_attempt",
     cardKey: `target:opponent_reply_trainer:${state.formationHash}`,
     positionKey: state.formationHash,
@@ -192,7 +193,7 @@ export function generateOpponentReplyTrainerTrainingTargetCard(ctx: DailyTrainin
     sourceCount: 1,
     summary: built.sourceLabel ? `Reply trainer from ${built.sourceLabel}` : "Opponent reply drill",
     trainingTarget: state,
-  });
+  }), inferConceptTagsForTrainingTarget("opponent_reply_trainer", ["common_reply", "opponent_reply_recognition"]));
 }
 
 function resolveAttemptMove(state: DailyTrainingTargetState, attempt: { from?: string | null; to?: string | null; uci?: string | null; san?: string | null; choiceUci?: string | null }) {

@@ -2,6 +2,7 @@ import { Chess, type Move } from "chess.js";
 import type { DailyBlundrMiniGameCard, DailyMiniGameAdvanceResult, DailyMiniGameDefinition, DailyMiniGameGenerationContext, DailyMiniGameState } from "./dailyMiniGameTypes";
 import { scoreDailyMiniGameAttempt } from "./dailyMiniGameScoring";
 import { hashString, normalizeText, squareDistance, squareToCoords, coordsToSquare } from "./miniGameUtils";
+import { attachConceptTagsToDailyCard, inferConceptTagsForMiniGame } from "../concepts/dailyConceptTagging";
 
 type KnightGymScenario = {
   whiteKing: string;
@@ -173,7 +174,7 @@ export function generateKnightGymnasiumMiniGameCard(ctx: DailyMiniGameGeneration
   const state = buildKnightGymState(ctx, scenario);
   const mastery = Math.max(0, Math.min(1, ctx.currentMastery));
   const confidence = Math.max(0, Math.min(1, ctx.confidence));
-  return {
+  return attachConceptTagsToDailyCard({
     source: "daily_attempt",
     cardKey: `mini:knight_gymnasium:${state.formationHash}`,
     positionKey: state.formationHash,
@@ -220,7 +221,7 @@ export function generateKnightGymnasiumMiniGameCard(ctx: DailyMiniGameGeneration
     sourceCount: 1,
     summary: `Knight route with ${state.targetSquares?.length ?? 0} target${(state.targetSquares?.length ?? 0) === 1 ? "" : "s"}`,
     miniGame: state,
-  };
+  }, inferConceptTagsForMiniGame("knight_gymnasium", state.skillIds));
 }
 
 function updateCapturedTargets(state: DailyMiniGameState, destination: string): string[] {
@@ -459,4 +460,3 @@ export const knightGymnasiumDefinition: DailyMiniGameDefinition = {
   generate: generateKnightGymnasiumMiniGameCard,
   scoreAttempt: (args) => scoreDailyMiniGameAttempt(args),
 };
-

@@ -1,5 +1,6 @@
 import type { DailyMiniGameState } from "./miniGames/dailyMiniGameTypes";
 import type { DailyTrainingTargetState } from "./trainingTargets/dailyTrainingTargetTypes";
+import type { DailyConceptDomain, DailyConceptId } from "./concepts/dailyConceptTypes";
 
 export const DAILY_BLUNDR_SCHEMA_VERSION = 1 as const;
 
@@ -18,7 +19,8 @@ export type DailyBlundrDomain =
   | "key_square"
   | "piece_imbalance"
   | "tactical_idea"
-  | "special_technique";
+  | "special_technique"
+  | DailyConceptDomain;
 
 export type DailyBlundrDifficulty =
   | "intro"
@@ -78,6 +80,9 @@ export type DailyBlundrCard = DailyBlundrSeed & {
   summary: string;
   miniGame?: DailyMiniGameState | null;
   trainingTarget?: DailyTrainingTargetState | null;
+  conceptIds?: DailyConceptId[];
+  primaryConceptId?: DailyConceptId | null;
+  conceptMasteryKeys?: string[];
 };
 
 export type DailyBlundrAttempt = {

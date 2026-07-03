@@ -8,6 +8,8 @@ import type {
   DailyBlundrMasteryTarget,
 } from "./dailyBlundrTypes";
 import { DAILY_BLUNDR_SCHEMA_VERSION } from "./dailyBlundrTypes";
+import { getDailyConceptById } from "./concepts/dailyConceptRegistry";
+import { getConceptIdsForMasteryTargets, normalizeConceptId } from "./concepts/dailyConceptTagging";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -27,6 +29,29 @@ function uniqueSources(existing: readonly string[] | undefined, next: string): D
 }
 
 function uniqueTargets(card: DailyBlundrCard): DailyBlundrMasteryTarget[] {
+  const conceptIds = Array.from(
+    new Set(
+      [
+        ...(card.conceptIds ?? []),
+        ...(card.primaryConceptId ? [card.primaryConceptId] : []),
+        ...(card.conceptMasteryKeys ?? []).map((entry) => normalizeConceptId(entry)).filter((entry): entry is NonNullable<DailyBlundrCard["conceptIds"]>[number] => Boolean(entry)),
+        ...getConceptIdsForMasteryTargets(card.masteryTargets),
+      ].filter(Boolean),
+    ),
+  );
+  const conceptTargets = conceptIds
+    .map((conceptId) => {
+      const concept = getDailyConceptById(conceptId);
+      if (!concept) return null;
+      return {
+        conceptKey: concept.masteryKey,
+        domain: concept.domain,
+        label: concept.shortName || concept.displayName,
+        difficultyHint: concept.recommendedDifficulty[0] ?? card.difficulty,
+      };
+    })
+    .filter(Boolean) as DailyBlundrMasteryTarget[];
+
   const targets = card.kind === "recall" || card.kind === "mastery" || card.kind === "weak_spot" || card.kind === "training_game"
     ? [
         {
@@ -38,6 +63,7 @@ function uniqueTargets(card: DailyBlundrCard): DailyBlundrMasteryTarget[] {
         ...card.masteryTargets,
       ]
     : [...card.masteryTargets];
+  targets.push(...conceptTargets);
   const seen = new Set<string>();
   return targets.filter((target) => {
     if (seen.has(target.conceptKey)) return false;

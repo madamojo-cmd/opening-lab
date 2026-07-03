@@ -1,4 +1,6 @@
 import type { DailyBlundrDifficulty, DailyBlundrMasteryState } from "../dailyBlundrTypes";
+import { getConceptMasteryRecord } from "../concepts/dailyConceptMastery";
+import { inferConceptTagsForMiniGame } from "../concepts/dailyConceptTagging";
 import type { DailyBlundrMiniGameCard, DailyMiniGameDefinition, DailyMiniGameId, DailyMiniGameSelection } from "./dailyMiniGameTypes";
 import { DAILY_MINI_GAME_REGISTRY } from "./dailyMiniGameRegistry";
 
@@ -53,8 +55,11 @@ function resolveMiniGameRecord(mastery: DailyBlundrMasteryState | null, definiti
   confidence: number;
   lastSeenAt: string | null;
 } {
-  const records = definition.skillIds
-    .map((skillId) => mastery?.records[`mini:${definition.id}:${skillId}`] ?? null)
+  const conceptIds = inferConceptTagsForMiniGame(definition.id, definition.skillIds);
+  const records = [
+    ...definition.skillIds.map((skillId) => mastery?.records[`mini:${definition.id}:${skillId}`] ?? null),
+    ...conceptIds.map((conceptId) => getConceptMasteryRecord(mastery, conceptId)),
+  ]
     .filter((record): record is NonNullable<typeof record> => Boolean(record));
 
   if (!records.length) {
@@ -208,4 +213,3 @@ export function selectDailyMiniGame(input: DailyMiniGameSelectionInput): DailyMi
 
   return null;
 }
-

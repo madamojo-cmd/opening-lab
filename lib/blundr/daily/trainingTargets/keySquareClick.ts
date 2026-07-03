@@ -19,6 +19,7 @@ import {
   squareDistance,
 } from "./trainingTargetUtils";
 import { scoreDailyTrainingTargetAttempt } from "./dailyTrainingTargetScoring";
+import { attachConceptTagsToDailyCard, inferConceptTagsForTrainingTarget } from "../concepts/dailyConceptTagging";
 import { coordsToSquare, squareToCoords } from "./trainingTargetUtils";
 
 type KeySquareScenario = {
@@ -146,7 +147,7 @@ export function generateKeySquareClickTrainingTargetCard(ctx: DailyTrainingTarge
   if (!state) return null;
   const currentMastery = Math.max(0, Math.min(1, ctx.currentMastery));
   const confidence = Math.max(0, Math.min(1, ctx.confidence));
-  return buildTrainingTargetCard({
+  return attachConceptTagsToDailyCard(buildTrainingTargetCard({
     source: "daily_attempt",
     cardKey: `target:key_square_click:${state.formationHash}`,
     positionKey: state.formationHash,
@@ -194,7 +195,7 @@ export function generateKeySquareClickTrainingTargetCard(ctx: DailyTrainingTarge
     sourceCount: 1,
     summary: state.prompt,
     trainingTarget: state,
-  });
+  }), inferConceptTagsForTrainingTarget("key_square_click", ["key_square_awareness", "square_control"]));
 }
 
 function findNearestCorrectSquare(correctSquares: readonly string[], clickedSquare: string): string | null {
