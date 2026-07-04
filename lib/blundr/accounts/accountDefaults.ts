@@ -79,9 +79,11 @@ export function createDefaultDailyRetentionProgress(userId: string, localDate = 
       dailyBlundr: buildRingProgress("daily_blundr", goals.dailyBlundrGoal),
     },
     allRingsClosed: false,
+    allRingsClosedAt: undefined,
     xpEarned: 0,
     openingPointsEarned: 0,
     streakEligible: false,
+    activityEventIds: [],
     updatedAt: now,
   };
 }
@@ -91,6 +93,7 @@ export function createDefaultStreakRecord(userId: string, now = nowIso()): Strea
     userId,
     currentStreak: 0,
     longestStreak: 0,
+    totalAllRingsClosedDays: 0,
     updatedAt: now,
   };
 }

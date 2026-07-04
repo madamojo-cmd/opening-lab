@@ -4,12 +4,17 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, BadgeCheck, CheckCircle2, Clock3, Flame, Sparkles, Target } from "lucide-react";
 import { DailyBlundrPlayer } from "@/components/daily/DailyBlundrPlayer";
+import { TrainingCompletionSummary } from "@/components/completion/TrainingCompletionSummary";
+import { completeDailyRingActivity } from "@/lib/blundr/daily-rings/dailyRingService";
 import { loadDailyBlundrOverview } from "@/lib/blundr/daily/dailyBlundrReadModel";
 import { buildDailyBlundrProgressAfterCompletion, markDailyBlundrSessionStarted, saveDailyBlundrStore, upsertDailyBlundrSessionStore } from "@/lib/blundr/daily/dailyBlundrStorage";
 import { isDailyBlundrSessionComplete } from "@/lib/blundr/daily/dailyBlundrSessionController";
 import { summarizeDailyBlundrMastery } from "@/lib/blundr/daily/dailyBlundrMastery";
 import type { DailyBlundrPlayerAttemptCommit } from "@/lib/blundr/daily/dailyBlundrPlayerTypes";
 import { writeDailyBlundrReviewAttempts, writeDailyBlundrReviewCards } from "@/lib/blundr/daily/dailyBlundrReviewStorage";
+import { getLocalAccountCurrentUserId, getLocalTrainingProfile } from "@/lib/blundr/accounts/localAccountStorage";
+import { loadRepertoireProgress } from "@/lib/blundr/repertoire/repertoireProgressService";
+import type { DailyRingCompletionResultLike } from "@/lib/blundr/daily-rings/dailyRingTypes";
 
 type DailyBlundrOverview = ReturnType<typeof loadDailyBlundrOverview>;
 
@@ -67,6 +72,7 @@ function mergeDailyBlundrOverview(
 
 export function DailyBlundrScreen() {
   const [overview, setOverview] = useState<DailyBlundrOverview | null>(null);
+  const [completionResult, setCompletionResult] = useState<DailyRingCompletionResultLike | null>(null);
   const playerSectionRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -124,6 +130,7 @@ export function DailyBlundrScreen() {
     if (!complete) return;
     if (rewardClaimed) return;
     const now = nowIso();
+    const userId = getLocalAccountCurrentUserId();
     const nextProgress = buildDailyBlundrProgressAfterCompletion({
       previous: overview.store.progress,
       dateKey: overview.dateKey,
@@ -138,6 +145,28 @@ export function DailyBlundrScreen() {
     applyOverviewUpdate({
       session: nextSession,
       progress: nextProgress,
+    });
+
+    void completeDailyRingActivity({
+      userId,
+      activity: {
+        userId,
+        source: "daily_blundr_deck_completed",
+        dailySessionId: session.deckFingerprint,
+        completionId: `${overview.dateKey}:${session.deckFingerprint}:daily_blundr_deck_completed`,
+        createdAt: now,
+      },
+      repertoireProgress: loadRepertoireProgress({ userId }),
+      profile: getLocalTrainingProfile(userId) ?? undefined,
+      now,
+    }).then((result) => {
+      setCompletionResult(result);
+    }).catch((error) => {
+      setCompletionResult({
+        ok: false,
+        code: "completion_failed",
+        message: error instanceof Error ? error.message : "Could not record daily progress.",
+      });
     });
   }
 
@@ -287,6 +316,8 @@ export function DailyBlundrScreen() {
             </button>
           </section>
         ) : null}
+
+        {completionResult ? <TrainingCompletionSummary result={completionResult} className="mt-5" /> : null}
 
         <section className="mt-5 rounded-3xl border border-stone-200 bg-white p-4 shadow-sm">
           <div className="flex items-center gap-2 text-sm font-black text-stone-900">

@@ -79,9 +79,11 @@ type SupabaseDailyRetentionProgressRow = {
   daily_blundr_completed: boolean;
   daily_blundr_completed_at: string | null;
   all_rings_closed: boolean;
+  all_rings_closed_at: string | null;
   xp_earned: number;
   opening_points_earned: number;
   streak_eligible: boolean;
+  activity_event_ids: string[] | null;
   completed_at: string | null;
   updated_at: string;
 };
@@ -109,6 +111,7 @@ type SupabaseStreakRecordRow = {
   user_id: string;
   current_streak: number;
   longest_streak: number;
+  total_all_rings_closed_days: number;
   last_completed_local_date: string | null;
   updated_at: string;
 };
@@ -302,9 +305,11 @@ function mapDailyRetentionRow(progress: DailyRetentionProgress): SupabaseDailyRe
     daily_blundr_completed: Boolean(progress.rings.dailyBlundr.completed),
     daily_blundr_completed_at: progress.rings.dailyBlundr.completedAt ?? null,
     all_rings_closed: Boolean(progress.allRingsClosed),
+    all_rings_closed_at: progress.allRingsClosedAt ?? progress.completedAt ?? null,
     xp_earned: Math.max(0, Number(progress.xpEarned) || 0),
     opening_points_earned: Math.max(0, Number(progress.openingPointsEarned) || 0),
     streak_eligible: Boolean(progress.streakEligible),
+    activity_event_ids: Array.isArray(progress.activityEventIds) ? normalizeStringArray(progress.activityEventIds) : [],
     completed_at: progress.completedAt ?? null,
     updated_at: normalizeText(progress.updatedAt) || nowIso(),
   };
@@ -343,9 +348,11 @@ function mapDailyRetentionRowToModel(row: SupabaseDailyRetentionProgressRow | nu
       },
     },
     allRingsClosed: Boolean(row.all_rings_closed),
+    allRingsClosedAt: row.all_rings_closed_at ?? undefined,
     xpEarned: Math.max(0, Number(row.xp_earned) || 0),
     openingPointsEarned: Math.max(0, Number(row.opening_points_earned) || 0),
     streakEligible: Boolean(row.streak_eligible),
+    activityEventIds: normalizeStringArray(row.activity_event_ids),
     completedAt: row.completed_at ?? undefined,
     updatedAt: row.updated_at || base.updatedAt,
   };
@@ -403,6 +410,7 @@ function mapStreakRecordRow(record: StreakRecord): SupabaseStreakRecordRow {
     user_id: record.userId,
     current_streak: Math.max(0, Number(record.currentStreak) || 0),
     longest_streak: Math.max(0, Number(record.longestStreak) || 0),
+    total_all_rings_closed_days: Math.max(0, Number(record.totalAllRingsClosedDays) || 0),
     last_completed_local_date: record.lastCompletedLocalDate ?? null,
     updated_at: normalizeText(record.updatedAt) || nowIso(),
   };
@@ -415,6 +423,7 @@ function mapStreakRecordRowToModel(row: SupabaseStreakRecordRow | null): StreakR
     ...base,
     currentStreak: Math.max(0, Number(row.current_streak) || 0),
     longestStreak: Math.max(0, Number(row.longest_streak) || 0),
+    totalAllRingsClosedDays: Math.max(0, Number(row.total_all_rings_closed_days) || 0),
     lastCompletedLocalDate: row.last_completed_local_date ?? undefined,
     updatedAt: row.updated_at || base.updatedAt,
   };

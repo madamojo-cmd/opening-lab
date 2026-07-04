@@ -17,6 +17,7 @@ import type {
 } from "./accountTypes";
 import type { PersistenceResult } from "../persistence/persistenceTypes";
 import { getAccountPersistenceAdapter } from "./accountRepository";
+import { getLocalDailyRetentionProgress, getLocalStreakRecord } from "./localAccountStorage";
 import { readLocalDailyBlundrState } from "../daily/dailyBlundrStorage";
 import { buildInitialRepertoireFromStarterPack } from "../onboarding/starterPacks";
 
@@ -100,6 +101,7 @@ function buildDailyRetentionProgress(userId: string, localState: ReturnType<type
   progress.rings.dailyBattery.completed = progress.rings.dailyBattery.progress >= progress.rings.dailyBattery.goal;
   progress.rings.dailyBlundr.completed = progress.rings.dailyBlundr.progress >= progress.rings.dailyBlundr.goal;
   progress.allRingsClosed = progress.rings.dailyTempo.completed && progress.rings.dailyBattery.completed && progress.rings.dailyBlundr.completed;
+  progress.allRingsClosedAt = progress.allRingsClosed ? now : undefined;
   progress.xpEarned = Math.max(0, localState.store.progress.localDailyXp ?? 0);
   progress.streakEligible = Boolean(localState.store.progress.lastCompletedDateKey === localState.dateKey);
   progress.completedAt = progress.allRingsClosed ? now : undefined;
@@ -115,6 +117,8 @@ export function prepareDailyStateForAccountSync(userId: string, input: DailyStat
   const localState = readLocalDailyBlundrState();
   const now = input.now ?? nowIso();
   const profile = input.profile ?? createDefaultTrainingProfile(userId, now);
+  const localRetentionProgress = getLocalDailyRetentionProgress(userId, localState.dateKey);
+  const localStreakRecord = getLocalStreakRecord(userId);
   const repertoire =
     input.repertoire ??
     buildInitialRepertoireFromStarterPack({
@@ -122,9 +126,9 @@ export function prepareDailyStateForAccountSync(userId: string, input: DailyStat
       starterPackId: profile.selectedStarterPackId ?? "classical_attacker",
       now,
     });
-  const streakRecord = input.streakRecord ?? createDefaultStreakRecord(userId, now);
+  const streakRecord = input.streakRecord ?? localStreakRecord ?? createDefaultStreakRecord(userId, now);
   const rewardHistory = input.rewardHistory ?? createDefaultRewardHistory(userId, now);
-  const dailyRetentionProgress = input.dailyRetentionProgress ?? buildDailyRetentionProgress(userId, localState, profile, now);
+  const dailyRetentionProgress = input.dailyRetentionProgress ?? localRetentionProgress ?? buildDailyRetentionProgress(userId, localState, profile, now);
 
   return {
     userId,

@@ -27,6 +27,7 @@ import { useVisualRecipePlayback } from "@/components/board/useVisualRecipePlayb
 import { ProjectiveTacticalOverlay } from "@/components/board/ProjectiveTacticalOverlay";
 import { TempoDailyBlundrCard } from "@/components/daily/TempoDailyBlundrCard";
 import { ReviewTabDailyBlundrPanel } from "@/components/daily/ReviewTabDailyBlundrPanel";
+import { DailyRingsCard } from "@/components/daily-rings/DailyRingsCard";
 import { RepertoireProgressPanel } from "@/components/repertoire/RepertoireProgressPanel";
 import { RepertoirePointsSummary } from "@/components/repertoire/RepertoirePointsSummary";
 import { RepertoireUnlockProgress } from "@/components/repertoire/RepertoireUnlockProgress";
@@ -137,8 +138,10 @@ import type { DebugEvent, TrainerDebugSnapshot } from "@/lib/blundr/debug/traine
 import type { UserTrainingProfile } from "@/lib/blundr/accounts/accountTypes";
 import { getLocalAccountCurrentUserId, getLocalTrainingProfile } from "@/lib/blundr/accounts/localAccountStorage";
 import { shouldShowOnboarding } from "@/lib/blundr/onboarding/onboardingRouting";
-import { earnAndPersistRepertoirePoints, loadRepertoireProgress } from "@/lib/blundr/repertoire/repertoireProgressService";
+import { loadRepertoireProgress } from "@/lib/blundr/repertoire/repertoireProgressService";
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
+import { completeDailyRingActivity } from "@/lib/blundr/daily-rings/dailyRingService";
+import type { DailyRingCompletionResultLike } from "@/lib/blundr/daily-rings/dailyRingTypes";
 
 const BlundrDiagnosticsPanel = dynamic(
   () => import("@/components/debug/BlundrDiagnosticsPanel").then((mod) => mod.BlundrDiagnosticsPanel),
@@ -1264,6 +1267,7 @@ export default function App(){
   const [activeTab,setActiveTab]=useState<Tab>("home");
   const [onboardingProfile,setOnboardingProfile]=useState<UserTrainingProfile | null>(null);
   const [repertoireProgress,setRepertoireProgress]=useState<RepertoireProgress>(()=>loadRepertoireProgress({userId:getLocalAccountCurrentUserId()}));
+  const [latestCompletionResult,setLatestCompletionResult]=useState<DailyRingCompletionResultLike | null>(null);
   const [customRepertoires,setCustomRepertoires]=useState<Repertoire[]>([]);
   const [runtimeRepertoires,setRuntimeRepertoires]=useState<Repertoire[]>(()=>buildRuntimePlaceholderRepertoires());
   const [selectedRepertoireId,setSelectedRepertoireId]=useState(runtimeOpeningSelection.selectedOpeningId);
@@ -4921,36 +4925,74 @@ export default function App(){
     if(openingRunAwardKeyRef.current===completionKey)return;
     openingRunAwardKeyRef.current=completionKey;
     let cancelled=false;
-    void earnAndPersistRepertoirePoints({
-      userId:getLocalAccountCurrentUserId(),
-      source:"opening_run_completed",
-      openingId:selectedRepertoireId,
-      completionId:completionKey,
-      starterPackId:repertoireProgress.selectedStarterPackId,
+    const userId=getLocalAccountCurrentUserId();
+    const now=new Date().toISOString();
+    const profile=onboardingProfile??getLocalTrainingProfile(userId)??undefined;
+    void completeDailyRingActivity({
+      userId,
+      activity:{
+        userId,
+        source:"opening_run_completed",
+        openingId:selectedRepertoireId,
+        completionId:completionKey,
+        createdAt:now,
+      },
+      repertoireProgress,
+      profile,
+      now,
     }).then((result)=>{
-      if(cancelled||!result.ok)return;
-      setRepertoireProgress(result.progress);
+      if(cancelled)return;
+      setLatestCompletionResult(result);
+      if(result.ok){
+        setRepertoireProgress(result.repertoireProgress);
+      }
+    }).catch((error)=>{
+      if(cancelled)return;
+      setLatestCompletionResult({
+        ok:false,
+        code:"completion_failed",
+        message:getErrorMessage(error,"Could not record daily progress."),
+      });
     });
     return()=>{cancelled=true};
-  },[activeTab,bookComplete,trainingMode,selectedRepertoireId,runtimeTrainingSessionId,fen,repertoireProgress.selectedStarterPackId]);
+  },[activeTab,bookComplete,trainingMode,selectedRepertoireId,runtimeTrainingSessionId,fen,repertoireProgress,onboardingProfile]);
   useEffect(()=>{
     if(activeTab!=="train"||trainingMode!=="continuation"||!branchCompleteEligibleNow||!stage2TerminalProof.proven)return;
     const completionKey=`${selectedRepertoireId}:${continuationSessionId??"continuation"}:${normalizeFen(fen)}:continuation_completed`;
     if(continuationAwardKeyRef.current===completionKey)return;
     continuationAwardKeyRef.current=completionKey;
     let cancelled=false;
-    void earnAndPersistRepertoirePoints({
-      userId:getLocalAccountCurrentUserId(),
-      source:"continuation_completed",
-      openingId:selectedRepertoireId,
-      completionId:completionKey,
-      starterPackId:repertoireProgress.selectedStarterPackId,
+    const userId=getLocalAccountCurrentUserId();
+    const now=new Date().toISOString();
+    const profile=onboardingProfile??getLocalTrainingProfile(userId)??undefined;
+    void completeDailyRingActivity({
+      userId,
+      activity:{
+        userId,
+        source:"continuation_completed",
+        openingId:selectedRepertoireId,
+        completionId:completionKey,
+        createdAt:now,
+      },
+      repertoireProgress,
+      profile,
+      now,
     }).then((result)=>{
-      if(cancelled||!result.ok)return;
-      setRepertoireProgress(result.progress);
+      if(cancelled)return;
+      setLatestCompletionResult(result);
+      if(result.ok){
+        setRepertoireProgress(result.repertoireProgress);
+      }
+    }).catch((error)=>{
+      if(cancelled)return;
+      setLatestCompletionResult({
+        ok:false,
+        code:"completion_failed",
+        message:getErrorMessage(error,"Could not record daily progress."),
+      });
     });
     return()=>{cancelled=true};
-  },[activeTab,trainingMode,branchCompleteEligibleNow,stage2TerminalProof.proven,selectedRepertoireId,continuationSessionId,fen,repertoireProgress.selectedStarterPackId]);
+  },[activeTab,trainingMode,branchCompleteEligibleNow,stage2TerminalProof.proven,selectedRepertoireId,continuationSessionId,fen,repertoireProgress,onboardingProfile]);
   useEffect(()=>{
     if(activeTab!=="train"||trainingMode!=="restricted"||!isUserTurn||bookComplete||game.isGameOver())return;
     if(expectedMoveResolution.source==="guided_branch_needs_continuation"){
@@ -7108,7 +7150,7 @@ export default function App(){
     eventLog: debugEventLog,
   });
   return <main className="min-h-screen bg-[#f7f7f4] text-stone-950"><div className="mx-auto flex min-h-screen max-w-md flex-col px-4 pb-24 pt-5">
-    {activeTab==="home"&&<section className="space-y-6"><header className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-green-700 text-white shadow-sm"><Beaker size={20}/></div><div><h1 className="text-2xl font-bold tracking-tight">Blundr</h1><p className="text-sm text-stone-500">Visual opening training with a controlled trainer.</p></div></div><button onClick={()=>setShowSettings(true)} className="rounded-2xl bg-white p-3 shadow-sm"><Settings className="text-stone-500" size={20}/></button></header>{shouldShowOnboarding(onboardingProfile)&&<Link href="/onboarding" className="flex items-center justify-between rounded-3xl border border-green-200 bg-green-50 p-4 text-left shadow-sm"><div><div className="text-sm font-black uppercase tracking-[0.18em] text-green-700">Onboarding incomplete</div><p className="mt-2 text-sm leading-6 text-stone-700">Finish setup to save your progress, choose a starter pack, and keep Daily BLUNDR across sessions.</p></div><ChevronRight className="text-green-700" size={20}/></Link>}<section className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div><div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">Repertoire progress</div><h2 className="mt-1 text-lg font-black tracking-tight text-stone-950">Build your repertoire</h2><p className="mt-2 text-sm leading-6 text-stone-600">Earn repertoire points by training. Use them to unlock more openings when you are ready.</p></div><Link href="/repertoire" className="rounded-2xl bg-green-700 px-4 py-3 text-sm font-black text-white shadow-sm">View repertoire</Link></div><div className="mt-4 grid gap-3"><RepertoirePointsSummary progress={repertoireProgress} compact/><RepertoireUnlockProgress progress={repertoireProgress}/></div></section><div className="grid grid-cols-2 gap-3"><MetricCard label="Accuracy" value={`${accuracy}%`} sub="all time" icon={<Trophy size={19}/>}/><MetricCard label="Streak" value={String(progress.streak)} sub="correct" icon={<Flame size={19}/>}/><MetricCard label="Review" value={String(mistakes.length)} sub="mistakes" icon={<XCircle size={19}/>} warning/><MetricCard label="Runtime openings" value={String(STAGE2_OPENING_AVAILABILITY_MATRIX.length)} sub="local crawled" icon={<BookOpen size={19}/>}/></div><TempoDailyBlundrCard /><div className="rounded-3xl bg-stone-900 p-4 text-white shadow-sm"><div className="flex items-center gap-2 text-sm font-bold text-green-300"><Cloud size={17}/> v2.7.33</div><p className="mt-2 text-sm leading-6 text-stone-300">Training now uses rule-only visual cues by default. Blundr Brain is reserved for manual reveal/debug, so normal practice stays fast, deterministic, and inexpensive.</p></div><div className="space-y-3">{repertoires.slice(0,5).map(r=>{const positions=getRepertoirePositionCount(r);const isLocked=repertoireProgress.lockedOpeningIds.includes(resolveStage2CanonicalOpeningId(r.id)??r.id);return <button key={r.id} onClick={()=>selectRepertoire(r.id)} disabled={isLocked} className={classNames("flex w-full items-center gap-3 rounded-3xl border bg-white p-3 text-left shadow-sm",isLocked?"cursor-not-allowed border-stone-200 opacity-70":"border-stone-200")}><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {positions} positions</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p>{isLocked?<div className="mt-2 inline-flex rounded-full bg-stone-100 px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">Locked</div>:null}</div><ChevronRight className="text-stone-400" size={20}/></button>})}</div></section>}
+    {activeTab==="home"&&<section className="space-y-6"><header className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-green-700 text-white shadow-sm"><Beaker size={20}/></div><div><h1 className="text-2xl font-bold tracking-tight">Blundr</h1><p className="text-sm text-stone-500">Visual opening training with a controlled trainer.</p></div></div><button onClick={()=>setShowSettings(true)} className="rounded-2xl bg-white p-3 shadow-sm"><Settings className="text-stone-500" size={20}/></button></header>{shouldShowOnboarding(onboardingProfile)&&<Link href="/onboarding" className="flex items-center justify-between rounded-3xl border border-green-200 bg-green-50 p-4 text-left shadow-sm"><div><div className="text-sm font-black uppercase tracking-[0.18em] text-green-700">Onboarding incomplete</div><p className="mt-2 text-sm leading-6 text-stone-700">Finish setup to save your progress, choose a starter pack, and keep Daily BLUNDR across sessions.</p></div><ChevronRight className="text-green-700" size={20}/></Link>}<DailyRingsCard repertoireProgress={repertoireProgress} refreshKey={repertoireProgress.updatedAt} completionResult={latestCompletionResult} onStartTraining={()=>setActiveTab("train")}/><section className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div><div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">Repertoire progress</div><h2 className="mt-1 text-lg font-black tracking-tight text-stone-950">Build your repertoire</h2><p className="mt-2 text-sm leading-6 text-stone-600">Earn repertoire points by training. Use them to unlock more openings when you are ready.</p></div><Link href="/repertoire" className="rounded-2xl bg-green-700 px-4 py-3 text-sm font-black text-white shadow-sm">View repertoire</Link></div><div className="mt-4 grid gap-3"><RepertoirePointsSummary progress={repertoireProgress} compact/><RepertoireUnlockProgress progress={repertoireProgress}/></div></section><div className="grid grid-cols-2 gap-3"><MetricCard label="Accuracy" value={`${accuracy}%`} sub="all time" icon={<Trophy size={19}/>}/><MetricCard label="Streak" value={String(progress.streak)} sub="correct" icon={<Flame size={19}/>}/><MetricCard label="Review" value={String(mistakes.length)} sub="mistakes" icon={<XCircle size={19}/>} warning/><MetricCard label="Runtime openings" value={String(STAGE2_OPENING_AVAILABILITY_MATRIX.length)} sub="local crawled" icon={<BookOpen size={19}/>}/></div><TempoDailyBlundrCard /><div className="rounded-3xl bg-stone-900 p-4 text-white shadow-sm"><div className="flex items-center gap-2 text-sm font-bold text-green-300"><Cloud size={17}/> v2.7.33</div><p className="mt-2 text-sm leading-6 text-stone-300">Training now uses rule-only visual cues by default. Blundr Brain is reserved for manual reveal/debug, so normal practice stays fast, deterministic, and inexpensive.</p></div><div className="space-y-3">{repertoires.slice(0,5).map(r=>{const positions=getRepertoirePositionCount(r);const isLocked=repertoireProgress.lockedOpeningIds.includes(resolveStage2CanonicalOpeningId(r.id)??r.id);return <button key={r.id} onClick={()=>selectRepertoire(r.id)} disabled={isLocked} className={classNames("flex w-full items-center gap-3 rounded-3xl border bg-white p-3 text-left shadow-sm",isLocked?"cursor-not-allowed border-stone-200 opacity-70":"border-stone-200")}><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {positions} positions</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p>{isLocked?<div className="mt-2 inline-flex rounded-full bg-stone-100 px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">Locked</div>:null}</div><ChevronRight className="text-stone-400" size={20}/></button>})}</div></section>}
     {activeTab==="repertoire"&&<section className="space-y-5"><RepertoireProgressPanel embedded onTrainOpening={(openingId)=>selectRepertoire(openingId,{allowLocked:false})}/></section>}
     {activeTab==="train"&&<section className="space-y-4">
       <header className="flex items-start justify-between gap-3">

@@ -60,9 +60,11 @@ export type DailyRetentionProgress = {
     dailyBlundr: DailyRingProgress;
   };
   allRingsClosed: boolean;
+  allRingsClosedAt?: string;
   xpEarned: number;
   openingPointsEarned: number;
   streakEligible: boolean;
+  activityEventIds: string[];
   completedAt?: string;
   updatedAt: string;
 };
@@ -99,6 +101,7 @@ export type StreakRecord = {
   userId: string;
   currentStreak: number;
   longestStreak: number;
+  totalAllRingsClosedDays: number;
   lastCompletedLocalDate?: string;
   updatedAt: string;
 };
@@ -211,4 +214,3 @@ export type UserAccountSyncState = {
 export type DailyTrainingSettings = Pick<UserTrainingProfile, "dailyTempoGoal" | "dailyBatteryGoal" | "dailyBlundrGoal" | "preferredTrainingMode" | "ratingBandId" | "ratingSource" | "selectedStarterPackId"> & {
   difficulty?: DailyBlundrDifficulty;
 };
-

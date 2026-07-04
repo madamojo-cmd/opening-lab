@@ -149,6 +149,11 @@ function normalizeRepertoire(raw: unknown): UserRepertoire | null {
   };
 }
 
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value.map((entry) => normalizeText(entry)).filter(Boolean)));
+}
+
 function normalizeRingProgress(raw: unknown, fallback: { type: "daily_tempo" | "daily_battery" | "daily_blundr"; goal: number }) {
   if (!isRecord(raw)) {
     return { type: fallback.type, goal: Math.max(1, fallback.goal), progress: 0, completed: false } as const;
@@ -183,9 +188,11 @@ function normalizeDailyRetentionProgress(raw: unknown): DailyRetentionProgress |
       dailyBlundr: normalizeRingProgress(raw.rings && isRecord(raw.rings) ? raw.rings.dailyBlundr : null, { type: "daily_blundr", goal: blundrGoal }),
     },
     allRingsClosed: Boolean(raw.allRingsClosed),
+    allRingsClosedAt: normalizeText(raw.allRingsClosedAt ?? raw.completedAt) || undefined,
     xpEarned: Math.max(0, Number(raw.xpEarned) || 0),
     openingPointsEarned: Math.max(0, Number(raw.openingPointsEarned) || 0),
     streakEligible: Boolean(raw.streakEligible),
+    activityEventIds: normalizeStringArray(raw.activityEventIds),
     completedAt: normalizeText(raw.completedAt) || undefined,
     updatedAt: normalizeText(raw.updatedAt) || base.updatedAt,
   };
@@ -234,8 +241,9 @@ function normalizeStreakRecord(raw: unknown): StreakRecord | null {
   const base = createDefaultStreakRecord(userId, normalizeText(raw.updatedAt) || nowIso());
   return {
     ...base,
-    currentStreak: Math.max(0, Number(raw.currentStreak) || 0),
-    longestStreak: Math.max(0, Number(raw.longestStreak) || 0),
+    currentStreak: Math.max(0, Number(raw.currentStreak ?? raw.currentStreakDays) || 0),
+    longestStreak: Math.max(0, Number(raw.longestStreak ?? raw.longestStreakDays) || 0),
+    totalAllRingsClosedDays: Math.max(0, Number(raw.totalAllRingsClosedDays ?? raw.total_all_rings_closed_days ?? 0) || 0),
     lastCompletedLocalDate: normalizeText(raw.lastCompletedLocalDate) || undefined,
     updatedAt: normalizeText(raw.updatedAt) || base.updatedAt,
   };
