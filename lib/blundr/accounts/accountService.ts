@@ -1,4 +1,4 @@
-import { createDefaultDailyRetentionProgress, createDefaultRewardHistory, createDefaultStreakRecord, createDefaultTrainingProfile, createDefaultUserRepertoire } from "./accountDefaults";
+import { createDefaultDailyRetentionProgress, createDefaultRewardHistory, createDefaultStreakRecord, createDefaultTrainingProfile } from "./accountDefaults";
 import type {
   CurrentBlundrUser,
   DailyRetentionProgress,
@@ -14,6 +14,7 @@ import type { PersistenceResult } from "../persistence/persistenceTypes";
 import { getCurrentBlundrUser } from "./accountSession";
 import { readDailyRetentionProgress, readRewardHistory, readStreakRecord, readTrainingProfile, readUserRepertoire, saveDailyRetentionProgress, saveRewardHistory, saveStreakRecord, saveTrainingProfile, saveUserRepertoire } from "./accountRepository";
 import { syncLocalDemoStateToAccount as syncDailyStateToAccount } from "./accountSync";
+import { buildInitialRepertoireFromStarterPack } from "../onboarding/starterPacks";
 
 export type AccountServiceContext = {
   user?: CurrentBlundrUser | null;
@@ -43,22 +44,25 @@ function chooseExisting<T extends { updatedAt: string }>(current: T, existing: T
   return existingUpdated > currentUpdated ? existing : current;
 }
 
-function getPersistenceError<T>(result: PersistenceResult<T>) {
-  return result.ok ? { code: "persistence_error", message: "Unknown persistence error." } : result.error;
+function getPersistenceError(result: PersistenceResult<unknown>) {
+  if ("error" in result) {
+    return result.error;
+  }
+  return { code: "persistence_error", message: "Unknown persistence error." };
 }
 
 function failBootstrap(result: PersistenceResult<unknown>): PersistenceResult<UserAccountBootstrap> {
   return { ok: false, error: getPersistenceError(result) };
 }
 
-async function createOrUpdate<T>(
+async function createOrUpdate<T extends { updatedAt: string }>(
   read: Promise<PersistenceResult<T | null>>,
   write: (value: T, context: AccountServiceContext) => Promise<PersistenceResult<T>>,
   fallback: T,
   context: AccountServiceContext,
 ): Promise<PersistenceResult<T>> {
   const existing = await read;
-  const next = existing.ok && existing.data ? chooseExisting(fallback, existing.data as T) : fallback;
+  const next = existing.ok && existing.data ? chooseExisting(fallback, existing.data) : fallback;
   return write(next, context);
 }
 
@@ -70,7 +74,11 @@ export async function getOrCreateTrainingProfile(userId: string, context: Accoun
 
 export async function getOrCreateUserRepertoire(userId: string, context: AccountServiceContext = {}): Promise<PersistenceResult<UserRepertoire>> {
   const now = context.now ?? nowIso();
-  const fallback = createDefaultUserRepertoire(userId, now);
+  const fallback = buildInitialRepertoireFromStarterPack({
+    userId,
+    starterPackId: "classical_attacker",
+    now,
+  });
   return createOrUpdate(readUserRepertoire(userId, context), saveUserRepertoire, fallback, context);
 }
 

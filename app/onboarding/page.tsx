@@ -67,6 +67,14 @@ function getRouteErrorMessage(body: unknown, fallback: string): string {
   return normalizeText((body as { error?: { message?: unknown } } | null)?.error?.message) || fallback;
 }
 
+function isBootstrapError(value: BootstrapSnapshot | { ok: false; message: string }): value is { ok: false; message: string } {
+  return Boolean(value && typeof value === "object" && "ok" in value && (value as { ok?: unknown }).ok === false);
+}
+
+function isCompletionError(value: CompletionSnapshot | { ok: false; message: string }): value is { ok: false; message: string } {
+  return Boolean(value && typeof value === "object" && "ok" in value && (value as { ok?: unknown }).ok === false);
+}
+
 function buildFallbackBootstrapSnapshot(state: BlundrOnboardingState, userId: string, onboardingCompleted = false): BootstrapSnapshot {
   const now = new Date().toISOString();
   const normalizedUserId = normalizeText(userId) || LOCAL_DEMO_USER_ID;
@@ -381,7 +389,7 @@ export default function OnboardingPage() {
     setNeedsEmailConfirmation(false);
     try {
       const response = await fetchBootstrapSnapshot(null);
-      if ("ok" in response && response.ok === false) {
+      if (isBootstrapError(response)) {
         const fallback = buildFallbackBootstrapSnapshot(state, LOCAL_DEMO_USER_ID, false);
         applyBootstrapSnapshotToLocalStorage(fallback);
         saveBootstrapSnapshot(fallback);
@@ -435,7 +443,7 @@ export default function OnboardingPage() {
       }
 
       const bootstrap = await fetchBootstrapSnapshot(session.accessToken);
-      if ("ok" in bootstrap && bootstrap.ok === false) {
+      if (isBootstrapError(bootstrap)) {
         setAuthError(bootstrap.message);
         return;
       }
@@ -468,7 +476,7 @@ export default function OnboardingPage() {
       const session = state.accountChoice === "account" ? await getOnboardingAuthSession() : null;
       const result = await fetchCompletionSnapshot(finalState, session?.accessToken ?? null);
 
-      if ("ok" in result && result.ok === false) {
+      if (isCompletionError(result)) {
         if (state.accountChoice !== "local_demo") {
           setCompletionError(result.message);
           return;

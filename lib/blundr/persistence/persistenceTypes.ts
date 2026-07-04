@@ -12,6 +12,7 @@ import type {
   ValidationSnapshot,
   BlundrAccountMode,
 } from "../accounts/accountTypes";
+import type { RepertoirePointEvent, RepertoireUnlockEvent } from "../repertoire/repertoireTypes";
 
 export type PersistenceError = {
   code: string;
@@ -30,6 +31,10 @@ export type BlundrPersistenceAdapter = {
   upsertTrainingProfile(profile: UserTrainingProfile): Promise<PersistenceResult<UserTrainingProfile>>;
   getUserRepertoire(userId: string): Promise<PersistenceResult<UserRepertoire | null>>;
   upsertUserRepertoire(repertoire: UserRepertoire): Promise<PersistenceResult<UserRepertoire>>;
+  getRepertoirePointEvents(userId: string): Promise<PersistenceResult<RepertoirePointEvent[]>>;
+  appendRepertoirePointEvent(event: RepertoirePointEvent): Promise<PersistenceResult<RepertoirePointEvent>>;
+  getRepertoireUnlockEvents(userId: string): Promise<PersistenceResult<RepertoireUnlockEvent[]>>;
+  appendRepertoireUnlockEvent(event: RepertoireUnlockEvent): Promise<PersistenceResult<RepertoireUnlockEvent>>;
   getDailyRetentionProgress(userId: string, localDate: string): Promise<PersistenceResult<DailyRetentionProgress | null>>;
   upsertDailyRetentionProgress(progress: DailyRetentionProgress): Promise<PersistenceResult<DailyRetentionProgress>>;
   getOpeningUnlockProgress(userId: string): Promise<PersistenceResult<OpeningUnlockProgress[]>>;
@@ -54,10 +59,11 @@ export type SupabaseTableNames = {
   dailyRetentionProgress: string;
   openingUnlockProgress: string;
   openingUnlockEvents: string;
+  repertoirePointEvents: string;
+  repertoireUnlockEvents: string;
   streakRecords: string;
   rewardHistory: string;
   rewardRolls: string;
   validationSnapshots: string;
   developerAuditLog: string;
 };
-

@@ -7,6 +7,8 @@ export const BLUNDR_PERSISTENCE_TABLES = {
   dailyRetentionProgress: "blundr_daily_retention_progress",
   openingUnlockProgress: "blundr_opening_unlock_progress",
   openingUnlockEvents: "blundr_opening_unlock_events",
+  repertoirePointEvents: "blundr_repertoire_point_events",
+  repertoireUnlockEvents: "blundr_repertoire_unlock_events",
   streakRecords: "blundr_streak_records",
   rewardHistory: "blundr_reward_history",
   rewardRolls: "blundr_reward_rolls",
@@ -20,4 +22,3 @@ export const BLUNDR_PERSISTENCE_MODES = {
   developerAdmin: "developer_admin",
   localOrSupabase: "local_or_supabase",
 } as const;
-

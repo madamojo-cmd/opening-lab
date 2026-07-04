@@ -15,6 +15,7 @@ import {
   normalizeRatingBandId,
   normalizeStarterPackId,
 } from "../accounts/accountDefaults";
+import type { RepertoirePointEvent, RepertoireUnlockEvent } from "../repertoire/repertoireTypes";
 import type { PersistenceResult, BlundrPersistenceAdapter } from "./persistenceTypes";
 
 type SupabaseUserProfileRow = {
@@ -40,6 +41,25 @@ type SupabaseUserRepertoireRow = {
   locked_opening_ids: string[] | null;
   opening_unlock_points: number;
   updated_at: string;
+};
+
+type SupabaseRepertoirePointEventRow = {
+  id: string;
+  user_id: string;
+  source: RepertoirePointEvent["source"];
+  points: number;
+  opening_id: string | null;
+  daily_session_id: string | null;
+  created_at: string;
+};
+
+type SupabaseRepertoireUnlockEventRow = {
+  id: string;
+  user_id: string;
+  opening_id: string;
+  points_spent: number;
+  unlock_index: number;
+  created_at: string;
 };
 
 type SupabaseDailyRetentionProgressRow = {
@@ -213,6 +233,54 @@ function mapRepertoireRowToModel(row: SupabaseUserRepertoireRow | null): UserRep
     lockedOpeningIds: normalizeStringArray(row.locked_opening_ids),
     openingUnlockPoints: Math.max(0, Number(row.opening_unlock_points) || 0),
     updatedAt: row.updated_at || base.updatedAt,
+  };
+}
+
+function mapRepertoirePointEventRow(event: RepertoirePointEvent): SupabaseRepertoirePointEventRow {
+  return {
+    id: event.id,
+    user_id: event.userId,
+    source: event.source,
+    points: Math.max(0, Number(event.points) || 0),
+    opening_id: event.openingId ? normalizeText(event.openingId) : null,
+    daily_session_id: event.dailySessionId ? normalizeText(event.dailySessionId) : null,
+    created_at: normalizeText(event.createdAt) || nowIso(),
+  };
+}
+
+function mapRepertoirePointEventRowToModel(row: SupabaseRepertoirePointEventRow | null): RepertoirePointEvent | null {
+  if (!row) return null;
+  return {
+    id: row.id,
+    userId: row.user_id,
+    source: row.source,
+    points: Math.max(0, Number(row.points) || 0),
+    openingId: row.opening_id ?? undefined,
+    dailySessionId: row.daily_session_id ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
+function mapRepertoireUnlockEventRow(event: RepertoireUnlockEvent): SupabaseRepertoireUnlockEventRow {
+  return {
+    id: event.id,
+    user_id: event.userId,
+    opening_id: event.openingId,
+    points_spent: Math.max(0, Number(event.pointsSpent) || 0),
+    unlock_index: Math.max(1, Number(event.unlockIndex) || 1),
+    created_at: normalizeText(event.createdAt) || nowIso(),
+  };
+}
+
+function mapRepertoireUnlockEventRowToModel(row: SupabaseRepertoireUnlockEventRow | null): RepertoireUnlockEvent | null {
+  if (!row) return null;
+  return {
+    id: row.id,
+    userId: row.user_id,
+    openingId: row.opening_id,
+    pointsSpent: Math.max(0, Number(row.points_spent) || 0),
+    unlockIndex: Math.max(1, Number(row.unlock_index) || 1),
+    createdAt: row.created_at,
   };
 }
 
@@ -480,6 +548,36 @@ export function createBlundrSupabasePersistenceAdapter(input: SupabasePersistenc
         return ok(mapRepertoireRowToModel(data as SupabaseUserRepertoireRow | null) ?? cloneJson(repertoire));
       });
     },
+    async getRepertoirePointEvents(userId: string) {
+      return runClientOperation(accessToken, async (client) => {
+        const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.repertoirePointEvents).select("*").eq("user_id", userId).order("created_at", { ascending: true });
+        if (error) return err("supabase_query_failed", "Could not load repertoire point events.", error, true);
+        return ok((data ?? []).map((row) => mapRepertoirePointEventRowToModel(row as SupabaseRepertoirePointEventRow)).filter((entry): entry is RepertoirePointEvent => Boolean(entry)));
+      });
+    },
+    async appendRepertoirePointEvent(event: RepertoirePointEvent) {
+      return runClientOperation(accessToken, async (client) => {
+        const row = mapRepertoirePointEventRow(event);
+        const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.repertoirePointEvents).upsert(row, { onConflict: "id" }).select("*").maybeSingle();
+        if (error) return err("supabase_write_failed", "Could not save repertoire point event.", error, true);
+        return ok((data ? mapRepertoirePointEventRowToModel(data as SupabaseRepertoirePointEventRow) : event) ?? event);
+      });
+    },
+    async getRepertoireUnlockEvents(userId: string) {
+      return runClientOperation(accessToken, async (client) => {
+        const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.repertoireUnlockEvents).select("*").eq("user_id", userId).order("created_at", { ascending: true });
+        if (error) return err("supabase_query_failed", "Could not load repertoire unlock events.", error, true);
+        return ok((data ?? []).map((row) => mapRepertoireUnlockEventRowToModel(row as SupabaseRepertoireUnlockEventRow)).filter((entry): entry is RepertoireUnlockEvent => Boolean(entry)));
+      });
+    },
+    async appendRepertoireUnlockEvent(event: RepertoireUnlockEvent) {
+      return runClientOperation(accessToken, async (client) => {
+        const row = mapRepertoireUnlockEventRow(event);
+        const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.repertoireUnlockEvents).upsert(row, { onConflict: "id" }).select("*").maybeSingle();
+        if (error) return err("supabase_write_failed", "Could not save repertoire unlock event.", error, true);
+        return ok((data ? mapRepertoireUnlockEventRowToModel(data as SupabaseRepertoireUnlockEventRow) : event) ?? event);
+      });
+    },
     async getDailyRetentionProgress(userId: string, localDate: string) {
       return runClientOperation(accessToken, async (client) => {
         const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.dailyRetentionProgress).select("*").eq("user_id", userId).eq("local_date", localDate).maybeSingle();
@@ -572,6 +670,10 @@ export {
   mapTrainingProfileRowToModel,
   mapRepertoireRow,
   mapRepertoireRowToModel,
+  mapRepertoirePointEventRow,
+  mapRepertoirePointEventRowToModel,
+  mapRepertoireUnlockEventRow,
+  mapRepertoireUnlockEventRowToModel,
   mapDailyRetentionRow,
   mapDailyRetentionRowToModel,
   mapOpeningUnlockProgressRow,

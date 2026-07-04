@@ -16,6 +16,8 @@ import type {
   OpeningUnlockEvent,
   OpeningUnlockProgress,
   RewardRoll,
+  RewardRarity,
+  VariableReward,
   StreakRecord,
   UserRepertoire,
   UserRewardHistory,
@@ -23,12 +25,16 @@ import type {
   ValidationSnapshot,
 } from "./accountTypes";
 import { BLUNDR_LOCAL_ACCOUNT_STORAGE_KEY, BLUNDR_LOCAL_DEMO_USER_ID } from "../persistence/persistenceKeys";
+import { normalizeRepertoirePointEvent, normalizeRepertoireUnlockEvent, sortRepertoirePointEvents, sortRepertoireUnlockEvents } from "../repertoire/repertoireEvents";
+import type { RepertoirePointEvent, RepertoireUnlockEvent } from "../repertoire/repertoireTypes";
 
 export type LocalAccountBundle = {
   schemaVersion: 1;
   currentUserId: string | null;
   trainingProfilesByUserId: Record<string, UserTrainingProfile>;
   repertoiresByUserId: Record<string, UserRepertoire>;
+  repertoirePointEventsByUserId: Record<string, RepertoirePointEvent[]>;
+  repertoireUnlockEventsByUserId: Record<string, RepertoireUnlockEvent[]>;
   dailyRetentionProgressByKey: Record<string, DailyRetentionProgress>;
   openingUnlockProgressByUserId: Record<string, OpeningUnlockProgress[]>;
   openingUnlockEventsByUserId: Record<string, OpeningUnlockEvent[]>;
@@ -45,6 +51,8 @@ const DEFAULT_BUNDLE: LocalAccountBundle = {
   currentUserId: BLUNDR_LOCAL_DEMO_USER_ID,
   trainingProfilesByUserId: {},
   repertoiresByUserId: {},
+  repertoirePointEventsByUserId: {},
+  repertoireUnlockEventsByUserId: {},
   dailyRetentionProgressByKey: {},
   openingUnlockProgressByUserId: {},
   openingUnlockEventsByUserId: {},
@@ -211,6 +219,14 @@ function normalizeOpeningUnlockEvent(raw: unknown): OpeningUnlockEvent | null {
   };
 }
 
+function normalizeRepertoirePointEventEntry(raw: unknown): RepertoirePointEvent | null {
+  return normalizeRepertoirePointEvent(raw);
+}
+
+function normalizeRepertoireUnlockEventEntry(raw: unknown): RepertoireUnlockEvent | null {
+  return normalizeRepertoireUnlockEvent(raw);
+}
+
 function normalizeStreakRecord(raw: unknown): StreakRecord | null {
   if (!isRecord(raw)) return null;
   const userId = normalizeText(raw.userId);
@@ -254,9 +270,12 @@ function normalizeRewardRoll(raw: unknown): RewardRoll | null {
       : "daily_blundr_ring_closed";
   if (!id || !userId) return null;
   const reward = isRecord(raw.reward)
-    ? {
+    ? ({
         id: normalizeText(raw.reward.id),
-        rarity: raw.reward.rarity === "common" || raw.reward.rarity === "uncommon" || raw.reward.rarity === "rare" || raw.reward.rarity === "epic" ? raw.reward.rarity : "common",
+        rarity:
+          raw.reward.rarity === "common" || raw.reward.rarity === "uncommon" || raw.reward.rarity === "rare" || raw.reward.rarity === "epic"
+            ? (raw.reward.rarity as RewardRarity)
+            : "common",
         rewardType:
           raw.reward.rewardType === "unlock_points" ||
           raw.reward.rewardType === "opening_fragment" ||
@@ -269,7 +288,7 @@ function normalizeRewardRoll(raw: unknown): RewardRoll | null {
         openingId: normalizeText(raw.reward.openingId) || undefined,
         displayName: normalizeText(raw.reward.displayName) || "Reward",
         description: normalizeText(raw.reward.description) || "Reward granted.",
-      }
+      } satisfies VariableReward)
     : undefined;
   return {
     ...createDefaultRewardRoll(userId, trigger, normalizeText(raw.seed) || id, normalizeText(raw.rolledAt) || nowIso(), Boolean(raw.didReward), reward),
@@ -316,6 +335,8 @@ function normalizeBundle(raw: unknown): LocalAccountBundle {
     currentUserId: normalizeText(raw.currentUserId) || BLUNDR_LOCAL_DEMO_USER_ID,
     trainingProfilesByUserId: {},
     repertoiresByUserId: {},
+    repertoirePointEventsByUserId: {},
+    repertoireUnlockEventsByUserId: {},
     dailyRetentionProgressByKey: {},
     openingUnlockProgressByUserId: {},
     openingUnlockEventsByUserId: {},
@@ -334,6 +355,14 @@ function normalizeBundle(raw: unknown): LocalAccountBundle {
   for (const [userId, value] of Object.entries(normalizeMap<Record<string, unknown>>(raw.repertoiresByUserId))) {
     const repertoire = normalizeRepertoire(value);
     if (repertoire) next.repertoiresByUserId[normalizeText(userId) || repertoire.userId] = repertoire;
+  }
+  for (const [userId, value] of Object.entries(normalizeMap<Record<string, unknown>>(raw.repertoirePointEventsByUserId))) {
+    const items = Array.isArray(value) ? value.map(normalizeRepertoirePointEventEntry).filter((entry): entry is RepertoirePointEvent => Boolean(entry)) : [];
+    if (items.length) next.repertoirePointEventsByUserId[normalizeText(userId)] = sortRepertoirePointEvents(items);
+  }
+  for (const [userId, value] of Object.entries(normalizeMap<Record<string, unknown>>(raw.repertoireUnlockEventsByUserId))) {
+    const items = Array.isArray(value) ? value.map(normalizeRepertoireUnlockEventEntry).filter((entry): entry is RepertoireUnlockEvent => Boolean(entry)) : [];
+    if (items.length) next.repertoireUnlockEventsByUserId[normalizeText(userId)] = sortRepertoireUnlockEvents(items);
   }
   for (const [key, value] of Object.entries(normalizeMap<Record<string, unknown>>(raw.dailyRetentionProgressByKey))) {
     const progress = normalizeDailyRetentionProgress(value);
@@ -449,6 +478,57 @@ export function upsertLocalUserRepertoire(repertoire: UserRepertoire): UserReper
     bundle.repertoiresByUserId[normalized.userId] = normalized;
     bundle.currentUserId = bundle.currentUserId ?? normalized.userId;
     bundle.updatedAt = normalized.updatedAt;
+    return bundle;
+  });
+  return cloneJson(normalized);
+}
+
+export function getLocalRepertoirePointEvents(userId: string): RepertoirePointEvent[] {
+  return cloneJson(readStoredBundle().repertoirePointEventsByUserId[normalizeText(userId)] ?? []);
+}
+
+export function appendLocalRepertoirePointEvent(event: RepertoirePointEvent): RepertoirePointEvent {
+  const normalized = normalizeRepertoirePointEventEntry(event) ?? {
+    ...event,
+    id: String(event.id ?? "").trim() || `${normalizeText(event.userId)}:${Date.now()}`,
+    userId: normalizeText(event.userId) || getLocalAccountCurrentUserId(),
+    source: event.source,
+    points: Math.max(0, Number(event.points) || 0),
+    openingId: normalizeText(event.openingId) || undefined,
+    dailySessionId: normalizeText(event.dailySessionId) || undefined,
+    createdAt: normalizeText(event.createdAt) || nowIso(),
+  };
+  const current = getLocalRepertoirePointEvents(normalized.userId);
+  const next = sortRepertoirePointEvents([...current.filter((entry) => entry.id !== normalized.id), normalized]);
+  updateLocalAccountBundle((bundle) => {
+    bundle.repertoirePointEventsByUserId[normalized.userId] = next;
+    bundle.currentUserId = bundle.currentUserId ?? normalized.userId;
+    bundle.updatedAt = normalized.createdAt;
+    return bundle;
+  });
+  return cloneJson(normalized);
+}
+
+export function getLocalRepertoireUnlockEvents(userId: string): RepertoireUnlockEvent[] {
+  return cloneJson(readStoredBundle().repertoireUnlockEventsByUserId[normalizeText(userId)] ?? []);
+}
+
+export function appendLocalRepertoireUnlockEvent(event: RepertoireUnlockEvent): RepertoireUnlockEvent {
+  const normalized = normalizeRepertoireUnlockEventEntry(event) ?? {
+    ...event,
+    id: String(event.id ?? "").trim() || `${normalizeText(event.userId)}:${normalizeText(event.openingId)}:${Date.now()}`,
+    userId: normalizeText(event.userId) || getLocalAccountCurrentUserId(),
+    openingId: normalizeText(event.openingId) || "unknown",
+    pointsSpent: Math.max(0, Number(event.pointsSpent) || 0),
+    unlockIndex: Math.max(1, Number(event.unlockIndex) || 1),
+    createdAt: normalizeText(event.createdAt) || nowIso(),
+  };
+  const current = getLocalRepertoireUnlockEvents(normalized.userId);
+  const next = sortRepertoireUnlockEvents([...current.filter((entry) => entry.id !== normalized.id), normalized]);
+  updateLocalAccountBundle((bundle) => {
+    bundle.repertoireUnlockEventsByUserId[normalized.userId] = next;
+    bundle.currentUserId = bundle.currentUserId ?? normalized.userId;
+    bundle.updatedAt = normalized.createdAt;
     return bundle;
   });
   return cloneJson(normalized);

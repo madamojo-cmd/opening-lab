@@ -3,7 +3,6 @@ import {
   createDefaultRewardHistory,
   createDefaultStreakRecord,
   createDefaultTrainingProfile,
-  createDefaultUserRepertoire,
 } from "./accountDefaults";
 import type {
   CurrentBlundrUser,
@@ -19,6 +18,7 @@ import type {
 import type { PersistenceResult } from "../persistence/persistenceTypes";
 import { getAccountPersistenceAdapter } from "./accountRepository";
 import { readLocalDailyBlundrState } from "../daily/dailyBlundrStorage";
+import { buildInitialRepertoireFromStarterPack } from "../onboarding/starterPacks";
 
 export type DailyStateSyncInput = {
   user?: CurrentBlundrUser | null;
@@ -74,8 +74,11 @@ function mergeRepertoire(local: UserRepertoire, remote: UserRepertoire | null | 
   };
 }
 
-function getPersistenceError<T>(result: PersistenceResult<T>) {
-  return result.ok ? { code: "persistence_error", message: "Unknown persistence error." } : result.error;
+function getPersistenceError(result: PersistenceResult<unknown>) {
+  if ("error" in result) {
+    return result.error;
+  }
+  return { code: "persistence_error", message: "Unknown persistence error." };
 }
 
 function failSync<T>(result: PersistenceResult<T>): PersistenceResult<UserAccountSyncState> {
@@ -112,7 +115,13 @@ export function prepareDailyStateForAccountSync(userId: string, input: DailyStat
   const localState = readLocalDailyBlundrState();
   const now = input.now ?? nowIso();
   const profile = input.profile ?? createDefaultTrainingProfile(userId, now);
-  const repertoire = input.repertoire ?? createDefaultUserRepertoire(userId, now);
+  const repertoire =
+    input.repertoire ??
+    buildInitialRepertoireFromStarterPack({
+      userId,
+      starterPackId: profile.selectedStarterPackId ?? "classical_attacker",
+      now,
+    });
   const streakRecord = input.streakRecord ?? createDefaultStreakRecord(userId, now);
   const rewardHistory = input.rewardHistory ?? createDefaultRewardHistory(userId, now);
   const dailyRetentionProgress = input.dailyRetentionProgress ?? buildDailyRetentionProgress(userId, localState, profile, now);

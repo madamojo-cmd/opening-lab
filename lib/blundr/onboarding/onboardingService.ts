@@ -41,6 +41,13 @@ function fail<T = never>(code: string, message: string, cause?: unknown): Persis
   return { ok: false, error: { code, message, cause, retryable: false } };
 }
 
+function getPersistenceError(result: PersistenceResult<unknown>) {
+  if ("error" in result) {
+    return result.error;
+  }
+  return { code: "persistence_error", message: "Unknown persistence error." };
+}
+
 function uniqueSteps(stepIds: readonly typeof ONBOARDING_STEP_SEQUENCE[number][]): typeof ONBOARDING_STEP_SEQUENCE[number][] {
   const seen = new Set<typeof ONBOARDING_STEP_SEQUENCE[number]>();
   const next: typeof ONBOARDING_STEP_SEQUENCE[number][] = [];
@@ -200,9 +207,15 @@ export async function completeOnboarding(state: BlundrOnboardingState, userId: s
   const repertoire = buildRepertoireFromOnboarding(finalState, userId);
 
   const savedProfileResult = await persistence.upsertTrainingProfile(savedProfile);
-  if (!savedProfileResult.ok) return fail(savedProfileResult.error.code, savedProfileResult.error.message, savedProfileResult.error.cause);
+  if (!savedProfileResult.ok) {
+    const error = getPersistenceError(savedProfileResult);
+    return fail(error.code, error.message, error.cause);
+  }
   const savedRepertoireResult = await persistence.upsertUserRepertoire(repertoire);
-  if (!savedRepertoireResult.ok) return fail(savedRepertoireResult.error.code, savedRepertoireResult.error.message, savedRepertoireResult.error.cause);
+  if (!savedRepertoireResult.ok) {
+    const error = getPersistenceError(savedRepertoireResult);
+    return fail(error.code, error.message, error.cause);
+  }
 
   return {
     ok: true,

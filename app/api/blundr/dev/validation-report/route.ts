@@ -6,6 +6,13 @@ import { resolveBlundrDeveloperAccess } from "@/lib/blundr/backend/devAccess";
 
 export const dynamic = "force-dynamic";
 
+function getPersistenceError(result: { ok: true } | { ok: false; error: { code: string; message: string; cause?: unknown; retryable?: boolean } }) {
+  if ("error" in result) {
+    return result.error;
+  }
+  return { code: "persistence_error", message: "Unknown persistence error." };
+}
+
 async function handleReport(request: NextRequest, persist: boolean) {
   const access = await resolveBlundrDeveloperAccess(request);
   if (!access.allowed) {
@@ -31,7 +38,7 @@ async function handleReport(request: NextRequest, persist: boolean) {
     allowLocalFallback: true,
   });
   if (!saved.ok) {
-    return NextResponse.json({ ok: false, error: saved.error }, { status: 500 });
+    return NextResponse.json({ ok: false, error: getPersistenceError(saved) }, { status: 500 });
   }
 
   await appendDeveloperAuditLogEntry(

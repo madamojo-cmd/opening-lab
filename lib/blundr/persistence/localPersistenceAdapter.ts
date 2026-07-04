@@ -2,9 +2,13 @@ import type { BlundrAccountMode, DailyRetentionProgress, OpeningUnlockEvent, Ope
 import {
   appendLocalDeveloperAuditLog,
   appendLocalOpeningUnlockEvent,
+  appendLocalRepertoirePointEvent,
+  appendLocalRepertoireUnlockEvent,
   appendLocalRewardRoll,
   getLocalDailyRetentionProgress,
   getLocalOpeningUnlockProgress,
+  getLocalRepertoirePointEvents,
+  getLocalRepertoireUnlockEvents,
   getLocalRewardHistory,
   getLocalStreakRecord,
   getLocalTrainingProfile,
@@ -19,6 +23,7 @@ import {
   upsertLocalTrainingProfile,
   upsertLocalUserRepertoire,
 } from "../accounts/localAccountStorage";
+import type { RepertoirePointEvent, RepertoireUnlockEvent } from "../repertoire/repertoireTypes";
 import type { PersistenceError, PersistenceResult, BlundrPersistenceAdapter, DeveloperAuditLogWrite } from "./persistenceTypes";
 
 function ok<T>(data: T): PersistenceResult<T> {
@@ -74,6 +79,36 @@ export function createBlundrLocalPersistenceAdapter(mode: BlundrAccountMode = "l
         return ok(upsertLocalUserRepertoire(repertoire));
       } catch (cause) {
         return withLocalError("Could not save local repertoire.", cause);
+      }
+    },
+    async getRepertoirePointEvents(userId: string) {
+      try {
+        return ok(getLocalRepertoirePointEvents(userId));
+      } catch (cause) {
+        return withLocalError("Could not read local repertoire point events.", cause);
+      }
+    },
+    async appendRepertoirePointEvent(event: RepertoirePointEvent) {
+      try {
+        currentUserIdFor(event.userId);
+        return ok(appendLocalRepertoirePointEvent(event));
+      } catch (cause) {
+        return withLocalError("Could not save local repertoire point event.", cause);
+      }
+    },
+    async getRepertoireUnlockEvents(userId: string) {
+      try {
+        return ok(getLocalRepertoireUnlockEvents(userId));
+      } catch (cause) {
+        return withLocalError("Could not read local repertoire unlock events.", cause);
+      }
+    },
+    async appendRepertoireUnlockEvent(event: RepertoireUnlockEvent) {
+      try {
+        currentUserIdFor(event.userId);
+        return ok(appendLocalRepertoireUnlockEvent(event));
+      } catch (cause) {
+        return withLocalError("Could not save local repertoire unlock event.", cause);
       }
     },
     async getDailyRetentionProgress(userId: string, localDate: string) {
