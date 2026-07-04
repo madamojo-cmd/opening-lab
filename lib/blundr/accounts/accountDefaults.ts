@@ -39,6 +39,7 @@ export function createDefaultTrainingProfile(userId: string, now = nowIso()): Us
     dailyTempoGoal: 10,
     dailyBatteryGoal: 3,
     dailyBlundrGoal: 1,
+    selectedStarterPackId: "classical_attacker",
     createdAt: now,
     updatedAt: now,
   };
@@ -184,4 +185,3 @@ export function normalizeRatingBandId(value: unknown): RatingBandId {
 export function normalizeStarterPackId(value: unknown): StarterPackId | undefined {
   return value === "solid_builder" || value === "classical_attacker" || value === "dynamic_fighter" || value === "flexible_strategist" ? value : undefined;
 }
-

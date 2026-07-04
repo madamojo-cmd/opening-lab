@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Chess } from "chess.js";
@@ -130,6 +131,9 @@ import { analyzeBlundrPosition } from "@/lib/blundr/brain/analyzeBlundrPosition"
 import { appendDebugEvent } from "@/lib/blundr/debug/trainerDebugEventLog";
 import { isBlundrDebugEnabled } from "@/lib/blundr/debug/trainerDebugGuards";
 import type { DebugEvent, TrainerDebugSnapshot } from "@/lib/blundr/debug/trainerDebugTypes";
+import type { UserTrainingProfile } from "@/lib/blundr/accounts/accountTypes";
+import { getLocalAccountCurrentUserId, getLocalTrainingProfile } from "@/lib/blundr/accounts/localAccountStorage";
+import { shouldShowOnboarding } from "@/lib/blundr/onboarding/onboardingRouting";
 
 const BlundrDiagnosticsPanel = dynamic(
   () => import("@/components/debug/BlundrDiagnosticsPanel").then((mod) => mod.BlundrDiagnosticsPanel),
@@ -1253,6 +1257,7 @@ export default function App(){
     [trainingSessionId],
   );
   const [activeTab,setActiveTab]=useState<Tab>("home");
+  const [onboardingProfile,setOnboardingProfile]=useState<UserTrainingProfile | null>(null);
   const [customRepertoires,setCustomRepertoires]=useState<Repertoire[]>([]);
   const [runtimeRepertoires,setRuntimeRepertoires]=useState<Repertoire[]>(()=>buildRuntimePlaceholderRepertoires());
   const [selectedRepertoireId,setSelectedRepertoireId]=useState(runtimeOpeningSelection.selectedOpeningId);
@@ -4385,6 +4390,10 @@ export default function App(){
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
   useEffect(()=>{
+    const currentUserId=getLocalAccountCurrentUserId();
+    setOnboardingProfile(getLocalTrainingProfile(currentUserId));
+  },[]);
+  useEffect(()=>{
     if(typeof window==="undefined")return;
     const loaded=loadCoachUtteranceMemory(window.localStorage);
     const meta=readCoachUtteranceMemoryMeta(window.localStorage);
@@ -4415,6 +4424,16 @@ export default function App(){
   useEffect(()=>localStorage.setItem("blundr-board-settings",JSON.stringify(boardSettings)),[boardSettings]);
   useEffect(()=>localStorage.setItem("blundr-stage2-rating-band",rating.id),[rating.id]);
   useEffect(()=>localStorage.setItem(STAGE2_RUNTIME_TRAINING_LINE_MEMORY_KEY,JSON.stringify(recentRuntimeTrainingLineKeys.slice(0,2))),[recentRuntimeTrainingLineKeys]);
+  useEffect(()=>{
+    if(typeof window==="undefined")return;
+    const hash=window.location.hash.replace(/^#/, "").trim();
+    if(!hash)return;
+    const canonicalOpeningId=resolveStage2CanonicalOpeningId(hash);
+    if(!canonicalOpeningId)return;
+    selectRepertoire(canonicalOpeningId);
+    window.history.replaceState(null,"",`${window.location.pathname}${window.location.search}`);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
   useEffect(()=>{telemetryEnabledRef.current=telemetryEnabled},[telemetryEnabled]);
   useEffect(()=>{telemetryEventsRef.current=telemetryEvents},[telemetryEvents]);
   useEffect(()=>{branchCompleteLatchRef.current=branchCompleteLatch},[branchCompleteLatch]);
@@ -7044,7 +7063,7 @@ export default function App(){
     eventLog: debugEventLog,
   });
   return <main className="min-h-screen bg-[#f7f7f4] text-stone-950"><div className="mx-auto flex min-h-screen max-w-md flex-col px-4 pb-24 pt-5">
-    {activeTab==="home"&&<section className="space-y-6"><header className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-green-700 text-white shadow-sm"><Beaker size={20}/></div><div><h1 className="text-2xl font-bold tracking-tight">Blundr</h1><p className="text-sm text-stone-500">Visual opening training with a controlled trainer.</p></div></div><button onClick={()=>setShowSettings(true)} className="rounded-2xl bg-white p-3 shadow-sm"><Settings className="text-stone-500" size={20}/></button></header><div className="grid grid-cols-2 gap-3"><MetricCard label="Accuracy" value={`${accuracy}%`} sub="all time" icon={<Trophy size={19}/>}/><MetricCard label="Streak" value={String(progress.streak)} sub="correct" icon={<Flame size={19}/>}/><MetricCard label="Review" value={String(mistakes.length)} sub="mistakes" icon={<XCircle size={19}/>} warning/><MetricCard label="Runtime openings" value={String(STAGE2_OPENING_AVAILABILITY_MATRIX.length)} sub="local crawled" icon={<BookOpen size={19}/>}/></div><TempoDailyBlundrCard /><div className="rounded-3xl bg-stone-900 p-4 text-white shadow-sm"><div className="flex items-center gap-2 text-sm font-bold text-green-300"><Cloud size={17}/> v2.7.33</div><p className="mt-2 text-sm leading-6 text-stone-300">Training now uses rule-only visual cues by default. Blundr Brain is reserved for manual reveal/debug, so normal practice stays fast, deterministic, and inexpensive.</p></div><div className="space-y-3">{repertoires.slice(0,5).map(r=>{const positions=getRepertoirePositionCount(r);return <button key={r.id} onClick={()=>selectRepertoire(r.id)} className="flex w-full items-center gap-3 rounded-3xl border border-stone-200 bg-white p-3 text-left shadow-sm"><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {positions} positions</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>})}</div></section>}
+    {activeTab==="home"&&<section className="space-y-6"><header className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-green-700 text-white shadow-sm"><Beaker size={20}/></div><div><h1 className="text-2xl font-bold tracking-tight">Blundr</h1><p className="text-sm text-stone-500">Visual opening training with a controlled trainer.</p></div></div><button onClick={()=>setShowSettings(true)} className="rounded-2xl bg-white p-3 shadow-sm"><Settings className="text-stone-500" size={20}/></button></header>{shouldShowOnboarding(onboardingProfile)&&<Link href="/onboarding" className="flex items-center justify-between rounded-3xl border border-green-200 bg-green-50 p-4 text-left shadow-sm"><div><div className="text-sm font-black uppercase tracking-[0.18em] text-green-700">Onboarding incomplete</div><p className="mt-2 text-sm leading-6 text-stone-700">Finish setup to save your progress, choose a starter pack, and keep Daily BLUNDR across sessions.</p></div><ChevronRight className="text-green-700" size={20}/></Link>}<div className="grid grid-cols-2 gap-3"><MetricCard label="Accuracy" value={`${accuracy}%`} sub="all time" icon={<Trophy size={19}/>}/><MetricCard label="Streak" value={String(progress.streak)} sub="correct" icon={<Flame size={19}/>}/><MetricCard label="Review" value={String(mistakes.length)} sub="mistakes" icon={<XCircle size={19}/>} warning/><MetricCard label="Runtime openings" value={String(STAGE2_OPENING_AVAILABILITY_MATRIX.length)} sub="local crawled" icon={<BookOpen size={19}/>}/></div><TempoDailyBlundrCard /><div className="rounded-3xl bg-stone-900 p-4 text-white shadow-sm"><div className="flex items-center gap-2 text-sm font-bold text-green-300"><Cloud size={17}/> v2.7.33</div><p className="mt-2 text-sm leading-6 text-stone-300">Training now uses rule-only visual cues by default. Blundr Brain is reserved for manual reveal/debug, so normal practice stays fast, deterministic, and inexpensive.</p></div><div className="space-y-3">{repertoires.slice(0,5).map(r=>{const positions=getRepertoirePositionCount(r);return <button key={r.id} onClick={()=>selectRepertoire(r.id)} className="flex w-full items-center gap-3 rounded-3xl border border-stone-200 bg-white p-3 text-left shadow-sm"><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {positions} positions</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>})}</div></section>}
     {activeTab==="repertoire"&&<section className="space-y-5"><header className="flex items-start justify-between gap-3"><div><h1 className="text-2xl font-bold tracking-tight">Repertoires</h1><p className="text-sm text-stone-500">Reliable openings included in the app.</p></div><button onClick={()=>setShowAddLine(true)} className="rounded-2xl bg-green-700 px-4 py-2 text-sm font-black text-white">Add</button></header><div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-sm"><Search size={18} className="text-stone-400"/><span className="text-sm text-stone-400">Search repertoires</span></div><div className="space-y-3">{repertoires.map(r=>{const positions=getRepertoirePositionCount(r);return <button key={r.id} onClick={()=>selectRepertoire(r.id)} className={classNames("flex w-full items-center gap-3 rounded-3xl border bg-white p-3 text-left shadow-sm",r.id===canonicalSelectedRepertoireId?"border-green-700":"border-stone-200")}><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-3xl">{r.color==="white"?"♙":"♟"}</div><div className="min-w-0 flex-1"><div className="font-bold">{r.name}</div><div className="text-sm text-stone-500">{r.lines.length} lines • {positions} positions • {r.color}</div><p className="mt-1 line-clamp-2 text-xs text-stone-400">{r.description}</p></div><ChevronRight className="text-stone-400" size={20}/></button>})}</div><div className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm"><div className="mb-3 flex items-center justify-between gap-3"><div><h2 className="text-lg font-black tracking-tight">Runtime catalog</h2><p className="text-sm text-stone-500">Local crawled runtime package training lines for all 21 openings.</p></div><div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-600">{STAGE2_OPENING_AVAILABILITY_MATRIX.length} visible</div></div><div className="grid gap-2">{STAGE2_OPENING_AVAILABILITY_MATRIX.map((opening)=>{const trainable=repertoires.some((rep)=>rep.id===opening.openingId);return <button key={opening.openingId} onClick={()=>selectRepertoire(opening.openingId)} className={classNames("flex items-center justify-between gap-3 rounded-2xl border p-3 text-left shadow-sm",trainable?"border-green-200 bg-green-50":"border-stone-200 bg-stone-50 opacity-90",opening.openingId===canonicalSelectedRepertoireId?"ring-2 ring-green-700/30":"")}><div className="min-w-0"><div className="font-bold">{opening.displayName}</div><div className="text-xs text-stone-500">{opening.openingId} • {opening.learnerPerspective} • {opening.runtimeNodeCount.toLocaleString()} nodes • {opening.runtimeCandidateMoveCount.toLocaleString()} moves</div></div><div className="text-right text-xs font-black text-stone-500"><div>{opening.contentStatus}</div><div>{opening.qaStatus}</div></div></button>})}</div></div></section>}
     {activeTab==="train"&&<section className="space-y-4">
       <header className="flex items-start justify-between gap-3">
