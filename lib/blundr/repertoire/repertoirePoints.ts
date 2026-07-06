@@ -16,6 +16,8 @@ export function getPointAwardForSource(source: RepertoirePointSource): number {
       return REPERTOIRE_POINT_AWARDS.continuationCompleted;
     case "daily_blundr_deck_completed":
       return REPERTOIRE_POINT_AWARDS.dailyBlundrDeckCompleted;
+    case "reward_bonus":
+      return 0;
     case "manual_dev_adjustment":
       return 0;
     default:

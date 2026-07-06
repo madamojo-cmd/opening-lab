@@ -60,6 +60,7 @@ export function normalizeRepertoirePointEvent(raw: unknown): RepertoirePointEven
     input.source === "opening_run_completed" ||
     input.source === "continuation_completed" ||
     input.source === "daily_blundr_deck_completed" ||
+    input.source === "reward_bonus" ||
     input.source === "manual_dev_adjustment"
       ? input.source
       : "manual_dev_adjustment";

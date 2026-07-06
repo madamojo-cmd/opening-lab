@@ -5,6 +5,8 @@ import type { DailyRetentionProgress, StreakRecord, UserTrainingProfile } from "
 import { getOnboardingAuthSession } from "../onboarding/onboardingAuth";
 import { loadRepertoireProgress, earnAndPersistRepertoirePoints } from "../repertoire/repertoireProgressService";
 import { getPointAwardForSource } from "../repertoire/repertoirePoints";
+import { REWARD_CACHE_COPY } from "../rewards/rewardConstants";
+import { evaluateTempoCacheRewards } from "../rewards/tempoCacheService";
 import { getDailyBlundrDateKey } from "../daily/dailyBlundrStorage";
 import { createAllRingsClosedEventId, createStreakMilestoneEventId } from "./dailyRingEvents";
 import { createDefaultDailyRingDay, applyDailyRingActivity, getDailyRingPercent, getDailyRingSummary, isDailyRingClosed, areAllDailyRingsClosed } from "./dailyRingProgress";
@@ -172,8 +174,9 @@ function buildFallbackFailure(code: string, message: string): DailyRingCompletio
   };
 }
 
-function chooseTempoMessage(result: Pick<DailyRingCompletionResult, "source" | "ringClosedThisAction" | "allRingsClosedThisAction" | "streakMilestones" | "activityAlreadyApplied">): string {
+function chooseTempoMessage(result: Pick<DailyRingCompletionResult, "source" | "ringClosedThisAction" | "allRingsClosedThisAction" | "streakMilestones" | "activityAlreadyApplied" | "rewardPointsAwarded">): string {
   if (result.activityAlreadyApplied) return "That rep already counted.";
+  if (result.rewardPointsAwarded > 0) return REWARD_CACHE_COPY.intro;
   if (result.allRingsClosedThisAction) {
     return result.streakMilestones?.length ? "All three rings closed. Tempo approves." : "All three rings closed. Tempo approves.";
   }
@@ -203,8 +206,10 @@ function buildSummaryLines(input: {
   ringClosedThisAction: boolean;
   allRingsClosedThisAction: boolean;
   repertoirePointsAwarded: number;
+  rewardPointsAwarded: number;
   xpAwarded: number;
   streakMilestones: ReadonlyArray<{ milestoneDays: 7 | 30; pointsAwarded: number; xpAwarded: number }>;
+  rewardSummaries?: readonly string[];
 }): string[] {
   const lines: string[] = [];
   if (input.source === "opening_run_completed") {
@@ -226,8 +231,14 @@ function buildSummaryLines(input: {
   if (input.xpAwarded > 0) {
     lines.push(`+${input.xpAwarded} XP.`);
   }
+  if (input.rewardPointsAwarded > 0) {
+    lines.push(`+${input.rewardPointsAwarded} reward point${input.rewardPointsAwarded === 1 ? "" : "s"}.`);
+  }
   for (const milestone of input.streakMilestones) {
     lines.push(`${milestone.milestoneDays}-day streak reached.`);
+  }
+  for (const rewardLine of input.rewardSummaries ?? []) {
+    lines.push(rewardLine);
   }
   return lines;
 }
@@ -320,6 +331,11 @@ export function buildDailyRingCompletionResult(args: {
       activityEvent: baseResult.activityEvent,
       pointAwards: [],
       xpEvents: [],
+      rewardPointsAwarded: 0,
+      rewardRolls: [],
+      rewardGrants: [],
+      rewardHistory: undefined,
+      tempoCacheState: "closed",
       summaryTitle: "Already counted",
       summaryLines: ["Tempo already recorded this rep."],
       tempoMessage: "That rep already counted.",
@@ -427,6 +443,7 @@ export function buildDailyRingCompletionResult(args: {
       ringClosedThisAction: baseResult.ringClosedThisAction,
       allRingsClosedThisAction: baseResult.allRingsClosedThisAction,
       repertoirePointsAwarded: totalPointAwards,
+      rewardPointsAwarded: 0,
       xpAwarded: totalXpAwarded,
       streakMilestones,
     }),
@@ -436,6 +453,7 @@ export function buildDailyRingCompletionResult(args: {
       allRingsClosedThisAction: baseResult.allRingsClosedThisAction,
       streakMilestones,
       activityAlreadyApplied: false,
+      rewardPointsAwarded: 0,
     } as DailyRingCompletionResult),
     nextRecommendedAction: chooseNextRecommendedAction({
       allRingsClosedThisAction: baseResult.allRingsClosedThisAction,
@@ -500,8 +518,50 @@ export async function completeDailyRingActivity(args: {
     }
   }
 
+  const rewardBatch = await evaluateTempoCacheRewards({
+    userId,
+    localDate: result.localDate,
+    activitySource: args.activity.source,
+    ringClosedThisAction: result.ringClosedThisAction,
+    allRingsClosedThisAction: result.allRingsClosedThisAction,
+    currentStreakDays: result.streakRecord.currentStreakDays,
+    totalAllRingsClosedDays: result.streakRecord.totalAllRingsClosedDays,
+    starterPackId: repertoireProgress.selectedStarterPackId,
+    now: args.now,
+  });
+
+  result.rewardPointsAwarded = rewardBatch.rewardPointsAwarded;
+  result.rewardRolls = rewardBatch.rewardRolls;
+  result.rewardGrants = rewardBatch.rewardGrants;
+  result.rewardHistory = rewardBatch.rewardHistory;
+  result.tempoCacheState = rewardBatch.state;
+  result.repertoirePointsAwarded += rewardBatch.rewardPointsAwarded;
+  result.pointAwards = [
+    ...result.pointAwards,
+    ...rewardBatch.rewardGrants.map((grant) => ({
+      id: grant.id,
+      source: "reward_bonus" as const,
+      points: grant.pointsApplied,
+      label: grant.displayName,
+    })),
+  ];
+  if (rewardBatch.rewardPointsAwarded > 0) {
+    result.dayRecord = {
+      ...result.dayRecord,
+      repertoirePointsEarnedToday: result.dayRecord.repertoirePointsEarnedToday + rewardBatch.rewardPointsAwarded,
+      updatedAt: args.now ?? result.dayRecord.updatedAt,
+    };
+    result.summaryLines = [
+      ...result.summaryLines,
+      ...rewardBatch.rewardGrants.map((grant) => `${grant.displayName} +${grant.pointsApplied} repertoire points.`),
+    ];
+    result.tempoMessage = REWARD_CACHE_COPY.intro;
+  }
+
   const latestProgress = loadRepertoireProgress({ userId, now: args.now });
   result.repertoireProgress = latestProgress;
+
+  syncDailyRingSnapshotLocally(result.dayRecord, result.streakRecord, args.profile ?? getLocalTrainingProfile(userId) ?? undefined);
 
   await syncDailyRingSnapshotRemotely(
     result.dayRecord,

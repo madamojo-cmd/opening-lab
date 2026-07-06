@@ -118,8 +118,12 @@ type SupabaseStreakRecordRow = {
 
 type SupabaseRewardHistoryRow = {
   user_id: string;
+  all_rings_days_since_random_reward: number;
   random_bonus_pity_counter: number;
+  last_random_reward_local_date: string | null;
   last_random_bonus_at: string | null;
+  last_pity_guarantee_local_date: string | null;
+  applied_reward_ids: string[] | null;
   updated_at: string;
 };
 
@@ -432,8 +436,12 @@ function mapStreakRecordRowToModel(row: SupabaseStreakRecordRow | null): StreakR
 function mapRewardHistoryRow(history: UserRewardHistory): SupabaseRewardHistoryRow {
   return {
     user_id: history.userId,
+    all_rings_days_since_random_reward: Math.max(0, Number(history.allRingsDaysSinceRandomReward) || 0),
     random_bonus_pity_counter: Math.max(0, Number(history.randomBonusPityCounter) || 0),
+    last_random_reward_local_date: history.lastRandomRewardLocalDate ?? null,
     last_random_bonus_at: history.lastRandomBonusAt ?? null,
+    last_pity_guarantee_local_date: history.lastPityGuaranteeLocalDate ?? null,
+    applied_reward_ids: Array.isArray(history.appliedRewardIds) ? normalizeStringArray(history.appliedRewardIds) : [],
     updated_at: normalizeText(history.updatedAt) || nowIso(),
   };
 }
@@ -443,8 +451,12 @@ function mapRewardHistoryRowToModel(row: SupabaseRewardHistoryRow | null): UserR
   const base = createDefaultRewardHistory(row.user_id, row.updated_at);
   return {
     ...base,
+    allRingsDaysSinceRandomReward: Math.max(0, Number(row.all_rings_days_since_random_reward ?? row.random_bonus_pity_counter) || 0),
     randomBonusPityCounter: Math.max(0, Number(row.random_bonus_pity_counter) || 0),
+    lastRandomRewardLocalDate: row.last_random_reward_local_date ?? undefined,
     lastRandomBonusAt: row.last_random_bonus_at ?? undefined,
+    lastPityGuaranteeLocalDate: row.last_pity_guarantee_local_date ?? undefined,
+    appliedRewardIds: normalizeStringArray(row.applied_reward_ids),
     updatedAt: row.updated_at || base.updatedAt,
   };
 }
@@ -658,7 +670,7 @@ export function createBlundrSupabasePersistenceAdapter(input: SupabasePersistenc
     async appendRewardRoll(roll: RewardRoll) {
       return runClientOperation(accessToken, async (client) => {
         const row = mapRewardRollRow(roll);
-        const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.rewardRolls).insert(row).select("*").maybeSingle();
+        const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.rewardRolls).upsert(row, { onConflict: "id" }).select("*").maybeSingle();
         if (error) return err("supabase_write_failed", "Could not save reward roll.", error, true);
         return ok((data ? mapRewardRollRowToModel(data as SupabaseRewardRollRow) : roll) ?? roll);
       });

@@ -14,6 +14,7 @@ import { DailyRingSummary } from "./DailyRingSummary";
 import { DailyRingTempoCallout } from "./DailyRingTempoCallout";
 import { DailyRingCompletionBanner } from "./DailyRingCompletionBanner";
 import { StreakSummaryCard } from "@/components/streaks/StreakSummaryCard";
+import { TempoCacheCard } from "@/components/rewards/TempoCacheCard";
 
 function classNames(...classes: Array<string | false | null | undefined>): string {
   return classes.filter(Boolean).join(" ");
@@ -105,6 +106,13 @@ export function DailyRingsCard({ repertoireProgress, refreshKey, completionResul
 
       <div className="mt-4 grid gap-3">
         {completionResult ? <DailyRingCompletionBanner result={completionResult} /> : null}
+        {completionResult?.rewardGrants?.length ? (
+          <TempoCacheCard
+            state={completionResult.tempoCacheState ?? "applied"}
+            rewardGrants={completionResult.rewardGrants}
+            rewardHistory={completionResult.rewardHistory ?? null}
+          />
+        ) : null}
         {ringItems.map((ring) => (
           <DailyRingSummary key={ring.ringId} label={ring.label} description={ring.description} progress={ring.progress} goal={ring.goal} percent={ring.percent} closed={ring.closed} />
         ))}

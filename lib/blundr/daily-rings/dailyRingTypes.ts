@@ -1,6 +1,8 @@
 import type { RepertoirePointSource, RepertoireProgress } from "../repertoire/repertoireTypes";
 import type { StreakProgressRecord } from "../streaks/streakTypes";
 import type { XpEvent, XpSource } from "../xp/xpTypes";
+import type { RewardGrantRecord, TempoCacheState } from "../rewards/rewardTypes";
+import type { RewardRoll, UserRewardHistory } from "../accounts/accountTypes";
 
 export type DailyRingId = "daily_tempo" | "daily_battery" | "daily_blundr";
 
@@ -108,10 +110,15 @@ export type DailyRingCompletionResult = {
   allRingsClosedThisAction: boolean;
   activityAlreadyApplied: boolean;
   repertoirePointsAwarded: number;
+  rewardPointsAwarded: number;
   xpAwarded: number;
   activityEvent: DailyRingActivityEvent;
   pointAwards: DailyRingPointAward[];
   xpEvents: DailyRingXpAward[];
+  rewardRolls?: RewardRoll[];
+  rewardGrants?: RewardGrantRecord[];
+  rewardHistory?: UserRewardHistory;
+  tempoCacheState?: TempoCacheState;
   streakMilestone?: {
     milestoneDays: 7 | 30;
     pointsAwarded: number;

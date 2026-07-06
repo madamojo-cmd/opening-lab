@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircle2, Sparkles } from "lucide-react";
 
 import { BLUNDR_ANALYTICS_EVENTS } from "@/lib/blundr/analytics/blundrAnalyticsEvents";
@@ -8,6 +8,7 @@ import { trackBlundrAnalyticsEvent } from "@/lib/blundr/analytics/blundrAnalytic
 import type { DailyRingCompletionResultLike } from "@/lib/blundr/daily-rings/dailyRingTypes";
 import { DailyRingCompletionBanner } from "@/components/daily-rings/DailyRingCompletionBanner";
 import { StreakSummaryCard } from "@/components/streaks/StreakSummaryCard";
+import { TempoCacheModal } from "@/components/rewards/TempoCacheModal";
 
 function classNames(...classes: Array<string | false | null | undefined>): string {
   return classes.filter(Boolean).join(" ");
@@ -19,6 +20,8 @@ type TrainingCompletionSummaryProps = {
 };
 
 export function TrainingCompletionSummary({ result, className }: TrainingCompletionSummaryProps) {
+  const [showTempoCache, setShowTempoCache] = useState(false);
+
   useEffect(() => {
     if (!result || !result.ok) return;
     trackBlundrAnalyticsEvent(BLUNDR_ANALYTICS_EVENTS.TRAINING_COMPLETION_SUMMARY_VIEWED, {
@@ -28,6 +31,14 @@ export function TrainingCompletionSummary({ result, className }: TrainingComplet
       repertoirePointsAwarded: result.repertoirePointsAwarded,
       xpAwarded: result.xpAwarded,
     });
+  }, [result]);
+
+  useEffect(() => {
+    if (result && result.ok && (result.rewardGrants?.length ?? 0) > 0) {
+      setShowTempoCache(true);
+      return;
+    }
+    setShowTempoCache(false);
   }, [result]);
 
   if (!result) return null;
@@ -46,6 +57,18 @@ export function TrainingCompletionSummary({ result, className }: TrainingComplet
 
   return (
     <section className={classNames("rounded-3xl border border-green-200 bg-green-50 p-4 shadow-sm", className)}>
+      {result.ok ? (
+        <TempoCacheModal
+          open={showTempoCache && (result.rewardGrants?.length ?? 0) > 0}
+          userId={result.userId}
+          localDate={result.localDate}
+          state={result.tempoCacheState ?? "applied"}
+          rewardGrants={result.rewardGrants ?? []}
+          rewardHistory={result.rewardHistory ?? null}
+          onClose={() => setShowTempoCache(false)}
+          onPrimaryAction={() => setShowTempoCache(false)}
+        />
+      ) : null}
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 text-sm font-black text-green-900">

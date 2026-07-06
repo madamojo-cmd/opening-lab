@@ -86,8 +86,8 @@ function failSync<T>(result: PersistenceResult<T>): PersistenceResult<UserAccoun
   return { ok: false, error: getPersistenceError(result) };
 }
 
-function buildDailyRetentionProgress(userId: string, localState: ReturnType<typeof readLocalDailyBlundrState>, profile: UserTrainingProfile, now: string): DailyRetentionProgress {
-  const progress = createDefaultDailyRetentionProgress(userId, localState.dateKey, {
+function buildDailyRetentionProgress(userId: string, localState: ReturnType<typeof readLocalDailyBlundrState>, profile: UserTrainingProfile, now: string, localDate: string): DailyRetentionProgress {
+  const progress = createDefaultDailyRetentionProgress(userId, localDate, {
     dailyTempoGoal: profile.dailyTempoGoal,
     dailyBatteryGoal: profile.dailyBatteryGoal,
     dailyBlundrGoal: profile.dailyBlundrGoal,
@@ -103,7 +103,7 @@ function buildDailyRetentionProgress(userId: string, localState: ReturnType<type
   progress.allRingsClosed = progress.rings.dailyTempo.completed && progress.rings.dailyBattery.completed && progress.rings.dailyBlundr.completed;
   progress.allRingsClosedAt = progress.allRingsClosed ? now : undefined;
   progress.xpEarned = Math.max(0, localState.store.progress.localDailyXp ?? 0);
-  progress.streakEligible = Boolean(localState.store.progress.lastCompletedDateKey === localState.dateKey);
+  progress.streakEligible = Boolean(localState.store.progress.lastCompletedDateKey === localDate);
   progress.completedAt = progress.allRingsClosed ? now : undefined;
   progress.updatedAt = now;
   return progress;
@@ -116,8 +116,9 @@ export function readLocalDailyBlundrStateSnapshot() {
 export function prepareDailyStateForAccountSync(userId: string, input: DailyStateSyncInput = {}): UserAccountSyncState {
   const localState = readLocalDailyBlundrState();
   const now = input.now ?? nowIso();
+  const localDate = normalizeText(input.now) ? localDateKey(new Date(input.now as string)) : localState.dateKey;
   const profile = input.profile ?? createDefaultTrainingProfile(userId, now);
-  const localRetentionProgress = getLocalDailyRetentionProgress(userId, localState.dateKey);
+  const localRetentionProgress = getLocalDailyRetentionProgress(userId, localDate);
   const localStreakRecord = getLocalStreakRecord(userId);
   const repertoire =
     input.repertoire ??
@@ -128,11 +129,11 @@ export function prepareDailyStateForAccountSync(userId: string, input: DailyStat
     });
   const streakRecord = input.streakRecord ?? localStreakRecord ?? createDefaultStreakRecord(userId, now);
   const rewardHistory = input.rewardHistory ?? createDefaultRewardHistory(userId, now);
-  const dailyRetentionProgress = input.dailyRetentionProgress ?? localRetentionProgress ?? buildDailyRetentionProgress(userId, localState, profile, now);
+  const dailyRetentionProgress = input.dailyRetentionProgress ?? localRetentionProgress ?? buildDailyRetentionProgress(userId, localState, profile, now, localDate);
 
   return {
     userId,
-    localDate: localState.dateKey,
+    localDate,
     profile,
     repertoire,
     streakRecord,

@@ -24,6 +24,10 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function normalizeText(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
 function localDateKey(date = new Date()): string {
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -101,8 +105,13 @@ export function createDefaultStreakRecord(userId: string, now = nowIso()): Strea
 export function createDefaultRewardHistory(userId: string, now = nowIso()): UserRewardHistory {
   return {
     userId,
+    allRingsDaysSinceRandomReward: 0,
     randomBonusPityCounter: 0,
+    lastRandomRewardLocalDate: undefined,
     updatedAt: now,
+    lastRandomBonusAt: undefined,
+    lastPityGuaranteeLocalDate: undefined,
+    appliedRewardIds: [],
   };
 }
 
@@ -143,9 +152,17 @@ export function createDefaultOpeningUnlockEvent(userId: string, openingId: strin
   };
 }
 
-export function createDefaultRewardRoll(userId: string, trigger: RewardTrigger, seed: string, now = nowIso(), didReward = false, reward?: VariableReward): RewardRoll {
+export function createDefaultRewardRoll(
+  userId: string,
+  trigger: RewardTrigger,
+  seed: string,
+  now = nowIso(),
+  didReward = false,
+  reward?: VariableReward,
+  triggerEventId?: string,
+): RewardRoll {
   return {
-    id: `${userId}:${trigger}:${seed}:${now}`,
+    id: normalizeText(triggerEventId) || `${userId}:${trigger}:${seed}:${now}`,
     userId,
     trigger,
     rolledAt: now,

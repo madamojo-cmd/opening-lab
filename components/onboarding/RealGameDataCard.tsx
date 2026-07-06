@@ -2,6 +2,8 @@
 
 import { ChevronRight, Layers3, Scale, Users } from "lucide-react";
 import type { ReactNode } from "react";
+import { BLUNDR_ONBOARDING_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
+import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 import { TempoCallout } from "./TempoCallout";
 
 type RealGameDataCardProps = {
@@ -71,6 +73,7 @@ export function RealGameDataCard({ ratingBandLabel, ratingBandDescription, examp
           </div>
         </div>
         <div className="rounded-2xl border border-stone-200 bg-stone-50 p-3">
+          <BlundrAssetImage asset={BLUNDR_ONBOARDING_ASSETS.realGameData} alt="Real game data illustration" variant="onboardingIllustration" className="mb-3" />
           <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-700">Common replies</div>
           <div className="mt-3 grid gap-2">
             {exampleReplies.map((reply) => (
@@ -92,4 +95,3 @@ export function RealGameDataCard({ ratingBandLabel, ratingBandDescription, examp
     </section>
   );
 }
-

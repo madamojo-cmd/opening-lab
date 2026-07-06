@@ -111,6 +111,9 @@ export type RewardTrigger =
   | "daily_battery_ring_closed"
   | "daily_blundr_ring_closed"
   | "all_rings_closed"
+  | "three_all_rings_completions"
+  | "weekly_cache"
+  | "monthly_cache"
   | "three_day_streak"
   | "seven_day_streak"
   | "thirty_day_streak";
@@ -146,8 +149,12 @@ export type RewardRoll = {
 
 export type UserRewardHistory = {
   userId: string;
+  allRingsDaysSinceRandomReward: number;
   randomBonusPityCounter: number;
+  lastRandomRewardLocalDate?: string;
   lastRandomBonusAt?: string;
+  lastPityGuaranteeLocalDate?: string;
+  appliedRewardIds: string[];
   updatedAt: string;
 };
 

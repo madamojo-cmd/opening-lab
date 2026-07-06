@@ -4,6 +4,7 @@ export type RepertoirePointSource =
   | "opening_run_completed"
   | "continuation_completed"
   | "daily_blundr_deck_completed"
+  | "reward_bonus"
   | "manual_dev_adjustment";
 
 export type RepertoirePointEvent = {

@@ -13,6 +13,7 @@ import { RepertoireOpeningGrid } from "./RepertoireOpeningGrid";
 import { RepertoirePointsSummary } from "./RepertoirePointsSummary";
 import { RepertoireTempoCallout } from "./RepertoireTempoCallout";
 import { RepertoireUnlockProgress } from "./RepertoireUnlockProgress";
+import { RewardHistoryList } from "@/components/rewards/RewardHistoryList";
 
 type RepertoireProgressPanelProps = {
   onTrainOpening?: (openingId: string) => void;
@@ -154,6 +155,7 @@ export function RepertoireProgressPanel({ onTrainOpening, homeHref = "/", classN
       <RepertoireUnlockProgress progress={progress} />
 
       <RepertoireTempoCallout />
+      <RewardHistoryList />
 
       <div className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between gap-3">

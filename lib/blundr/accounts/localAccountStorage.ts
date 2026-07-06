@@ -254,10 +254,27 @@ function normalizeRewardHistory(raw: unknown): UserRewardHistory | null {
   const userId = normalizeText(raw.userId);
   if (!userId) return null;
   const base = createDefaultRewardHistory(userId, normalizeText(raw.updatedAt) || nowIso());
+  const allRingsDaysSinceRandomReward = Math.max(
+    0,
+    Number(
+      raw.allRingsDaysSinceRandomReward ??
+        raw.randomBonusPityCounter ??
+        raw.all_rings_days_since_random_reward ??
+        0,
+    ) || 0,
+  );
+  const appliedRewardIdsRaw = raw.appliedRewardIds ?? raw.applied_reward_ids;
+  const appliedRewardIds = Array.isArray(appliedRewardIdsRaw)
+    ? Array.from(new Set(appliedRewardIdsRaw.map((entry) => normalizeText(entry)).filter(Boolean)))
+    : [];
   return {
     ...base,
-    randomBonusPityCounter: Math.max(0, Number(raw.randomBonusPityCounter) || 0),
-    lastRandomBonusAt: normalizeText(raw.lastRandomBonusAt) || undefined,
+    allRingsDaysSinceRandomReward,
+    randomBonusPityCounter: allRingsDaysSinceRandomReward,
+    lastRandomRewardLocalDate: normalizeText(raw.lastRandomRewardLocalDate ?? raw.last_random_reward_local_date) || undefined,
+    lastRandomBonusAt: normalizeText(raw.lastRandomBonusAt ?? raw.last_random_bonus_at) || undefined,
+    lastPityGuaranteeLocalDate: normalizeText(raw.lastPityGuaranteeLocalDate ?? raw.last_pity_guarantee_local_date) || undefined,
+    appliedRewardIds,
     updatedAt: normalizeText(raw.updatedAt) || base.updatedAt,
   };
 }
@@ -271,10 +288,19 @@ function normalizeRewardRoll(raw: unknown): RewardRoll | null {
     raw.trigger === "daily_battery_ring_closed" ||
     raw.trigger === "daily_blundr_ring_closed" ||
     raw.trigger === "all_rings_closed" ||
+    raw.trigger === "three_all_rings_completions" ||
+    raw.trigger === "weekly_cache" ||
+    raw.trigger === "monthly_cache" ||
     raw.trigger === "three_day_streak" ||
     raw.trigger === "seven_day_streak" ||
     raw.trigger === "thirty_day_streak"
-      ? raw.trigger
+      ? raw.trigger === "three_day_streak"
+        ? "three_all_rings_completions"
+        : raw.trigger === "seven_day_streak"
+          ? "weekly_cache"
+          : raw.trigger === "thirty_day_streak"
+            ? "monthly_cache"
+            : raw.trigger
       : "daily_blundr_ring_closed";
   if (!id || !userId) return null;
   const reward = isRecord(raw.reward)

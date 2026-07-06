@@ -26,7 +26,7 @@ export function TempoCallout({ title = "Tempo", copy, tone = "default", classNam
   return (
     <section className={classNames("rounded-[1.75rem] border p-4 shadow-sm", toneClass, className)}>
       <div className="flex items-start gap-3">
-        <TempoMascot className="shrink-0 scale-90" />
+        <TempoMascot className="!h-12 !w-12 shrink-0" />
         <div className="min-w-0 flex-1">
           <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">{title}</div>
           <p className="mt-1 text-sm leading-6 text-stone-700">{copy}</p>
@@ -36,4 +36,3 @@ export function TempoCallout({ title = "Tempo", copy, tone = "default", classNam
     </section>
   );
 }
-

@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 import { BookOpen, ChevronLeft } from "lucide-react";
+import { BLUNDR_BRAND_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
+import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 
 type OnboardingHeaderProps = {
   title: string;
@@ -20,9 +22,12 @@ export function OnboardingHeader({ title, copy, eyebrow = "Blundr onboarding", o
   return (
     <header className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-green-700">
-          <BookOpen size={14} />
-          {eyebrow}
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-green-700">
+            <BookOpen size={14} />
+            {eyebrow}
+          </div>
+          <BlundrAssetImage asset={BLUNDR_BRAND_ASSETS.logoWordmark} alt="Blundr" variant="brandWordmark" priority className="max-w-[8rem] sm:max-w-[10rem]" />
         </div>
         {onBack ? (
           <button
@@ -45,4 +50,3 @@ export function OnboardingHeader({ title, copy, eyebrow = "Blundr onboarding", o
     </header>
   );
 }
-

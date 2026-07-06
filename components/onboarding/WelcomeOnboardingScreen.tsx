@@ -1,6 +1,8 @@
 "use client";
 
 import { ArrowRight, BookOpen, Users, Target } from "lucide-react";
+import { BLUNDR_TEMPO_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
+import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 import { OnboardingButtonRow } from "./OnboardingButtonRow";
 import { OnboardingFeatureRow } from "./OnboardingFeatureRow";
 import { OnboardingShell } from "./OnboardingShell";
@@ -22,6 +24,16 @@ export function WelcomeOnboardingScreen({ stepIndex, stepCount, onNext }: Welcom
       stepCount={stepCount}
       footer={<OnboardingButtonRow primaryLabel="Get Started" onPrimary={onNext} primaryTone="green" />}
     >
+      <div className="rounded-[1.75rem] border border-green-100 bg-[linear-gradient(180deg,_rgba(255,255,255,1),_rgba(236,246,226,0.9))] p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">Welcome</div>
+            <p className="mt-2 text-sm leading-6 text-stone-700">Tempo keeps the training loop deterministic and gives you rare extra boosts on top.</p>
+          </div>
+          <BlundrAssetImage asset={BLUNDR_TEMPO_ASSETS.fullBody} alt="Tempo full body" variant="tempoHero" />
+        </div>
+      </div>
+
       <div className="grid gap-3">
         <OnboardingFeatureRow label={ONBOARDING_FEATURE_ROWS[0].label} description={ONBOARDING_FEATURE_ROWS[0].description} icon={<Users size={16} />} />
         <OnboardingFeatureRow label={ONBOARDING_FEATURE_ROWS[1].label} description={ONBOARDING_FEATURE_ROWS[1].description} icon={<BookOpen size={16} />} />
@@ -38,4 +50,3 @@ export function WelcomeOnboardingScreen({ stepIndex, stepCount, onNext }: Welcom
     </OnboardingShell>
   );
 }
-
