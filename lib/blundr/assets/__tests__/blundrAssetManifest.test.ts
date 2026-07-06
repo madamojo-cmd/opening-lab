@@ -39,8 +39,11 @@ for (const group of assetGroups) {
     assert.notEqual(assetPath.trim(), "", `Expected non-empty asset path: ${assetPath}`);
     assert.ok(assetPath.startsWith("/"), `Expected root-relative asset path: ${assetPath}`);
     assert.ok(!assetPath.includes(" "), `Expected asset path without spaces: ${assetPath}`);
+    assert.ok(!assetPath.startsWith("/assets/_incoming"), `Expected asset path outside incoming drop: ${assetPath}`);
     assert.ok(!assetPath.includes("_incoming"), `Expected canonical asset path without incoming drop reference: ${assetPath}`);
     assert.ok(!assetPath.includes("__MACOSX"), `Expected asset path without macOS metadata reference: ${assetPath}`);
+    assert.ok(!assetPath.includes("assets/Blundr Assets"), `Expected asset path outside source drop folder: ${assetPath}`);
+    assert.ok(!assetPath.includes("BNlundr assets transparetnt"), `Expected asset path outside source drop folder: ${assetPath}`);
     assert.ok(existsSync(resolve(process.cwd(), `public${assetPath}`)), `Missing canonical asset file: ${assetPath}`);
   }
 }

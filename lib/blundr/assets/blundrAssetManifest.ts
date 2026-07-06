@@ -19,8 +19,8 @@ export const BLUNDR_REWARD_ASSETS = {
   choiceToken: "/assets/rewards/reward-choice-token.png",
   epicBonus: "/assets/rewards/reward-epic-bonus.png",
   cardBackground: "/assets/rewards/reward-card-background.png",
-  cardBackWide: "/assets/rewards/reward-card-back-wide.jpg",
-  cardBackPortrait: "/assets/rewards/reward-card-back-portrait.jpg",
+  cardBackWide: "/assets/rewards/reward-card-back-wide.png",
+  cardBackPortrait: "/assets/rewards/reward-card-back-portrait.png",
   rarityCommon: "/assets/rewards/reward-rarity-common.png",
   rarityUncommon: "/assets/rewards/reward-rarity-uncommon.png",
   rarityRare: "/assets/rewards/reward-rarity-rare.png",
@@ -29,13 +29,13 @@ export const BLUNDR_REWARD_ASSETS = {
 
 export const BLUNDR_REWARD_ANIMATIONS = {
   tempoCacheOpen: "/assets/rewards/animations/tempo-cache-open.mp4",
-  tempoCacheOpenFallback: "/assets/rewards/animations/tempo-cache-open-fallback.webp",
+  tempoCacheOpenFallback: "/assets/rewards/animations/tempo-cache-open-fallback.png",
   rewardPop: "/assets/rewards/animations/reward-pop.mp4",
-  rewardPopFallback: "/assets/rewards/animations/reward-pop-fallback.webp",
+  rewardPopFallback: "/assets/rewards/animations/reward-pop-fallback.png",
   pointsFloat: "/assets/rewards/animations/points-float.mp4",
-  pointsFloatFallback: "/assets/rewards/animations/points-float-fallback.webp",
+  pointsFloatFallback: "/assets/rewards/animations/points-float-fallback.png",
   streakFlare: "/assets/rewards/animations/streak-flare.mp4",
-  streakFlareFallback: "/assets/rewards/animations/streak-flare-fallback.webp",
+  streakFlareFallback: "/assets/rewards/animations/streak-flare-fallback.png",
 } as const;
 
 export const BLUNDR_ONBOARDING_ASSETS = {
