@@ -48,7 +48,7 @@ export const ONBOARDING_STEPS: readonly OnboardingStepDefinition[] = [
     id: "daily_goals",
     label: "Daily Goals",
     shortLabel: "Goals",
-    description: "Choose your daily tempo, battery, and Daily BLUNDR targets.",
+    description: "Choose your daily tempo, battery, and Daily Blundr targets.",
   },
   {
     id: "real_game_data",
@@ -64,7 +64,7 @@ export const ONBOARDING_STEPS: readonly OnboardingStepDefinition[] = [
   },
   {
     id: "training_modes",
-    label: "Assisted + Plain + Daily BLUNDR",
+    label: "Assisted + Plain + Daily Blundr",
     shortLabel: "Modes",
     description: "Explain guidance, recall, and adaptive reviews.",
   },
@@ -112,4 +112,3 @@ export function isFinalOnboardingStep(stepId: OnboardingStepId): boolean {
 export function getOnboardingStepCount(): number {
   return ONBOARDING_STEP_SEQUENCE.length;
 }
-

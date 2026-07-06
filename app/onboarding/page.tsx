@@ -224,7 +224,7 @@ function buildFinalSummary(state: BlundrOnboardingState): ReactNode {
         <div className="mt-2 text-sm font-black text-stone-950">{getRatingBandLabel(ratingBand.id)}</div>
         <p className="mt-1 text-sm leading-6 text-stone-600">{getRatingBandTrainingDescription(ratingBand.id)}</p>
         <p className="mt-3 text-sm leading-6 text-stone-600">
-          {dailyGoalPreset.label} goals: {state.dailyTempoGoal} Tempo, {state.dailyBatteryGoal} Battery, {state.dailyBlundrGoal} Daily BLUNDR.
+          {dailyGoalPreset.label} goals: {state.dailyTempoGoal} Tempo, {state.dailyBatteryGoal} Battery, {state.dailyBlundrGoal} Daily Blundr.
         </p>
       </div>
     </div>
@@ -733,7 +733,7 @@ export default function OnboardingPage() {
               accent: state.preferredTrainingMode === "plain" ? "green" : "stone",
             },
             {
-              label: "Daily BLUNDR",
+              label: "Daily Blundr",
               description: "Missed moves and weak ideas return as short adaptive reviews.",
               accent: "stone",
             },
@@ -807,7 +807,7 @@ export default function OnboardingPage() {
           Welcome
         </div>
         <p className="mt-2 text-sm leading-6 text-stone-600">
-          Choose a starter pack, set your level, and build a Daily BLUNDR habit that survives refreshes.
+          Choose a starter pack, set your level, and build a Daily Blundr habit that survives refreshes.
         </p>
       </div>
     </OnboardingShell>

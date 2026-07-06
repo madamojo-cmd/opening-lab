@@ -20,8 +20,8 @@ import type { DailyRingCompletionResultLike } from "@/lib/blundr/daily-rings/dai
 
 type DailyBlundrOverview = ReturnType<typeof loadDailyBlundrOverview>;
 
-const EMPTY_STATE_COPY = "Queue clear. Tempo does not have missed moves to review yet. Train an opening and Daily BLUNDR will start building your smart review loop.";
-const COMPLETION_COPY = "Daily BLUNDR complete. Tempo saved the important mistakes for future review.";
+const EMPTY_STATE_COPY = "Queue clear. Tempo does not have missed moves to review yet. Train an opening and Daily Blundr will start building your smart review loop.";
+const COMPLETION_COPY = "Daily Blundr complete. Tempo saved the important mistakes for future review.";
 
 const EMPTY_REVIEW_STATS = {
   totalReviewCards: 0,
@@ -100,7 +100,7 @@ export function DailyBlundrScreen() {
   const rewardClaimed = Boolean(overview && session?.rewardClaimedAt && overview.store.progress.lastRewardDateKey === overview.dateKey);
   const pendingCompletion = Boolean(complete && !rewardClaimed);
   const primaryStateLabel = !hasCards ? "Start" : rewardClaimed ? "Done" : pendingCompletion ? "Complete" : started ? "Resume" : "Start";
-  const primaryActionLabel = !hasCards ? "Back to Home" : rewardClaimed ? "Daily BLUNDR complete" : pendingCompletion ? "Complete Daily BLUNDR" : started ? "Resume Daily BLUNDR" : "Start Daily BLUNDR";
+  const primaryActionLabel = !hasCards ? "Back to Home" : rewardClaimed ? "Daily Blundr complete" : pendingCompletion ? "Complete Daily Blundr" : started ? "Resume Daily Blundr" : "Start Daily Blundr";
   const canClaim = Boolean(pendingCompletion && session);
   const completionButtonTone = canClaim ? "bg-green-700 text-white shadow-sm" : "bg-stone-200 text-stone-500";
 
@@ -192,10 +192,10 @@ export function DailyBlundrScreen() {
                 <BlundrAssetImage asset={BLUNDR_TEMPO_ASSETS.thinking} alt="Tempo thinking" variant="tempoInline" className="mx-auto" />
                 <BlundrAssetImage asset={BLUNDR_EMPTY_STATE_ASSETS.loadingTempo} alt="Loading Tempo" variant="emptyState" className="mx-auto" />
               </div>
-              <div className="mt-4 text-xs font-black uppercase tracking-[0.18em] text-green-700">Loading Daily BLUNDR</div>
+              <div className="mt-4 text-xs font-black uppercase tracking-[0.18em] text-green-700">Loading Daily Blundr</div>
               <h1 className="mt-2 text-2xl font-black tracking-tight text-stone-950">Tempo is lining up today&apos;s loop.</h1>
               <p className="mt-2 text-sm leading-6 text-stone-600">
-                Your local Daily BLUNDR state is loading. If needed, Tempo will fall back safely to local data.
+                Your local Daily Blundr state is loading. If needed, Tempo will fall back safely to local data.
               </p>
             </section>
           </div>
@@ -208,8 +208,8 @@ export function DailyBlundrScreen() {
       <div className="mx-auto flex min-h-screen max-w-md flex-col px-4 pb-24 pt-5">
         <header className="flex items-start justify-between gap-4">
           <div>
-            <div className="text-xs font-black uppercase tracking-[0.28em] text-green-700">Daily BLUNDR</div>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight">Daily BLUNDR</h1>
+            <div className="text-xs font-black uppercase tracking-[0.28em] text-green-700">Daily Blundr</div>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight">Daily Blundr</h1>
             <p className="mt-1 text-sm text-stone-500">Tempo picked today’s smartest training.</p>
           </div>
           <Link href="/" className="rounded-2xl bg-white px-3 py-3 text-sm font-black text-stone-700 shadow-sm ring-1 ring-stone-200">
@@ -297,11 +297,11 @@ export function DailyBlundrScreen() {
               <div className="text-sm font-black uppercase tracking-wide">Queue clear</div>
             </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-[auto,1fr] sm:items-center">
-              <BlundrAssetImage asset={BLUNDR_EMPTY_STATE_ASSETS.emptyDailyBlundr} alt="Empty Daily BLUNDR state" variant="emptyState" className="mx-auto sm:mx-0" />
+              <BlundrAssetImage asset={BLUNDR_EMPTY_STATE_ASSETS.emptyDailyBlundr} alt="Empty Daily Blundr state" variant="emptyState" className="mx-auto sm:mx-0" />
               <div>
                 <p className="text-sm leading-6 text-stone-600">{EMPTY_STATE_COPY}</p>
                 <p className="mt-2 text-xs font-semibold text-stone-500">
-                  Build a few mistakes in the trainer and Daily BLUNDR will light up here.
+                  Build a few mistakes in the trainer and Daily Blundr will light up here.
                 </p>
               </div>
             </div>
@@ -334,7 +334,7 @@ export function DailyBlundrScreen() {
             </div>
             <h2 className="mt-2 text-lg font-black text-green-950">Tempo has all required cards.</h2>
             <p className="mt-2 text-sm leading-6 text-green-800">
-              {rewardClaimed ? COMPLETION_COPY : "All required cards are done. Tap Complete Daily BLUNDR to bank the streak."}
+              {rewardClaimed ? COMPLETION_COPY : "All required cards are done. Tap Complete Daily Blundr to bank the streak."}
             </p>
             <button
               type="button"
@@ -342,7 +342,7 @@ export function DailyBlundrScreen() {
               disabled={!canClaim}
               className={`mt-4 w-full rounded-2xl px-4 py-3 font-black ${rewardClaimed ? "bg-white text-green-800 ring-1 ring-green-200" : canClaim ? "bg-green-700 text-white shadow-sm" : "bg-stone-200 text-stone-500"}`}
             >
-              Complete Daily BLUNDR
+              Complete Daily Blundr
             </button>
           </section>
         ) : null}

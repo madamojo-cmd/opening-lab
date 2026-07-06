@@ -74,6 +74,7 @@ export type DailyBlundrBoardProps = {
   onMoveAttempt?: (attempt: DailyBlundrBoardMoveAttempt) => void;
   onSquareClick?: (square: string, piece: { type: string; color: string } | null) => void;
   squareClickMode?: boolean;
+  openingColor?: "white" | "black" | null;
 };
 
 export type DailyBlundrSupportControlsProps = {

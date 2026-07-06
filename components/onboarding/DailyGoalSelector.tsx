@@ -36,7 +36,7 @@ export function DailyGoalSelector({ selectedPresetId, onSelectPreset }: DailyGoa
             <div className="mt-2 text-2xl font-black tracking-tight text-stone-950">{preset.dailyTempoGoal}</div>
             <div className="mt-1 text-sm text-stone-500">Tempo</div>
             <div className="mt-3 text-sm leading-6 text-stone-600">
-              Battery {preset.dailyBatteryGoal} and Daily BLUNDR {preset.dailyBlundrGoal}
+              Battery {preset.dailyBatteryGoal} and Daily Blundr {preset.dailyBlundrGoal}
             </div>
             <p className="mt-2 text-sm leading-6 text-stone-600">{preset.summary}</p>
           </button>
@@ -45,4 +45,3 @@ export function DailyGoalSelector({ selectedPresetId, onSelectPreset }: DailyGoa
     </section>
   );
 }
-

@@ -29,8 +29,8 @@ import { advanceBreakTimingDrillTrainingTarget } from "@/lib/blundr/daily/traini
 import { advanceKeySquareClickTrainingTarget } from "@/lib/blundr/daily/trainingTargets/keySquareClick";
 import type { DailyBlundrTrainingTargetCard } from "@/lib/blundr/daily/trainingTargets/dailyTrainingTargetTypes";
 
-const EMPTY_STATE_COPY = "Queue clear. Tempo does not have missed moves to review yet. Train an opening and Daily BLUNDR will start building your smart review loop.";
-const COMPLETION_COPY = "Daily BLUNDR complete. Tempo saved the important mistakes for future review.";
+const EMPTY_STATE_COPY = "Queue clear. Tempo does not have missed moves to review yet. Train an opening and Daily Blundr will start building your smart review loop.";
+const COMPLETION_COPY = "Daily Blundr complete. Tempo saved the important mistakes for future review.";
 
 function nowIso(): string {
   return new Date().toISOString();

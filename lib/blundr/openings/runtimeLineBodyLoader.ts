@@ -9,6 +9,7 @@ import {
   STAGE2_RUNTIME_OPENING_INDEX_BY_ID,
   type RuntimeOpeningIndexEntry,
 } from "./runtimeOpeningIndex.generated";
+import { getStage2RuntimeTrainableRepertoire } from "./runtimeTrainableRepertoires";
 import { applyRuntimeUciMove } from "../runtime/uciReplay";
 import { normalizeRuntimePlaySequenceUci } from "../runtime/uciNormalization";
 import {
@@ -263,12 +264,25 @@ export async function loadStage2RuntimeTrainableRepertoire(openingId: string): P
   const pending = pendingRepertoireLoads.get(canonicalOpeningId);
   if (pending) return pending;
   const next = (async () => {
-    const rawLines = await loadRuntimeLineModule(canonicalOpeningId);
-    if (!rawLines || rawLines.length === 0) return null;
-    const repertoire = buildRuntimeTrainableRepertoireFromIndexEntry(canonicalOpeningId, rawLines);
-    if (!repertoire) return null;
-    loadedRepertoireCache.set(canonicalOpeningId, repertoire);
-    return repertoire;
+    try {
+      const rawLines = await loadRuntimeLineModule(canonicalOpeningId);
+      if (rawLines && rawLines.length > 0) {
+        const repertoire = buildRuntimeTrainableRepertoireFromIndexEntry(canonicalOpeningId, rawLines);
+        if (repertoire) {
+          loadedRepertoireCache.set(canonicalOpeningId, repertoire);
+          return repertoire;
+        }
+      }
+    } catch {
+      // Fall through to the generated static repertoire if a lazy chunk cannot load.
+    }
+
+    const staticRepertoire = getStage2RuntimeTrainableRepertoire(canonicalOpeningId);
+    if (staticRepertoire) {
+      loadedRepertoireCache.set(canonicalOpeningId, staticRepertoire);
+      return staticRepertoire;
+    }
+    return null;
   })();
   pendingRepertoireLoads.set(canonicalOpeningId, next);
   try {

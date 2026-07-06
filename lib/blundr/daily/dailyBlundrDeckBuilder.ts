@@ -209,7 +209,7 @@ export function buildDailyBlundrDeck(input: DailyBlundrDeckBuildInput): DailyBlu
     ...seed,
     id: seed.cardKey,
     kind: "recall",
-    title: seed.openingName || "Daily BLUNDR recall",
+    title: seed.openingName || "Daily Blundr recall",
     prompt: seed.expectedMoveSan
       ? `Recall the move for ${seed.openingName || "this position"}`
       : `Recall the continuation for ${seed.openingName || "this position"}`,

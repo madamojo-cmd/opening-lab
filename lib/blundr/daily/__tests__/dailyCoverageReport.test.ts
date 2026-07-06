@@ -15,7 +15,7 @@ export function testDailyCoverageReport(): void {
   assert.ok(report.noveltyCoverage.length > 0);
 
   const markdown = formatDailyCoverageReportMarkdown(report);
-  assert.ok(markdown.includes("Daily BLUNDR Content Validation Report"));
+  assert.ok(markdown.includes("Daily Blundr Content Validation Report"));
   assert.ok(markdown.includes("## Concept Coverage"));
   assert.ok(markdown.includes("## Recommended Next Fixes"));
 
@@ -43,4 +43,3 @@ export function testDailyCoverageReport(): void {
 
 testDailyCoverageReport();
 console.log("dailyCoverageReport ok");
-

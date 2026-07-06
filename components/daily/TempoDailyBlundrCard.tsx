@@ -49,7 +49,7 @@ export function TempoDailyBlundrCard() {
         <div>
           <div className="inline-flex items-center gap-2 rounded-full bg-green-50 px-3 py-1 text-xs font-black uppercase tracking-wide text-green-700">
             <Sparkles size={14} />
-            Daily BLUNDR
+            Daily Blundr
           </div>
           <h2 className="mt-3 text-lg font-black text-stone-950">Tempo picked today’s smartest training.</h2>
           <p className="mt-1 text-sm leading-6 text-stone-500">

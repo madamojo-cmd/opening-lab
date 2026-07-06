@@ -14,12 +14,12 @@ export type OnboardingFeatureCopy = {
 export const ONBOARDING_COPY: Record<OnboardingStepId, OnboardingCopyBlock> = {
   welcome: {
     title: "Train openings that actually stick",
-    copy: "Learn real opening lines, recognize opponent ideas, continue into the middlegame, and retain them through Daily BLUNDR.",
+    copy: "Learn real opening lines, recognize opponent ideas, continue into the middlegame, and retain them through Daily Blundr.",
     tempoCopy: "I’ll help you build a repertoire one useful day at a time.",
   },
   account: {
     title: "Save your progress",
-    copy: "Blundr tracks your repertoire, Daily BLUNDR reviews, opening progress, and training goals across sessions.",
+    copy: "Blundr tracks your repertoire, Daily Blundr reviews, opening progress, and training goals across sessions.",
     tempoCopy: "You can stay local for now, or sign in when you are ready to save progress across devices.",
   },
   rating: {
@@ -34,7 +34,7 @@ export const ONBOARDING_COPY: Record<OnboardingStepId, OnboardingCopyBlock> = {
   },
   daily_goals: {
     title: "Set your daily goals",
-    copy: "Tempo will size your Daily Tempo, Daily Battery, and Daily BLUNDR goals around your schedule.",
+    copy: "Tempo will size your Daily Tempo, Daily Battery, and Daily Blundr goals around your schedule.",
     tempoCopy: "Small, steady goals are easier to keep than ambitious ones that burn out quickly.",
   },
   real_game_data: {
@@ -49,12 +49,12 @@ export const ONBOARDING_COPY: Record<OnboardingStepId, OnboardingCopyBlock> = {
   },
   training_modes: {
     title: "Train with guidance. Recall without it.",
-    copy: "Assisted View: Visual cues before the move. Plain View: No cues - just recall. Daily BLUNDR: Missed moves and weak ideas return as short adaptive reviews.",
+    copy: "Assisted View: Visual cues before the move. Plain View: No cues - just recall. Daily Blundr: Missed moves and weak ideas return as short adaptive reviews.",
     tempoCopy: "Guidance helps you learn the line. Plain view helps you remember it on your own.",
   },
   start_training: {
     title: "Your repertoire is ready",
-    copy: "Start training with your starter pack and begin building your first Daily BLUNDR habit.",
+    copy: "Start training with your starter pack and begin building your first Daily Blundr habit.",
     tempoCopy: "The first useful day starts now.",
   },
 } as const;
@@ -69,8 +69,7 @@ export const ONBOARDING_FEATURE_ROWS: readonly OnboardingFeatureCopy[] = [
     description: "Learn the book, then keep playing the position after the book ends.",
   },
   {
-    label: "Daily BLUNDR review",
+    label: "Daily Blundr review",
     description: "Missed moves and weak ideas come back as short adaptive reviews.",
   },
 ] as const;
-

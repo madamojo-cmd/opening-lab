@@ -51,7 +51,7 @@ function getRingProgress(dayRecord: DailyRingDayRecord) {
     },
     {
       ringId: "daily_blundr" as const,
-      label: "Daily BLUNDR",
+      label: "Daily Blundr",
       description: "Review what needs to stick.",
       progress: dayRecord.dailyBlundr.progress,
       goal: dayRecord.dailyBlundr.goal,
@@ -92,7 +92,7 @@ export function DailyRingsCard({ repertoireProgress, refreshKey, completionResul
         <div>
           <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">Today&apos;s Blundr</div>
           <h2 className="mt-1 text-lg font-black tracking-tight text-stone-950">Close your daily rings</h2>
-          <p className="mt-2 text-sm leading-6 text-stone-600">Do opening reps, continuations, and Daily BLUNDR to keep your streak alive.</p>
+          <p className="mt-2 text-sm leading-6 text-stone-600">Do opening reps, continuations, and Daily Blundr to keep your streak alive.</p>
         </div>
         <button
           type="button"
@@ -155,7 +155,7 @@ export function DailyRingsCard({ repertoireProgress, refreshKey, completionResul
             incompleteDailyBlundr ? "bg-white text-green-700 ring-1 ring-green-200" : "bg-stone-100 text-stone-500",
           )}
         >
-          {incompleteDailyBlundr ? "Open Daily BLUNDR" : "Daily BLUNDR complete"}
+          {incompleteDailyBlundr ? "Open Daily Blundr" : "Daily Blundr complete"}
           <Target size={16} />
         </Link>
       </div>

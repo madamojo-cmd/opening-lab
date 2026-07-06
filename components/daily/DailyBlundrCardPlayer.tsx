@@ -5,6 +5,7 @@ import { DailyBlundrBoard } from "@/components/daily/DailyBlundrBoard";
 import { DailyBlundrSupportControls } from "@/components/daily/DailyBlundrSupportControls";
 import type { DailyBlundrCardPlayerProps } from "@/lib/blundr/daily/dailyBlundrPlayerTypes";
 import { getDailyConceptById } from "@/lib/blundr/daily/concepts/dailyConceptRegistry";
+import { getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
 
 function resolveExpectedMoveLabel(expectedMoveUci: string | null | undefined, expectedMoveSan: string | null | undefined): string {
   return expectedMoveUci || expectedMoveSan || "the saved move";
@@ -56,6 +57,7 @@ export function DailyBlundrCardPlayer({
   const trainingChoices = isTrainingTarget ? activeTrainingTargetState?.candidateMoves ?? card.trainingTarget?.candidateMoves ?? [] : [];
   const trainingSquareTargets = isTrainingTarget ? activeTrainingTargetState?.correctSquareKeys ?? activeTrainingTargetState?.targetSquares ?? card.trainingTarget?.correctSquareKeys ?? card.trainingTarget?.targetSquares ?? [] : [];
   const conceptLabels = (card.conceptIds ?? []).slice(0, 4).map((conceptId) => getDailyConceptById(conceptId)?.shortName || conceptId.split(":").pop() || conceptId);
+  const openingColor = getStage2OpeningAvailability(card.repertoireId ?? null)?.learnerPerspective ?? null;
 
   return (
     <section className="space-y-4 rounded-3xl bg-white p-4 shadow-sm">
@@ -64,7 +66,7 @@ export function DailyBlundrCardPlayer({
           <div className="text-xs font-black uppercase tracking-[0.22em] text-green-700">
             {isMiniGame ? "Mini-game" : isTrainingTarget ? "Training target" : "Recall card"}
           </div>
-          <h2 className="mt-1 text-lg font-black text-stone-950">{card.openingName || "Daily BLUNDR"}</h2>
+          <h2 className="mt-1 text-lg font-black text-stone-950">{card.openingName || "Daily Blundr"}</h2>
           <p className="mt-1 text-sm leading-6 text-stone-500">{card.summary}</p>
           {conceptLabels.length > 0 ? (
             <div className="mt-2 flex flex-wrap gap-2">
@@ -84,6 +86,7 @@ export function DailyBlundrCardPlayer({
         disabled={locked || Boolean(isMiniGame && activeMiniGameState?.completed) || Boolean(isTrainingTarget && activeTrainingTargetState?.completed) || (!isMiniGame && !isTrainingTarget && mode === "reveal_only")}
         onMoveAttempt={onBoardMoveAttempt}
         squareClickMode={isTrainingTarget && trainingInteractionKind === "square_click"}
+        openingColor={openingColor}
         onSquareClick={
           isTrainingTarget && trainingInteractionKind === "square_click"
             ? (square) => onSquareClick?.(square)

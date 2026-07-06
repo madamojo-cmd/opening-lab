@@ -54,7 +54,7 @@ export const REWARD_KIND_ASSETS = {
 export const REWARD_TRIGGER_LABELS = {
   daily_tempo_ring_closed: "Daily Tempo ring",
   daily_battery_ring_closed: "Daily Battery ring",
-  daily_blundr_ring_closed: "Daily BLUNDR ring",
+  daily_blundr_ring_closed: "Daily Blundr ring",
   all_rings_closed: "All three rings",
   three_all_rings_completions: "Every 3 all-ring days",
   weekly_cache: "7-day streak cache",

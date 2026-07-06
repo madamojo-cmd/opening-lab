@@ -36,7 +36,7 @@ export function validateConceptRegistry(): DailyValidationResult {
         category: "registry",
         code: "concept_registry_invalid",
         message: error instanceof Error ? error.message : "Daily concept registry validation failed.",
-        suggestion: "Fix the concept registry definitions before serving Daily BLUNDR content.",
+        suggestion: "Fix the concept registry definitions before serving Daily Blundr content.",
       }),
     ]);
   }

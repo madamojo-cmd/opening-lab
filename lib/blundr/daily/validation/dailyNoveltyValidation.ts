@@ -74,7 +74,7 @@ function duplicateGroupsToIssues(
       message: messageFactory(key, group.length),
       itemId: group[0]?.id,
       fen: group[0]?.fen ?? undefined,
-      suggestion: "Deduplicate the formation before serving it again in Daily BLUNDR.",
+      suggestion: "Deduplicate the formation before serving it again in Daily Blundr.",
     }),
   );
 }

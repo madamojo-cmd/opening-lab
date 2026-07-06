@@ -49,7 +49,7 @@ export function ReviewTabDailyBlundrPanel() {
         <div>
           <div className="inline-flex items-center gap-2 rounded-full bg-green-50 px-3 py-1 text-xs font-black uppercase tracking-wide text-green-700">
             <Sparkles size={14} />
-            Daily BLUNDR
+            Daily Blundr
           </div>
           <h2 className="mt-3 text-lg font-black tracking-tight text-stone-950">Tempo picked today’s smartest training.</h2>
           <p className="mt-1 text-sm leading-6 text-stone-600">
@@ -70,7 +70,7 @@ export function ReviewTabDailyBlundrPanel() {
           <BadgeCheck size={16} className="text-green-700" />
           Review
         </div>
-        <p className="mt-2 text-sm leading-6 text-stone-600">Daily BLUNDR sits on top of Review, while the existing mistake queue stays unchanged below.</p>
+        <p className="mt-2 text-sm leading-6 text-stone-600">Daily Blundr sits on top of Review, while the existing mistake queue stays unchanged below.</p>
       </div>
 
       <div className="mt-3 flex items-center justify-between rounded-2xl bg-green-50 px-3 py-3 text-sm font-semibold text-green-900">
@@ -101,7 +101,7 @@ export function ReviewTabDailyBlundrPanel() {
       </div>
 
       <Link href="/daily" className="mt-4 inline-flex w-full items-center justify-between rounded-2xl bg-stone-950 px-4 py-3 text-sm font-black text-white shadow-sm">
-        <span>{hasCards ? `${primaryLabel} Daily BLUNDR` : "Open Daily BLUNDR"}</span>
+        <span>{hasCards ? `${primaryLabel} Daily Blundr` : "Open Daily Blundr"}</span>
         <ArrowRight size={18} />
       </Link>
     </section>

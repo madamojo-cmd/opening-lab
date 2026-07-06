@@ -20,7 +20,7 @@ export function DailyBlundrSessionSummary({ cards, session, currentCard, reviewS
         <div>
           <div className="text-xs font-black uppercase tracking-[0.22em] text-green-700">Session</div>
           <h3 className="mt-1 text-lg font-black text-stone-950">
-            {currentCard?.openingName ?? "Daily BLUNDR session"}
+            {currentCard?.openingName ?? "Daily Blundr session"}
           </h3>
           <p className="mt-1 text-sm leading-6 text-stone-500">
             {currentCard ? currentCard.summary : "Tempo is lining up the next smart review."}

@@ -181,7 +181,7 @@ function chooseTempoMessage(result: Pick<DailyRingCompletionResult, "source" | "
     return result.streakMilestones?.length ? "All three rings closed. Tempo approves." : "All three rings closed. Tempo approves.";
   }
   if (result.ringClosedThisAction) return "Nice. That rep counts.";
-  if (result.source === "daily_blundr_deck_completed") return "That one goes into Daily BLUNDR if it needs review.";
+  if (result.source === "daily_blundr_deck_completed") return "That one goes into Daily Blundr if it needs review.";
   return "Your repertoire just got a little stronger.";
 }
 
@@ -198,7 +198,7 @@ function chooseNextRecommendedAction(result: Pick<DailyRingCompletionResult, "al
     : "daily_tempo";
   if (incompleteRing === "daily_tempo") return "Keep training your opening reps.";
   if (incompleteRing === "daily_battery") return "Play a few continuations next.";
-  return result.source === "daily_blundr_deck_completed" ? "Train another opening or continuation to keep the loop moving." : "Open Daily BLUNDR if you want to review today’s misses.";
+  return result.source === "daily_blundr_deck_completed" ? "Train another opening or continuation to keep the loop moving." : "Open Daily Blundr if you want to review today’s misses.";
 }
 
 function buildSummaryLines(input: {
@@ -217,7 +217,7 @@ function buildSummaryLines(input: {
   } else if (input.source === "continuation_completed") {
     lines.push("Daily Battery updated.");
   } else {
-    lines.push("Daily BLUNDR updated.");
+    lines.push("Daily Blundr updated.");
   }
   if (input.ringClosedThisAction) {
     lines.push("Ring closed.");

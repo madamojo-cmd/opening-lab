@@ -68,7 +68,7 @@ export function formatDailyCoverageReportMarkdown(report: DailyCoverageReport): 
   const recommendations = buildRecommendations(report.issues);
 
   const lines: string[] = [
-    "# Daily BLUNDR Content Validation Report",
+    "# Daily Blundr Content Validation Report",
     "",
     `Generated at: ${report.generatedAt}`,
     `Valid: ${report.valid ? "yes" : "no"}`,

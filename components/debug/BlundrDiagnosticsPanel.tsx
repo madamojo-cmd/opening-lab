@@ -677,7 +677,7 @@ function status(hasFail: boolean, hasWarn: boolean) {
 }
 
 function issueReport(snapshot: TrainerDebugSnapshot): string {
-  return `BLUNDR DEBUG ISSUE REPORT
+  return `Blundr debug issue report
 timestamp: ${new Date(snapshot.generatedAt).toISOString()}
 frame: ${snapshot.frame.trainerFrameId}
 fen4: ${snapshot.board.boardFen4}

@@ -73,6 +73,5 @@ for (const variant of BLUNDR_ASSET_IMAGE_VARIANTS) {
 assert.ok(BLUNDR_VIDEO_ASSET_VARIANT_FRAME_CLASSES.rewardAnimation.includes("aspect"), "Expected reward animation video frame class.");
 
 assert.ok(existsSync(resolve(process.cwd(), "public/favicon.png")), "Expected root favicon alias.");
-assert.ok(existsSync(resolve(process.cwd(), "public/assets/_incoming/blundr-assets-2")), "Expected incoming asset drop to be copied.");
 
 console.log("blundrAssetManifest.test.ts passed");

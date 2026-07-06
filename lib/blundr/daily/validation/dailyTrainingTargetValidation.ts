@@ -22,7 +22,7 @@ function validateDifficultyBand(value: unknown): DailyValidationResult {
       category: "difficulty",
       code: "invalid_difficulty",
       message: `Invalid difficulty: ${String(value ?? "")}`,
-      suggestion: "Use a Daily BLUNDR difficulty band.",
+      suggestion: "Use a Daily Blundr difficulty band.",
     }),
   ]);
 }

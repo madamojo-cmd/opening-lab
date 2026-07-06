@@ -104,7 +104,7 @@ export function validateDifficultyDistribution(items: readonly DailyValidationCo
         severity: "warning",
         category: "difficulty",
         code: "all_intro_content",
-        message: "All Daily BLUNDR content is in the intro band.",
+        message: "All Daily Blundr content is in the intro band.",
         suggestion: "Add beginner and intermediate content to widen the training ladder.",
       }),
     );
@@ -116,8 +116,8 @@ export function validateDifficultyDistribution(items: readonly DailyValidationCo
         severity: "warning",
         category: "difficulty",
         code: "all_advanced_expert_content",
-        message: "All Daily BLUNDR content is in the advanced or expert bands.",
-        suggestion: "Add beginner-safe content so Daily BLUNDR can serve lighter sessions.",
+        message: "All Daily Blundr content is in the advanced or expert bands.",
+        suggestion: "Add beginner-safe content so Daily Blundr can serve lighter sessions.",
       }),
     );
   }

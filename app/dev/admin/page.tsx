@@ -22,7 +22,7 @@ export default async function AdminPage() {
         <header className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm">
           <div className="text-xs font-black uppercase tracking-[0.28em] text-green-700">Developer tools</div>
           <h1 className="mt-2 text-2xl font-black tracking-tight">Blundr admin</h1>
-          <p className="mt-2 text-sm leading-6 text-stone-600">Server-gated debug view for accounts, Daily BLUNDR state, repertoire operations, and validation snapshots.</p>
+          <p className="mt-2 text-sm leading-6 text-stone-600">Server-gated debug view for accounts, Daily Blundr state, repertoire operations, and validation snapshots.</p>
         </header>
 
         <AdminGate allowed={access.allowed} reason={access.reason}>

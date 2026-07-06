@@ -40,7 +40,7 @@ export const DAILY_RING_DEFINITIONS: readonly DailyRingDefinition[] = [
   },
   {
     ringId: "daily_blundr",
-    label: "Daily BLUNDR",
+    label: "Daily Blundr",
     description: "Review what needs to stick.",
     source: "daily_blundr_deck_completed",
     defaultGoal: 1,
@@ -54,4 +54,3 @@ export function getDailyRingDefinition(ringId: DailyRingId): DailyRingDefinition
 export function getDailyRingDefinitionBySource(source: DailyRingActivitySource): DailyRingDefinition {
   return DAILY_RING_DEFINITIONS.find((definition) => definition.source === source) ?? DAILY_RING_DEFINITIONS[0];
 }
-

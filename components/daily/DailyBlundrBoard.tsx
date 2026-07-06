@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Chess, type Square } from "chess.js";
 import type { DailyBlundrBoardProps } from "@/lib/blundr/daily/dailyBlundrPlayerTypes";
+import { buildBoardRenderConfig } from "@/lib/blundr/board/boardRenderConfig";
+import { createDefaultBoardPreferences, readLocalBoardPreferences } from "@/lib/blundr/board/boardPreferenceService";
 
 function pieceGlyph(piece: { type: string; color: string } | null): string {
   if (!piece) return "";
@@ -27,8 +29,9 @@ function describeCoordinate(square: string): string {
   return square;
 }
 
-export function DailyBlundrBoard({ fen, disabled, onMoveAttempt, onSquareClick, squareClickMode }: DailyBlundrBoardProps) {
+export function DailyBlundrBoard({ fen, disabled, onMoveAttempt, onSquareClick, squareClickMode, openingColor }: DailyBlundrBoardProps) {
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
+  const [boardPreferences, setBoardPreferences] = useState(() => createDefaultBoardPreferences());
   const game = useMemo(() => {
     try {
       return new Chess(fen);
@@ -36,17 +39,29 @@ export function DailyBlundrBoard({ fen, disabled, onMoveAttempt, onSquareClick, 
       return null;
     }
   }, [fen]);
-  const orientation = useMemo<"white" | "black">(() => {
-    try {
-      return new Chess(fen).turn() === "b" ? "black" : "white";
-    } catch {
-      return "white";
-    }
-  }, [fen]);
+  const renderConfig = useMemo(
+    () =>
+      buildBoardRenderConfig({
+        boardThemeId: boardPreferences.boardThemeId,
+        pieceSetId: boardPreferences.pieceSetId,
+        showCoordinates: boardPreferences.showCoordinates,
+        boardOrientation: boardPreferences.boardOrientation,
+        openingColor,
+        fenTurn: game?.turn() === "b" ? "black" : "white",
+        source: boardPreferences.source,
+        updatedAt: boardPreferences.updatedAt,
+      }),
+    [boardPreferences, game, openingColor],
+  );
+  const orientation = renderConfig.boardOrientation;
 
   useEffect(() => {
     setSelectedSquare(null);
   }, [fen]);
+
+  useEffect(() => {
+    setBoardPreferences(readLocalBoardPreferences(typeof window !== "undefined" ? window.localStorage : null));
+  }, []);
 
   const legalTargets = useMemo(() => {
     if (!game || !selectedSquare) return [];
@@ -119,7 +134,7 @@ export function DailyBlundrBoard({ fen, disabled, onMoveAttempt, onSquareClick, 
                   });
                   setSelectedSquare(null);
                 }}
-                className={`relative flex aspect-square items-center justify-center text-2xl font-black transition ${isDark ? "bg-[#8a6d4f] text-white" : "bg-[#e8dcc8] text-stone-900"} ${isSelected ? "ring-4 ring-inset ring-green-800" : ""} ${isTarget && !squareClickMode ? "after:absolute after:h-3 after:w-3 after:rounded-full after:bg-green-600/75 after:content-['']" : ""} ${squareClickMode ? "cursor-pointer" : ""}`}
+                className={`relative flex aspect-square items-center justify-center text-2xl font-black transition ${isDark ? renderConfig.theme.squareDarkClassName : renderConfig.theme.squareLightClassName} ${isSelected ? "ring-4 ring-inset ring-green-800" : ""} ${isTarget && !squareClickMode ? "after:absolute after:h-3 after:w-3 after:rounded-full after:bg-green-600/75 after:content-['']" : ""} ${squareClickMode ? "cursor-pointer" : ""}`}
                 aria-label={describeCoordinate(square)}
               >
                 <span aria-hidden>{pieceGlyph(piece)}</span>

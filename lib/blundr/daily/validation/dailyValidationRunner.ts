@@ -149,7 +149,7 @@ export function runDailyBlundrValidation(input: DailyBlundrValidationInput = {})
 export function assertDailyBlundrValidationIsValid(report: DailyCoverageReport): void {
   assertDailyConceptRegistryIsValid();
   if (!report.valid) {
-    throw new Error(`Daily BLUNDR validation failed with ${report.summary.errorCount} error(s).`);
+    throw new Error(`Daily Blundr validation failed with ${report.summary.errorCount} error(s).`);
   }
 }
 

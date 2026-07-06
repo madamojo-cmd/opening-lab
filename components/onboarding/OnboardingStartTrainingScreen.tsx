@@ -36,7 +36,7 @@ export function OnboardingStartTrainingScreen({ stepIndex, stepCount, onBack, on
               Ready
             </div>
             <p className="mt-2 text-sm leading-6 text-stone-700">
-              Start training with your starter pack and begin building your first Daily BLUNDR habit.
+              Start training with your starter pack and begin building your first Daily Blundr habit.
             </p>
             {summary ? <div className="mt-4">{summary}</div> : null}
           </div>
