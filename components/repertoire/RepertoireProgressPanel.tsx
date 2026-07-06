@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, BookOpen, RefreshCw, Sparkles } from "lucide-react";
+import { BLUNDR_EMPTY_STATE_ASSETS, BLUNDR_TEMPO_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
 import { BLUNDR_ANALYTICS_EVENTS } from "@/lib/blundr/analytics/blundrAnalyticsEvents";
 import { trackBlundrAnalyticsEvent } from "@/lib/blundr/analytics/blundrAnalyticsService";
 import { getLocalAccountCurrentUserId } from "@/lib/blundr/accounts/localAccountStorage";
 import { getStarterPackById } from "@/lib/blundr/onboarding/starterPacks";
 import { loadRepertoireProgress, unlockAndPersistOpening } from "@/lib/blundr/repertoire/repertoireProgressService";
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
+import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 import { RepertoireOpeningGrid } from "./RepertoireOpeningGrid";
 import { RepertoirePointsSummary } from "./RepertoirePointsSummary";
 import { RepertoireTempoCallout } from "./RepertoireTempoCallout";
@@ -123,10 +125,8 @@ export function RepertoireProgressPanel({ onTrainOpening, homeHref = "/", classN
         </div>
 
         <div className="mt-4 rounded-2xl bg-[#fbfcf7] p-3">
-          <div className="flex items-start gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-green-700 text-white shadow-sm">
-              <Sparkles size={18} />
-            </div>
+          <div className="grid gap-3 sm:grid-cols-[auto,1fr] sm:items-center">
+            <BlundrAssetImage asset={BLUNDR_TEMPO_ASSETS.coach} alt="Tempo coach" variant="tempoInline" className="mx-auto sm:mx-0" />
             <div className="min-w-0 flex-1">
               <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">Tempo says</div>
               <p className="mt-1 text-sm leading-6 text-stone-700">
@@ -148,7 +148,20 @@ export function RepertoireProgressPanel({ onTrainOpening, homeHref = "/", classN
         <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-900 shadow-sm">{statusMessage}</div>
       ) : null}
       {errorMessage ? (
-        <div className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-semibold text-stone-700 shadow-sm">{errorMessage}</div>
+        <div className="rounded-2xl border border-stone-200 bg-white p-4 text-sm font-semibold text-stone-700 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <BlundrAssetImage
+              asset={BLUNDR_EMPTY_STATE_ASSETS.errorSafeFallback}
+              alt="Safe fallback"
+              variant="emptyState"
+              className="mx-auto sm:mx-0 sm:shrink-0"
+            />
+            <div>
+              <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">Safe fallback</div>
+              <p className="mt-2 text-sm leading-6 text-stone-700">{errorMessage}</p>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       <RepertoirePointsSummary progress={progress} />
@@ -178,7 +191,23 @@ export function RepertoireProgressPanel({ onTrainOpening, homeHref = "/", classN
         unlockingOpeningId={unlockingOpeningId}
         emptyLockedState={
           <div className="rounded-[1.5rem] border border-stone-200 bg-white p-4 text-sm leading-6 text-stone-600 shadow-sm">
-            All eligible MVP openings are unlocked. Keep training to build points for future packs.
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+              <BlundrAssetImage
+                asset={BLUNDR_EMPTY_STATE_ASSETS.emptyRepertoire}
+                alt="Empty repertoire"
+                variant="emptyState"
+                className="mx-auto sm:mx-0 sm:shrink-0"
+              />
+              <div>
+                <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">All set</div>
+                <p className="mt-2">
+                  All eligible MVP openings are unlocked. Keep training to build points for future packs.
+                </p>
+                <p className="mt-2 text-xs font-semibold text-stone-500">
+                  Tempo will widen the pool when new repertoire is ready.
+                </p>
+              </div>
+            </div>
           </div>
         }
       />

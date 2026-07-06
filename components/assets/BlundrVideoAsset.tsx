@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-type BlundrVideoAssetVariant = "rewardAnimation";
+import { BLUNDR_VIDEO_ASSET_VARIANT_FRAME_CLASSES, type BlundrVideoAssetVariant } from "./blundrAssetVariants";
 
 type BlundrVideoAssetProps = {
   src: string;
@@ -15,10 +14,6 @@ type BlundrVideoAssetProps = {
 function classNames(...classes: Array<string | false | null | undefined>): string {
   return classes.filter(Boolean).join(" ");
 }
-
-const VARIANT_FRAME_CLASSES: Record<BlundrVideoAssetVariant, string> = {
-  rewardAnimation: "w-full max-w-[clamp(16rem,82vw,28rem)] aspect-[16/11] rounded-[2rem] bg-[#fbfcf7] p-2 ring-1 ring-stone-200",
-};
 
 export function BlundrVideoAsset({ src, fallbackSrc, ariaLabel, variant = "rewardAnimation", className }: BlundrVideoAssetProps) {
   const [videoErrored, setVideoErrored] = useState(false);
@@ -37,7 +32,7 @@ export function BlundrVideoAsset({ src, fallbackSrc, ariaLabel, variant = "rewar
     return () => media.removeListener(handleChange);
   }, []);
 
-  const frameClassName = VARIANT_FRAME_CLASSES[variant];
+  const frameClassName = BLUNDR_VIDEO_ASSET_VARIANT_FRAME_CLASSES[variant];
   const showVideo = Boolean(src && !videoErrored && !reducedMotion);
 
   return (

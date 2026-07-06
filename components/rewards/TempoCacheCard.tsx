@@ -2,7 +2,7 @@
 
 import type { RewardGrantRecord, TempoCacheState } from "@/lib/blundr/rewards/rewardTypes";
 import type { UserRewardHistory } from "@/lib/blundr/accounts/accountTypes";
-import { BLUNDR_REWARD_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
+import { BLUNDR_REWARD_ASSETS, BLUNDR_TEMPO_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
 import { REWARD_CACHE_COPY } from "@/lib/blundr/rewards/rewardConstants";
 import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 import { RewardAnimation } from "./RewardAnimation";
@@ -52,16 +52,19 @@ export function TempoCacheCard({ state, rewardGrants = [], rewardHistory, classN
 
       <div className="relative z-10 space-y-4">
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">Tempo Cache</div>
-            <h3 className="mt-1 text-xl font-black tracking-tight text-stone-950">{REWARD_CACHE_COPY.intro}</h3>
-            <p className="mt-2 text-sm leading-6 text-stone-600">
-              {state === "closed"
-                ? "The cache is waiting for a ring closure or streak milestone."
-                : streakCache
-                  ? "A streak milestone opened this cache."
-                  : "Tempo found a bonus for your training."}
-            </p>
+          <div className="flex items-start gap-3">
+            <BlundrAssetImage asset={BLUNDR_TEMPO_ASSETS.reward} alt="Tempo reward" variant="tempoInline" className="shrink-0" />
+            <div>
+              <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">Tempo Cache</div>
+              <h3 className="mt-1 text-xl font-black tracking-tight text-stone-950">{REWARD_CACHE_COPY.intro}</h3>
+              <p className="mt-2 text-sm leading-6 text-stone-600">
+                {state === "closed"
+                  ? "The cache is waiting for a ring closure or streak milestone."
+                  : streakCache
+                    ? "A streak milestone opened this cache."
+                    : "Tempo found a bonus for your training."}
+              </p>
+            </div>
           </div>
           <div className="rounded-full bg-green-50 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-green-700 ring-1 ring-green-200">
             {state}
@@ -146,4 +149,3 @@ export function TempoCacheCard({ state, rewardGrants = [], rewardHistory, classN
     </section>
   );
 }
-

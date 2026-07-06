@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, Sparkles } from "lucide-react";
 
 import { BLUNDR_ANALYTICS_EVENTS } from "@/lib/blundr/analytics/blundrAnalyticsEvents";
+import { BLUNDR_TEMPO_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
 import { trackBlundrAnalyticsEvent } from "@/lib/blundr/analytics/blundrAnalyticsService";
 import type { DailyRingCompletionResultLike } from "@/lib/blundr/daily-rings/dailyRingTypes";
+import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 import { DailyRingCompletionBanner } from "@/components/daily-rings/DailyRingCompletionBanner";
 import { StreakSummaryCard } from "@/components/streaks/StreakSummaryCard";
 import { TempoCacheModal } from "@/components/rewards/TempoCacheModal";
@@ -69,13 +71,16 @@ export function TrainingCompletionSummary({ result, className }: TrainingComplet
           onPrimaryAction={() => setShowTempoCache(false)}
         />
       ) : null}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 text-sm font-black text-green-900">
-            <Sparkles size={16} />
-            {result.summaryTitle}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+          <BlundrAssetImage asset={BLUNDR_TEMPO_ASSETS.reward} alt="Tempo reward" variant="tempoInline" className="mx-auto sm:mx-0 sm:shrink-0" />
+          <div>
+            <div className="flex items-center gap-2 text-sm font-black text-green-900">
+              <Sparkles size={16} />
+              {result.summaryTitle}
+            </div>
+            <p className="mt-2 text-sm leading-6 text-green-800">{result.tempoMessage}</p>
           </div>
-          <p className="mt-2 text-sm leading-6 text-green-800">{result.tempoMessage}</p>
         </div>
         <div className="rounded-full bg-white px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-green-700 ring-1 ring-green-200">
           +{result.repertoirePointsAwarded} pts

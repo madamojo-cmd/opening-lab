@@ -8,6 +8,7 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   icons: {
     icon: [
+      { url: "/favicon.png", type: "image/png" },
       { url: BLUNDR_BRAND_ASSETS.favicon, type: "image/png" },
       { url: BLUNDR_BRAND_ASSETS.appIcon, type: "image/png" },
     ],

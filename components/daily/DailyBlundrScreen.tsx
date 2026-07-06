@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, BadgeCheck, CheckCircle2, Clock3, Flame, Sparkles, Target } from "lucide-react";
+import { BLUNDR_EMPTY_STATE_ASSETS, BLUNDR_TEMPO_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
+import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 import { DailyBlundrPlayer } from "@/components/daily/DailyBlundrPlayer";
 import { TrainingCompletionSummary } from "@/components/completion/TrainingCompletionSummary";
 import { completeDailyRingActivity } from "@/lib/blundr/daily-rings/dailyRingService";
@@ -181,6 +183,26 @@ export function DailyBlundrScreen() {
     });
   }
 
+  if (!overview) {
+      return (
+        <main className="min-h-screen bg-[#f7f7f4] text-stone-950">
+          <div className="mx-auto flex min-h-screen max-w-md items-center px-4 py-6">
+            <section className="w-full rounded-[1.75rem] border border-stone-200 bg-white p-5 text-center shadow-sm">
+              <div className="flex flex-col gap-4">
+                <BlundrAssetImage asset={BLUNDR_TEMPO_ASSETS.thinking} alt="Tempo thinking" variant="tempoInline" className="mx-auto" />
+                <BlundrAssetImage asset={BLUNDR_EMPTY_STATE_ASSETS.loadingTempo} alt="Loading Tempo" variant="emptyState" className="mx-auto" />
+              </div>
+              <div className="mt-4 text-xs font-black uppercase tracking-[0.18em] text-green-700">Loading Daily BLUNDR</div>
+              <h1 className="mt-2 text-2xl font-black tracking-tight text-stone-950">Tempo is lining up today&apos;s loop.</h1>
+              <p className="mt-2 text-sm leading-6 text-stone-600">
+                Your local Daily BLUNDR state is loading. If needed, Tempo will fall back safely to local data.
+              </p>
+            </section>
+          </div>
+        </main>
+      );
+  }
+
   return (
     <main className="min-h-screen bg-[#f7f7f4] text-stone-950">
       <div className="mx-auto flex min-h-screen max-w-md flex-col px-4 pb-24 pt-5">
@@ -274,10 +296,18 @@ export function DailyBlundrScreen() {
               <CheckCircle2 size={20} />
               <div className="text-sm font-black uppercase tracking-wide">Queue clear</div>
             </div>
-            <p className="mt-3 text-sm leading-6 text-stone-600">{EMPTY_STATE_COPY}</p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-[auto,1fr] sm:items-center">
+              <BlundrAssetImage asset={BLUNDR_EMPTY_STATE_ASSETS.emptyDailyBlundr} alt="Empty Daily BLUNDR state" variant="emptyState" className="mx-auto sm:mx-0" />
+              <div>
+                <p className="text-sm leading-6 text-stone-600">{EMPTY_STATE_COPY}</p>
+                <p className="mt-2 text-xs font-semibold text-stone-500">
+                  Build a few mistakes in the trainer and Daily BLUNDR will light up here.
+                </p>
+              </div>
+            </div>
             <div className="mt-4 flex items-center gap-2 rounded-2xl bg-stone-50 px-3 py-3 text-sm text-stone-500">
               <Clock3 size={16} />
-              Build a few mistakes in the trainer and Daily BLUNDR will light up here.
+              Tempo keeps the empty-state card calm until a session is ready.
             </div>
             <Link href="/" className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-green-700 px-4 py-3 font-black text-white shadow-sm">
               Back to Home

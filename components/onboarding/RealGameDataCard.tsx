@@ -1,10 +1,8 @@
 "use client";
 
 import { ChevronRight, Layers3, Scale, Users } from "lucide-react";
-import type { ReactNode } from "react";
-import { BLUNDR_ONBOARDING_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
+import { BLUNDR_ONBOARDING_ASSETS, BLUNDR_TEMPO_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
 import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
-import { TempoCallout } from "./TempoCallout";
 
 type RealGameDataCardProps = {
   ratingBandLabel: string;
@@ -50,7 +48,10 @@ export function RealGameDataCard({ ratingBandLabel, ratingBandDescription, examp
           <h3 className="mt-3 text-lg font-black text-stone-950">Built from real game data</h3>
           <p className="mt-2 text-sm leading-6 text-stone-600">{ratingBandDescription}</p>
         </div>
-        <div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-600">Tempo</div>
+        <div className="flex flex-col items-end gap-2">
+          <BlundrAssetImage asset={BLUNDR_TEMPO_ASSETS.pointing} alt="Tempo pointing" variant="tempoInline" className="shrink-0" />
+          <div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-600">Tempo</div>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-[1.2fr_0.8fr]">

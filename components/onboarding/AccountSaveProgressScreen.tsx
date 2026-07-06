@@ -1,8 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { LockKeyhole, Mail, Sparkles } from "lucide-react";
+import { BLUNDR_EMPTY_STATE_ASSETS, BLUNDR_TEMPO_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
 import type { OnboardingAccountChoice, OnboardingAuthMode } from "@/lib/blundr/onboarding/onboardingTypes";
+import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 import { OnboardingButtonRow } from "./OnboardingButtonRow";
 import { OnboardingFeatureRow } from "./OnboardingFeatureRow";
 import { OnboardingShell } from "./OnboardingShell";
@@ -150,8 +151,19 @@ export function AccountSaveProgressScreen({
               </button>
 
               {!authAvailable ? (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
-                  Supabase auth is not configured. Continue in local demo to keep going.
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                    <BlundrAssetImage
+                      asset={BLUNDR_EMPTY_STATE_ASSETS.offlineLocalDemo}
+                      alt="Local demo fallback"
+                      variant="emptyState"
+                      className="mx-auto sm:mx-0 sm:shrink-0"
+                    />
+                    <div>
+                      <div className="text-xs font-black uppercase tracking-[0.18em] text-amber-800">Supabase unavailable</div>
+                      <p className="mt-2">Continue in local demo to keep going without auth credentials.</p>
+                    </div>
+                  </div>
                 </div>
               ) : null}
 
@@ -165,17 +177,47 @@ export function AccountSaveProgressScreen({
                 </div>
               ) : null}
 
-              {authError ? (
-                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-900">{authError}</div>
-              ) : null}
             </>
           ) : (
-            <div className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm leading-6 text-stone-600">
-              Continue in local demo to save progress on this device without Supabase credentials.
+            <div className="rounded-2xl border border-stone-200 bg-white p-4 text-sm leading-6 text-stone-600">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                <BlundrAssetImage
+                  asset={BLUNDR_EMPTY_STATE_ASSETS.offlineLocalDemo}
+                  alt="Local demo fallback"
+                  variant="emptyState"
+                  className="mx-auto sm:mx-0 sm:shrink-0"
+                />
+                <div>
+                  <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">Local demo</div>
+                  <p className="mt-2">
+                    Continue in local demo to save progress on this device without Supabase credentials.
+                  </p>
+                  <p className="mt-2 text-xs font-semibold text-stone-500">
+                    Tempo keeps your setup moving even when auth is unavailable.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
         </div>
       </div>
+
+      {authError ? (
+        <div className="rounded-[1.75rem] border border-red-200 bg-red-50 p-4 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <BlundrAssetImage
+              asset={BLUNDR_TEMPO_ASSETS.sad}
+              alt="Tempo sad"
+              variant="tempoInline"
+              className="mx-auto sm:mx-0 sm:shrink-0"
+            />
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-black uppercase tracking-[0.18em] text-red-700">Auth failed</div>
+              <p className="mt-2 text-sm leading-6 text-red-900">{authError}</p>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </OnboardingShell>
   );
 }

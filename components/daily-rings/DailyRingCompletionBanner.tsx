@@ -3,6 +3,8 @@
 import { CheckCircle2, XCircle } from "lucide-react";
 
 import type { DailyRingCompletionResultLike } from "@/lib/blundr/daily-rings/dailyRingTypes";
+import { BLUNDR_TEMPO_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
+import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 import { XpGainPill } from "@/components/xp/XpGainPill";
 
 function classNames(...classes: Array<string | false | null | undefined>): string {
@@ -31,13 +33,21 @@ export function DailyRingCompletionBanner({ result, className }: DailyRingComple
 
   return (
     <div className={classNames("rounded-3xl border border-green-200 bg-green-50 p-4 shadow-sm", className)}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 text-sm font-black text-green-900">
-            <CheckCircle2 size={16} />
-            {result.summaryTitle}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+          <BlundrAssetImage
+            asset={result.allRingsClosedThisAction || result.streakMilestones?.length ? BLUNDR_TEMPO_ASSETS.celebrate : BLUNDR_TEMPO_ASSETS.success}
+            alt="Tempo celebration"
+            variant="tempoInline"
+            className="mx-auto sm:mx-0 sm:shrink-0"
+          />
+          <div>
+            <div className="flex items-center gap-2 text-sm font-black text-green-900">
+              <CheckCircle2 size={16} />
+              {result.summaryTitle}
+            </div>
+            <p className="mt-2 text-sm leading-6 text-green-800">{result.tempoMessage}</p>
           </div>
-          <p className="mt-2 text-sm leading-6 text-green-800">{result.tempoMessage}</p>
         </div>
         <XpGainPill xp={result.xpAwarded} />
       </div>
