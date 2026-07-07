@@ -6,19 +6,13 @@ import type { DailyBlundrBoardProps } from "@/lib/blundr/daily/dailyBlundrPlayer
 import { buildBoardRenderConfig } from "@/lib/blundr/board/boardRenderConfig";
 import { createDefaultBoardPreferences, readLocalBoardPreferences } from "@/lib/blundr/board/boardPreferenceService";
 import { BLUNDR_BOARD_PREFERENCES_CHANGED_EVENT } from "@/lib/blundr/board/boardPreferenceEvents";
-
-function pieceGlyph(piece: { type: string; color: string } | null): string {
-  if (!piece) return "";
-  const glyphs: Record<string, { w: string; b: string }> = {
-    p: { w: "♙", b: "♟" },
-    n: { w: "♘", b: "♞" },
-    b: { w: "♗", b: "♝" },
-    r: { w: "♖", b: "♜" },
-    q: { w: "♕", b: "♛" },
-    k: { w: "♔", b: "♚" },
-  };
-  return glyphs[piece.type]?.[piece.color === "w" ? "w" : "b"] ?? "";
-}
+import {
+  renderBoardPieceGlyph,
+  resolveBoardPieceSizeStyle,
+  resolveBoardPieceToneClasses,
+  resolveBoardPieceTypographyClasses,
+} from "@/lib/blundr/board/boardPieceRendering";
+import { resolveDailyBoardClick } from "@/lib/blundr/daily/dailyBoardInteraction";
 
 function squareFromCoords(fileIndex: number, rankIndex: number, orientation: "white" | "black"): string {
   const file = orientation === "white" ? fileIndex : 7 - fileIndex;
@@ -119,39 +113,29 @@ export function DailyBlundrBoard({ fen, disabled, onMoveAttempt, onSquareClick, 
                     onSquareClick?.(square, piece);
                     return;
                   }
-                  if (!selectedSquare) {
-                    if (piece && piece.color === game.turn()) {
-                      setSelectedSquare(square);
-                    }
-                    return;
-                  }
-                  if (square === selectedSquare) {
-                    setSelectedSquare(null);
-                    return;
-                  }
-                  const from = selectedSquare;
-                  const trial = new Chess(fen);
-                  const move = trial.move({
-                    from: from as never,
-                    to: square as never,
-                    promotion: "q",
+                  const outcome = resolveDailyBoardClick({
+                    fen,
+                    selectedSquare,
+                    square,
+                    piece,
+                    turn: game.turn(),
+                    squareClickMode,
                   });
-                  const legal = Boolean(move);
-                  const uci = legal && move ? `${move.from}${move.to}${move.promotion ?? ""}` : `${from}${square}`;
-                  onMoveAttempt?.({
-                    from,
-                    to: square,
-                    uci,
-                    san: legal && move ? move.san : null,
-                    legal,
-                    promotion: legal && move?.promotion ? move.promotion : null,
-                  });
-                  setSelectedSquare(null);
+                  setSelectedSquare(outcome.nextSelectedSquare);
+                  if (outcome.attempt) {
+                    onMoveAttempt?.(outcome.attempt);
+                  }
                 }}
                 className={`relative flex aspect-square items-center justify-center text-2xl font-black transition ${isDark ? renderConfig.theme.squareDarkClassName : renderConfig.theme.squareLightClassName} ${isSelected ? "ring-4 ring-inset ring-green-800" : ""} ${isTarget && !squareClickMode ? "after:absolute after:h-3 after:w-3 after:rounded-full after:bg-green-600/75 after:content-['']" : ""} ${squareClickMode ? "cursor-pointer" : ""}`}
                 aria-label={describeCoordinate(square)}
               >
-                <span aria-hidden>{pieceGlyph(piece)}</span>
+                <span
+                  aria-hidden
+                  className={`pointer-events-none flex h-full w-full items-center justify-center leading-none antialiased ${resolveBoardPieceTypographyClasses(renderConfig.pieceSetId)} ${piece?.color === "w" ? resolveBoardPieceToneClasses("w") : resolveBoardPieceToneClasses("b")}`}
+                  style={{ fontSize: resolveBoardPieceSizeStyle(renderConfig.pieceSetId), transform: "translateY(-1px)" }}
+                >
+                  {piece ? renderBoardPieceGlyph(piece.color as "w" | "b", piece.type, renderConfig.pieceSetId) : ""}
+                </span>
               </button>
             );
           }),

@@ -6,5 +6,9 @@ export const metadata = {
 };
 
 export default function ProgressPage() {
-  return <ProgressDashboard homeHref="/" settingsHref="/settings" />;
+  return (
+    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-24 pt-5">
+      <ProgressDashboard homeHref="/" settingsHref="/settings" />
+    </main>
+  );
 }

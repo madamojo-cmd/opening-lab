@@ -62,6 +62,7 @@ import { buildVisibleTeachingSurface } from "@/lib/blundr/presentation/buildVisi
 import { buildLiveVisibleTeachingSurface } from "@/lib/blundr/presentation/buildLiveVisibleTeachingSurface";
 import { adaptVisibleSurfaceToBoardVisuals, adaptVisibleSurfaceToCoachUi } from "@/lib/blundr/presentation/uiSurfaceAdapter";
 import { buildTrainingBoardVisibilitySquares } from "@/lib/blundr/presentation/legalMoveDotVisibility";
+import { renderBoardPieceGlyph } from "@/lib/blundr/board/boardPieceRendering";
 import {
   DEFAULT_PROJECTIVE_TACTIC_DURATION_MS,
   DEFAULT_PROJECTIVE_TACTIC_FADE_MS,
@@ -493,9 +494,6 @@ type BoardSettings = { boardTheme: BoardTheme; pieceStyle: PieceStyle; showAttac
 type CapturedSummary = { whiteCaptured: string[]; blackCaptured: string[]; materialAdvantage: { side: ChessColor | null; value: number } };
 
 const DEFAULT_PROGRESS: Progress = { attempts: 0, correct: 0, incorrect: 0, streak: 0, trainedPositions: {}, mistakes: {} };
-const PIECE_SYMBOLS: Record<string, string> = { wp:"♙", wn:"♘", wb:"♗", wr:"♖", wq:"♕", wk:"♔", bp:"♟", bn:"♞", bb:"♝", br:"♜", bq:"♛", bk:"♚" };
-const LETTER_PIECES: Record<string, string> = { wp:"P", wn:"N", wb:"B", wr:"R", wq:"Q", wk:"K", bp:"p", bn:"n", bb:"b", br:"r", bq:"q", bk:"k" };
-const NEO_PIECES: Record<string, string> = { wp:"♙", wn:"♘", wb:"♗", wr:"♖", wq:"♕", wk:"♔", bp:"♟", bn:"♞", bb:"♝", br:"♜", bq:"♛", bk:"♚" };
 const PIECE_VALUES: Record<string, number> = { p:1, n:3, b:3, r:5, q:9, k:0 };
 const INITIAL_COUNTS: Record<ChessColor, Record<string, number>> = { w:{p:8,n:2,b:2,r:2,q:1,k:1}, b:{p:8,n:2,b:2,r:2,q:1,k:1} };
 const DEFAULT_BOARD_SETTINGS: BoardSettings = { boardTheme:"default", pieceStyle:"unicode", showAttack:true, showDefense:true, showPlan:true, showMoveDots:true, showEvalBar:true, showCaptured:true, showOpponentCue:true, projectiveTacticLinesEnabled:true, projectiveTacticLabelsEnabled:true };
@@ -1108,6 +1106,10 @@ function whiteEvalPercent(cpWhite:number|undefined){
   return Math.max(5,Math.min(95,50+bounded/24));
 }
 
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
 function advantageLabel(cpWhite:number|undefined){
   if(typeof cpWhite!=="number")return "Engine pending";
   if(Math.abs(cpWhite)>90000)return cpWhite>0?"White mate":"Black mate";
@@ -1117,10 +1119,7 @@ function advantageLabel(cpWhite:number|undefined){
 }
 
 function pieceGlyph(color:ChessColor,type:string,style:PieceStyle){
-  const key=`${color}${type}`;
-  if(style==="letters")return LETTER_PIECES[key]??type;
-  if(style==="neo")return NEO_PIECES[key]??PIECE_SYMBOLS[key]??type;
-  return PIECE_SYMBOLS[key]??type;
+  return renderBoardPieceGlyph(color === "w" ? "w" : "b", type, style === "letters" ? "letters" : style === "neo" ? "neo" : "unicode");
 }
 
 function capturedSummary(game:Chess):CapturedSummary{

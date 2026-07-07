@@ -1,6 +1,4 @@
 "use client";
-
-import { Keyboard } from "lucide-react";
 import { DailyBlundrBoard } from "@/components/daily/DailyBlundrBoard";
 import { DailyBlundrSupportControls } from "@/components/daily/DailyBlundrSupportControls";
 import type { DailyBlundrCardPlayerProps } from "@/lib/blundr/daily/dailyBlundrPlayerTypes";
@@ -33,7 +31,6 @@ export function DailyBlundrCardPlayer({
   onSquareClick,
   onChoiceSelect,
   onReveal,
-  onShowAnswer,
   onMarkReviewed,
 }: DailyBlundrCardPlayerProps) {
   const isMiniGame = card.kind === "mini_game";
@@ -150,44 +147,14 @@ export function DailyBlundrCardPlayer({
               {trainingSquareTargets.length ? `Click: ${trainingSquareTargets.join(", ")}` : "Click the key square Tempo marked."}
             </div>
           ) : (
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                onSubmitMove(moveInput);
-              }}
-              className="space-y-3"
-            >
-              <div className="rounded-2xl bg-white p-3 text-sm leading-6 text-stone-600">
-                Enter the move in UCI, or SAN if that is the move you remember. UCI is preferred for grading.
+            <div className="space-y-3 rounded-3xl border border-stone-200 bg-white p-4 text-sm leading-6 text-stone-600">
+              <div className="rounded-2xl bg-stone-50 px-3 py-3 text-sm leading-6 text-stone-600">
+                Tap the move on the board. Tempo will grade the selected piece and destination directly.
               </div>
-              <div>
-                <label htmlFor={`daily-blundr-training-target-${card.cardKey}`} className="text-xs font-black uppercase tracking-wide text-stone-500">
-                  Your move
-                </label>
-                <div className="mt-2 flex items-center gap-2">
-                  <input
-                    id={`daily-blundr-training-target-${card.cardKey}`}
-                    value={moveInput}
-                    onChange={(event) => onMoveInputChange(event.target.value)}
-                    placeholder={trainingExpectedLabel ?? "e2e4"}
-                    className="min-w-0 flex-1 rounded-2xl border border-stone-200 bg-white px-4 py-3 text-base font-semibold outline-none ring-0 focus:border-green-700"
-                  />
-                  <button type="submit" className="rounded-2xl bg-green-700 px-4 py-3 font-black text-white shadow-sm">
-                    Check
-                  </button>
-                </div>
+              <div className="text-xs font-black uppercase tracking-[0.22em] text-stone-500">
+                {trainingExpectedLabel ? `Expected move: ${trainingExpectedLabel}` : "Board move recall"}
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => onMoveInputChange(trainingExpectedLabel ?? "")}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-stone-100 px-4 py-3 font-black text-stone-700"
-                >
-                  <Keyboard size={15} />
-                  Fill answer
-                </button>
-              </div>
-            </form>
+            </div>
           )}
 
           {trainingInteractionKind !== "square_click" ? (
@@ -197,8 +164,7 @@ export function DailyBlundrCardPlayer({
               revealedAt={support.revealedAt}
               disabled={locked}
               onReveal={onReveal}
-              onShowAnswer={onShowAnswer}
-              onMarkReviewed={onMarkReviewed}
+              onContinue={onMarkReviewed}
             />
           ) : null}
 
@@ -218,44 +184,15 @@ export function DailyBlundrCardPlayer({
           ) : null}
 
           {mode === "uci_graded" ? (
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                onSubmitMove(moveInput);
-              }}
-              className="space-y-3"
-            >
-              <div className="rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600">
-                Enter the move in UCI, or SAN if that is the move you remember. UCI is preferred for grading.
-              </div>
+            <div className="space-y-3 rounded-3xl border border-stone-200 bg-stone-50 p-4 text-sm leading-6 text-stone-600">
               <div>
-                <label htmlFor={`daily-blundr-move-${card.cardKey}`} className="text-xs font-black uppercase tracking-wide text-stone-500">
-                  Your move
-                </label>
-                <div className="mt-2 flex items-center gap-2">
-                  <input
-                    id={`daily-blundr-move-${card.cardKey}`}
-                    value={moveInput}
-                    onChange={(event) => onMoveInputChange(event.target.value)}
-                    placeholder={card.expectedMoveUci ?? card.expectedMoveSan ?? "e2e4"}
-                    className="min-w-0 flex-1 rounded-2xl border border-stone-200 bg-white px-4 py-3 text-base font-semibold outline-none ring-0 focus:border-green-700"
-                  />
-                  <button type="submit" className="rounded-2xl bg-green-700 px-4 py-3 font-black text-white shadow-sm">
-                    Check
-                  </button>
-                </div>
+                <div className="text-xs font-black uppercase tracking-[0.22em] text-stone-500">Board move recall</div>
+                <p className="mt-2 font-semibold text-stone-800">Select the move directly on the board. Tempo grades the piece-to-square path you tap.</p>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => onMoveInputChange(card.expectedMoveUci ?? card.expectedMoveSan ?? "")}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-stone-100 px-4 py-3 font-black text-stone-700"
-                >
-                  <Keyboard size={15} />
-                  Fill answer
-                </button>
+              <div className="rounded-2xl bg-white px-3 py-3 text-xs font-semibold text-stone-500">
+                If you get stuck, tap Reveal to see the answer, then Continue when you are ready to move on.
               </div>
-            </form>
+            </div>
           ) : (
             <div className="rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600">
               Tempo can reveal this review, then mark it as reviewed without forcing a move entry.
@@ -268,8 +205,7 @@ export function DailyBlundrCardPlayer({
             revealedAt={support.revealedAt}
             disabled={locked}
             onReveal={onReveal}
-            onShowAnswer={onShowAnswer}
-            onMarkReviewed={onMarkReviewed}
+            onContinue={onMarkReviewed}
           />
         </>
       )}

@@ -64,7 +64,6 @@ export type DailyBlundrCardPlayerProps = {
   onSquareClick?: (square: string) => void;
   onChoiceSelect?: (choiceUci: string) => void;
   onReveal: () => void;
-  onShowAnswer: () => void;
   onMarkReviewed: () => void;
 };
 
@@ -83,8 +82,7 @@ export type DailyBlundrSupportControlsProps = {
   revealedAt: string | null;
   disabled?: boolean;
   onReveal: () => void;
-  onShowAnswer: () => void;
-  onMarkReviewed: () => void;
+  onContinue: () => void;
 };
 
 export type DailyBlundrCardFeedbackProps = {

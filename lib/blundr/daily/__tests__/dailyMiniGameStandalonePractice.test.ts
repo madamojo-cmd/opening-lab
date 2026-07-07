@@ -6,7 +6,7 @@ import { loadDailyBlundrOverview } from "../dailyBlundrReadModel";
 import { loadBlundrProgressSummary } from "../../progress/progressSummaryService";
 
 const userId = "mini-game-practice-user";
-const now = "2026-07-06T12:20:00.000Z";
+const now = new Date().toISOString();
 
 resetLocalAccountState(userId);
 setLocalAccountCurrentUserId(userId);

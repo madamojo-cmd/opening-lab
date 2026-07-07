@@ -44,7 +44,7 @@ function installLocalStorageMock(): () => void {
 const restore = installLocalStorageMock();
 try {
   const userId = "progress-user";
-  const now = "2026-07-06T10:00:00.000Z";
+  const now = new Date().toISOString();
   const localDate = now.slice(0, 10);
 
   resetLocalAccountState(userId);

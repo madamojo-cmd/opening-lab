@@ -629,16 +629,6 @@ export function DailyBlundrPlayer({
             : normalizeText(currentCard.expectedMoveSan ?? currentCard.expectedMoveUci ?? "the saved move");
           setFeedback({ message: `Tempo was looking for ${expected}.`, tone: "neutral" });
         }}
-        onShowAnswer={() => {
-          if (currentCard.kind === "mini_game") return;
-          setSupport((previous) => ({ ...previous, answerShown: true }));
-          const expected = currentCard.kind === "training_target"
-            ? trainingTargetState?.trainingTargetId === "opening_branch_builder" && trainingTargetState?.expectedSequenceUci?.length
-              ? trainingTargetState.expectedSequenceUci.join(" ")
-              : trainingTargetState?.expectedMoveSan ?? trainingTargetState?.expectedMoveUci ?? currentCard.expectedMoveSan ?? currentCard.expectedMoveUci ?? "the saved move"
-            : normalizeText(currentCard.expectedMoveSan ?? currentCard.expectedMoveUci ?? "the saved move");
-          setFeedback({ message: `Tempo was looking for ${expected}.`, tone: "neutral" });
-        }}
         onMarkReviewed={() => {
           if (currentCard.kind === "mini_game") return;
           if (currentCard.kind === "training_target") {
