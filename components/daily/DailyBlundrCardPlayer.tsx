@@ -55,6 +55,8 @@ export function DailyBlundrCardPlayer({
   const trainingSquareTargets = isTrainingTarget ? activeTrainingTargetState?.correctSquareKeys ?? activeTrainingTargetState?.targetSquares ?? card.trainingTarget?.correctSquareKeys ?? card.trainingTarget?.targetSquares ?? [] : [];
   const conceptLabels = (card.conceptIds ?? []).slice(0, 4).map((conceptId) => getDailyConceptById(conceptId)?.shortName || conceptId.split(":").pop() || conceptId);
   const openingColor = getStage2OpeningAvailability(card.repertoireId ?? null)?.learnerPerspective ?? null;
+  const miniGameScenario = activeMiniGameState?.scenario ?? card.miniGame?.scenario ?? null;
+  const miniGameSourceLabel = miniGameScenario?.source === "standalone_review" ? "Review" : "Daily Blundr";
 
   return (
     <section className="space-y-4 rounded-3xl bg-white p-4 shadow-sm">
@@ -93,9 +95,30 @@ export function DailyBlundrCardPlayer({
 
       {isMiniGame ? (
         <div className="space-y-3 rounded-3xl border border-stone-200 bg-stone-50 p-4 text-sm leading-6 text-stone-600">
+          {answerVisible ? (
+            <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+              <div className="text-xs font-black uppercase tracking-[0.22em] text-amber-700">Answer</div>
+              <p className="mt-2 font-semibold">Blundr was looking for {miniGameScenario?.solution.san || miniGameScenario?.solution.uci || expectedMove}.</p>
+              {miniGameScenario?.explanation ? <p className="mt-2 text-sm leading-6 text-amber-900/90">{miniGameScenario.explanation}</p> : null}
+            </div>
+          ) : null}
           <div>
             <div className="text-xs font-black uppercase tracking-[0.22em] text-stone-500">Objective</div>
-            <p className="mt-2 font-semibold text-stone-800">{card.prompt}</p>
+            <p className="mt-2 font-semibold text-stone-800">{miniGameScenario?.instructions ?? card.prompt}</p>
+            {miniGameScenario?.goal ? <p className="mt-2 text-sm leading-6 text-stone-600">{miniGameScenario.goal}</p> : null}
+          </div>
+          <DailyBlundrSupportControls
+            usedReveal={support.usedReveal}
+            answerShown={support.answerShown}
+            revealedAt={support.revealedAt}
+            disabled={locked}
+            onReveal={onReveal}
+            onContinue={onMarkReviewed}
+          />
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-stone-500 ring-1 ring-stone-200">{miniGameSourceLabel}</span>
+            <span className="rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-stone-500 ring-1 ring-stone-200">{miniGameScenario?.theme ?? card.title}</span>
+            <span className="rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-stone-500 ring-1 ring-stone-200">{miniGameScenario?.estimatedTimeSeconds ? `${miniGameScenario.estimatedTimeSeconds}s` : "Quick"}</span>
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs font-black uppercase tracking-wide text-stone-600">
             <div className="rounded-2xl bg-white px-3 py-3">
@@ -108,7 +131,7 @@ export function DailyBlundrCardPlayer({
             </div>
           </div>
           <div className="rounded-2xl bg-white px-3 py-3 text-xs font-semibold text-stone-500">
-            {card.miniGame?.goalSquares?.length ? `Goal: ${card.miniGame.goalSquares.join(", ")}` : "Goal: solve the route."}
+            {miniGameScenario?.goal ? `${miniGameScenario.goal}` : card.miniGame?.goalSquares?.length ? `Goal: ${card.miniGame.goalSquares.join(", ")}` : "Goal: solve the route."}
             {card.miniGame?.targetSquares?.length ? ` Targets: ${card.miniGame.targetSquares.join(", ")}` : ""}
           </div>
         </div>
@@ -144,12 +167,12 @@ export function DailyBlundrCardPlayer({
             </div>
           ) : trainingInteractionKind === "square_click" ? (
             <div className="rounded-2xl bg-white px-3 py-3 text-xs font-semibold text-stone-500">
-              {trainingSquareTargets.length ? `Click: ${trainingSquareTargets.join(", ")}` : "Click the key square Tempo marked."}
+              {trainingSquareTargets.length ? `Click: ${trainingSquareTargets.join(", ")}` : "Click the key square Blundr marked."}
             </div>
           ) : (
             <div className="space-y-3 rounded-3xl border border-stone-200 bg-white p-4 text-sm leading-6 text-stone-600">
               <div className="rounded-2xl bg-stone-50 px-3 py-3 text-sm leading-6 text-stone-600">
-                Tap the move on the board. Tempo will grade the selected piece and destination directly.
+                Tap the move on the board. Blundr will grade the selected piece and destination directly.
               </div>
               <div className="text-xs font-black uppercase tracking-[0.22em] text-stone-500">
                 {trainingExpectedLabel ? `Expected move: ${trainingExpectedLabel}` : "Board move recall"}
@@ -170,7 +193,7 @@ export function DailyBlundrCardPlayer({
 
           {answerVisible && trainingInteractionKind !== "square_click" ? (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs font-semibold text-amber-900">
-              Tempo was looking for {trainingExpectedLabel}.
+              Blundr was looking for {trainingExpectedLabel}.
             </div>
           ) : null}
         </div>
@@ -179,7 +202,7 @@ export function DailyBlundrCardPlayer({
           {answerVisible ? (
             <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
               <div className="text-xs font-black uppercase tracking-[0.22em] text-amber-700">Answer</div>
-              <p className="mt-2 font-semibold">Tempo was looking for {expectedMove}.</p>
+              <p className="mt-2 font-semibold">Blundr was looking for {expectedMove}.</p>
             </div>
           ) : null}
 
@@ -187,7 +210,7 @@ export function DailyBlundrCardPlayer({
             <div className="space-y-3 rounded-3xl border border-stone-200 bg-stone-50 p-4 text-sm leading-6 text-stone-600">
               <div>
                 <div className="text-xs font-black uppercase tracking-[0.22em] text-stone-500">Board move recall</div>
-                <p className="mt-2 font-semibold text-stone-800">Select the move directly on the board. Tempo grades the piece-to-square path you tap.</p>
+                <p className="mt-2 font-semibold text-stone-800">Select the move directly on the board. Blundr grades the piece-to-square path you tap.</p>
               </div>
               <div className="rounded-2xl bg-white px-3 py-3 text-xs font-semibold text-stone-500">
                 If you get stuck, tap Reveal to see the answer, then Continue when you are ready to move on.
@@ -195,7 +218,7 @@ export function DailyBlundrCardPlayer({
             </div>
           ) : (
             <div className="rounded-2xl bg-stone-50 p-3 text-sm leading-6 text-stone-600">
-              Tempo can reveal this review, then mark it as reviewed without forcing a move entry.
+              Blundr can reveal this review, then mark it as reviewed without forcing a move entry.
             </div>
           )}
 

@@ -1,6 +1,6 @@
 import type { LearningEvent } from "@/lib/blundr/learning/learningEvents";
 import { selectDailyMiniGame } from "./miniGames/dailyMiniGameSelector";
-import type { DailyBlundrMiniGameCard } from "./miniGames/dailyMiniGameTypes";
+import type { DailyBlundrMiniGameCard, DailyMiniGameId } from "./miniGames/dailyMiniGameTypes";
 import { selectDailyTrainingTarget } from "./trainingTargets/dailyTrainingTargetSelector";
 import type { DailyBlundrTrainingTargetCard } from "./trainingTargets/dailyTrainingTargetTypes";
 import { getConceptSuggestionsForDailyCard } from "./concepts/dailyConceptSearch";
@@ -28,6 +28,8 @@ export type DailyBlundrDeckBuildInput = {
   dateKey?: string;
   now?: string;
   limit?: number;
+  userIdOrLocalId?: string | null;
+  recentScenarioKeys?: readonly string[] | null;
 };
 
 export type DailyBlundrDeckBuildResult = DailyBlundrReviewDeckBuildResult & {
@@ -50,6 +52,10 @@ function nowDateKey(): string {
 
 function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+function uniqueNonEmpty(values: readonly (string | null | undefined)[]): string[] {
+  return Array.from(new Set(values.map((value) => normalizeText(value)).filter(Boolean)));
 }
 
 function parseIsoTimestamp(value: string | null): number {
@@ -175,6 +181,18 @@ function buildSummary(rawSeeds: DailyBlundrSeed[], cards: DailyBlundrCard[]): Da
   };
 }
 
+function resolveMiniGameInsertionCount(cardCount: number, availableSlots: number): number {
+  if (availableSlots <= 0) return 0;
+  if (cardCount < 2) return 0;
+  if (cardCount < 4) return Math.min(1, availableSlots);
+  return Math.min(2, availableSlots);
+}
+
+function resolveMiniGameScenarioKey(card: DailyBlundrCard | null | undefined): string {
+  if (!card) return "";
+  return normalizeText(card.miniGame?.scenario?.novelty.scenarioKey) || normalizeText(card.miniGame?.noveltyKey) || normalizeText(card.miniGame?.formationHash);
+}
+
 function buildCardSummary(seed: DailyBlundrSeed, sourceCount: number): string {
   const opening = normalizeText(seed.openingName) || "Local recall";
   const signalLabel = sourceCount === 1 ? "signal" : "signals";
@@ -189,6 +207,7 @@ export function buildDailyBlundrDeck(input: DailyBlundrDeckBuildInput): DailyBlu
   const dateKey = input.dateKey ?? nowDateKey();
   const limit = Math.max(1, Math.min(5, Number(input.limit ?? DEFAULT_LIMIT) || DEFAULT_LIMIT));
   const now = input.now ?? new Date().toISOString();
+  const userIdOrLocalId = normalizeText(input.userIdOrLocalId) || "local";
   const progressSeeds = adaptProgressMistakesToDailySeeds(input.progress);
   const eventSeeds = adaptLearningEventsToDailySeeds(input.learningEvents);
   const rawSeeds = [...eventSeeds, ...progressSeeds];
@@ -266,8 +285,8 @@ export function buildDailyBlundrDeck(input: DailyBlundrDeckBuildInput): DailyBlu
       : null;
   const cards: DailyBlundrCard[] = [...validReviewCards];
   if (trainingTargetSelection && cards.length < limit) {
-    const trainingTargetCard = trainingTargetSelection.card;
-    const nextTrainingTargetCard = {
+  const trainingTargetCard = trainingTargetSelection.card;
+  const nextTrainingTargetCard = {
       ...trainingTargetCard,
       deckRank: cards.length + 1,
       priority: trainingTargetCard.priority,
@@ -277,32 +296,49 @@ export function buildDailyBlundrDeck(input: DailyBlundrDeckBuildInput): DailyBlu
       cards.push(nextTrainingTargetCard);
     }
   }
-  const miniGameSelection = selectDailyMiniGame({
-    mastery: input.mastery ?? null,
-    dateKey,
-    now,
-    dueReviewCount: reviewDeck.dueReviewCount,
-    selectedReviewCount: reviewDeck.selectedReviewCards.length + (trainingTargetSelection ? 1 : 0),
-    recentMiniGameIds: [],
-    recentFenKeys: [
-      ...reviewFenKeys,
-      normalizeText(trainingTargetSelection?.card.fen),
-    ].filter(Boolean),
-    sessionMiniGameIds: [],
-    excludedMiniGameIds: [],
-  });
+  const baseRecentScenarioKeys = uniqueNonEmpty([
+    ...(input.recentScenarioKeys ?? []),
+    ...cards.map(resolveMiniGameScenarioKey).filter(Boolean),
+  ]);
+  const miniGameSlots = resolveMiniGameInsertionCount(cards.length, limit - cards.length);
+  const miniGameIdsForDeck: DailyMiniGameId[] = [];
+  let recentScenarioKeys = [...baseRecentScenarioKeys];
 
-  if (miniGameSelection && (reviewDeck.dueReviewCount === 0 || cards.length < limit)) {
+  for (let slot = 0; slot < miniGameSlots; slot += 1) {
+    const miniGameSelection = selectDailyMiniGame({
+      mastery: input.mastery ?? null,
+      dateKey,
+      now,
+      dueReviewCount: reviewDeck.dueReviewCount,
+      selectedReviewCount: reviewDeck.selectedReviewCards.length + (trainingTargetSelection ? 1 : 0),
+      recentMiniGameIds: miniGameIdsForDeck,
+      recentFenKeys: [
+        ...reviewFenKeys,
+        normalizeText(trainingTargetSelection?.card.fen),
+      ].filter(Boolean),
+      recentScenarioKeys,
+      sessionMiniGameIds: [],
+      excludedMiniGameIds: miniGameIdsForDeck,
+      source: "daily_deck",
+      seed: `${dateKey}|${userIdOrLocalId}|${reviewDeck.selectionMode}|${slot}|${cards.length}|${limit}`,
+      userIdOrLocalId,
+      deckId: reviewDeck.selectionMode || dateKey,
+    });
+
+    if (!miniGameSelection?.card) continue;
     const miniGameCard = miniGameSelection.card;
+    if (miniGameCard.miniGame?.scenario?.source !== "daily_deck") continue;
     const nextMiniGameCard = {
       ...miniGameCard,
       deckRank: cards.length + 1,
       priority: miniGameCard.priority,
       summary: miniGameCard.summary,
     } as DailyBlundrMiniGameCard;
-    if (isValidDailyCard(nextMiniGameCard)) {
-      cards.push(nextMiniGameCard);
-    }
+    if (!isValidDailyCard(nextMiniGameCard)) continue;
+    cards.push(nextMiniGameCard);
+    miniGameIdsForDeck.push(miniGameCard.miniGame.miniGameId);
+    const scenarioKey = resolveMiniGameScenarioKey(nextMiniGameCard);
+    if (scenarioKey) recentScenarioKeys = uniqueNonEmpty([scenarioKey, ...recentScenarioKeys]);
   }
 
   const fingerprint = cards.map((card) => card.cardKey).join("|");

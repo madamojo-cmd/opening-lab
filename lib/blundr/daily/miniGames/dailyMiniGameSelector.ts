@@ -1,7 +1,8 @@
 import type { DailyBlundrDifficulty, DailyBlundrMasteryState } from "../dailyBlundrTypes";
 import { getConceptMasteryRecord } from "../concepts/dailyConceptMastery";
 import { inferConceptTagsForMiniGame } from "../concepts/dailyConceptTagging";
-import type { DailyBlundrMiniGameCard, DailyMiniGameDefinition, DailyMiniGameId, DailyMiniGameSelection } from "./dailyMiniGameTypes";
+import type { BlundrBoardPreferences } from "@/lib/blundr/board/boardThemeTypes";
+import type { DailyBlundrMiniGameCard, DailyMiniGameDefinition, DailyMiniGameId, DailyMiniGameSelection, DailyMiniGameSource } from "./dailyMiniGameTypes";
 import { DAILY_MINI_GAME_REGISTRY } from "./dailyMiniGameRegistry";
 
 export type DailyMiniGameSelectionInput = {
@@ -12,8 +13,14 @@ export type DailyMiniGameSelectionInput = {
   selectedReviewCount: number;
   recentMiniGameIds?: readonly DailyMiniGameId[];
   recentFenKeys?: readonly string[];
+  recentScenarioKeys?: readonly string[];
   sessionMiniGameIds?: readonly DailyMiniGameId[];
   excludedMiniGameIds?: readonly DailyMiniGameId[];
+  source?: DailyMiniGameSource;
+  seed?: string;
+  userIdOrLocalId?: string | null;
+  boardPreferences?: Partial<BlundrBoardPreferences> | null;
+  deckId?: string | null;
 };
 
 function normalizeText(value: unknown): string {
@@ -146,6 +153,8 @@ function isRecentFen(candidate: DailyBlundrMiniGameCard, recentFenKeys: readonly
     normalizeText(candidate.positionKey),
     normalizeText(candidate.miniGame.formationHash),
     normalizeText(candidate.miniGame.noveltyKey),
+    normalizeText(candidate.miniGame.scenario?.novelty.scenarioKey),
+    normalizeText(candidate.miniGame.scenario?.id),
   ]);
   return recentFenKeys.some((key) => keys.has(normalizeText(key)));
 }
@@ -155,6 +164,7 @@ export function selectDailyMiniGame(input: DailyMiniGameSelectionInput): DailyMi
   const recentMiniGameIds = input.recentMiniGameIds ?? [];
   const excludedMiniGameIds = input.excludedMiniGameIds ?? [];
   const sessionMiniGameIds = input.sessionMiniGameIds ?? [];
+  const source = input.source ?? "daily_deck";
   const candidates = DAILY_MINI_GAME_REGISTRY
     .map((definition) => {
       const mastery = resolveMiniGameRecord(input.mastery, definition);
@@ -197,10 +207,19 @@ export function selectDailyMiniGame(input: DailyMiniGameSelectionInput): DailyMi
       selectedReviewCount: input.selectedReviewCount,
       recentMiniGameIds,
       recentFenKeys: input.recentFenKeys ?? [],
+      recentScenarioKeys: input.recentScenarioKeys ?? [],
       sessionMiniGameIds,
+      source,
+      seed: input.seed ?? undefined,
+      userIdOrLocalId: input.userIdOrLocalId ?? null,
+      boardPreferences: input.boardPreferences ?? null,
+      deckId: input.deckId ?? null,
+      miniGameId: candidate.definition.id,
     });
     if (!card) continue;
+    if (card.miniGame?.scenario && card.miniGame.scenario.source !== source) continue;
     if (isRecentFen(card, input.recentFenKeys ?? [])) continue;
+    if (input.recentScenarioKeys?.some((recentKey) => normalizeText(recentKey) === normalizeText(card.miniGame?.scenario?.novelty.scenarioKey))) continue;
     return {
       definition: candidate.definition,
       card,

@@ -29,8 +29,8 @@ import { advanceBreakTimingDrillTrainingTarget } from "@/lib/blundr/daily/traini
 import { advanceKeySquareClickTrainingTarget } from "@/lib/blundr/daily/trainingTargets/keySquareClick";
 import type { DailyBlundrTrainingTargetCard } from "@/lib/blundr/daily/trainingTargets/dailyTrainingTargetTypes";
 
-const EMPTY_STATE_COPY = "Queue clear. Tempo does not have missed moves to review yet. Train an opening and Daily Blundr will start building your smart review loop.";
-const COMPLETION_COPY = "Daily Blundr complete. Tempo saved the important mistakes for future review.";
+const EMPTY_STATE_COPY = "Queue clear. Blundr does not have missed moves to review yet. Train an opening and Daily Blundr will start building your smart review loop.";
+const COMPLETION_COPY = "Daily Blundr complete. Blundr saved the important mistakes for future review.";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -58,25 +58,25 @@ function buildRecallFeedbackMessage(score: number, usedReveal: boolean, sessionC
     return { message: "Good review. This one will come back sooner.", tone: "warning" };
   }
   if (score >= 95) {
-    return { message: "Nice. Tempo locked that one in.", tone: "success" };
+    return { message: "Nice. Blundr locked that one in.", tone: "success" };
   }
-  return { message: "Tempo saved this for review.", tone: "warning" };
+  return { message: "Blundr saved this for review.", tone: "warning" };
 }
 
 function buildMiniGameFeedbackMessage(card: DailyBlundrMiniGameCard, correct: boolean): { message: string; tone: "success" | "warning" } {
   if (card.miniGame.miniGameId === "king_race") {
     return correct
-      ? { message: "Nice. Tempo found the path through the king traffic.", tone: "success" }
-      : { message: "Tempo saved the king geometry for practice.", tone: "warning" };
+      ? { message: "Nice. Blundr found the path through the king traffic.", tone: "success" }
+      : { message: "Blundr saved the king geometry for practice.", tone: "warning" };
   }
   if (card.miniGame.miniGameId === "knight_gymnasium") {
     return correct
       ? { message: "Clean route. Your knight found the pattern.", tone: "success" }
-      : { message: "Tempo will bring this knight route back.", tone: "warning" };
+      : { message: "Blundr will bring this knight route back.", tone: "warning" };
   }
   return correct
-    ? { message: `Nice. Tempo locked ${card.title} in.`, tone: "success" }
-    : { message: `Tempo will bring ${card.title} back for practice.`, tone: "warning" };
+    ? { message: `Nice. Blundr locked ${card.title} in.`, tone: "success" }
+    : { message: `Blundr will bring ${card.title} back for practice.`, tone: "warning" };
 }
 
 function buildTrainingTargetFeedbackMessage(card: DailyBlundrCard, result: DailyTrainingTargetAdvanceResult | null, complete: boolean): { message: string; tone: "success" | "warning" | "complete" | "neutral" } {
@@ -87,31 +87,31 @@ function buildTrainingTargetFeedbackMessage(card: DailyBlundrCard, result: Daily
     if (card.trainingTarget?.trainingTargetId === "opening_branch_builder") {
       return { message: "Clean branch so far. Keep the line going.", tone: "neutral" };
     }
-    return { message: "Tempo wants the next move.", tone: "neutral" };
+    return { message: "Blundr wants the next move.", tone: "neutral" };
   }
   if (card.trainingTarget?.trainingTargetId === "reply_radar") {
     return result.won
-      ? { message: "Tempo saw that reply coming.", tone: "success" }
-      : { message: "Tempo saved that reply pattern for review.", tone: "warning" };
+      ? { message: "Blundr saw that reply coming.", tone: "success" }
+      : { message: "Blundr saved that reply pattern for review.", tone: "warning" };
   }
   if (card.trainingTarget?.trainingTargetId === "opening_branch_builder") {
     return result.won
-      ? { message: "Clean branch. Tempo locked in the move order.", tone: "success" }
-      : { message: "Tempo saved that branch for another pass.", tone: "warning" };
+      ? { message: "Clean branch. Blundr locked in the move order.", tone: "success" }
+      : { message: "Blundr saved that branch for another pass.", tone: "warning" };
   }
   if (card.trainingTarget?.trainingTargetId === "opponent_reply_trainer") {
     return result.won
-      ? { message: "Good anticipation. Tempo had that reply marked.", tone: "success" }
-      : { message: "Tempo will bring this reply back.", tone: "warning" };
+      ? { message: "Good anticipation. Blundr had that reply marked.", tone: "success" }
+      : { message: "Blundr will bring this reply back.", tone: "warning" };
   }
   if (card.trainingTarget?.trainingTargetId === "break_timing_drill") {
     return result.won
-      ? { message: "Nice timing. Tempo found the break.", tone: "success" }
-      : { message: "Tempo saved that break timing for review.", tone: "warning" };
+      ? { message: "Nice timing. Blundr found the break.", tone: "success" }
+      : { message: "Blundr saved that break timing for review.", tone: "warning" };
   }
   return result.won
-    ? { message: "That’s the square. Tempo marked it.", tone: "success" }
-    : { message: "Tempo saved that square pattern for review.", tone: "warning" };
+    ? { message: "That’s the square. Blundr marked it.", tone: "success" }
+    : { message: "Blundr saved that square pattern for review.", tone: "warning" };
 }
 
 function getCurrentCard(cards: readonly DailyBlundrCard[], sessionCardId: string | null, sessionIndex: number): DailyBlundrCard | null {
@@ -441,6 +441,84 @@ export function DailyBlundrPlayer({
     });
   }
 
+  function commitMiniGameReveal() {
+    if (!session || !currentCard || currentCard.kind !== "mini_game" || !currentCard.miniGame) return;
+    const miniGameCard = currentCard as DailyBlundrMiniGameCard;
+    const definition = getDailyMiniGameDefinition(miniGameCard.miniGame.miniGameId);
+    if (!definition) return;
+    const startedAt = attemptStartedAtRef.current;
+    const responseTimeMs = startedAt ? Math.max(0, Date.now() - startedAt) : null;
+    const revealState = miniGameState ?? miniGameCard.miniGame;
+    const scoring = definition.scoreAttempt({
+      card: miniGameCard,
+      completed: false,
+      won: false,
+      moveCount: revealState.plyCount,
+      moveLimit: revealState.moveLimit,
+      bestKnownMoves: revealState.bestKnownScore ?? null,
+      illegalMoveCount: 0,
+      blocked: false,
+      perfectPath: false,
+      objectiveCount: 1,
+      objectivesCompleted: 0,
+      reason: "reveal_used",
+    });
+    const now = nowIso();
+    const attempt: DailyBlundrAttempt = {
+      id: `daily-mini-game-reveal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      cardId: currentCard.cardKey,
+      source: currentCard.source,
+      createdAt: now,
+      completedAt: now,
+      outcome: scoring.outcome,
+      correct: scoring.correct,
+      attemptedMoveUci: null,
+      attemptedMoveSan: null,
+      responseMoveUci: null,
+      responseMoveSan: null,
+      expectedMoveUci: miniGameCard.miniGame.scenario?.solution.uci ?? null,
+      expectedMoveSan: miniGameCard.miniGame.scenario?.solution.san ?? null,
+      usedReveal: true,
+      responseTimeMs,
+      note: "reveal_used",
+    };
+
+    finalizeAttempt({
+      card: currentCard,
+      attempt,
+      scoring,
+      miniGameResult: {
+        state: {
+          ...revealState,
+          completed: true,
+          won: false,
+        },
+        completed: true,
+        won: false,
+        legal: true,
+        reason: "reveal_used",
+        attemptedMoveUci: null,
+        attemptedMoveSan: null,
+        moveCount: revealState.plyCount,
+        illegalMoveCount: 0,
+        scoreInput: {
+          card: null as never,
+          completed: false,
+          won: false,
+          moveCount: revealState.plyCount,
+          moveLimit: revealState.moveLimit,
+          bestKnownMoves: revealState.bestKnownScore ?? null,
+          illegalMoveCount: 0,
+          blocked: false,
+          perfectPath: false,
+          objectiveCount: 1,
+          objectivesCompleted: 0,
+          reason: "reveal_used",
+        },
+      },
+    });
+  }
+
   function commitTrainingTargetAttempt(options: {
     attemptedMove?: string | null;
     choiceUci?: string | null;
@@ -596,7 +674,7 @@ export function DailyBlundrPlayer({
             if (nextMiniGame.completed) {
               commitMiniGameAttempt(nextMiniGame, attempt);
             } else {
-              setFeedback({ message: "Tempo is still threading the route.", tone: "neutral" });
+              setFeedback({ message: "Blundr is still threading the route.", tone: "neutral" });
             }
             return;
           }
@@ -619,7 +697,12 @@ export function DailyBlundrPlayer({
           commitTrainingTargetAttempt({ choiceUci, usedReveal: support.usedReveal });
         }}
         onReveal={() => {
-          if (currentCard.kind === "mini_game") return;
+          if (currentCard.kind === "mini_game" && currentCard.miniGame?.scenario) {
+            const solution = currentCard.miniGame.scenario.solution.san || currentCard.miniGame.scenario.solution.uci;
+            setSupport((previous) => ({ ...previous, usedReveal: true, revealedAt: previous.revealedAt ?? nowIso(), answerShown: true }));
+            setFeedback({ message: `${currentCard.miniGame.scenario.explanation} Blundr was looking for ${solution}.`, tone: "warning" });
+            return;
+          }
           const revealedAt = nowIso();
           setSupport((previous) => ({ ...previous, usedReveal: true, revealedAt, answerShown: true }));
           const expected = currentCard.kind === "training_target"
@@ -627,10 +710,13 @@ export function DailyBlundrPlayer({
               ? trainingTargetState.expectedSequenceUci.join(" ")
               : trainingTargetState?.expectedMoveSan ?? trainingTargetState?.expectedMoveUci ?? currentCard.expectedMoveSan ?? currentCard.expectedMoveUci ?? "the saved move"
             : normalizeText(currentCard.expectedMoveSan ?? currentCard.expectedMoveUci ?? "the saved move");
-          setFeedback({ message: `Tempo was looking for ${expected}.`, tone: "neutral" });
+          setFeedback({ message: `Blundr was looking for ${expected}.`, tone: "neutral" });
         }}
         onMarkReviewed={() => {
-          if (currentCard.kind === "mini_game") return;
+          if (currentCard.kind === "mini_game") {
+            commitMiniGameReveal();
+            return;
+          }
           if (currentCard.kind === "training_target") {
             setSupport((previous) => ({
               usedReveal: true,

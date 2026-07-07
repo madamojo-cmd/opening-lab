@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 
+import { buildPracticeBundle } from "@/components/review/MiniGamePracticeRunner";
 import { resetLocalAccountState, setLocalAccountCurrentUserId } from "../../accounts/localAccountStorage";
 import { clearLocalLearningEvents, createLearningSessionId, recordLearningEvent } from "../../learning/learningEvents";
 import { loadDailyBlundrOverview } from "../dailyBlundrReadModel";
@@ -11,6 +12,24 @@ const now = new Date().toISOString();
 resetLocalAccountState(userId);
 setLocalAccountCurrentUserId(userId);
 clearLocalLearningEvents();
+
+const practiceBundle = buildPracticeBundle("king_race", 0, [], userId);
+assert.ok(practiceBundle);
+assert.equal(practiceBundle?.card.miniGame.scenario?.source, "standalone_review");
+
+const nextPracticeBundle = buildPracticeBundle(
+  "king_race",
+  1,
+  [practiceBundle?.card.miniGame.scenario?.novelty.scenarioKey ?? ""],
+  userId,
+);
+assert.ok(nextPracticeBundle);
+assert.notEqual(
+  nextPracticeBundle?.card.miniGame.scenario?.novelty.scenarioKey,
+  practiceBundle?.card.miniGame.scenario?.novelty.scenarioKey,
+);
+
+assert.equal(buildPracticeBundle("unknown_mini_game", 0, [], userId), null);
 
 const before = loadDailyBlundrOverview(5);
 recordLearningEvent({

@@ -38,7 +38,7 @@ export function ReviewHub({ embedded = false, homeHref = "/", settingsHref = "/s
               </div>
               <h1 className="mt-3 text-2xl font-black tracking-tight text-stone-950">Review and practice</h1>
               <p className="mt-2 text-sm leading-6 text-stone-600">
-                Practice the patterns that make Daily Blundr easier. Tempo keeps the queue calm and the minigames focused.
+                Practice the patterns that make Daily Blundr easier. Blundr keeps the queue calm and the minigames focused.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -59,9 +59,9 @@ export function ReviewHub({ embedded = false, homeHref = "/", settingsHref = "/s
 
       <section className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-          <BlundrAssetImage asset={BLUNDR_TEMPO_ASSETS.coach} alt="Tempo coach" variant="tempoCard" className="mx-auto w-full max-w-[9rem] sm:mx-0 sm:w-32" />
+          <BlundrAssetImage asset={BLUNDR_TEMPO_ASSETS.coach} alt="Blundr coach" variant="tempoCard" className="mx-auto w-full max-w-[9rem] sm:mx-0 sm:w-32" />
           <div className="min-w-0 flex-1">
-            <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">Minigames</div>
+          <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">Minigames</div>
             <h2 className="mt-2 text-lg font-black tracking-tight text-stone-950">{DAILY_MINI_GAME_REGISTRY.length} practice games ready</h2>
             <p className="mt-2 text-sm leading-6 text-stone-600">
               Pick a pattern, play a compact scenario, and practice outside the Daily Blundr loop.
@@ -136,7 +136,7 @@ export function ReviewHub({ embedded = false, homeHref = "/", settingsHref = "/s
           <p className="mt-2 text-sm leading-6 text-stone-600">Promotion races, passed pawns, and timing.</p>
         </div>
         <div className="rounded-[1.5rem] border border-stone-200 bg-white p-4 shadow-sm">
-          <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">Tempo coach</div>
+          <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">Blundr coach</div>
           <div className="mt-2 text-2xl font-black tracking-tight text-stone-950">Stand-alone</div>
           <p className="mt-2 text-sm leading-6 text-stone-600">Practice here without mutating Daily Blundr completion state.</p>
         </div>

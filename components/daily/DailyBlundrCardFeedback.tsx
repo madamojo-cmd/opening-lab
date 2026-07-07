@@ -22,7 +22,7 @@ export function DailyBlundrCardFeedback({ message, tone }: DailyBlundrCardFeedba
     <div className={`rounded-3xl border p-4 text-sm leading-6 shadow-sm ${feedbackToneClasses(tone)}`}>
       <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em] opacity-80">
         {feedbackToneIcon(tone)}
-        Tempo
+        Blundr
       </div>
       <p className="mt-2 font-semibold">{message}</p>
     </div>

@@ -31,6 +31,13 @@ export function makeMiniGameContext(overrides: Partial<DailyMiniGameGenerationCo
     recentMiniGameIds: overrides.recentMiniGameIds ?? [],
     recentFenKeys: overrides.recentFenKeys ?? [],
     sessionMiniGameIds: overrides.sessionMiniGameIds ?? [],
+    source: overrides.source ?? "daily_deck",
+    seed: overrides.seed ?? null,
+    userIdOrLocalId: overrides.userIdOrLocalId ?? "local",
+    recentScenarioKeys: overrides.recentScenarioKeys ?? [],
+    boardPreferences: overrides.boardPreferences ?? null,
+    deckId: overrides.deckId ?? null,
+    miniGameId: overrides.miniGameId ?? null,
   };
 }
 
@@ -123,4 +130,3 @@ export function makeValidMiniGameCards(): DailyBlundrMiniGameCard[] {
 export function makeValidTrainingTargetCards(): DailyBlundrTrainingTargetCard[] {
   return DAILY_TRAINING_TARGET_REGISTRY.map((definition) => definition.generate(makeTrainingTargetContext())!).filter((card): card is DailyBlundrTrainingTargetCard => Boolean(card));
 }
-

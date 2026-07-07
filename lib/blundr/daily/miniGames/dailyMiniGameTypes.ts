@@ -1,4 +1,6 @@
 import type { DailyBlundrAttemptOutcome, DailyBlundrCard, DailyBlundrDifficulty, DailyBlundrMasteryState } from "../dailyBlundrTypes";
+import type { BlundrBoardPreferences } from "@/lib/blundr/board/boardThemeTypes";
+import type { DailyValidationIssue } from "../validation/dailyValidationTypes";
 
 export type DailyMiniGameId =
   | "king_race"
@@ -46,9 +48,83 @@ export type DailyMiniGameSkillId =
   | "rook_endgame"
   | "mating_net";
 
+export type DailyMiniGameSource = "daily_deck" | "standalone_review";
+
+export type DailyMiniGameScenarioValidation = {
+  checkedAt: string;
+  valid: boolean;
+  attempts: number;
+  issues: DailyValidationIssue[];
+};
+
+export type DailyMiniGameScenarioSolution = {
+  uci: string;
+  san: string | null;
+};
+
+export type DailyMiniGameScenarioScoring = {
+  mode: "single_move" | "route" | "choice";
+  maxAttempts: number;
+  revealPenalty: number;
+  canRetry: boolean;
+  correctMoveReward: number;
+};
+
+export type DailyMiniGameScenarioRetryBehavior = {
+  allowRetry: boolean;
+  refreshSeedOnRetry: boolean;
+  nextLabel: "Continue" | "Next";
+};
+
+export type DailyMiniGameScenarioRevealBehavior = {
+  revealLabel: "Reveal";
+  continueLabel: "Continue" | "Next";
+  showAnswerLabel?: string | null;
+  markReviewedLabel?: string | null;
+};
+
+export type DailyMiniGameScenarioNovelty = {
+  scenarioKey: string;
+  cooldownGroup: string;
+  recentScenarioKeys: string[];
+  avoidedRepeat: boolean;
+};
+
+export type DailyMiniGameScenario = {
+  id: string;
+  miniGameId: DailyMiniGameId;
+  source: DailyMiniGameSource;
+  seed: string;
+  generatedAt: string;
+  createdAt: string;
+  fen: string;
+  sideToMove: "w" | "b";
+  prompt: string;
+  instructions: string;
+  goal: string;
+  acceptedMoves: string[];
+  solution: DailyMiniGameScenarioSolution;
+  explanation: string;
+  conceptTags: string[];
+  difficulty: DailyBlundrDifficulty;
+  estimatedTimeSeconds: number;
+  validation: DailyMiniGameScenarioValidation;
+  scoring: DailyMiniGameScenarioScoring;
+  retryBehavior: DailyMiniGameScenarioRetryBehavior;
+  revealBehavior: DailyMiniGameScenarioRevealBehavior;
+  novelty: DailyMiniGameScenarioNovelty;
+  theme: string;
+  targetSquares?: string[];
+  goalSquares?: string[];
+  acceptedSquares?: string[];
+  boardOrientationHint?: "white" | "black" | "auto";
+  candidateMoves?: Array<{ uci: string; san: string | null; label: string; correct: boolean }>;
+};
+
 export type DailyMiniGameState = {
   miniGameId: DailyMiniGameId;
   scenarioId?: string;
+  scenario?: DailyMiniGameScenario | null;
   skillIds: DailyMiniGameSkillId[];
   difficulty: DailyBlundrDifficulty;
   startFen: string;
@@ -88,6 +164,13 @@ export type DailyMiniGameGenerationContext = {
   recentMiniGameIds: readonly DailyMiniGameId[];
   recentFenKeys: readonly string[];
   sessionMiniGameIds: readonly DailyMiniGameId[];
+  source?: DailyMiniGameSource;
+  seed?: string | null;
+  userIdOrLocalId?: string | null;
+  recentScenarioKeys?: readonly string[];
+  boardPreferences?: Partial<BlundrBoardPreferences> | null;
+  deckId?: string | null;
+  miniGameId?: DailyMiniGameId | null;
 };
 
 export type DailyMiniGameScoreInput = {

@@ -15,6 +15,7 @@ import type { DailyBlundrReviewAttempt, DailyBlundrReviewCard } from "@/lib/blun
 import type { DailyBlundrPlayerAttemptCommit } from "@/lib/blundr/daily/dailyBlundrPlayerTypes";
 import type { DailyBlundrMiniGameCard, DailyMiniGameId } from "@/lib/blundr/daily/miniGames/dailyMiniGameTypes";
 import { recordLearningEvent, createLearningSessionId } from "@/lib/blundr/learning/learningEvents";
+import { readLocalBoardPreferences } from "@/lib/blundr/board/boardPreferenceService";
 
 type PracticeBundle = {
   card: DailyBlundrMiniGameCard;
@@ -37,11 +38,12 @@ function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function buildPracticeBundle(miniGameId: string, nonce: number): PracticeBundle | null {
+export function buildPracticeBundle(miniGameId: string, nonce: number, recentScenarioKeys: readonly string[], userIdOrLocalId: string | null): PracticeBundle | null {
   const definition = getDailyMiniGameDefinition(miniGameId as DailyMiniGameId);
   if (!definition) return null;
   const now = new Date().toISOString();
   const dateKey = `${getDailyBlundrDateKey()}:${definition.id}:${nonce}`;
+  const boardPreferences = typeof window !== "undefined" ? readLocalBoardPreferences(window.localStorage) : null;
   const card = definition.generate({
     dateKey,
     now,
@@ -54,6 +56,13 @@ function buildPracticeBundle(miniGameId: string, nonce: number): PracticeBundle 
     recentMiniGameIds: [],
     recentFenKeys: [],
     sessionMiniGameIds: [],
+    source: "standalone_review",
+    seed: `${definition.id}|${dateKey}|${nonce}|standalone_review|${userIdOrLocalId ?? "local"}`,
+    userIdOrLocalId,
+    recentScenarioKeys,
+    boardPreferences,
+    deckId: `review:${definition.id}`,
+    miniGameId: definition.id,
   });
   if (!card || card.kind !== "mini_game") return null;
   const session = reconcileDailyBlundrSession({
@@ -70,7 +79,12 @@ function buildPracticeBundle(miniGameId: string, nonce: number): PracticeBundle 
 
 export function MiniGamePracticeRunner({ miniGameId, homeHref = "/", reviewHref = "/review", settingsHref = "/settings" }: MiniGamePracticeRunnerProps) {
   const [practiceNonce, setPracticeNonce] = useState(0);
-  const practiceBundle = useMemo(() => buildPracticeBundle(miniGameId, practiceNonce), [miniGameId, practiceNonce]);
+  const [recentScenarioKeys, setRecentScenarioKeys] = useState<string[]>([]);
+  const userIdOrLocalId = useMemo(() => getLocalAccountCurrentUserId() ?? "local", []);
+  const practiceBundle = useMemo(
+    () => buildPracticeBundle(miniGameId, practiceNonce, recentScenarioKeys, userIdOrLocalId),
+    [miniGameId, practiceNonce, recentScenarioKeys, userIdOrLocalId],
+  );
   const definition = useMemo(() => getDailyMiniGameDefinition(miniGameId as DailyMiniGameId), [miniGameId]);
 
   const [session, setSession] = useState<PracticeBundle["session"] | null>(practiceBundle?.session ?? null);
@@ -87,6 +101,13 @@ export function MiniGamePracticeRunner({ miniGameId, homeHref = "/", reviewHref 
     setReviewAttempts([]);
     setMastery(null);
     setStatusMessage(null);
+    const scenarioKey = normalizeText(practiceBundle?.card.miniGame?.scenario?.novelty.scenarioKey);
+    if (scenarioKey) {
+      setRecentScenarioKeys((previous) => {
+        const next = [scenarioKey, ...previous.filter((entry) => normalizeText(entry) !== scenarioKey)];
+        return next.slice(0, 8);
+      });
+    }
   }, [practiceBundle]);
 
   function advanceScenario() {
@@ -120,8 +141,10 @@ export function MiniGamePracticeRunner({ miniGameId, homeHref = "/", reviewHref 
       timeToMoveMs: commit.attempt.responseTimeMs ?? undefined,
       metadata: {
         practiceMode: "mini_game",
+        practiceSource: "standalone_review",
         miniGameId: currentDefinition.id,
         scenarioId: commit.card.miniGame?.scenarioId ?? null,
+        scenarioKey: commit.card.miniGame?.scenario?.novelty.scenarioKey ?? null,
         completed: commit.sessionComplete,
       },
     });
@@ -139,7 +162,7 @@ export function MiniGamePracticeRunner({ miniGameId, homeHref = "/", reviewHref 
               </div>
               <h1 className="mt-3 text-2xl font-black tracking-tight text-stone-950">Unknown minigame</h1>
               <p className="mt-2 text-sm leading-6 text-stone-600">
-                Tempo could not find a playable minigame for this route. Return to Review and pick one from the registry.
+                Blundr could not find a playable minigame for this route. Return to Review and pick one from the registry.
               </p>
             </div>
             <Link href={settingsHref} className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm" aria-label="Open settings">
@@ -180,7 +203,7 @@ export function MiniGamePracticeRunner({ miniGameId, homeHref = "/", reviewHref 
           <div className="min-w-0 flex-1">
             <div className="inline-flex items-center gap-2 rounded-full bg-green-50 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-green-700">
               <Sparkles size={14} />
-              Practice hub
+              Minigames
             </div>
             <h1 className="mt-3 text-2xl font-black tracking-tight text-stone-950">{definition.displayName ?? definition.title}</h1>
             <p className="mt-2 text-sm leading-6 text-stone-600">{definition.shortDescription ?? definition.summary}</p>
@@ -198,7 +221,7 @@ export function MiniGamePracticeRunner({ miniGameId, homeHref = "/", reviewHref 
 
       <section className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-          <BlundrAssetImage asset={BLUNDR_TEMPO_ASSETS.pointing} alt="Tempo pointing" variant="tempoCard" className="mx-auto w-full max-w-[9rem] sm:mx-0 sm:w-32" />
+          <BlundrAssetImage asset={BLUNDR_TEMPO_ASSETS.pointing} alt="Blundr pointing" variant="tempoCard" className="mx-auto w-full max-w-[9rem] sm:mx-0 sm:w-32" />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap gap-2">
               <span className="rounded-full bg-green-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-green-700">
@@ -215,7 +238,7 @@ export function MiniGamePracticeRunner({ miniGameId, homeHref = "/", reviewHref 
               Skills: <span className="font-black text-stone-900">{definition.skillIds.join(", ")}</span>
             </p>
             <p className="mt-2 text-sm leading-6 text-stone-600">
-              Tempo uses the same board theme, move grading, and Daily Blundr controls here. Practice does not mark the Daily Blundr deck complete.
+              Blundr uses the same board theme, move grading, and Daily Blundr controls here. Practice does not mark the Daily Blundr deck complete.
             </p>
           </div>
         </div>
@@ -244,7 +267,7 @@ export function MiniGamePracticeRunner({ miniGameId, homeHref = "/", reviewHref 
           className="inline-flex items-center justify-center gap-2 rounded-[1.5rem] bg-green-700 px-4 py-3 text-sm font-black text-white shadow-sm"
         >
           <RefreshCw size={16} />
-          Try another scenario
+          Next scenario
         </button>
         <Link href={reviewHref} className="inline-flex items-center justify-center gap-2 rounded-[1.5rem] bg-stone-100 px-4 py-3 text-sm font-black text-stone-700 shadow-sm">
           <Home size={16} />
@@ -262,13 +285,13 @@ export function MiniGamePracticeRunner({ miniGameId, homeHref = "/", reviewHref 
           <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">Practice state</div>
           <div className="mt-2 text-lg font-black tracking-tight text-stone-950">{session?.status ?? "not started"}</div>
           <p className="mt-2 text-sm leading-6 text-stone-600">
-            {session?.completedAt ? "Tempo logged a clean finish for this scenario." : "Keep going until the route is complete."}
+            {session?.completedAt ? "Blundr logged a clean finish for this scenario." : "Keep going until the route is complete."}
           </p>
         </div>
         <div className="rounded-[1.5rem] border border-stone-200 bg-white p-4 shadow-sm">
           <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">Session id</div>
           <div className="mt-2 text-lg font-black tracking-tight text-stone-950">{session?.dateKey ?? "n/a"}</div>
-          <p className="mt-2 text-sm leading-6 text-stone-600">A fresh scenario seed appears each time you tap Try another scenario.</p>
+          <p className="mt-2 text-sm leading-6 text-stone-600">A fresh scenario seed appears each time you tap Next scenario.</p>
         </div>
       </section>
     </section>

@@ -40,7 +40,7 @@ const TACTIC_SHOTS_SCENARIOS: StaticMiniGameScenario[] = [
       ],
       "w",
     ),
-    prompt: "Hit the back rank before Tempo's defense settles.",
+    prompt: "Hit the back rank before the defense settles.",
     summary: "Back-rank hit on e8",
     note: "Back-rank shot on e8",
     expectedMoveUci: "e1e8",
@@ -99,4 +99,3 @@ export const tacticShotsDefinition = createStaticMiniGameDefinition(
   },
   TACTIC_SHOTS_SCENARIOS,
 );
-

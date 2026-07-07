@@ -1,5 +1,5 @@
 import { scoreDailyMiniGameAttempt } from "./dailyMiniGameScoring";
-import { advanceStaticMiniGame, buildStaticMiniGameCard, selectStaticMiniGameScenario, type StaticMiniGameScenario } from "./staticMiniGameHelpers";
+import { advanceStaticMiniGame, buildStaticMiniGameCard, rankStaticMiniGameScenarios, selectStaticMiniGameScenario, type StaticMiniGameScenario } from "./staticMiniGameHelpers";
 import type {
   DailyBlundrDifficulty,
   DailyMiniGameAdvanceAttempt,
@@ -49,29 +49,35 @@ export function createStaticMiniGameDefinition(config: StaticMiniGameDefinitionC
     canAppearInStandalonePractice: config.canAppearInStandalonePractice ?? true,
     selectionPriority: config.selectionPriority,
     generate(ctx: DailyMiniGameGenerationContext) {
-      const scenario = selectStaticMiniGameScenario(ctx, config.id, scenarioList);
-      const generated = buildStaticMiniGameCard({
-        miniGameId: config.id,
-        title: config.title,
-        summary: config.buildSummary?.(scenario) ?? config.summary,
-        prompt: config.buildPrompt(scenario),
-        scenario,
-        ctx,
-        skillIds: config.skillIds,
-        conceptIds: config.conceptIds,
-        tags: config.tags,
-        difficultyWeight: config.difficultyWeight,
-        selectionPriority: config.selectionPriority,
-        displayName: config.displayName,
-        shortDescription: config.shortDescription,
-        instructions: config.instructions,
-        estimatedSeconds: config.estimatedSeconds,
-        canAppearInDailyBlundr: config.canAppearInDailyBlundr,
-        canAppearInStandalonePractice: config.canAppearInStandalonePractice,
-        moveLimit: scenario.moveLimit,
-        bestKnownScore: scenario.bestKnownMoves,
-      });
-      return generated.card;
+      const orderedScenarios = rankStaticMiniGameScenarios(ctx, config.id, scenarioList);
+      const fallbackScenario = selectStaticMiniGameScenario(ctx, config.id, scenarioList);
+      for (const scenario of orderedScenarios.length ? orderedScenarios : [fallbackScenario]) {
+        const generated = buildStaticMiniGameCard({
+          miniGameId: config.id,
+          title: config.title,
+          summary: config.buildSummary?.(scenario) ?? config.summary,
+          prompt: config.buildPrompt(scenario),
+          scenario,
+          ctx,
+          skillIds: config.skillIds,
+          conceptIds: config.conceptIds,
+          tags: config.tags,
+          difficultyWeight: config.difficultyWeight,
+          selectionPriority: config.selectionPriority,
+          displayName: config.displayName,
+          shortDescription: config.shortDescription,
+          instructions: config.instructions,
+          estimatedSeconds: config.estimatedSeconds,
+          canAppearInDailyBlundr: config.canAppearInDailyBlundr,
+          canAppearInStandalonePractice: config.canAppearInStandalonePractice,
+          moveLimit: scenario.moveLimit,
+          bestKnownScore: scenario.bestKnownMoves,
+        });
+        if (generated?.card) {
+          return generated.card;
+        }
+      }
+      return null;
     },
     scoreAttempt: (args) => scoreDailyMiniGameAttempt(args),
     advance(state: DailyMiniGameState, attempt: DailyMiniGameAdvanceAttempt) {

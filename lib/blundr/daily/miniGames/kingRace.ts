@@ -1,5 +1,12 @@
 import { Chess, type Move } from "chess.js";
-import type { DailyBlundrMiniGameCard, DailyMiniGameAdvanceResult, DailyMiniGameDefinition, DailyMiniGameGenerationContext, DailyMiniGameState } from "./dailyMiniGameTypes";
+import type {
+  DailyBlundrMiniGameCard,
+  DailyMiniGameAdvanceResult,
+  DailyMiniGameDefinition,
+  DailyMiniGameGenerationContext,
+  DailyMiniGameScenario,
+  DailyMiniGameState,
+} from "./dailyMiniGameTypes";
 import { scoreDailyMiniGameAttempt } from "./dailyMiniGameScoring";
 import { hashString, normalizeText, squareDistance } from "./miniGameUtils";
 import { attachConceptTagsToDailyCard, inferConceptTagsForMiniGame } from "../concepts/dailyConceptTagging";
@@ -12,11 +19,11 @@ type KingRaceScenario = {
 };
 
 const KING_RACE_SCENARIOS: KingRaceScenario[] = [
-  { whiteKing: "d4", blackKing: "h8", goalSquare: "a8", moveLimitOffset: 2 },
-  { whiteKing: "e3", blackKing: "h8", goalSquare: "a8", moveLimitOffset: 1 },
-  { whiteKing: "d1", blackKing: "h8", goalSquare: "a8", moveLimitOffset: 0 },
-  { whiteKing: "c2", blackKing: "a8", goalSquare: "h1", moveLimitOffset: 0 },
-  { whiteKing: "e1", blackKing: "a8", goalSquare: "h8", moveLimitOffset: 0 },
+  { whiteKing: "d4", blackKing: "h8", goalSquare: "e5", moveLimitOffset: 0 },
+  { whiteKing: "e3", blackKing: "h8", goalSquare: "f4", moveLimitOffset: 0 },
+  { whiteKing: "d1", blackKing: "h8", goalSquare: "e2", moveLimitOffset: 0 },
+  { whiteKing: "c2", blackKing: "a8", goalSquare: "d3", moveLimitOffset: 0 },
+  { whiteKing: "e1", blackKing: "a8", goalSquare: "f2", moveLimitOffset: 0 },
 ];
 
 const KING_RACE_RECOMMENDED_FOR = ["intro", "beginner", "early_intermediate", "intermediate", "advanced", "expert"] as const;
@@ -71,6 +78,28 @@ function buildBoardFen(whiteKing: string, blackKing: string, sideToMove: "w" | "
   return `${ranks} ${sideToMove} - - 0 1`;
 }
 
+function uniqueText(values: readonly (string | null | undefined)[]): string[] {
+  return Array.from(new Set(values.map((value) => normalizeText(value)).filter(Boolean)));
+}
+
+function buildScenarioKey(scenario: KingRaceScenario, source: string): string {
+  return hashString([scenario.whiteKing, scenario.blackKing, scenario.goalSquare, String(scenario.moveLimitOffset), source].join("|"));
+}
+
+function weightedSeedValue(value: string): number {
+  let total = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    total = (total + value.charCodeAt(index) * (index + 1)) % 1_000_000_007;
+  }
+  return total;
+}
+
+function resolveScenarioSeed(ctx: DailyMiniGameGenerationContext): string {
+  const explicitSeed = normalizeText(ctx.seed);
+  if (explicitSeed) return explicitSeed;
+  return hashString([ctx.dateKey, ctx.userIdOrLocalId ?? "local", ctx.deckId ?? "deck", ctx.source ?? "daily_deck", "king_race", ctx.difficulty].join("|"));
+}
+
 function isValidSetup(whiteKing: string, blackKing: string): boolean {
   try {
     const chess = new Chess(buildBoardFen(whiteKing, blackKing));
@@ -84,8 +113,41 @@ function selectScenario(ctx: DailyMiniGameGenerationContext): KingRaceScenario {
   const minRank = difficultyRank(ctx.difficulty);
   const eligible = KING_RACE_SCENARIOS.filter((_, index) => index <= Math.max(0, Math.min(KING_RACE_SCENARIOS.length - 1, minRank + 1)));
   const pool = eligible.length ? eligible : KING_RACE_SCENARIOS.slice(0, 1);
-  const seed = hashString(`${ctx.dateKey}|king_race|${ctx.difficulty}|${ctx.currentMastery.toFixed(2)}|${ctx.confidence.toFixed(2)}`);
-  return pool[seed ? Number.parseInt(seed, 36) % pool.length : 0];
+  const seed = resolveScenarioSeed(ctx);
+  const source = ctx.source ?? "daily_deck";
+  const recentScenarioKeys = new Set((ctx.recentScenarioKeys ?? []).map((value) => normalizeText(value)).filter(Boolean));
+  const seedValue = weightedSeedValue(`${seed}|${source}|${ctx.difficulty}|king_race`);
+  const startIndex = pool.length > 0 ? seedValue % pool.length : 0;
+  const rotated = [...pool.slice(startIndex), ...pool.slice(0, startIndex)];
+  for (const scenario of rotated) {
+    const key = buildScenarioKey(scenario, source);
+    if (!recentScenarioKeys.has(key)) return scenario;
+  }
+  return rotated[0] ?? pool[0];
+}
+
+function resolveSolutionMove(fen: string, goalSquare: string): { from: string; to: string; uci: string; san: string | null } | null {
+  try {
+    const chess = new Chess(fen);
+    const moves = chess.moves({ verbose: true }) as Move[];
+    const goal = goalSquare.toLowerCase();
+    const preferred = moves.find((move) => move.piece === "k" && move.to.toLowerCase() === goal) ?? moves.find((move) => move.piece === "k");
+    if (!preferred) return null;
+    const applied = new Chess(fen);
+    const resolved = applied.move({
+      from: preferred.from as never,
+      to: preferred.to as never,
+    });
+    if (!resolved) return null;
+    return {
+      from: resolved.from,
+      to: resolved.to,
+      uci: `${resolved.from}${resolved.to}${resolved.promotion ?? ""}`,
+      san: resolved.san ?? null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function buildKingRaceState(ctx: DailyMiniGameGenerationContext, scenario: KingRaceScenario): DailyMiniGameState {
@@ -178,6 +240,89 @@ export function generateKingRaceMiniGameCard(ctx: DailyMiniGameGenerationContext
   const scenario = selectScenario(ctx);
   if (!isValidSetup(scenario.whiteKing, scenario.blackKing)) return null;
   const state = buildKingRaceState(ctx, scenario);
+  const source = ctx.source ?? "daily_deck";
+  const seed = resolveScenarioSeed(ctx);
+  const solution = resolveSolutionMove(state.startFen, scenario.goalSquare);
+  if (!solution) return null;
+  const recentScenarioKeys = uniqueText(ctx.recentScenarioKeys ?? []);
+  const scenarioKey = buildScenarioKey(scenario, source);
+  const scenarioContract: DailyMiniGameScenario = {
+    id: `mini:king_race:${state.formationHash}`,
+    miniGameId: "king_race",
+    source,
+    seed,
+    generatedAt: ctx.now,
+    createdAt: ctx.now,
+    fen: state.startFen,
+    sideToMove: state.sideToMove,
+    prompt: `Guide the white king to ${scenario.goalSquare}.`,
+    instructions: `Tap the white king, then the goal square ${scenario.goalSquare}.`,
+    goal: `Reach ${scenario.goalSquare}.`,
+    acceptedMoves: [solution.uci],
+    solution: {
+      uci: solution.uci,
+      san: solution.san,
+    },
+    explanation: `Step the king to ${scenario.goalSquare} while keeping the black king boxed out.`,
+    conceptTags: uniqueText([
+      ...inferConceptTagsForMiniGame("king_race", state.skillIds),
+      "king race",
+      "opposition",
+      "goal square",
+    ]),
+    difficulty: state.difficulty,
+    estimatedTimeSeconds: 30,
+    validation: {
+      checkedAt: ctx.now,
+      valid: true,
+      attempts: 1,
+      issues: [],
+    },
+    scoring: {
+      mode: "route",
+      maxAttempts: Math.max(1, state.moveLimit),
+      revealPenalty: 0.1,
+      canRetry: true,
+      correctMoveReward: 1,
+    },
+    retryBehavior: {
+      allowRetry: true,
+      refreshSeedOnRetry: true,
+      nextLabel: "Next",
+    },
+    revealBehavior: {
+      revealLabel: "Reveal",
+      continueLabel: "Continue",
+      showAnswerLabel: null,
+      markReviewedLabel: null,
+    },
+    novelty: {
+      scenarioKey,
+      cooldownGroup: "king_race",
+      recentScenarioKeys,
+      avoidedRepeat: recentScenarioKeys.includes(scenarioKey),
+    },
+    theme: "king race",
+    targetSquares: [scenario.goalSquare],
+    goalSquares: [scenario.goalSquare],
+    acceptedSquares: [scenario.goalSquare],
+    boardOrientationHint: ctx.boardPreferences?.boardOrientation ?? "auto",
+    candidateMoves: (() => {
+      try {
+        const chess = new Chess(state.startFen);
+        return (chess.moves({ verbose: true }) as Move[]).map((move) => ({
+          uci: `${move.from}${move.to}${move.promotion ?? ""}`,
+          san: move.san ?? null,
+          label: move.to.toLowerCase() === scenario.goalSquare.toLowerCase() ? "Reach the goal square" : `King move to ${move.to}`,
+          correct: move.to.toLowerCase() === scenario.goalSquare.toLowerCase(),
+        }));
+      } catch {
+        return [{ uci: solution.uci, san: solution.san, label: "Reach the goal square", correct: true }];
+      }
+    })(),
+  };
+  state.scenario = scenarioContract;
+  state.noveltyKey = scenarioContract.novelty.scenarioKey;
   const currentMastery = Math.max(0, Math.min(1, ctx.currentMastery));
   const confidence = Math.max(0, Math.min(1, ctx.confidence));
   return attachConceptTagsToDailyCard({
@@ -537,7 +682,7 @@ export function advanceKingRaceMiniGame(state: DailyMiniGameState, attempt: { fr
 export const kingRaceDefinition: DailyMiniGameDefinition = {
   id: "king_race",
   title: "King Race",
-  summary: "Guide the king through opposition and reach the goal square before Tempo's blocker arrives.",
+  summary: "Guide the king through opposition and reach the goal square before the blocker arrives.",
   skillIds: ["king_pathing", "opposition", "goal_zone"],
   recommendedFor: [...KING_RACE_RECOMMENDED_FOR],
   generate: generateKingRaceMiniGameCard,

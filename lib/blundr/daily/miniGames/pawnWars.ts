@@ -1,7 +1,14 @@
 import { Chess, type Move } from "chess.js";
-import type { DailyBlundrMiniGameCard, DailyMiniGameAdvanceResult, DailyMiniGameDefinition, DailyMiniGameGenerationContext, DailyMiniGameState } from "./dailyMiniGameTypes";
+import type {
+  DailyBlundrMiniGameCard,
+  DailyMiniGameAdvanceResult,
+  DailyMiniGameDefinition,
+  DailyMiniGameGenerationContext,
+  DailyMiniGameScenario,
+  DailyMiniGameState,
+} from "./dailyMiniGameTypes";
 import { scoreDailyMiniGameAttempt } from "./dailyMiniGameScoring";
-import { hashString, squareToCoords } from "./miniGameUtils";
+import { hashString, normalizeText, squareToCoords } from "./miniGameUtils";
 import { attachConceptTagsToDailyCard, inferConceptTagsForMiniGame } from "../concepts/dailyConceptTagging";
 
 type PawnWarsObjective = "promotion" | "passed_pawn";
@@ -16,11 +23,11 @@ type PawnWarsScenario = {
 };
 
 const PAWN_WARS_SCENARIOS: PawnWarsScenario[] = [
-  { whiteKing: "a1", blackKing: "h8", whitePawn: "e6", blackPawns: ["d7"], objective: "promotion", goalSquare: "e8" },
-  { whiteKing: "a1", blackKing: "h8", whitePawn: "c4", blackPawns: ["b5", "d5"], objective: "passed_pawn", goalSquare: "c6" },
-  { whiteKing: "a1", blackKing: "h8", whitePawn: "g5", blackPawns: ["f6"], objective: "promotion", goalSquare: "g8" },
-  { whiteKing: "a1", blackKing: "h8", whitePawn: "b3", blackPawns: ["a4", "c4"], objective: "passed_pawn", goalSquare: "b6" },
-  { whiteKing: "a1", blackKing: "h8", whitePawn: "d2", blackPawns: ["c3", "e3"], objective: "promotion", goalSquare: "d8" },
+  { whiteKing: "a1", blackKing: "h8", whitePawn: "e7", blackPawns: ["d6"], objective: "promotion", goalSquare: "e8" },
+  { whiteKing: "a1", blackKing: "h8", whitePawn: "c5", blackPawns: ["b6", "d6"], objective: "passed_pawn", goalSquare: "c6" },
+  { whiteKing: "a1", blackKing: "h8", whitePawn: "g7", blackPawns: ["f6"], objective: "promotion", goalSquare: "g8" },
+  { whiteKing: "a1", blackKing: "h8", whitePawn: "b5", blackPawns: ["a6", "c6"], objective: "passed_pawn", goalSquare: "b6" },
+  { whiteKing: "a1", blackKing: "h8", whitePawn: "d7", blackPawns: ["c6", "e6"], objective: "promotion", goalSquare: "d8" },
 ];
 
 const PAWN_WARS_RECOMMENDED_FOR = ["intro", "beginner", "early_intermediate", "intermediate", "advanced", "expert"] as const;
@@ -65,6 +72,28 @@ function buildBoardFen(pieces: Array<{ square: string; piece: string }>, sideToM
   return `${ranks} ${sideToMove} - - 0 1`;
 }
 
+function uniqueText(values: readonly (string | null | undefined)[]): string[] {
+  return Array.from(new Set(values.map((value) => normalizeText(value)).filter(Boolean)));
+}
+
+function buildScenarioKey(scenario: PawnWarsScenario, source: string): string {
+  return hashString([scenario.whiteKing, scenario.blackKing, scenario.whitePawn, scenario.blackPawns.join(","), scenario.objective, scenario.goalSquare, source].join("|"));
+}
+
+function weightedSeedValue(value: string): number {
+  let total = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    total = (total + value.charCodeAt(index) * (index + 1)) % 1_000_000_007;
+  }
+  return total;
+}
+
+function resolveScenarioSeed(ctx: DailyMiniGameGenerationContext): string {
+  const explicitSeed = normalizeText(ctx.seed);
+  if (explicitSeed) return explicitSeed;
+  return hashString([ctx.dateKey, ctx.userIdOrLocalId ?? "local", ctx.deckId ?? "deck", ctx.source ?? "daily_deck", "pawn_wars", ctx.difficulty].join("|"));
+}
+
 function isValidSetup(scenario: PawnWarsScenario): boolean {
   try {
     const chess = new Chess(
@@ -85,8 +114,37 @@ function selectScenario(ctx: DailyMiniGameGenerationContext): PawnWarsScenario {
   const rank = difficultyRank(ctx.difficulty);
   const eligible = PAWN_WARS_SCENARIOS.filter((_, index) => index <= Math.max(0, Math.min(PAWN_WARS_SCENARIOS.length - 1, rank + 1)));
   const pool = eligible.length ? eligible : PAWN_WARS_SCENARIOS.slice(0, 1);
-  const seed = hashString(`${ctx.dateKey}|pawn_wars|${ctx.difficulty}|${ctx.currentMastery.toFixed(2)}|${ctx.confidence.toFixed(2)}`);
-  return pool[Number.parseInt(seed, 36) % pool.length];
+  const seed = resolveScenarioSeed(ctx);
+  const source = ctx.source ?? "daily_deck";
+  const recentScenarioKeys = new Set((ctx.recentScenarioKeys ?? []).map((value) => normalizeText(value)).filter(Boolean));
+  const seedValue = weightedSeedValue(`${seed}|${source}|${ctx.difficulty}|pawn_wars`);
+  const startIndex = pool.length > 0 ? seedValue % pool.length : 0;
+  const rotated = [...pool.slice(startIndex), ...pool.slice(0, startIndex)];
+  for (const scenario of rotated) {
+    const key = buildScenarioKey(scenario, source);
+    if (!recentScenarioKeys.has(key)) return scenario;
+  }
+  return rotated[0] ?? pool[0];
+}
+
+function resolveSolutionMove(fen: string, scenario: PawnWarsScenario): { from: string; to: string; uci: string; san: string | null } | null {
+  try {
+    const chess = new Chess(fen);
+    const goalSquare = scenario.goalSquare.toLowerCase();
+    const moves = chess.moves({ verbose: true }) as Move[];
+    const preferred = moves.find((move) => move.piece === "p" && move.color === "w" && move.to.toLowerCase() === goalSquare) ?? moves.find((move) => move.piece === "p" && move.color === "w");
+    if (!preferred) return null;
+    const applied = applyMove(fen, preferred.from, preferred.to);
+    if (!applied.move) return null;
+    return {
+      from: applied.move.from,
+      to: applied.move.to,
+      uci: `${applied.move.from}${applied.move.to}${applied.move.promotion ?? ""}`,
+      san: applied.move.san ?? null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function startRank(square: string): number {
@@ -207,6 +265,93 @@ export function generatePawnWarsMiniGameCard(ctx: DailyMiniGameGenerationContext
   const scenario = selectScenario(ctx);
   if (!isValidSetup(scenario)) return null;
   const state = buildPawnWarsState(ctx, scenario);
+  const source = ctx.source ?? "daily_deck";
+  const seed = resolveScenarioSeed(ctx);
+  const solution = resolveSolutionMove(state.startFen, scenario);
+  if (!solution) return null;
+  const recentScenarioKeys = uniqueText(ctx.recentScenarioKeys ?? []);
+  const scenarioKey = buildScenarioKey(scenario, source);
+  const scenarioContract: DailyMiniGameScenario = {
+    id: `mini:pawn_wars:${state.formationHash}`,
+    miniGameId: "pawn_wars",
+    source,
+    seed,
+    generatedAt: ctx.now,
+    createdAt: ctx.now,
+    fen: state.startFen,
+    sideToMove: state.sideToMove,
+    prompt: scenario.objective === "promotion"
+      ? `Promote the pawn on the ${scenario.whitePawn[0]}-file by moving to ${scenario.goalSquare}.`
+      : `Create a passed pawn by moving to ${scenario.goalSquare}.`,
+    instructions: `Tap the white pawn, then ${scenario.goalSquare}.`,
+    goal: `Reach ${scenario.goalSquare}.`,
+    acceptedMoves: [solution.uci],
+    solution: {
+      uci: solution.uci,
+      san: solution.san,
+    },
+    explanation: scenario.objective === "promotion"
+      ? `Advance the pawn to ${scenario.goalSquare} and promote before the defense can stop it.`
+      : `Advance to ${scenario.goalSquare} to create the passed pawn and win the race.`,
+    conceptTags: uniqueText([
+      ...inferConceptTagsForMiniGame("pawn_wars", state.skillIds),
+      "pawn race",
+      scenario.objective,
+      scenario.whitePawn[0] ?? "",
+    ]),
+    difficulty: state.difficulty,
+    estimatedTimeSeconds: 30,
+    validation: {
+      checkedAt: ctx.now,
+      valid: true,
+      attempts: 1,
+      issues: [],
+    },
+    scoring: {
+      mode: "single_move",
+      maxAttempts: Math.max(1, state.moveLimit),
+      revealPenalty: 0.1,
+      canRetry: true,
+      correctMoveReward: 1,
+    },
+    retryBehavior: {
+      allowRetry: true,
+      refreshSeedOnRetry: true,
+      nextLabel: "Next",
+    },
+    revealBehavior: {
+      revealLabel: "Reveal",
+      continueLabel: "Continue",
+      showAnswerLabel: null,
+      markReviewedLabel: null,
+    },
+    novelty: {
+      scenarioKey,
+      cooldownGroup: "pawn_wars",
+      recentScenarioKeys,
+      avoidedRepeat: recentScenarioKeys.includes(scenarioKey),
+    },
+    theme: scenario.objective === "promotion" ? "promotion race" : "passed pawn race",
+    targetSquares: [scenario.goalSquare],
+    goalSquares: [scenario.goalSquare],
+    acceptedSquares: [scenario.goalSquare],
+    boardOrientationHint: ctx.boardPreferences?.boardOrientation ?? "auto",
+    candidateMoves: (() => {
+      try {
+        const chess = new Chess(state.startFen);
+        return (chess.moves({ verbose: true }) as Move[]).map((move) => ({
+          uci: `${move.from}${move.to}${move.promotion ?? ""}`,
+          san: move.san ?? null,
+          label: move.to.toLowerCase() === scenario.goalSquare.toLowerCase() ? "Reach the goal square" : `Pawn move to ${move.to}`,
+          correct: move.to.toLowerCase() === scenario.goalSquare.toLowerCase(),
+        }));
+      } catch {
+        return [{ uci: solution.uci, san: solution.san, label: "Reach the goal square", correct: true }];
+      }
+    })(),
+  };
+  state.scenario = scenarioContract;
+  state.noveltyKey = scenarioContract.novelty.scenarioKey;
   const mastery = Math.max(0, Math.min(1, ctx.currentMastery));
   const confidence = Math.max(0, Math.min(1, ctx.confidence));
   const fileLabel = scenario.whitePawn[0].toUpperCase();
@@ -248,7 +393,7 @@ export function generatePawnWarsMiniGameCard(ctx: DailyMiniGameGenerationContext
     kind: "mini_game",
     title: "Pawn Wars",
     prompt: scenario.objective === "promotion"
-      ? `Promote the pawn on the ${scenario.whitePawn[0]}-file before Tempo's reply stops the race.`
+      ? `Promote the pawn on the ${scenario.whitePawn[0]}-file before the reply stops the race.`
       : `Build a passed pawn on the ${scenario.goalSquare} square before the blockade closes.`,
     repertoireId: null,
     reviewCardId: null,

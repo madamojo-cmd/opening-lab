@@ -83,7 +83,7 @@ export function DailyBlundrBoard({ fen, disabled, onMoveAttempt, onSquareClick, 
   if (!game) {
     return (
       <div className="rounded-3xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-500">
-        Tempo could not load this position.
+        Blundr could not load this position.
       </div>
     );
   }

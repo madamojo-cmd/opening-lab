@@ -51,15 +51,15 @@ export function TempoDailyBlundrCard() {
             <Sparkles size={14} />
             Daily Blundr
           </div>
-          <h2 className="mt-3 text-lg font-black text-stone-950">Tempo picked today’s smartest training.</h2>
+          <h2 className="mt-3 text-lg font-black text-stone-950">Blundr picked today’s smartest training.</h2>
           <p className="mt-1 text-sm leading-6 text-stone-500">
             {reviewStats.dueToday > 0
-              ? `Tempo found ${reviewStats.dueToday} reviews ready.`
+              ? `Blundr found ${reviewStats.dueToday} reviews ready.`
               : hasTrainingTarget
-                ? "Queue clear. Tempo found a training target from your recent openings."
+                ? "Queue clear. Blundr found a training target from your recent openings."
                 : hasMiniGame
-                ? "Queue clear. Tempo picked a skill game to sharpen your board vision."
-                : "Queue clear. Tempo is waiting for a fresh training seed."}
+                ? "Queue clear. Blundr picked a skill game to sharpen your board vision."
+                : "Queue clear. Blundr is waiting for a fresh training seed."}
           </p>
         </div>
         <div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-600">{primaryLabel}</div>
@@ -91,12 +91,12 @@ export function TempoDailyBlundrCard() {
 
       <p className="mt-3 text-xs leading-5 text-stone-400">
         {reviewStats.dueToday > 0
-          ? "Tempo is prioritizing the reviews most likely to slip."
+          ? "Blundr is prioritizing the reviews most likely to slip."
           : hasTrainingTarget
-            ? "Tempo picked a focused drill from recent openings."
+            ? "Blundr picked a focused drill from recent openings."
             : hasMiniGame
-            ? "Tempo picked a compact skill game instead of crowding out the queue."
-            : "Queue clear for now. Train an opening and Tempo will keep building the review loop."}
+            ? "Blundr picked a compact skill game instead of crowding out the queue."
+            : "Queue clear for now. Train an opening and Blundr will keep building the review loop."}
       </p>
     </section>
   );

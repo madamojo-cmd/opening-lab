@@ -23,7 +23,7 @@ export function DailyBlundrSessionSummary({ cards, session, currentCard, reviewS
             {currentCard?.openingName ?? "Daily Blundr session"}
           </h3>
           <p className="mt-1 text-sm leading-6 text-stone-500">
-            {currentCard ? currentCard.summary : "Tempo is lining up the next smart review."}
+            {currentCard ? currentCard.summary : "Blundr is lining up the next smart review."}
           </p>
         </div>
         <div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-600">
@@ -57,7 +57,7 @@ export function DailyBlundrSessionSummary({ cards, session, currentCard, reviewS
       <p className="mt-3 text-xs font-semibold leading-5 text-stone-500">
         {pending > 0
           ? `${pending} card${pending === 1 ? "" : "s"} left in today’s session.`
-          : "All session cards are complete. Tempo has moved the important mistakes into review."}
+          : "All session cards are complete. Blundr has moved the important mistakes into review."}
       </p>
     </section>
   );

@@ -11,7 +11,7 @@ import {
   type DailyBlundrSessionStore,
   type DailyBlundrStore,
 } from "./dailyBlundrTypes";
-import type { DailyMiniGameState } from "./miniGames/dailyMiniGameTypes";
+import type { DailyMiniGameScenario, DailyMiniGameState } from "./miniGames/dailyMiniGameTypes";
 import type {
   DailyTrainingTargetCandidateMove,
   DailyTrainingTargetState,
@@ -73,6 +73,85 @@ function cloneJson<T>(value: T): T {
 
 function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+function normalizeMiniGameScenario(raw: unknown): DailyMiniGameScenario | null {
+  if (!raw || typeof raw !== "object") return null;
+  const scenario = raw as Partial<DailyMiniGameScenario> & Record<string, unknown>;
+  const id = normalizeText(scenario.id);
+  const miniGameId = normalizeMiniGameId(scenario.miniGameId);
+  const seed = normalizeText(scenario.seed);
+  const fen = normalizeText(scenario.fen);
+  const prompt = normalizeText(scenario.prompt);
+  const instructions = normalizeText(scenario.instructions) || prompt;
+  const goal = normalizeText(scenario.goal) || prompt;
+  if (!id || !miniGameId || !seed || !fen) return null;
+  const source = scenario.source === "standalone_review" ? "standalone_review" : "daily_deck";
+  const sideToMove = scenario.sideToMove === "b" ? "b" : "w";
+  const acceptedMoves = Array.isArray(scenario.acceptedMoves) ? uniqueNonEmpty(scenario.acceptedMoves.map((entry) => normalizeText(entry).toLowerCase())) : [];
+  const conceptTags = Array.isArray(scenario.conceptTags) ? uniqueNonEmpty(scenario.conceptTags.map((entry) => normalizeText(entry))) : [];
+  const generatedAt = normalizeText(scenario.generatedAt) || normalizeText(scenario.createdAt) || nowIso();
+  const createdAt = normalizeText(scenario.createdAt) || generatedAt;
+  const solution = {
+    uci: normalizeText(scenario.solution?.uci),
+    san: normalizeText(scenario.solution?.san) || null,
+  };
+  return {
+    id,
+    miniGameId,
+    source,
+    seed,
+    generatedAt,
+    createdAt,
+    fen,
+    sideToMove,
+    prompt,
+    instructions,
+    goal,
+    acceptedMoves,
+    solution,
+    explanation: normalizeText(scenario.explanation) || goal,
+    conceptTags,
+    difficulty: normalizeDifficulty(scenario.difficulty),
+    estimatedTimeSeconds: Math.max(1, Number(scenario.estimatedTimeSeconds ?? 45) || 45),
+    validation: {
+      checkedAt: normalizeText(scenario.validation?.checkedAt) || generatedAt,
+      valid: Boolean(scenario.validation?.valid ?? true),
+      attempts: Math.max(0, Number(scenario.validation?.attempts ?? 0) || 0),
+      issues: Array.isArray(scenario.validation?.issues) ? scenario.validation.issues : [],
+    },
+    scoring: {
+      mode: scenario.scoring?.mode === "route" || scenario.scoring?.mode === "choice" ? scenario.scoring.mode : "single_move",
+      maxAttempts: Math.max(1, Number(scenario.scoring?.maxAttempts ?? 1) || 1),
+      revealPenalty: Number.isFinite(Number(scenario.scoring?.revealPenalty)) ? Number(scenario.scoring?.revealPenalty) : 0.1,
+      canRetry: Boolean(scenario.scoring?.canRetry ?? true),
+      correctMoveReward: Number.isFinite(Number(scenario.scoring?.correctMoveReward)) ? Number(scenario.scoring?.correctMoveReward) : 1,
+    },
+    retryBehavior: {
+      allowRetry: Boolean(scenario.retryBehavior?.allowRetry ?? true),
+      refreshSeedOnRetry: Boolean(scenario.retryBehavior?.refreshSeedOnRetry ?? true),
+      nextLabel: scenario.retryBehavior?.nextLabel === "Continue" ? "Continue" : "Next",
+    },
+    revealBehavior: {
+      revealLabel: "Reveal",
+      continueLabel: scenario.revealBehavior?.continueLabel === "Next" ? "Next" : "Continue",
+      showAnswerLabel: normalizeText(scenario.revealBehavior?.showAnswerLabel) || null,
+      markReviewedLabel: normalizeText(scenario.revealBehavior?.markReviewedLabel) || null,
+    },
+    novelty: {
+      scenarioKey: normalizeText(scenario.novelty?.scenarioKey) || `${miniGameId}:${id}:${fen}`,
+      cooldownGroup: normalizeText(scenario.novelty?.cooldownGroup) || miniGameId,
+      recentScenarioKeys: Array.isArray(scenario.novelty?.recentScenarioKeys) ? scenario.novelty.recentScenarioKeys.map((entry) => normalizeText(entry)).filter(Boolean) : [],
+      avoidedRepeat: Boolean(scenario.novelty?.avoidedRepeat ?? false),
+    },
+    theme: normalizeText(scenario.theme) || prompt || miniGameId,
+    targetSquares: Array.isArray(scenario.targetSquares) ? uniqueNonEmpty(scenario.targetSquares.map((entry) => normalizeText(entry).toLowerCase())) : undefined,
+    goalSquares: Array.isArray(scenario.goalSquares) ? uniqueNonEmpty(scenario.goalSquares.map((entry) => normalizeText(entry).toLowerCase())) : undefined,
+    acceptedSquares: Array.isArray(scenario.acceptedSquares) ? uniqueNonEmpty(scenario.acceptedSquares.map((entry) => normalizeText(entry).toLowerCase())) : undefined,
+    boardOrientationHint:
+      scenario.boardOrientationHint === "white" || scenario.boardOrientationHint === "black" ? scenario.boardOrientationHint : "auto",
+    candidateMoves: Array.isArray(scenario.candidateMoves) ? (scenario.candidateMoves as NonNullable<DailyMiniGameScenario["candidateMoves"]>) : undefined,
+  };
 }
 
 function parseJson<T>(raw: string | null, fallback: T): T {
@@ -202,6 +281,7 @@ function normalizeMiniGameState(raw: unknown): DailyMiniGameState | null {
     noveltyKey: normalizeText(state.noveltyKey) || `${miniGameId}:${currentFen}`,
     lastMoveUci: normalizeText(state.lastMoveUci) || null,
     lastMoveSan: normalizeText(state.lastMoveSan) || null,
+    scenario: normalizeMiniGameScenario((state as { scenario?: unknown }).scenario),
   };
 }
 
@@ -269,7 +349,7 @@ function normalizeTrainingTargetState(raw: unknown): DailyTrainingTargetState | 
     currentFen,
     learnerSide: state.learnerSide === "black" ? "black" : "white",
     sideToMove: state.sideToMove === "b" ? "b" : "w",
-    prompt: normalizeText(state.prompt) || "Tempo found a focused drill for today.",
+    prompt: normalizeText(state.prompt) || "Blundr found a focused drill for today.",
     expectedMoveUci: normalizeText(state.expectedMoveUci) || null,
     expectedMoveSan: normalizeText(state.expectedMoveSan) || null,
     expectedSequenceUci: Array.isArray(state.expectedSequenceUci) ? state.expectedSequenceUci.map((entry) => normalizeText(entry)).filter(Boolean) : undefined,

@@ -20,8 +20,8 @@ import type { DailyRingCompletionResultLike } from "@/lib/blundr/daily-rings/dai
 
 type DailyBlundrOverview = ReturnType<typeof loadDailyBlundrOverview>;
 
-const EMPTY_STATE_COPY = "Queue clear. Tempo does not have missed moves to review yet. Train an opening and Daily Blundr will start building your smart review loop.";
-const COMPLETION_COPY = "Daily Blundr complete. Tempo saved the important mistakes for future review.";
+const EMPTY_STATE_COPY = "Queue clear. Blundr does not have missed moves to review yet. Train an opening and Daily Blundr will start building your smart review loop.";
+const COMPLETION_COPY = "Daily Blundr complete. Blundr saved the important mistakes for future review.";
 
 const EMPTY_REVIEW_STATS = {
   totalReviewCards: 0,
@@ -189,13 +189,13 @@ export function DailyBlundrScreen() {
           <div className="mx-auto flex min-h-screen max-w-md items-center px-4 py-6">
             <section className="w-full rounded-[1.75rem] border border-stone-200 bg-white p-5 text-center shadow-sm">
               <div className="flex flex-col gap-4">
-                <BlundrAssetImage asset={BLUNDR_TEMPO_ASSETS.thinking} alt="Tempo thinking" variant="tempoInline" className="mx-auto" />
-                <BlundrAssetImage asset={BLUNDR_EMPTY_STATE_ASSETS.loadingTempo} alt="Loading Tempo" variant="emptyState" className="mx-auto" />
+                <BlundrAssetImage asset={BLUNDR_TEMPO_ASSETS.thinking} alt="Blundr thinking" variant="tempoInline" className="mx-auto" />
+                <BlundrAssetImage asset={BLUNDR_EMPTY_STATE_ASSETS.loadingTempo} alt="Loading Blundr" variant="emptyState" className="mx-auto" />
               </div>
               <div className="mt-4 text-xs font-black uppercase tracking-[0.18em] text-green-700">Loading Daily Blundr</div>
-              <h1 className="mt-2 text-2xl font-black tracking-tight text-stone-950">Tempo is lining up today&apos;s loop.</h1>
+              <h1 className="mt-2 text-2xl font-black tracking-tight text-stone-950">Blundr is lining up today&apos;s loop.</h1>
               <p className="mt-2 text-sm leading-6 text-stone-600">
-                Your local Daily Blundr state is loading. If needed, Tempo will fall back safely to local data.
+                Your local Daily Blundr state is loading. If needed, Blundr will fall back safely to local data.
               </p>
             </section>
           </div>
@@ -210,7 +210,7 @@ export function DailyBlundrScreen() {
           <div>
             <div className="text-xs font-black uppercase tracking-[0.28em] text-green-700">Daily Blundr</div>
             <h1 className="mt-1 text-2xl font-bold tracking-tight">Daily Blundr</h1>
-            <p className="mt-1 text-sm text-stone-500">Tempo picked today’s smartest training.</p>
+            <p className="mt-1 text-sm text-stone-500">Blundr picked today’s smartest training.</p>
           </div>
           <Link href="/" className="rounded-2xl bg-white px-3 py-3 text-sm font-black text-stone-700 shadow-sm ring-1 ring-stone-200">
             <span className="inline-flex items-center gap-2">
@@ -234,10 +234,10 @@ export function DailyBlundrScreen() {
                 {reviewStats.dueToday > 0
                   ? "Today’s smart reviews are built from the positions most likely to slip."
                   : hasTrainingTarget
-                    ? "Queue clear. Tempo found a training target from your recent openings."
-                    : hasMiniGame
-                    ? "Queue clear. Tempo picked a skill game to sharpen your board vision."
-                    : "Queue clear. Tempo is waiting for a fresh training seed."}
+                    ? "Queue clear. Blundr found a training target from your recent openings."
+                : hasMiniGame
+                    ? "Queue clear. Blundr picked a skill game to sharpen your board vision."
+                    : "Queue clear. Blundr is waiting for a fresh training seed."}
               </p>
             </div>
             <div className="rounded-full bg-white/10 px-3 py-1 text-xs font-black text-white">{primaryStateLabel}</div>
@@ -310,7 +310,7 @@ export function DailyBlundrScreen() {
             </div>
             <div className="mt-4 flex items-center gap-2 rounded-2xl bg-stone-50 px-3 py-3 text-sm text-stone-500">
               <Clock3 size={16} />
-              Tempo keeps the empty-state card calm until a session is ready.
+              Blundr keeps the empty-state card calm until a session is ready.
             </div>
             <Link href="/" className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-green-700 px-4 py-3 font-black text-white shadow-sm">
               Back to Home
@@ -335,7 +335,7 @@ export function DailyBlundrScreen() {
               <CheckCircle2 size={18} />
               <div className="text-xs font-black uppercase tracking-wide">Session complete</div>
             </div>
-            <h2 className="mt-2 text-lg font-black text-green-950">Tempo has all required cards.</h2>
+            <h2 className="mt-2 text-lg font-black text-green-950">Blundr has all required cards.</h2>
             <p className="mt-2 text-sm leading-6 text-green-800">
               {rewardClaimed ? COMPLETION_COPY : "All required cards are done. Tap Complete Daily Blundr to bank the streak."}
             </p>
@@ -358,7 +358,7 @@ export function DailyBlundrScreen() {
             Mastery scaffold
           </div>
           <p className="mt-2 text-sm leading-6 text-stone-600">
-            Daily-local mastery keeps track of what Tempo has already seen, what still feels shaky, and what can fade out later.
+            Daily-local mastery keeps track of what Blundr has already seen, what still feels shaky, and what can fade out later.
           </p>
           <div className="mt-3 grid grid-cols-4 gap-2 text-center text-xs font-black">
             <div className="rounded-2xl bg-stone-50 px-2 py-3 text-stone-700">Fresh {masterySummary.fresh}</div>

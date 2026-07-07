@@ -1,5 +1,5 @@
 import { Chess, type Move } from "chess.js";
-import type { DailyBlundrMiniGameCard, DailyMiniGameAdvanceResult, DailyMiniGameDefinition, DailyMiniGameGenerationContext, DailyMiniGameState } from "./dailyMiniGameTypes";
+import type { DailyBlundrMiniGameCard, DailyMiniGameAdvanceResult, DailyMiniGameDefinition, DailyMiniGameGenerationContext, DailyMiniGameScenario, DailyMiniGameState } from "./dailyMiniGameTypes";
 import { scoreDailyMiniGameAttempt } from "./dailyMiniGameScoring";
 import { hashString, normalizeText, squareDistance, squareToCoords, coordsToSquare } from "./miniGameUtils";
 import { attachConceptTagsToDailyCard, inferConceptTagsForMiniGame } from "../concepts/dailyConceptTagging";
@@ -13,10 +13,10 @@ type KnightGymScenario = {
 
 const KNIGHT_GYM_SCENARIOS: KnightGymScenario[] = [
   { whiteKing: "e1", blackKing: "h8", startKnight: "g1", targetSquares: ["e2"] },
-  { whiteKing: "e1", blackKing: "h8", startKnight: "b1", targetSquares: ["c3", "a3"] },
-  { whiteKing: "a1", blackKing: "h8", startKnight: "d2", targetSquares: ["f3", "e4"] },
-  { whiteKing: "a1", blackKing: "h8", startKnight: "b1", targetSquares: ["c3", "d5", "f4"] },
-  { whiteKing: "a1", blackKing: "h8", startKnight: "g5", targetSquares: ["e4", "f6", "h7"] },
+  { whiteKing: "e1", blackKing: "h8", startKnight: "b1", targetSquares: ["c3"] },
+  { whiteKing: "a1", blackKing: "h8", startKnight: "d2", targetSquares: ["c4"] },
+  { whiteKing: "a1", blackKing: "h8", startKnight: "f3", targetSquares: ["e5"] },
+  { whiteKing: "a1", blackKing: "h8", startKnight: "c2", targetSquares: ["e3"] },
 ];
 
 const KNIGHT_GYM_RECOMMENDED_FOR = ["intro", "beginner", "early_intermediate", "intermediate", "advanced", "expert"] as const;
@@ -61,6 +61,28 @@ function buildBoardFen(pieces: Array<{ square: string; piece: string }>, sideToM
   return `${ranks} ${sideToMove} - - 0 1`;
 }
 
+function uniqueText(values: readonly (string | null | undefined)[]): string[] {
+  return Array.from(new Set(values.map((value) => normalizeText(value)).filter(Boolean)));
+}
+
+function buildScenarioKey(scenario: KnightGymScenario, source: string): string {
+  return hashString([scenario.whiteKing, scenario.blackKing, scenario.startKnight, scenario.targetSquares.join(","), source].join("|"));
+}
+
+function weightedSeedValue(value: string): number {
+  let total = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    total = (total + value.charCodeAt(index) * (index + 1)) % 1_000_000_007;
+  }
+  return total;
+}
+
+function resolveScenarioSeed(ctx: DailyMiniGameGenerationContext): string {
+  const explicitSeed = normalizeText(ctx.seed);
+  if (explicitSeed) return explicitSeed;
+  return hashString([ctx.dateKey, ctx.userIdOrLocalId ?? "local", ctx.deckId ?? "deck", ctx.source ?? "daily_deck", "knight_gymnasium", ctx.difficulty].join("|"));
+}
+
 function isValidSetup(scenario: KnightGymScenario): boolean {
   try {
     const chess = new Chess(
@@ -81,8 +103,17 @@ function selectScenario(ctx: DailyMiniGameGenerationContext): KnightGymScenario 
   const rank = difficultyRank(ctx.difficulty);
   const eligible = KNIGHT_GYM_SCENARIOS.filter((_, index) => index <= Math.max(0, Math.min(KNIGHT_GYM_SCENARIOS.length - 1, rank + 1)));
   const pool = eligible.length ? eligible : KNIGHT_GYM_SCENARIOS.slice(0, 1);
-  const seed = hashString(`${ctx.dateKey}|knight_gymnasium|${ctx.difficulty}|${ctx.currentMastery.toFixed(2)}|${ctx.confidence.toFixed(2)}`);
-  return pool[Number.parseInt(seed, 36) % pool.length];
+  const seed = resolveScenarioSeed(ctx);
+  const source = ctx.source ?? "daily_deck";
+  const recentScenarioKeys = new Set((ctx.recentScenarioKeys ?? []).map((value) => normalizeText(value)).filter(Boolean));
+  const seedValue = weightedSeedValue(`${seed}|${source}|${ctx.difficulty}|knight_gymnasium`);
+  const startIndex = pool.length > 0 ? seedValue % pool.length : 0;
+  const rotated = [...pool.slice(startIndex), ...pool.slice(0, startIndex)];
+  for (const scenario of rotated) {
+    const key = buildScenarioKey(scenario, source);
+    if (!recentScenarioKeys.has(key)) return scenario;
+  }
+  return rotated[0] ?? pool[0];
 }
 
 function shortestKnightPath(start: string, targets: readonly string[]): number {
@@ -168,10 +199,114 @@ function resolveCardMove(move: Move | null): string {
   return `${move.from}${move.to}${move.promotion ?? ""}`;
 }
 
+function resolveSolutionMove(fen: string, targetSquare: string): { from: string; to: string; uci: string; san: string | null } | null {
+  try {
+    const chess = new Chess(fen);
+    const goal = targetSquare.toLowerCase();
+    const moves = chess.moves({ verbose: true }) as Move[];
+    const preferred = moves.find((move) => move.piece === "n" && move.color === "w" && move.to.toLowerCase() === goal) ?? moves.find((move) => move.piece === "n" && move.color === "w");
+    if (!preferred) return null;
+    const applied = applyMove(fen, preferred.from, preferred.to);
+    if (!applied.move) return null;
+    return {
+      from: applied.move.from,
+      to: applied.move.to,
+      uci: resolveCardMove(applied.move),
+      san: applied.move.san ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function generateKnightGymnasiumMiniGameCard(ctx: DailyMiniGameGenerationContext): DailyBlundrMiniGameCard | null {
   const scenario = selectScenario(ctx);
   if (!isValidSetup(scenario)) return null;
   const state = buildKnightGymState(ctx, scenario);
+  const source = ctx.source ?? "daily_deck";
+  const seed = resolveScenarioSeed(ctx);
+  const targetSquare = state.targetSquares[0] ?? scenario.targetSquares[0];
+  const solution = resolveSolutionMove(state.startFen, targetSquare);
+  if (!solution) return null;
+  const recentScenarioKeys = uniqueText(ctx.recentScenarioKeys ?? []);
+  const scenarioKey = buildScenarioKey(scenario, source);
+  const scenarioContract: DailyMiniGameScenario = {
+    id: `mini:knight_gymnasium:${state.formationHash}`,
+    miniGameId: "knight_gymnasium",
+    source,
+    seed,
+    generatedAt: ctx.now,
+    createdAt: ctx.now,
+    fen: state.startFen,
+    sideToMove: state.sideToMove,
+    prompt: `Capture the flagged square with the knight.`,
+    instructions: `Tap the knight, then ${targetSquare}.`,
+    goal: `Capture ${targetSquare}.`,
+    acceptedMoves: [solution.uci],
+    solution: {
+      uci: solution.uci,
+      san: solution.san,
+    },
+    explanation: `Jump the knight to ${targetSquare} and keep the route tight.`,
+    conceptTags: uniqueText([
+      ...inferConceptTagsForMiniGame("knight_gymnasium", state.skillIds),
+      "knight geometry",
+      "shortest path",
+      "target square",
+    ]),
+    difficulty: state.difficulty,
+    estimatedTimeSeconds: 25,
+    validation: {
+      checkedAt: ctx.now,
+      valid: true,
+      attempts: 1,
+      issues: [],
+    },
+    scoring: {
+      mode: "single_move",
+      maxAttempts: Math.max(1, state.moveLimit),
+      revealPenalty: 0.1,
+      canRetry: true,
+      correctMoveReward: 1,
+    },
+    retryBehavior: {
+      allowRetry: true,
+      refreshSeedOnRetry: true,
+      nextLabel: "Next",
+    },
+    revealBehavior: {
+      revealLabel: "Reveal",
+      continueLabel: "Continue",
+      showAnswerLabel: null,
+      markReviewedLabel: null,
+    },
+    novelty: {
+      scenarioKey,
+      cooldownGroup: "knight_gymnasium",
+      recentScenarioKeys,
+      avoidedRepeat: recentScenarioKeys.includes(scenarioKey),
+    },
+    theme: "knight geometry",
+    targetSquares: [targetSquare],
+    goalSquares: [targetSquare],
+    acceptedSquares: [targetSquare],
+    boardOrientationHint: ctx.boardPreferences?.boardOrientation ?? "auto",
+    candidateMoves: (() => {
+      try {
+        const chess = new Chess(state.startFen);
+        return (chess.moves({ verbose: true }) as Move[]).map((move) => ({
+          uci: `${move.from}${move.to}${move.promotion ?? ""}`,
+          san: move.san ?? null,
+          label: move.to.toLowerCase() === targetSquare.toLowerCase() ? "Capture the target" : `Knight move to ${move.to}`,
+          correct: move.to.toLowerCase() === targetSquare.toLowerCase(),
+        }));
+      } catch {
+        return [{ uci: solution.uci, san: solution.san, label: "Capture the target", correct: true }];
+      }
+    })(),
+  };
+  state.scenario = scenarioContract;
+  state.noveltyKey = scenarioContract.novelty.scenarioKey;
   const mastery = Math.max(0, Math.min(1, ctx.currentMastery));
   const confidence = Math.max(0, Math.min(1, ctx.confidence));
   return attachConceptTagsToDailyCard({

@@ -1,8 +1,7 @@
 import { Chess } from "chess.js";
-import { attachConceptTagsToDailyCard } from "../concepts/dailyConceptTagging";
-import { inferConceptTagsForMiniGame } from "../concepts/dailyConceptTagging";
+import { attachConceptTagsToDailyCard, inferConceptTagsForMiniGame } from "../concepts/dailyConceptTagging";
 import { scoreDailyMiniGameAttempt } from "./dailyMiniGameScoring";
-import { hashString, normalizeText } from "./miniGameUtils";
+import { hashString, normalizeText, uniqueSquares } from "./miniGameUtils";
 import type {
   DailyBlundrMiniGameCard,
   DailyMiniGameAdvanceAttempt,
@@ -10,8 +9,10 @@ import type {
   DailyMiniGameDefinition,
   DailyMiniGameGenerationContext,
   DailyMiniGameId,
+  DailyMiniGameScenario,
   DailyMiniGameSkillId,
   DailyMiniGameState,
+  DailyMiniGameSource,
 } from "./dailyMiniGameTypes";
 
 export type StaticMiniGameScenario = {
@@ -21,12 +22,26 @@ export type StaticMiniGameScenario = {
   summary: string;
   note?: string;
   expectedMoveUci: string;
+  expectedMoveSan?: string | null;
   acceptedMoves?: readonly string[];
   goalSquares?: readonly string[];
   targetSquares?: readonly string[];
   flagSquares?: readonly string[];
   moveLimit?: number;
   bestKnownMoves?: number;
+  theme?: string;
+  instructions?: string;
+  goal?: string;
+  explanation?: string;
+  conceptTags?: readonly string[];
+  estimatedTimeSeconds?: number;
+  source?: DailyMiniGameSource;
+  solutionSan?: string | null;
+  boardOrientationHint?: "white" | "black" | "auto";
+  candidateMoves?: Array<{ uci: string; san: string | null; label: string; correct: boolean }>;
+  scoringMode?: DailyMiniGameScenario["scoring"]["mode"];
+  retryBehavior?: Partial<DailyMiniGameScenario["retryBehavior"]>;
+  revealBehavior?: Partial<DailyMiniGameScenario["revealBehavior"]>;
 };
 
 function normalizeMoveUci(value: string): string {
@@ -55,6 +70,334 @@ function applyMoveUci(fen: string, uci: string): { fen: string; san: string | nu
   } catch {
     return null;
   }
+}
+
+function uniqueConceptIds(values: readonly (string | null | undefined)[]): string[] {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => normalizeText(value))
+        .filter((value) => Boolean(value) && value.startsWith("concept:")),
+    ),
+  );
+}
+
+function uniqueText(values: readonly (string | null | undefined)[]): string[] {
+  return Array.from(new Set(values.map((value) => normalizeText(value)).filter(Boolean)));
+}
+
+function buildScenarioKey(input: {
+  miniGameId: DailyMiniGameId;
+  theme: string;
+  fen: string;
+  solutionUci: string;
+  targetSquares?: readonly string[] | null;
+  goalSquares?: readonly string[] | null;
+  difficulty: string;
+  source: DailyMiniGameSource;
+}): string {
+  const placement = normalizeText(input.fen).replace(/\s+/g, " ");
+  const target = uniqueSquares(input.targetSquares ?? []).join(",");
+  const goal = uniqueSquares(input.goalSquares ?? []).join(",");
+  return hashString(
+    [
+      input.miniGameId,
+      normalizeText(input.theme) || input.miniGameId,
+      placement,
+      normalizeMoveUci(input.solutionUci),
+      target,
+      goal,
+      normalizeText(input.difficulty),
+      input.source,
+    ].join("|"),
+  );
+}
+
+function buildScenarioValidation(attempts: number, now: string): DailyMiniGameScenario["validation"] {
+  return {
+    checkedAt: now,
+    valid: true,
+    attempts,
+    issues: [],
+  };
+}
+
+function buildScenarioConceptTags(input: {
+  scenario: StaticMiniGameScenario;
+  skillIds: readonly DailyMiniGameSkillId[];
+  miniGameId: DailyMiniGameId;
+  title: string;
+}): string[] {
+  return uniqueText([
+    ...(input.scenario.conceptTags ?? []),
+    ...(input.scenario.theme ? [input.scenario.theme] : []),
+    input.scenario.goal ?? input.scenario.summary,
+    input.scenario.summary,
+    ...input.skillIds.map((skillId) => skillId.replace(/_/g, " ")),
+    input.title,
+    input.miniGameId.replace(/_/g, " "),
+  ]);
+}
+
+function buildScenarioRetryBehavior(scenario: StaticMiniGameScenario): DailyMiniGameScenario["retryBehavior"] {
+  return {
+    allowRetry: scenario.retryBehavior?.allowRetry ?? true,
+    refreshSeedOnRetry: scenario.retryBehavior?.refreshSeedOnRetry ?? true,
+    nextLabel: scenario.retryBehavior?.nextLabel ?? "Next",
+  };
+}
+
+function buildScenarioRevealBehavior(scenario: StaticMiniGameScenario): DailyMiniGameScenario["revealBehavior"] {
+  return {
+    revealLabel: "Reveal",
+    continueLabel: scenario.revealBehavior?.continueLabel ?? "Continue",
+    showAnswerLabel: scenario.revealBehavior?.showAnswerLabel ?? null,
+    markReviewedLabel: scenario.revealBehavior?.markReviewedLabel ?? null,
+  };
+}
+
+function buildScenarioScoring(scenario: StaticMiniGameScenario, moveLimit: number): DailyMiniGameScenario["scoring"] {
+  return {
+    mode: scenario.scoringMode ?? (moveLimit > 1 ? "route" : "single_move"),
+    maxAttempts: Math.max(1, moveLimit),
+    revealPenalty: 0.1,
+    canRetry: true,
+    correctMoveReward: 1,
+  };
+}
+
+function buildScenarioNovelty(input: {
+  miniGameId: DailyMiniGameId;
+  scenario: StaticMiniGameScenario;
+  seed: string;
+  source: DailyMiniGameSource;
+  difficulty: string;
+  recentScenarioKeys: readonly string[];
+}): DailyMiniGameScenario["novelty"] {
+  const scenarioKey = buildScenarioKey({
+    miniGameId: input.miniGameId,
+    theme: input.scenario.theme ?? input.scenario.note ?? input.scenario.summary ?? input.scenario.scenarioId,
+    fen: input.scenario.fen,
+    solutionUci: input.scenario.expectedMoveUci,
+    targetSquares: input.scenario.targetSquares,
+    goalSquares: input.scenario.goalSquares,
+    difficulty: input.difficulty,
+    source: input.source,
+  });
+  const recentScenarioKeys = uniqueText(input.recentScenarioKeys);
+  const recentIndex = recentScenarioKeys.indexOf(scenarioKey);
+  return {
+    scenarioKey,
+    cooldownGroup: input.scenario.theme ?? input.scenario.summary ?? input.miniGameId,
+    recentScenarioKeys,
+    avoidedRepeat: recentIndex >= 0,
+  };
+}
+
+function resolveMiniGameSeed(input: {
+  ctx: DailyMiniGameGenerationContext;
+  miniGameId: DailyMiniGameId;
+  scenarioId: string;
+}): string {
+  const explicitSeed = normalizeText(input.ctx.seed);
+  if (explicitSeed) return explicitSeed;
+  return hashString(
+    [
+      input.ctx.dateKey,
+      input.ctx.userIdOrLocalId ?? "local",
+      input.ctx.deckId ?? "deck",
+      input.ctx.source ?? "daily_deck",
+      input.miniGameId,
+      input.scenarioId,
+      input.ctx.difficulty,
+      input.ctx.currentMastery.toFixed(2),
+      input.ctx.confidence.toFixed(2),
+    ].join("|"),
+  );
+}
+
+function rankScenarios<T extends StaticMiniGameScenario>(
+  ctx: DailyMiniGameGenerationContext,
+  miniGameId: DailyMiniGameId,
+  scenarios: readonly T[],
+): T[] {
+  const pool = scenarios.length > 0 ? [...scenarios] : [];
+  if (!pool.length) return [];
+  const seed = resolveMiniGameSeed({ ctx, miniGameId, scenarioId: pool[0]?.scenarioId ?? miniGameId });
+  const recentScenarioKeys = uniqueText(ctx.recentScenarioKeys ?? []);
+  return pool
+    .map((scenario, index) => {
+      const scenarioKey = buildScenarioKey({
+        miniGameId,
+        theme: scenario.theme ?? scenario.note ?? scenario.summary ?? scenario.scenarioId,
+        fen: scenario.fen,
+        solutionUci: scenario.expectedMoveUci,
+        targetSquares: scenario.targetSquares,
+        goalSquares: scenario.goalSquares,
+        difficulty: ctx.difficulty,
+        source: ctx.source ?? "daily_deck",
+      });
+      const recentIndex = recentScenarioKeys.indexOf(scenarioKey);
+      const recencyPenalty = recentIndex >= 0 ? (recentScenarioKeys.length - recentIndex) * 1_000_000 : 0;
+      const score = Number.parseInt(hashString(`${seed}|${miniGameId}|${scenario.scenarioId}|${index}`), 36) + recencyPenalty;
+      return { scenario, score };
+    })
+    .sort((a, b) => a.score - b.score || a.scenario.scenarioId.localeCompare(b.scenario.scenarioId))
+    .map((entry) => entry.scenario);
+}
+
+function buildScenarioContract(input: {
+  miniGameId: DailyMiniGameId;
+  title: string;
+  summary: string;
+  prompt: string;
+  scenario: StaticMiniGameScenario;
+  ctx: DailyMiniGameGenerationContext;
+  skillIds: readonly DailyMiniGameSkillId[];
+  conceptId?: string;
+  conceptIds?: readonly string[];
+  tags?: string[];
+  difficultyWeight?: number;
+  selectionPriority?: number;
+  displayName?: string;
+  shortDescription?: string;
+  instructions?: string;
+  estimatedSeconds?: number;
+  canAppearInDailyBlundr?: boolean;
+  canAppearInStandalonePractice?: boolean;
+  moveLimit?: number;
+  bestKnownScore?: number;
+}) {
+  const state = createStaticMiniGameState({
+    miniGameId: input.miniGameId,
+    scenario: input.scenario,
+    ctx: input.ctx,
+    skillIds: input.skillIds,
+    moveLimit: input.moveLimit,
+    bestKnownScore: input.bestKnownScore,
+  });
+  const currentMastery = Math.max(0, Math.min(1, input.ctx.currentMastery));
+  const confidence = Math.max(0, Math.min(1, input.ctx.confidence));
+  const source = input.ctx.source ?? "daily_deck";
+  const seed = resolveMiniGameSeed({ ctx: input.ctx, miniGameId: input.miniGameId, scenarioId: input.scenario.scenarioId });
+  const solution = applyMoveUci(state.startFen, input.scenario.expectedMoveUci) ?? applyMoveUci(state.startFen, input.scenario.expectedMoveUci.toLowerCase());
+  if (!solution) return null;
+  const acceptedMoves = uniqueText([input.scenario.expectedMoveUci, ...(input.scenario.acceptedMoves ?? [])]).map(normalizeMoveUci);
+  const scenario: DailyMiniGameScenario = {
+    id: `mini:${input.miniGameId}:${state.formationHash}`,
+    miniGameId: input.miniGameId,
+    source,
+    seed,
+    generatedAt: input.ctx.now,
+    createdAt: input.ctx.now,
+    fen: state.startFen,
+    sideToMove: state.sideToMove,
+    prompt: input.prompt,
+    instructions: input.instructions ?? input.prompt,
+    goal: input.scenario.goal ?? input.scenario.summary,
+    acceptedMoves,
+    solution: {
+      uci: solution.uci,
+      san: input.scenario.expectedMoveSan ?? solution.san,
+    },
+    explanation: input.scenario.explanation ?? input.scenario.note ?? input.scenario.summary,
+    conceptTags: buildScenarioConceptTags({
+      scenario: input.scenario,
+      skillIds: input.skillIds,
+      miniGameId: input.miniGameId,
+      title: input.title,
+    }),
+    difficulty: input.ctx.difficulty,
+    estimatedTimeSeconds: Math.max(5, Number(input.estimatedSeconds ?? input.scenario.estimatedTimeSeconds ?? 45) || 45),
+    validation: buildScenarioValidation(1, input.ctx.now),
+    scoring: buildScenarioScoring(input.scenario, state.moveLimit),
+    retryBehavior: buildScenarioRetryBehavior(input.scenario),
+    revealBehavior: buildScenarioRevealBehavior(input.scenario),
+    novelty: buildScenarioNovelty({
+      miniGameId: input.miniGameId,
+      scenario: input.scenario,
+      seed,
+      source,
+      difficulty: input.ctx.difficulty,
+      recentScenarioKeys: input.ctx.recentScenarioKeys ?? [],
+    }),
+    theme: input.scenario.theme ?? input.scenario.note ?? input.scenario.summary ?? input.title,
+    targetSquares: uniqueSquares(input.scenario.targetSquares),
+    goalSquares: uniqueSquares(input.scenario.goalSquares),
+    acceptedSquares: uniqueSquares([...(input.scenario.targetSquares ?? []), ...(input.scenario.goalSquares ?? []), ...(input.scenario.flagSquares ?? [])]),
+    boardOrientationHint: input.scenario.boardOrientationHint ?? input.ctx.boardPreferences?.boardOrientation ?? "auto",
+    candidateMoves: input.scenario.candidateMoves ? [...input.scenario.candidateMoves] : undefined,
+  };
+
+  state.scenario = scenario;
+  state.noveltyKey = scenario.novelty.scenarioKey;
+
+  const conceptIds = uniqueConceptIds([
+    ...(input.conceptIds ?? []),
+    ...inferConceptTagsForMiniGame(input.miniGameId, input.skillIds),
+  ]);
+
+  const card = attachConceptTagsToDailyCard(
+    {
+      source: "daily_attempt",
+      cardKey: `mini:${input.miniGameId}:${state.formationHash}`,
+      positionKey: state.formationHash,
+      fen: state.currentFen,
+      expectedMoveUci: null,
+      expectedMoveSan: null,
+      playedMoveUci: null,
+      playedMoveSan: null,
+      openingId: null,
+      openingName: input.title,
+      patternId: `mini:${input.miniGameId}`,
+      concept: input.conceptId ?? conceptIds[0] ?? null,
+      count: 1,
+      weight: input.difficultyWeight ?? 1.25,
+      lastSeenAt: input.ctx.mastery?.records[`mini:${input.miniGameId}:${input.skillIds[0] ?? input.miniGameId}`]?.lastSeenAt ?? null,
+      note: input.scenario.note ?? input.summary,
+      signals: [
+        "mini_game",
+        `mini:${input.miniGameId}`,
+        `source:${scenario.source}`,
+        `theme:${scenario.theme}`,
+        `scenario:${input.scenario.scenarioId}`,
+        `novelty:${scenario.novelty.scenarioKey}`,
+        ...input.skillIds.map((skillId) => `skill:${skillId}`),
+        ...(input.tags ?? []).map((tag) => `tag:${tag}`),
+      ],
+      masteryTargets: input.skillIds.map((skillId) => ({
+        conceptKey: `mini:${input.miniGameId}:${skillId}`,
+        domain: "mini_game" as const,
+        label: skillId.replace(/_/g, " "),
+        difficultyHint: input.ctx.difficulty,
+      })),
+      confidence: currentMastery >= 0.8 && confidence >= 0.6 ? "high" : currentMastery >= 0.35 ? "medium" : "low",
+      difficulty: input.ctx.difficulty,
+      id: `mini:${input.miniGameId}:${state.formationHash}`,
+      kind: "mini_game",
+      title: input.displayName ?? input.title,
+      prompt: input.prompt,
+      repertoireId: null,
+      reviewCardId: null,
+      reviewDedupeKey: null,
+      reviewPromptKind: null,
+      reviewStatus: null,
+      reviewDueAt: null,
+      deckRank: 1,
+      priority: Math.round((1 - currentMastery) * 80 + (1 - confidence) * 15 + (input.selectionPriority ?? 0)),
+      masteryKey: `mini:${input.miniGameId}:${state.formationHash}`,
+      sourceCount: 1,
+      summary: input.summary,
+      miniGame: state,
+      conceptIds,
+    },
+    conceptIds,
+  );
+
+  return {
+    card,
+    state,
+  };
 }
 
 export function buildBoardFenFromPieces(pieces: Array<{ square: string; piece: string }>, sideToMove: "w" | "b" = "w"): string {
@@ -90,15 +433,21 @@ export function buildBoardFenFromPieces(pieces: Array<{ square: string; piece: s
   return `${ranks} ${sideToMove} - - 0 1`;
 }
 
+export function rankStaticMiniGameScenarios<T extends StaticMiniGameScenario>(
+  ctx: DailyMiniGameGenerationContext,
+  miniGameId: DailyMiniGameId,
+  scenarios: readonly T[],
+): T[] {
+  return rankScenarios(ctx, miniGameId, scenarios);
+}
+
 export function selectStaticMiniGameScenario<T extends StaticMiniGameScenario>(
   ctx: DailyMiniGameGenerationContext,
   miniGameId: DailyMiniGameId,
   scenarios: readonly T[],
 ): T {
-  const pool = scenarios.length > 0 ? scenarios : [scenarios[0] ?? null].filter(Boolean) as T[];
-  const seed = hashString(`${ctx.dateKey}|${miniGameId}|${ctx.difficulty}|${ctx.currentMastery.toFixed(2)}|${ctx.confidence.toFixed(2)}`);
-  const index = Number.parseInt(seed, 36);
-  return pool[Math.abs(index) % pool.length] ?? pool[0];
+  const ranked = rankScenarios(ctx, miniGameId, scenarios);
+  return ranked[0] ?? scenarios[0] ?? (null as never);
 }
 
 export function createStaticMiniGameState(input: {
@@ -111,7 +460,18 @@ export function createStaticMiniGameState(input: {
 }): DailyMiniGameState {
   const moveLimit = Math.max(1, Number(input.moveLimit ?? input.scenario.moveLimit ?? 2) || 2);
   const bestKnownScore = Math.max(1, Number(input.bestKnownScore ?? input.scenario.bestKnownMoves ?? 1) || 1);
-  const formationHash = hashString(`${input.miniGameId}|${input.scenario.scenarioId}|${input.scenario.fen}|${input.ctx.dateKey}|${input.ctx.difficulty}`);
+  const seed = resolveMiniGameSeed({ ctx: input.ctx, miniGameId: input.miniGameId, scenarioId: input.scenario.scenarioId });
+  const formationHash = hashString(`${input.miniGameId}|${input.scenario.scenarioId}|${input.scenario.fen}|${seed}|${input.ctx.dateKey}|${input.ctx.difficulty}`);
+  const noveltyKey = buildScenarioKey({
+    miniGameId: input.miniGameId,
+    theme: input.scenario.theme ?? input.scenario.note ?? input.scenario.summary ?? input.scenario.scenarioId,
+    fen: input.scenario.fen,
+    solutionUci: input.scenario.expectedMoveUci,
+    targetSquares: input.scenario.targetSquares,
+    goalSquares: input.scenario.goalSquares,
+    difficulty: input.ctx.difficulty,
+    source: input.ctx.source ?? "daily_deck",
+  });
   return {
     miniGameId: input.miniGameId,
     scenarioId: input.scenario.scenarioId,
@@ -130,9 +490,10 @@ export function createStaticMiniGameState(input: {
     completed: false,
     won: false,
     formationHash,
-    noveltyKey: `${input.miniGameId}:${input.scenario.scenarioId}`,
+    noveltyKey,
     lastMoveUci: null,
     lastMoveSan: null,
+    scenario: null,
   };
 }
 
@@ -166,79 +527,35 @@ export function buildStaticMiniGameCard(input: {
     moveLimit: input.moveLimit,
     bestKnownScore: input.bestKnownScore,
   });
-  const currentMastery = Math.max(0, Math.min(1, input.ctx.currentMastery));
-  const confidence = Math.max(0, Math.min(1, input.ctx.confidence));
-  const conceptIds = uniqueConceptIds([
-    ...(input.conceptIds ?? []),
-    ...inferConceptTagsForMiniGame(input.miniGameId, input.skillIds),
-  ]);
-  const card = attachConceptTagsToDailyCard(
-    {
-      source: "daily_attempt",
-      cardKey: `mini:${input.miniGameId}:${state.formationHash}`,
-      positionKey: state.formationHash,
-      fen: state.currentFen,
-      expectedMoveUci: null,
-      expectedMoveSan: null,
-      playedMoveUci: null,
-      playedMoveSan: null,
-      openingId: null,
-      openingName: input.title,
-      patternId: `mini:${input.miniGameId}`,
-      concept: input.conceptId ?? conceptIds[0] ?? null,
-      count: 1,
-      weight: input.difficultyWeight ?? 1.25,
-      lastSeenAt: input.ctx.mastery?.records[`mini:${input.miniGameId}:${input.skillIds[0] ?? input.miniGameId}`]?.lastSeenAt ?? null,
-      note: input.scenario.note ?? input.summary,
-      signals: [
-        "mini_game",
-        `mini:${input.miniGameId}`,
-        ...input.skillIds.map((skillId) => `skill:${skillId}`),
-        ...(input.tags ?? []).map((tag) => `tag:${tag}`),
-        `scenario:${input.scenario.scenarioId}`,
-      ],
-      masteryTargets: input.skillIds.map((skillId) => ({
-        conceptKey: `mini:${input.miniGameId}:${skillId}`,
-        domain: "mini_game" as const,
-        label: skillId.replace(/_/g, " "),
-        difficultyHint: input.ctx.difficulty,
-      })),
-      confidence: currentMastery >= 0.8 && confidence >= 0.6 ? "high" : currentMastery >= 0.35 ? "medium" : "low",
-      difficulty: input.ctx.difficulty,
-      id: `mini:${input.miniGameId}:${state.formationHash}`,
-      kind: "mini_game",
-      title: input.displayName ?? input.title,
-      prompt: input.prompt,
-      repertoireId: null,
-      reviewCardId: null,
-      reviewDedupeKey: null,
-      reviewPromptKind: null,
-      reviewStatus: null,
-      reviewDueAt: null,
-      deckRank: 1,
-      priority: Math.round((1 - currentMastery) * 80 + (1 - confidence) * 15 + (input.selectionPriority ?? 0)),
-      masteryKey: `mini:${input.miniGameId}:${state.formationHash}`,
-      sourceCount: 1,
-      summary: input.summary,
-      miniGame: state,
-    },
-    conceptIds,
-  );
-
+  const bundle = buildScenarioContract({
+    miniGameId: input.miniGameId,
+    title: input.title,
+    summary: input.summary,
+    prompt: input.prompt,
+    scenario: input.scenario,
+    ctx: input.ctx,
+    skillIds: input.skillIds,
+    conceptId: input.conceptId,
+    conceptIds: input.conceptIds,
+    tags: input.tags,
+    difficultyWeight: input.difficultyWeight,
+    selectionPriority: input.selectionPriority,
+    displayName: input.displayName,
+    shortDescription: input.shortDescription,
+    instructions: input.instructions,
+    estimatedSeconds: input.estimatedSeconds,
+    canAppearInDailyBlundr: input.canAppearInDailyBlundr,
+    canAppearInStandalonePractice: input.canAppearInStandalonePractice,
+    moveLimit: input.moveLimit,
+    bestKnownScore: input.bestKnownScore,
+  });
+  if (!bundle) return null;
+  const { card, state: generatedState } = bundle;
+  generatedState.scenario = card.miniGame?.scenario ?? null;
   return {
     card,
-    state,
+    state: generatedState,
   };
-}
-
-function uniqueConceptIds(values: readonly (string | null | undefined)[]): string[] {
-  return Array.from(
-    new Set(
-      values
-        .map((value) => normalizeText(value))
-        .filter((value) => Boolean(value) && value.startsWith("concept:")),
-    ),
-  );
 }
 
 export function advanceStaticMiniGame(
