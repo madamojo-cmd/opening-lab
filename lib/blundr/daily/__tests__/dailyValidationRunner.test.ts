@@ -11,7 +11,7 @@ import {
 
 export function testDailyValidationRunner(): void {
   assert.equal(getDailyBlundrValidationConceptCount(), 68);
-  assert.equal(getDailyBlundrValidationMiniGameCount(), 3);
+  assert.equal(getDailyBlundrValidationMiniGameCount(), 8);
   assert.equal(getDailyBlundrValidationTrainingTargetCount(), 5);
 
   const registryReport = runDailyBlundrRegistryValidation();
@@ -32,4 +32,3 @@ export function testDailyValidationRunner(): void {
 
 testDailyValidationRunner();
 console.log("dailyValidationRunner ok");
-

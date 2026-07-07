@@ -7,10 +7,10 @@ export function testDailyMiniGameValidation(): void {
   assert.ok(validateMiniGameRegistry().valid);
 
   const cards = makeValidMiniGameCards();
-  assert.equal(cards.length, 3);
-  assert.ok(validateMiniGameCard(cards[0]!).valid);
-  assert.ok(validateMiniGameCard(cards[1]!).valid);
-  assert.ok(validateMiniGameCard(cards[2]!).valid);
+  assert.equal(cards.length, 8);
+  for (const card of cards) {
+    assert.ok(validateMiniGameCard(card).valid);
+  }
 
   const missingNoveltyKey = validateMiniGameCard({
     ...cards[0]!,

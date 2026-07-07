@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, BadgeCheck, CheckCircle2, Clock3, Flame, Sparkles, Target } from "lucide-react";
+import { ArrowLeft, BadgeCheck, CheckCircle2, Clock3, Flame, Settings, Sparkles, Target } from "lucide-react";
 import { BLUNDR_EMPTY_STATE_ASSETS, BLUNDR_TEMPO_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
 import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 import { DailyBlundrPlayer } from "@/components/daily/DailyBlundrPlayer";
@@ -217,6 +217,9 @@ export function DailyBlundrScreen() {
               <ArrowLeft size={16} />
               Home
             </span>
+          </Link>
+          <Link href="/settings" className="rounded-2xl bg-white p-3 text-stone-700 shadow-sm ring-1 ring-stone-200" aria-label="Open settings">
+            <Settings size={16} />
           </Link>
         </header>
 

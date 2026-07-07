@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, BookOpen, RefreshCw, Sparkles } from "lucide-react";
+import { ArrowLeft, BookOpen, RefreshCw, Settings, Sparkles } from "lucide-react";
 import { BLUNDR_EMPTY_STATE_ASSETS, BLUNDR_TEMPO_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
 import { BLUNDR_ANALYTICS_EVENTS } from "@/lib/blundr/analytics/blundrAnalyticsEvents";
 import { trackBlundrAnalyticsEvent } from "@/lib/blundr/analytics/blundrAnalyticsService";
@@ -114,13 +114,23 @@ export function RepertoireProgressPanel({ onTrainOpening, homeHref = "/", classN
             </p>
           </div>
           {!embedded ? (
-            <Link href={homeHref} className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm">
-              <ArrowLeft size={18} />
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link href="/settings" className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm" aria-label="Open settings">
+                <Settings size={18} />
+              </Link>
+              <Link href={homeHref} className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm" aria-label="Back to home">
+                <ArrowLeft size={18} />
+              </Link>
+            </div>
           ) : (
-            <button type="button" onClick={() => setProgress(loadRepertoireProgress({ userId }))} className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm">
-              <RefreshCw size={18} />
-            </button>
+            <div className="flex items-center gap-2">
+              <Link href="/settings" className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm" aria-label="Open settings">
+                <Settings size={18} />
+              </Link>
+              <button type="button" onClick={() => setProgress(loadRepertoireProgress({ userId }))} className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm" aria-label="Refresh repertoire">
+                <RefreshCw size={18} />
+              </button>
+            </div>
           )}
         </div>
 

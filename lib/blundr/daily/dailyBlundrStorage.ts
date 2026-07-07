@@ -119,7 +119,16 @@ function normalizeDifficulty(value: unknown): DailyBlundrDifficulty {
 }
 
 function normalizeMiniGameId(value: unknown): DailyMiniGameState["miniGameId"] | null {
-  return value === "king_race" || value === "knight_gymnasium" || value === "pawn_wars" ? value : null;
+  return value === "king_race" ||
+    value === "knight_gymnasium" ||
+    value === "pawn_wars" ||
+    value === "tactic_shots" ||
+    value === "key_square_conquest" ||
+    value === "structure_builder" ||
+    value === "imbalance_arena" ||
+    value === "technique_lab"
+    ? value
+    : null;
 }
 
 function normalizeMiniGameSkillId(value: unknown): DailyMiniGameState["skillIds"][number] | null {
@@ -130,7 +139,33 @@ function normalizeMiniGameSkillId(value: unknown): DailyMiniGameState["skillIds"
     value === "shortest_path" ||
     value === "pawn_race" ||
     value === "promotion" ||
-    value === "passed_pawn"
+    value === "passed_pawn" ||
+    value === "forks" ||
+    value === "pins" ||
+    value === "skewers" ||
+    value === "discovered_attack" ||
+    value === "back_rank" ||
+    value === "overloaded_piece" ||
+    value === "key_square_control" ||
+    value === "outpost" ||
+    value === "invasion_square" ||
+    value === "king_entry" ||
+    value === "blockade" ||
+    value === "pawn_structure" ||
+    value === "pawn_break" ||
+    value === "isolated_pawn" ||
+    value === "backward_pawn" ||
+    value === "pawn_chain" ||
+    value === "bishop_vs_knight" ||
+    value === "rook_activity" ||
+    value === "exchange_value" ||
+    value === "material_imbalance" ||
+    value === "color_complex" ||
+    value === "conversion" ||
+    value === "zugzwang" ||
+    value === "triangulation" ||
+    value === "rook_endgame" ||
+    value === "mating_net"
     ? value
     : null;
 }

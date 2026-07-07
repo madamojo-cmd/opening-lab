@@ -9,6 +9,7 @@ import { REWARD_CACHE_COPY } from "../rewards/rewardConstants";
 import { evaluateTempoCacheRewards } from "../rewards/tempoCacheService";
 import { getDailyBlundrDateKey } from "../daily/dailyBlundrStorage";
 import { createAllRingsClosedEventId, createStreakMilestoneEventId } from "./dailyRingEvents";
+import { notifyDailyRingRefresh } from "./dailyRingRefreshSignal";
 import { createDefaultDailyRingDay, applyDailyRingActivity, getDailyRingPercent, getDailyRingSummary, isDailyRingClosed, areAllDailyRingsClosed } from "./dailyRingProgress";
 import { applyAllRingsClosedDay, createDefaultStreakRecord, getStreakMilestoneBonuses, isConsecutiveLocalDateWrapper } from "../streaks/streakService";
 import { createXpEvent, getXpAwardForAllRingsClosed, getXpAwardForStreakMilestone } from "../xp/xpService";
@@ -619,6 +620,14 @@ export async function completeDailyRingActivity(args: {
       totalAllRingsClosedDays: result.streakRecord.totalAllRingsClosedDays,
     });
   }
+
+  notifyDailyRingRefresh({
+    userId,
+    localDate: result.localDate,
+    source: args.activity.source,
+    activityEventId: result.activityEvent.id,
+    updatedAt: result.dayRecord.updatedAt,
+  });
 
   return result;
 }

@@ -75,8 +75,8 @@ function buildMiniGameFeedbackMessage(card: DailyBlundrMiniGameCard, correct: bo
       : { message: "Tempo will bring this knight route back.", tone: "warning" };
   }
   return correct
-    ? { message: "Passed pawn created. Tempo locked that race in.", tone: "success" }
-    : { message: "Tempo saved this pawn race for review.", tone: "warning" };
+    ? { message: `Nice. Tempo locked ${card.title} in.`, tone: "success" }
+    : { message: `Tempo will bring ${card.title} back for practice.`, tone: "warning" };
 }
 
 function buildTrainingTargetFeedbackMessage(card: DailyBlundrCard, result: DailyTrainingTargetAdvanceResult | null, complete: boolean): { message: string; tone: "success" | "warning" | "complete" | "neutral" } {
@@ -144,6 +144,9 @@ function advanceMiniGame(
 ): DailyMiniGameAdvanceResult | null {
   const definition = getDailyMiniGameDefinition(card.miniGame.miniGameId);
   if (!definition) return null;
+  if (definition.advance) {
+    return definition.advance(state, attempt);
+  }
   if (state.miniGameId === "king_race") {
     return advanceKingRaceMiniGame(state, attempt);
   }

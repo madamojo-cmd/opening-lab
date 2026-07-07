@@ -9,6 +9,7 @@ import { trackBlundrAnalyticsEvent } from "@/lib/blundr/analytics/blundrAnalytic
 import { getLocalAccountCurrentUserId } from "@/lib/blundr/accounts/localAccountStorage";
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
 import { getDailyRingSnapshotSummary, loadDailyRingSnapshot } from "@/lib/blundr/daily-rings/dailyRingService";
+import { BLUNDR_DAILY_RING_REFRESH_EVENT } from "@/lib/blundr/daily-rings/dailyRingRefreshSignal";
 import type { DailyRingCompletionResultLike, DailyRingDayRecord, DailyRingSnapshot } from "@/lib/blundr/daily-rings/dailyRingTypes";
 import { DailyRingSummary } from "./DailyRingSummary";
 import { DailyRingTempoCallout } from "./DailyRingTempoCallout";
@@ -65,10 +66,24 @@ export function DailyRingsCard({ repertoireProgress, refreshKey, completionResul
   const [snapshot, setSnapshot] = useState<DailyRingSnapshot>(() => loadDailyRingSnapshot({ userId: getLocalAccountCurrentUserId() }));
   const trackedViewKeyRef = useRef<string | null>(null);
 
+  function refreshSnapshot() {
+    setSnapshot(loadDailyRingSnapshot({ userId: getLocalAccountCurrentUserId() }));
+  }
+
   useEffect(() => {
-    const nextSnapshot = loadDailyRingSnapshot({ userId: getLocalAccountCurrentUserId() });
-    setSnapshot(nextSnapshot);
-  }, [refreshKey, repertoireProgress.updatedAt]);
+    refreshSnapshot();
+  }, [refreshKey, repertoireProgress.updatedAt, completionResult?.activityEvent?.id, completionResult?.activityAlreadyApplied, completionResult?.ok]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleRefresh = () => refreshSnapshot();
+    window.addEventListener(BLUNDR_DAILY_RING_REFRESH_EVENT, handleRefresh);
+    window.addEventListener("storage", handleRefresh);
+    return () => {
+      window.removeEventListener(BLUNDR_DAILY_RING_REFRESH_EVENT, handleRefresh);
+      window.removeEventListener("storage", handleRefresh);
+    };
+  }, []);
 
   useEffect(() => {
     const viewKey = `${snapshot.userId}:${snapshot.localDate}`;

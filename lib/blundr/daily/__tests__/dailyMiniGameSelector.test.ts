@@ -44,6 +44,15 @@ function makeMasteryState(entries: Record<string, DailyBlundrMasteryRecord>): Da
   };
 }
 
+function makeMiniGameSkillRecords(miniGameId: string, skillIds: readonly string[], currentMastery: number, confidence: number, lastSeenAt: string): Record<string, DailyBlundrMasteryRecord> {
+  return Object.fromEntries(
+    skillIds.map((skillId) => [
+      `mini:${miniGameId}:${skillId}`,
+      makeRecord(`mini:${miniGameId}:${skillId}`, currentMastery, confidence, lastSeenAt),
+    ]),
+  );
+}
+
 export function testDailyMiniGameSelector(): void {
   const lowKingMastery = makeMasteryState({
     "mini:king_race:king_pathing": makeRecord("mini:king_race:king_pathing", 0.1, 0.2),
@@ -54,6 +63,11 @@ export function testDailyMiniGameSelector(): void {
     "mini:pawn_wars:pawn_race": makeRecord("mini:pawn_wars:pawn_race", 0.9, 0.9),
     "mini:pawn_wars:promotion": makeRecord("mini:pawn_wars:promotion", 0.9, 0.9),
     "mini:pawn_wars:passed_pawn": makeRecord("mini:pawn_wars:passed_pawn", 0.9, 0.9),
+    ...makeMiniGameSkillRecords("tactic_shots", ["forks", "pins", "skewers", "discovered_attack", "back_rank", "overloaded_piece"], 0.9, 0.9, "2026-07-01T10:00:00.000Z"),
+    ...makeMiniGameSkillRecords("key_square_conquest", ["key_square_control", "outpost", "invasion_square", "king_entry", "blockade"], 0.9, 0.9, "2026-07-01T10:00:00.000Z"),
+    ...makeMiniGameSkillRecords("structure_builder", ["pawn_structure", "pawn_break", "isolated_pawn", "backward_pawn", "pawn_chain"], 0.9, 0.9, "2026-07-01T10:00:00.000Z"),
+    ...makeMiniGameSkillRecords("imbalance_arena", ["bishop_vs_knight", "rook_activity", "exchange_value", "material_imbalance", "color_complex"], 0.9, 0.9, "2026-07-01T10:00:00.000Z"),
+    ...makeMiniGameSkillRecords("technique_lab", ["conversion", "zugzwang", "triangulation", "rook_endgame", "mating_net"], 0.9, 0.9, "2026-07-01T10:00:00.000Z"),
   });
 
   const introSelection = selectDailyMiniGame({
@@ -99,6 +113,11 @@ export function testDailyMiniGameSelector(): void {
       "mini:pawn_wars:pawn_race": makeRecord("mini:pawn_wars:pawn_race", 0.93, 0.91, "2026-07-01T10:00:00.000Z"),
       "mini:pawn_wars:promotion": makeRecord("mini:pawn_wars:promotion", 0.93, 0.91, "2026-07-01T10:00:00.000Z"),
       "mini:pawn_wars:passed_pawn": makeRecord("mini:pawn_wars:passed_pawn", 0.93, 0.91, "2026-07-01T10:00:00.000Z"),
+      ...makeMiniGameSkillRecords("tactic_shots", ["forks", "pins", "skewers", "discovered_attack", "back_rank", "overloaded_piece"], 0.95, 0.92, "2026-07-01T10:00:00.000Z"),
+      ...makeMiniGameSkillRecords("key_square_conquest", ["key_square_control", "outpost", "invasion_square", "king_entry", "blockade"], 0.95, 0.92, "2026-07-01T10:00:00.000Z"),
+      ...makeMiniGameSkillRecords("structure_builder", ["pawn_structure", "pawn_break", "isolated_pawn", "backward_pawn", "pawn_chain"], 0.95, 0.92, "2026-07-01T10:00:00.000Z"),
+      ...makeMiniGameSkillRecords("imbalance_arena", ["bishop_vs_knight", "rook_activity", "exchange_value", "material_imbalance", "color_complex"], 0.95, 0.92, "2026-07-01T10:00:00.000Z"),
+      ...makeMiniGameSkillRecords("technique_lab", ["conversion", "zugzwang", "triangulation", "rook_endgame", "mating_net"], 0.95, 0.92, "2026-07-01T10:00:00.000Z"),
     }),
     dateKey: "2026-07-02",
     now: "2026-07-02T09:00:00.000Z",
@@ -116,4 +135,3 @@ export function testDailyMiniGameSelector(): void {
 
 testDailyMiniGameSelector();
 console.log("dailyMiniGameSelector ok");
-

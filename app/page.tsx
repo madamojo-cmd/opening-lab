@@ -28,9 +28,12 @@ import { ProjectiveTacticalOverlay } from "@/components/board/ProjectiveTactical
 import { TempoDailyBlundrCard } from "@/components/daily/TempoDailyBlundrCard";
 import { ReviewTabDailyBlundrPanel } from "@/components/daily/ReviewTabDailyBlundrPanel";
 import { DailyRingsCard } from "@/components/daily-rings/DailyRingsCard";
+import { BLUNDR_DAILY_RING_REFRESH_EVENT } from "@/lib/blundr/daily-rings/dailyRingRefreshSignal";
 import { RepertoireProgressPanel } from "@/components/repertoire/RepertoireProgressPanel";
 import { RepertoirePointsSummary } from "@/components/repertoire/RepertoirePointsSummary";
 import { RepertoireUnlockProgress } from "@/components/repertoire/RepertoireUnlockProgress";
+import { ProgressDashboard } from "@/components/progress/ProgressDashboard";
+import { ReviewHub } from "@/components/review/ReviewHub";
 import { createLearningSessionId, recordLearningEvent } from "@/lib/blundr/learning/learningEvents";
 import type { LearningEvent } from "@/lib/blundr/learning/learningEvents";
 import { loadOpponentVariationMemory, recordOpponentChoice } from "@/lib/blundr/opponent/opponentVariationMemory";
@@ -137,6 +140,8 @@ import { isBlundrDebugEnabled } from "@/lib/blundr/debug/trainerDebugGuards";
 import type { DebugEvent, TrainerDebugSnapshot } from "@/lib/blundr/debug/trainerDebugTypes";
 import type { UserTrainingProfile } from "@/lib/blundr/accounts/accountTypes";
 import { getLocalAccountCurrentUserId, getLocalTrainingProfile } from "@/lib/blundr/accounts/localAccountStorage";
+import { BLUNDR_BOARD_PREFERENCES_CHANGED_EVENT } from "@/lib/blundr/board/boardPreferenceEvents";
+import { readLocalBoardPreferences, writeLocalBoardPreferences } from "@/lib/blundr/board/boardPreferenceService";
 import { shouldShowOnboarding } from "@/lib/blundr/onboarding/onboardingRouting";
 import { loadRepertoireProgress } from "@/lib/blundr/repertoire/repertoireProgressService";
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
@@ -482,7 +487,7 @@ function buildDiagnosticsPlaceholder(input: DiagnosticsPlaceholderInput): Traine
     eventLog: input.eventLog,
   };
 }
-type BoardTheme = "classic" | "slate" | "blue" | "walnut";
+type BoardTheme = "default" | "classic" | "slate" | "blue" | "walnut";
 type PieceStyle = "unicode" | "letters" | "neo";
 type BoardSettings = { boardTheme: BoardTheme; pieceStyle: PieceStyle; showAttack: boolean; showDefense: boolean; showPlan: boolean; showMoveDots: boolean; showEvalBar: boolean; showCaptured: boolean; showOpponentCue: boolean; projectiveTacticLinesEnabled: boolean; projectiveTacticLabelsEnabled: boolean };
 type CapturedSummary = { whiteCaptured: string[]; blackCaptured: string[]; materialAdvantage: { side: ChessColor | null; value: number } };
@@ -493,7 +498,19 @@ const LETTER_PIECES: Record<string, string> = { wp:"P", wn:"N", wb:"B", wr:"R", 
 const NEO_PIECES: Record<string, string> = { wp:"♙", wn:"♘", wb:"♗", wr:"♖", wq:"♕", wk:"♔", bp:"♟", bn:"♞", bb:"♝", br:"♜", bq:"♛", bk:"♚" };
 const PIECE_VALUES: Record<string, number> = { p:1, n:3, b:3, r:5, q:9, k:0 };
 const INITIAL_COUNTS: Record<ChessColor, Record<string, number>> = { w:{p:8,n:2,b:2,r:2,q:1,k:1}, b:{p:8,n:2,b:2,r:2,q:1,k:1} };
-const DEFAULT_BOARD_SETTINGS: BoardSettings = { boardTheme:"classic", pieceStyle:"unicode", showAttack:true, showDefense:true, showPlan:true, showMoveDots:true, showEvalBar:true, showCaptured:true, showOpponentCue:true, projectiveTacticLinesEnabled:true, projectiveTacticLabelsEnabled:true };
+const DEFAULT_BOARD_SETTINGS: BoardSettings = { boardTheme:"default", pieceStyle:"unicode", showAttack:true, showDefense:true, showPlan:true, showMoveDots:true, showEvalBar:true, showCaptured:true, showOpponentCue:true, projectiveTacticLinesEnabled:true, projectiveTacticLabelsEnabled:true };
+function isHomeDefaultBoardTheme(theme: BoardTheme): boolean {
+  return theme === "default" || theme === "classic" || theme === "slate";
+}
+function normalizeHomeBoardTheme(theme: unknown): BoardTheme {
+  const text = String(theme ?? "").trim().toLowerCase();
+  if (text === "blue" || text === "walnut") return text;
+  return "default";
+}
+function normalizeHomeBoardPieceStyle(value: unknown): PieceStyle {
+  const text = String(value ?? "").trim().toLowerCase();
+  return text === "letters" || text === "neo" ? text : "unicode";
+}
 const LOCAL_TELEMETRY_KEY = "blundr-v27-local-telemetry";
 const STAGE2_RUNTIME_TRAINING_LINE_MEMORY_KEY = "blundr-stage2-runtime-training-line-memory-v1";
 const MAX_LOCAL_TELEMETRY_EVENTS = 120;
@@ -4387,7 +4404,25 @@ export default function App(){
     },Math.max(0,input.delayMs??350));
     return request;
   }
-  useEffect(()=>{const saved=localStorage.getItem("blundr-v22-progress");const savedCustom=localStorage.getItem("blundr-v22-custom");const savedSettings=localStorage.getItem("blundr-board-settings");const savedTelemetry=localStorage.getItem(LOCAL_TELEMETRY_KEY);if(saved)try{setProgress(JSON.parse(saved))}catch{}if(savedCustom)try{setCustomRepertoires(JSON.parse(savedCustom))}catch{}if(savedSettings)try{setBoardSettings({...DEFAULT_BOARD_SETTINGS,...JSON.parse(savedSettings)})}catch{}if(savedTelemetry)try{const parsed=JSON.parse(savedTelemetry) as Partial<LocalTelemetryStore>;const nextEvents=Array.isArray(parsed.events)?parsed.events.slice(-MAX_LOCAL_TELEMETRY_EVENTS):[];setTelemetryEnabled(Boolean(parsed.enabled));setTelemetryEvents(nextEvents);telemetryEventsRef.current=nextEvents;telemetrySeq.current=nextEvents.reduce((max,event)=>Math.max(max,Number(event.id)||0),0)}catch{}},[]);
+  useEffect(()=>{
+    const saved=localStorage.getItem("blundr-v22-progress");
+    const savedCustom=localStorage.getItem("blundr-v22-custom");
+    const savedSettings=localStorage.getItem("blundr-board-settings");
+    const savedTelemetry=localStorage.getItem(LOCAL_TELEMETRY_KEY);
+    if(saved)try{setProgress(JSON.parse(saved))}catch{}
+    if(savedCustom)try{setCustomRepertoires(JSON.parse(savedCustom))}catch{}
+    if(savedSettings)try{
+      const parsed=JSON.parse(savedSettings);
+      const canonicalBoardPreferences=readLocalBoardPreferences(localStorage);
+      setBoardSettings({
+        ...DEFAULT_BOARD_SETTINGS,
+        ...parsed,
+        boardTheme:normalizeHomeBoardTheme(canonicalBoardPreferences.boardThemeId),
+        pieceStyle:normalizeHomeBoardPieceStyle(canonicalBoardPreferences.pieceSetId),
+      });
+    }catch{}
+    if(savedTelemetry)try{const parsed=JSON.parse(savedTelemetry) as Partial<LocalTelemetryStore>;const nextEvents=Array.isArray(parsed.events)?parsed.events.slice(-MAX_LOCAL_TELEMETRY_EVENTS):[];setTelemetryEnabled(Boolean(parsed.enabled));setTelemetryEvents(nextEvents);telemetryEventsRef.current=nextEvents;telemetrySeq.current=nextEvents.reduce((max,event)=>Math.max(max,Number(event.id)||0),0)}catch{}
+  },[]);
   useEffect(()=>{
     try{
       const savedRuntimeLineMemory=localStorage.getItem(STAGE2_RUNTIME_TRAINING_LINE_MEMORY_KEY);
@@ -4434,9 +4469,49 @@ export default function App(){
     const savedRatingBand=localStorage.getItem("blundr-stage2-rating-band");
     if(savedRatingBand)setRatingFilter(getStage2RatingBandByFilterValue(savedRatingBand).value);
   },[]);
-  useEffect(()=>localStorage.setItem("blundr-board-settings",JSON.stringify(boardSettings)),[boardSettings]);
+  useEffect(()=>{
+    const currentPreferences=readLocalBoardPreferences(localStorage);
+    const nextPreferences={
+      ...currentPreferences,
+      boardThemeId:normalizeHomeBoardTheme(boardSettings.boardTheme)==="blue"?"blue":normalizeHomeBoardTheme(boardSettings.boardTheme)==="walnut"?"walnut":"default",
+      pieceSetId:normalizeHomeBoardPieceStyle(boardSettings.pieceStyle),
+      updatedAt:nowIso(),
+    };
+    writeLocalBoardPreferences(nextPreferences,localStorage);
+  },[boardSettings]);
   useEffect(()=>localStorage.setItem("blundr-stage2-rating-band",rating.id),[rating.id]);
   useEffect(()=>localStorage.setItem(STAGE2_RUNTIME_TRAINING_LINE_MEMORY_KEY,JSON.stringify(recentRuntimeTrainingLineKeys.slice(0,2))),[recentRuntimeTrainingLineKeys]);
+  useEffect(()=>{
+    if(typeof window==="undefined")return;
+    const handleBoardPreferencesChanged=()=>{
+      const canonical=readLocalBoardPreferences(window.localStorage);
+      const nextTheme=normalizeHomeBoardTheme(canonical.boardThemeId);
+      const nextPiece=normalizeHomeBoardPieceStyle(canonical.pieceSetId);
+      setBoardSettings((current)=>{
+        if(current.boardTheme===nextTheme&&current.pieceStyle===nextPiece){
+          return current;
+        }
+        return {
+          ...current,
+          boardTheme:nextTheme,
+          pieceStyle:nextPiece,
+        };
+      });
+    };
+    const handleRingRefresh=()=>{
+      setRepertoireProgress(loadRepertoireProgress({userId:getLocalAccountCurrentUserId()}));
+    };
+    window.addEventListener("storage",handleBoardPreferencesChanged);
+    window.addEventListener(BLUNDR_BOARD_PREFERENCES_CHANGED_EVENT,handleBoardPreferencesChanged);
+    window.addEventListener("storage",handleRingRefresh);
+    window.addEventListener(BLUNDR_DAILY_RING_REFRESH_EVENT,handleRingRefresh);
+    return()=>{
+      window.removeEventListener("storage",handleBoardPreferencesChanged);
+      window.removeEventListener(BLUNDR_BOARD_PREFERENCES_CHANGED_EVENT,handleBoardPreferencesChanged);
+      window.removeEventListener("storage",handleRingRefresh);
+      window.removeEventListener(BLUNDR_DAILY_RING_REFRESH_EVENT,handleRingRefresh);
+    };
+  },[]);
   useEffect(()=>{
     if(typeof window==="undefined")return;
     const hash=window.location.hash.replace(/^#/, "").trim();
@@ -7249,19 +7324,19 @@ export default function App(){
       {showDetails&&opponentVariationDebug&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Opponent Variation Guard</div><div className="mt-2">Variation applied: {opponentVariationDebug.opponentVariationApplied?"yes":"no"}</div><div>Reason: {opponentVariationDebug.opponentVariationReason||"n/a"}</div><div>Recent branch keys: {opponentVariationDebug.recentOpponentBranchKeys.join(", ")||"n/a"}</div><div>Selected branch key: {opponentVariationDebug.selectedOpponentBranchKey??"n/a"}</div><div>Candidates: {opponentVariationDebug.candidateOpponentBranches.map((c)=>`${c.san??c.uci}:${c.baseWeight.toFixed(2)}→${c.adjustedWeight.toFixed(2)}:${c.safetyStatus??"unknown"}:${c.selectionScore?.toFixed?.(2)??"n/a"}${c.blockedReason?`(${c.blockedReason})`:""}`).join(", ")||"n/a"}</div><div>Blocked third-repeat branches: {opponentVariationDebug.blockedThirdRepeatBranches.join(", ")||"none"}</div><div>Fallback used: {opponentVariationDebug.fallbackUsed?"yes":"no"}</div><div>continuedPlaySelectedMoveInCandidateList: {opponentVariationDebug.continuedPlaySelectedMoveInCandidateList?"true":"false"}</div><div>continuedPlaySelectionConsistency: {opponentVariationDebug.continuedPlaySelectionConsistency??"n/a"}</div><div>continuationMoveSafetySource: {opponentVariationDebug.continuationMoveSafetySource??"n/a"}</div></div>}
       <div className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm"><div className="flex items-start gap-3">{feedback.toLowerCase().includes("correct")?<CheckCircle2 className="mt-0.5 text-green-700" size={24}/>:feedback.toLowerCase().includes("not quite")||feedback.toLowerCase().includes("illegal")?<XCircle className="mt-0.5 text-red-600" size={24}/>:<Target className="mt-0.5 text-green-700" size={24}/>}<div><div className="font-bold">{endingInfo?endingInfo.title:isReviewingHistory?"Review mode":isUserTurn?"Your move":"Opponent thinking"}</div><p className="text-sm leading-6 text-stone-600">{feedback}</p></div></div></div>
     </section>}
-    {activeTab==="review"&&<section className="space-y-5"><ReviewTabDailyBlundrPanel /><header><h1 className="text-2xl font-bold tracking-tight">Review Mistakes</h1><p className="text-sm text-stone-500">Wrong opening moves are saved here.</p></header>{mistakes.length===0?<div className="rounded-3xl bg-white p-6 text-center shadow-sm"><CheckCircle2 className="mx-auto mb-3 text-green-700" size={40}/><h2 className="text-lg font-bold">No mistakes due</h2><p className="mt-2 text-sm text-stone-500">Missed training positions will appear here.</p></div>:<div className="space-y-3">{mistakes.map(m=><button key={m.fen} onClick={()=>practiceMistake(m)} className="w-full rounded-3xl border border-stone-200 bg-white p-4 text-left shadow-sm"><div className="flex items-start justify-between gap-3"><div><div className="font-bold">{m.opening}</div><div className="mt-1 text-sm text-stone-500">Expected: <span className="font-bold text-green-700">{m.expectedMove}</span></div><div className="text-sm text-stone-500">You played: {m.playedMove}</div></div><span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">Missed {m.count}x</span></div></button>)}</div>}</section>}
-    {activeTab==="progress"&&<section className="space-y-5"><header><h1 className="text-2xl font-bold tracking-tight">Progress</h1><p className="text-sm text-stone-500">Your training snapshot.</p></header><div className="grid grid-cols-3 gap-2"><MetricCard compact label="Accuracy" value={`${accuracy}%`} sub="overall" icon={<Target size={18}/>}/><MetricCard compact label="Trained" value={String(Object.keys(progress.trainedPositions).length)} sub="positions" icon={<BookOpen size={18}/>}/><MetricCard compact label="Review" value={String(mistakes.length)} sub="due" icon={<XCircle size={18}/>} warning/></div></section>}
+    {activeTab==="review"&&<section className="space-y-5"><ReviewHub embedded homeHref="/" settingsHref="/settings"/></section>}
+    {activeTab==="progress"&&<section className="space-y-5"><ProgressDashboard embedded homeHref="/" settingsHref="/settings"/></section>}
   </div>{showAddLine&&<div className="fixed inset-0 z-[60] flex items-end bg-black/35 p-4"><div className="mx-auto w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><h2 className="text-xl font-black">Add Custom Line</h2><button onClick={()=>setShowAddLine(false)} className="rounded-full bg-stone-100 p-2"><X size={18}/></button></div><label className="text-sm font-bold text-stone-700">Name</label><input value={newRepName} onChange={e=>setNewRepName(e.target.value)} className="mt-1 w-full rounded-2xl border border-stone-200 px-4 py-3 outline-none focus:border-green-700"/><label className="mt-4 block text-sm font-bold text-stone-700">Train as</label><div className="mt-1 grid grid-cols-2 rounded-2xl bg-stone-200 p-1 text-sm font-semibold"><button onClick={()=>setNewRepColor("white")} className={classNames("rounded-xl py-2",newRepColor==="white"?"bg-white text-green-700 shadow-sm":"text-stone-500")}>White</button><button onClick={()=>setNewRepColor("black")} className={classNames("rounded-xl py-2",newRepColor==="black"?"bg-white text-green-700 shadow-sm":"text-stone-500")}>Black</button></div><label className="mt-4 block text-sm font-bold text-stone-700">Line in SAN</label><textarea value={newLineText} onChange={e=>setNewLineText(e.target.value)} rows={5} className="mt-1 w-full rounded-2xl border border-stone-200 px-4 py-3 outline-none focus:border-green-700"/><button onClick={createCustomRepertoire} className="mt-4 w-full rounded-2xl bg-green-700 px-4 py-4 font-black text-white shadow-sm">Save and Train</button></div></div>}{showSettings&&<SettingsPanel settings={boardSettings} setSettings={setBoardSettings} rating={rating} ratingBands={RATING_PRESETS} onRatingFilterChange={setRatingFilter} onClose={()=>setShowSettings(false)}/>}<BottomNav activeTab={activeTab} setActiveTab={setActiveTab}/>{blundrDebugEnabled&&<BlundrDiagnosticsPanel snapshot={diagnosticsSnapshot} enabled={blundrDebugEnabled} onEnabledChange={setBlundrDebugEnabled} onClearEvents={()=>setDebugEventLog([])}/>}</main>
 }
 
 function boardThemeClasses(theme:BoardTheme,isDark:boolean){
-  if(theme==="slate")return isDark?"bg-slate-600":"bg-slate-200";
   if(theme==="blue")return isDark?"bg-sky-700":"bg-sky-100";
   if(theme==="walnut")return isDark?"bg-amber-800":"bg-amber-100";
   return isDark?"bg-[#779954]":"bg-[#edeed1]";
 }
 function coordTone(theme:BoardTheme,isDark:boolean){
-  if(theme==="classic")return isDark?"text-[#edeed1]":"text-[#779954]";
+  if(theme==="blue")return isDark?"text-white/70":"text-sky-800";
+  if(theme==="walnut")return isDark?"text-white/70":"text-amber-800";
   return isDark?"text-white/70":"text-stone-600/70";
 }
 
@@ -7374,7 +7449,7 @@ function SettingsPanel({settings,setSettings,rating,ratingBands,onRatingFilterCh
   const toggle=(key:keyof Pick<BoardSettings,"showAttack"|"showDefense"|"showPlan"|"showMoveDots"|"showEvalBar"|"showCaptured"|"showOpponentCue"|"projectiveTacticLinesEnabled"|"projectiveTacticLabelsEnabled">)=>setSettings({...settings,[key]:!settings[key]});
   const OptionButton=({active,label,onClick}:{active:boolean;label:string;onClick:()=>void})=><button onClick={onClick} className={classNames("rounded-2xl px-3 py-2 text-xs font-black",active?"bg-green-700 text-white":"bg-stone-100 text-stone-600")}>{label}</button>;
   const Toggle=({id,label}:{id:keyof Pick<BoardSettings,"showAttack"|"showDefense"|"showPlan"|"showMoveDots"|"showEvalBar"|"showCaptured"|"showOpponentCue"|"projectiveTacticLinesEnabled"|"projectiveTacticLabelsEnabled">;label:string})=><button onClick={()=>toggle(id)} className={classNames("flex items-center justify-between rounded-2xl px-3 py-3 text-sm font-black",settings[id]?"bg-green-50 text-green-800":"bg-stone-100 text-stone-500")}><span>{label}</span><span>{settings[id]?"ON":"OFF"}</span></button>;
-  return <div className="fixed inset-0 z-[70] flex items-end bg-black/35 p-4"><div className="mx-auto max-h-[86vh] w-full max-w-md overflow-auto rounded-3xl bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><div><h2 className="text-xl font-black">Board Settings</h2><p className="text-xs font-semibold text-stone-500">Customize board, pieces, and active displays.</p></div><button onClick={onClose} className="rounded-full bg-stone-100 p-2"><X size={18}/></button></div><div className="space-y-5"><div><div className="mb-2 text-sm font-black">Trainer rating band</div><select value={rating.value} onChange={(event)=>onRatingFilterChange(event.target.value)} className="w-full rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-black text-stone-800 outline-none focus:border-green-700">{ratingBands.map((band)=><option key={band.id} value={band.value}>{band.label} — {band.target}</option>)}</select><p className="mt-2 text-xs font-semibold leading-5 text-stone-500">Restricted Trainer uses this local-package rating band for line selection. Maia continuation maps to {rating.maiaSkill} / ~{rating.maiaRating}.</p></div><div><div className="mb-2 text-sm font-black">Board</div><div className="grid grid-cols-4 gap-2"><OptionButton active={settings.boardTheme==="classic"} label="Classic" onClick={()=>update("boardTheme","classic")}/><OptionButton active={settings.boardTheme==="slate"} label="Slate" onClick={()=>update("boardTheme","slate")}/><OptionButton active={settings.boardTheme==="blue"} label="Blue" onClick={()=>update("boardTheme","blue")}/><OptionButton active={settings.boardTheme==="walnut"} label="Walnut" onClick={()=>update("boardTheme","walnut")}/></div></div><div><div className="mb-2 text-sm font-black">Pieces</div><div className="grid grid-cols-3 gap-2"><OptionButton active={settings.pieceStyle==="unicode"} label="Classic" onClick={()=>update("pieceStyle","unicode")}/><OptionButton active={settings.pieceStyle==="neo"} label="Neo" onClick={()=>update("pieceStyle","neo")}/><OptionButton active={settings.pieceStyle==="letters"} label="Letters" onClick={()=>update("pieceStyle","letters")}/></div></div><div><div className="mb-2 text-sm font-black">Active displays</div><div className="grid grid-cols-2 gap-2"><Toggle id="showMoveDots" label="Legal move dots"/><Toggle id="showEvalBar" label="Advantage bar"/><Toggle id="showCaptured" label="Captured pieces"/><Toggle id="showOpponentCue" label="Show Last Opponent Move"/>{PROJECTIVE_TACTICS_ENABLED?<><Toggle id="projectiveTacticLinesEnabled" label="Tactic lines"/><Toggle id="projectiveTacticLabelsEnabled" label="Tactic labels"/></>:null}</div></div><button onClick={onClose} className="w-full rounded-2xl bg-stone-950 px-4 py-4 font-black text-white">Done</button></div></div></div>
+  return <div className="fixed inset-0 z-[70] flex items-end bg-black/35 p-4"><div className="mx-auto max-h-[86vh] w-full max-w-md overflow-auto rounded-3xl bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><div><h2 className="text-xl font-black">Board Settings</h2><p className="text-xs font-semibold text-stone-500">Customize board, pieces, and active displays.</p></div><button onClick={onClose} className="rounded-full bg-stone-100 p-2"><X size={18}/></button></div><div className="space-y-5"><div><div className="mb-2 text-sm font-black">Trainer rating band</div><select value={rating.value} onChange={(event)=>onRatingFilterChange(event.target.value)} className="w-full rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-black text-stone-800 outline-none focus:border-green-700">{ratingBands.map((band)=><option key={band.id} value={band.value}>{band.label} — {band.target}</option>)}</select><p className="mt-2 text-xs font-semibold leading-5 text-stone-500">Restricted Trainer uses this local-package rating band for line selection. Maia continuation maps to {rating.maiaSkill} / ~{rating.maiaRating}.</p></div><div><div className="mb-2 text-sm font-black">Board</div><div className="grid grid-cols-3 gap-2"><OptionButton active={isHomeDefaultBoardTheme(settings.boardTheme)} label="Default" onClick={()=>update("boardTheme","default")}/><OptionButton active={settings.boardTheme==="blue"} label="Blue" onClick={()=>update("boardTheme","blue")}/><OptionButton active={settings.boardTheme==="walnut"} label="Walnut" onClick={()=>update("boardTheme","walnut")}/></div></div><div><div className="mb-2 text-sm font-black">Pieces</div><div className="grid grid-cols-3 gap-2"><OptionButton active={settings.pieceStyle==="unicode"} label="Classic" onClick={()=>update("pieceStyle","unicode")}/><OptionButton active={settings.pieceStyle==="neo"} label="Neo" onClick={()=>update("pieceStyle","neo")}/><OptionButton active={settings.pieceStyle==="letters"} label="Letters" onClick={()=>update("pieceStyle","letters")}/></div></div><div><div className="mb-2 text-sm font-black">Active displays</div><div className="grid grid-cols-2 gap-2"><Toggle id="showMoveDots" label="Legal move dots"/><Toggle id="showEvalBar" label="Advantage bar"/><Toggle id="showCaptured" label="Captured pieces"/><Toggle id="showOpponentCue" label="Show Last Opponent Move"/>{PROJECTIVE_TACTICS_ENABLED?<><Toggle id="projectiveTacticLinesEnabled" label="Tactic lines"/><Toggle id="projectiveTacticLabelsEnabled" label="Tactic labels"/></>:null}</div></div><button onClick={onClose} className="w-full rounded-2xl bg-stone-950 px-4 py-4 font-black text-white">Done</button></div></div></div>
 }
 
 function PipelineStatus({step,note}:{step:ThinkingStep;note:string}){const labels:Record<ThinkingStep,string>={idle:"Ready",facts:"Analyzing",engine:"Engine",brain:"Blundr Brain","gpt-receive":"Receiving","visual-update":"Updating",ready:"Ready",error:"Error"};const tone=step==="error"?"bg-red-50 text-red-700 ring-red-100":step==="ready"||step==="idle"?"bg-green-50 text-green-700 ring-green-100":"bg-blue-50 text-blue-700 ring-blue-100";return <div className={classNames("max-w-[190px] rounded-2xl px-3 py-2 text-right text-[11px] font-black leading-4 ring-1",tone)} title={note}><div>{labels[step]}</div><div className="truncate text-[10px] font-semibold opacity-75">{note}</div></div>}

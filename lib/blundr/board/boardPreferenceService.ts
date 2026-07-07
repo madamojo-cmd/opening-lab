@@ -8,6 +8,7 @@ import {
   type BlundrBoardPreferences,
   type BlundrBoardThemeInputId,
 } from "./boardThemeTypes";
+import { notifyBlundrBoardPreferencesChanged } from "./boardPreferenceEvents";
 
 export { createDefaultBoardPreferences } from "./boardThemeTypes";
 
@@ -31,6 +32,18 @@ function nowIso(): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function parseExistingBoardSettings(storage?: Storage | null): Record<string, unknown> {
+  if (!storage) return {};
+  const raw = storage.getItem(BLUNDR_BOARD_PREFERENCES_STORAGE_KEY);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return isRecord(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 export function normalizeBoardPreferences(value: unknown, fallback = createDefaultBoardPreferences()): BlundrBoardPreferences {
@@ -81,9 +94,11 @@ export function writeLocalBoardPreferences(preferences: BlundrBoardPreferences, 
     return preferences;
   }
 
-  const payload: LegacyBoardSettingsLike & BlundrBoardPreferences = {
+  const existing = parseExistingBoardSettings(storage);
+  const payload: Record<string, unknown> & LegacyBoardSettingsLike & BlundrBoardPreferences = {
+    ...existing,
     boardThemeId: preferences.boardThemeId,
-    boardTheme: preferences.boardThemeId,
+    boardTheme: preferences.boardThemeId === "default" ? "classic" : preferences.boardThemeId,
     pieceSetId: preferences.pieceSetId,
     pieceStyle: preferences.pieceSetId,
     showCoordinates: preferences.showCoordinates,
@@ -95,6 +110,12 @@ export function writeLocalBoardPreferences(preferences: BlundrBoardPreferences, 
 
   try {
     storage.setItem(BLUNDR_BOARD_PREFERENCES_STORAGE_KEY, JSON.stringify(payload));
+    notifyBlundrBoardPreferencesChanged({
+      boardThemeId: payload.boardThemeId,
+      pieceSetId: payload.pieceSetId,
+      source: payload.source,
+      updatedAt: payload.updatedAt,
+    });
   } catch {
     // Local board preferences are optional.
   }

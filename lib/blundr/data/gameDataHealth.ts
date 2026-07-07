@@ -8,6 +8,7 @@ import { getStage2RuntimeTrainableRepertoire } from "../openings/runtimeTrainabl
 import { loadStage2RuntimeTrainableRepertoires } from "../openings/runtimeLineBodyLoader";
 import { getStage2OpeningAvailability, getStage2OpeningAvailabilitySummary, STAGE2_OPENING_AVAILABILITY_MATRIX } from "../openings/openingAvailability";
 import { getAllStarterPacks, getStarterPackOpeningIds } from "../onboarding/starterPacks";
+import { buildDailyMiniGameHealthReport, type DailyMiniGameHealthReport } from "../daily/miniGames/dailyMiniGameHealth";
 
 export type GameDataHealthReport = {
   generatedAt: string;
@@ -48,6 +49,7 @@ export type GameDataHealthReport = {
     syntheticDeckCardCount: number;
     syntheticDeckHasCards: boolean;
   };
+  minigames: DailyMiniGameHealthReport;
 };
 
 function nowIso(): string {
@@ -195,6 +197,10 @@ export async function buildGameDataHealthReport(now = nowIso()): Promise<GameDat
   });
 
   const liveOverview = loadDailyBlundrOverview(5);
+  const miniGames = buildDailyMiniGameHealthReport({
+    dateKey: now.slice(0, 10),
+    now,
+  });
 
   return {
     generatedAt: now,
@@ -235,5 +241,6 @@ export async function buildGameDataHealthReport(now = nowIso()): Promise<GameDat
       syntheticDeckCardCount: syntheticDeck.cards.length,
       syntheticDeckHasCards: syntheticDeck.cards.length > 0,
     },
+    minigames: miniGames,
   };
 }

@@ -5,6 +5,7 @@ import { Chess, type Square } from "chess.js";
 import type { DailyBlundrBoardProps } from "@/lib/blundr/daily/dailyBlundrPlayerTypes";
 import { buildBoardRenderConfig } from "@/lib/blundr/board/boardRenderConfig";
 import { createDefaultBoardPreferences, readLocalBoardPreferences } from "@/lib/blundr/board/boardPreferenceService";
+import { BLUNDR_BOARD_PREFERENCES_CHANGED_EVENT } from "@/lib/blundr/board/boardPreferenceEvents";
 
 function pieceGlyph(piece: { type: string; color: string } | null): string {
   if (!piece) return "";
@@ -61,6 +62,19 @@ export function DailyBlundrBoard({ fen, disabled, onMoveAttempt, onSquareClick, 
 
   useEffect(() => {
     setBoardPreferences(readLocalBoardPreferences(typeof window !== "undefined" ? window.localStorage : null));
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const refreshPreferences = () => {
+      setBoardPreferences(readLocalBoardPreferences(window.localStorage));
+    };
+    window.addEventListener(BLUNDR_BOARD_PREFERENCES_CHANGED_EVENT, refreshPreferences);
+    window.addEventListener("storage", refreshPreferences);
+    return () => {
+      window.removeEventListener(BLUNDR_BOARD_PREFERENCES_CHANGED_EVENT, refreshPreferences);
+      window.removeEventListener("storage", refreshPreferences);
+    };
   }, []);
 
   const legalTargets = useMemo(() => {

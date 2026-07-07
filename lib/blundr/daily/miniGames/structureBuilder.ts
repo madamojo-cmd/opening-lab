@@ -1,0 +1,97 @@
+import type { StaticMiniGameScenario } from "./staticMiniGameHelpers";
+import { buildBoardFenFromPieces } from "./staticMiniGameHelpers";
+import { createStaticMiniGameDefinition } from "./staticMiniGameDefinitionFactory";
+
+const STRUCTURE_BUILDER_SCENARIOS: StaticMiniGameScenario[] = [
+  {
+    scenarioId: "center_break_exd5",
+    fen: buildBoardFenFromPieces(
+      [
+        { square: "g1", piece: "K" },
+        { square: "e4", piece: "P" },
+        { square: "d5", piece: "p" },
+        { square: "e8", piece: "k" },
+      ],
+      "w",
+    ),
+    prompt: "Break the center and open the structure.",
+    summary: "Center break with exd5",
+    note: "Center break with exd5",
+    expectedMoveUci: "e4d5",
+    goalSquares: ["d5"],
+    targetSquares: ["d5"],
+    flagSquares: ["d5"],
+    moveLimit: 1,
+    bestKnownMoves: 1,
+  },
+  {
+    scenarioId: "center_break_cxd5",
+    fen: buildBoardFenFromPieces(
+      [
+        { square: "g1", piece: "K" },
+        { square: "c4", piece: "P" },
+        { square: "d5", piece: "p" },
+        { square: "e8", piece: "k" },
+      ],
+      "w",
+    ),
+    prompt: "Choose the pawn break that fixes the structure in your favor.",
+    summary: "Center break with cxd5",
+    note: "Center break with cxd5",
+    expectedMoveUci: "c4d5",
+    goalSquares: ["d5"],
+    targetSquares: ["d5"],
+    flagSquares: ["d5"],
+    moveLimit: 1,
+    bestKnownMoves: 1,
+  },
+  {
+    scenarioId: "minority_break_bxc5",
+    fen: buildBoardFenFromPieces(
+      [
+        { square: "g1", piece: "K" },
+        { square: "b4", piece: "P" },
+        { square: "c5", piece: "p" },
+        { square: "e8", piece: "k" },
+      ],
+      "w",
+    ),
+    prompt: "Use the minority-style break that opens the file.",
+    summary: "Minority break on c5",
+    note: "Minority break on c5",
+    expectedMoveUci: "b4c5",
+    goalSquares: ["c5"],
+    targetSquares: ["c5"],
+    flagSquares: ["c5"],
+    moveLimit: 1,
+    bestKnownMoves: 1,
+  },
+];
+
+export const structureBuilderDefinition = createStaticMiniGameDefinition(
+  {
+    id: "structure_builder",
+    title: "Structure Builder",
+    summary: "Teach pawn breaks and structural plans.",
+    displayName: "Structure Builder",
+    shortDescription: "Find the break that improves the pawn structure.",
+    skillIds: ["pawn_structure", "pawn_break", "isolated_pawn", "backward_pawn", "pawn_chain"],
+    recommendedFor: ["intro", "beginner", "early_intermediate", "intermediate", "advanced", "expert"],
+    instructions: "Choose the pawn break or structural improvement that makes the position easier to play.",
+    estimatedSeconds: 50,
+    tags: ["pawn_structure", "break", "plan"],
+    canAppearInDailyBlundr: true,
+    canAppearInStandalonePractice: true,
+    conceptIds: [
+      "concept:pawn_structures:pawn_chain",
+      "concept:pawn_structures:isolated_queen_pawn",
+      "concept:pawn_structures:backward_pawn",
+      "concept:pawn_structures:open_center",
+      "concept:pawn_structures:minority_attack_structure",
+    ],
+    buildPrompt: (scenario) => scenario.prompt,
+    buildSummary: (scenario) => scenario.summary,
+  },
+  STRUCTURE_BUILDER_SCENARIOS,
+);
+

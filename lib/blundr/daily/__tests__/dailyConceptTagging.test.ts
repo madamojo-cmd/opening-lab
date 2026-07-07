@@ -64,6 +64,30 @@ export function testDailyConceptTagging(): void {
     ],
   );
   assert.deepEqual(
+    inferConceptTagsForMiniGame("tactic_shots", ["forks", "pins", "skewers"]),
+    [
+      "concept:tactical_ideas:fork",
+      "concept:tactical_ideas:pin",
+      "concept:tactical_ideas:skewer",
+      "concept:tactical_ideas:discovered_attack",
+      "concept:tactical_ideas:back_rank_motif",
+      "concept:tactical_ideas:overloaded_piece",
+      "concept:tactical_ideas:double_attack",
+    ],
+  );
+  assert.deepEqual(
+    inferConceptTagsForMiniGame("technique_lab", ["conversion", "zugzwang", "triangulation"]),
+    [
+      "concept:special_techniques:opposition",
+      "concept:special_techniques:triangulation",
+      "concept:special_techniques:zugzwang",
+      "concept:special_techniques:outside_passed_pawn",
+      "concept:special_techniques:corresponding_squares",
+      "concept:special_techniques:fortress_building",
+      "concept:special_techniques:tempo_gain",
+    ],
+  );
+  assert.deepEqual(
     inferConceptTagsForTrainingTarget("break_timing_drill", ["break_timing", "pawn_break"]),
     [
       "concept:tactical_ideas:pawn_break",
