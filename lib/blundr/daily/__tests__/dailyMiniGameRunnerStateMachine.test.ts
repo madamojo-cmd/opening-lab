@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import { resetLocalAccountState, setLocalAccountCurrentUserId } from "../../accounts/localAccountStorage";
 import { DAILY_MINI_GAME_REGISTRY } from "../miniGames/dailyMiniGameRegistry";
-import { buildMiniGameRunnerScenarioFromCard, buildPracticeBundle } from "@/components/review/MiniGamePracticeRunner";
+import { buildMiniGameRunnerScenarioFromCard } from "@/components/review/MiniGamePracticeRunner";
 import {
   canSubmitMove,
   createInitialMiniGameRunnerState,
@@ -10,14 +10,16 @@ import {
   shouldAllowRetry,
   shouldShowReveal,
 } from "../miniGames/runner/miniGameRunnerState";
+import { waitForPracticeBundle } from "./dailyValidationFixtures";
 
+void (async () => {
 const userId = "mini-game-runner-state-machine-user";
 
 resetLocalAccountState(userId);
 setLocalAccountCurrentUserId(userId);
 
 for (const definition of DAILY_MINI_GAME_REGISTRY) {
-  const bundle = buildPracticeBundle(definition.id, 0, [], userId);
+  const bundle = await waitForPracticeBundle(definition.id, 0, [], userId);
   assert.ok(bundle, `Expected a practice bundle for ${definition.id}`);
   assert.equal(bundle?.card.miniGame.scenario?.source, "standalone_review");
 
@@ -160,3 +162,4 @@ for (const definition of DAILY_MINI_GAME_REGISTRY) {
 }
 
 console.log("dailyMiniGameRunnerStateMachine.test.ts passed");
+})();

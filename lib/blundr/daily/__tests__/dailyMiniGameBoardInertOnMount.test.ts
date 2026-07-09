@@ -3,15 +3,17 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { DailyBlundrBoard } from "@/components/daily/DailyBlundrBoard";
-import { buildMiniGameRunnerScenarioFromCard, buildPracticeBundle } from "@/components/review/MiniGamePracticeRunner";
+import { buildMiniGameRunnerScenarioFromCard } from "@/components/review/MiniGamePracticeRunner";
 import { resetLocalAccountState, setLocalAccountCurrentUserId } from "../../accounts/localAccountStorage";
+import { waitForPracticeBundle } from "./dailyValidationFixtures";
 
+void (async () => {
 const userId = "mini-game-board-inert-user";
 
 resetLocalAccountState(userId);
 setLocalAccountCurrentUserId(userId);
 
-const bundle = buildPracticeBundle("king_race", 0, [], userId);
+const bundle = await waitForPracticeBundle("king_race", 0, [], userId);
 assert.ok(bundle, "Expected a practice bundle for king_race");
 
 const scenario = buildMiniGameRunnerScenarioFromCard(bundle!.card);
@@ -38,3 +40,4 @@ assert.equal(squareClicks, 0, "Expected board render to stay inert on mount");
 assert.equal(moveAttempts, 0, "Expected board render to stay inert on mount");
 
 console.log("dailyMiniGameBoardInertOnMount.test.ts passed");
+})();

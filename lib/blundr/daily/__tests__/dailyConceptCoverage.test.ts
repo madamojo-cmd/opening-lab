@@ -8,9 +8,10 @@ import {
   summarizeConceptCoverageByDomain,
   summarizeConceptCoverageBySurface,
 } from "../validation/dailyConceptCoverage";
-import { makeValidMiniGameCards, makeValidTrainingTargetCards } from "./dailyValidationFixtures";
+import { makeValidMiniGameCards, makeValidTrainingTargetCards, warmMiniGameCacheForContext } from "./dailyValidationFixtures";
 
-export function testDailyConceptCoverage(): void {
+export async function testDailyConceptCoverage(): Promise<void> {
+  await warmMiniGameCacheForContext();
   const items = [...makeValidMiniGameCards(), ...makeValidTrainingTargetCards()];
   const firstItem = items[0]!;
   const secondItem = items[1]!;
@@ -47,5 +48,4 @@ export function testDailyConceptCoverage(): void {
   assert.equal(summary.domainCoverage.length, 5);
 }
 
-testDailyConceptCoverage();
-console.log("dailyConceptCoverage ok");
+void testDailyConceptCoverage().then(() => console.log("dailyConceptCoverage ok"));

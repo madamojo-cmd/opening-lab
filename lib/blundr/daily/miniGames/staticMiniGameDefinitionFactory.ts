@@ -1,5 +1,12 @@
 import { scoreDailyMiniGameAttempt } from "./dailyMiniGameScoring";
-import { advanceStaticMiniGame, buildStaticMiniGameCard, rankStaticMiniGameScenarios, selectStaticMiniGameScenario, type StaticMiniGameScenario } from "./staticMiniGameHelpers";
+import {
+  advanceStaticMiniGame,
+  buildStaticMiniGameCard,
+  expandStaticMiniGameScenarios,
+  rankStaticMiniGameScenarios,
+  selectStaticMiniGameScenario,
+  type StaticMiniGameScenario,
+} from "./staticMiniGameHelpers";
 import type {
   DailyBlundrDifficulty,
   DailyMiniGameAdvanceAttempt,
@@ -49,8 +56,10 @@ export function createStaticMiniGameDefinition(config: StaticMiniGameDefinitionC
     canAppearInStandalonePractice: config.canAppearInStandalonePractice ?? true,
     selectionPriority: config.selectionPriority,
     generate(ctx: DailyMiniGameGenerationContext) {
-      const orderedScenarios = rankStaticMiniGameScenarios(ctx, config.id, scenarioList);
-      const fallbackScenario = selectStaticMiniGameScenario(ctx, config.id, scenarioList);
+      const expandedScenarios = expandStaticMiniGameScenarios(ctx, config.id, scenarioList);
+      const pool = expandedScenarios.length > 0 ? expandedScenarios : scenarioList;
+      const orderedScenarios = rankStaticMiniGameScenarios(ctx, config.id, pool);
+      const fallbackScenario = selectStaticMiniGameScenario(ctx, config.id, pool);
       for (const scenario of orderedScenarios.length ? orderedScenarios : [fallbackScenario]) {
         const generated = buildStaticMiniGameCard({
           miniGameId: config.id,
@@ -81,7 +90,36 @@ export function createStaticMiniGameDefinition(config: StaticMiniGameDefinitionC
     },
     scoreAttempt: (args) => scoreDailyMiniGameAttempt(args),
     advance(state: DailyMiniGameState, attempt: DailyMiniGameAdvanceAttempt) {
-      const scenario = scenarioById.get(state.scenarioId ?? "") ?? scenarioList[0];
+      const scenario = state.scenario
+        ? {
+            scenarioId: String(state.scenario.id ?? state.scenarioId ?? scenarioList[0]?.scenarioId ?? config.id).trim(),
+            fen: state.scenario.fen,
+            prompt: state.scenario.prompt,
+            summary: state.scenario.goal ?? state.scenario.prompt ?? state.scenario.theme,
+            note: state.scenario.explanation ?? state.scenario.goal ?? state.scenario.prompt,
+            expectedMoveUci: state.scenario.solution?.uci ?? "",
+            expectedMoveSan: state.scenario.solution?.san ?? null,
+            acceptedMoves: state.scenario.acceptedMoves ?? [],
+            goalSquares: state.scenario.goalSquares,
+            targetSquares: state.scenario.targetSquares,
+            flagSquares: state.scenario.acceptedSquares,
+            moveLimit: state.moveLimit,
+            bestKnownMoves: state.bestKnownScore ?? undefined,
+            theme: state.scenario.theme,
+            instructions: state.scenario.instructions,
+            goal: state.scenario.goal,
+            explanation: state.scenario.explanation,
+            conceptTags: state.scenario.conceptTags,
+            estimatedTimeSeconds: state.scenario.estimatedTimeSeconds,
+            source: state.scenario.source,
+            solutionSan: state.scenario.solution?.san ?? null,
+            boardOrientationHint: state.scenario.boardOrientationHint,
+            candidateMoves: state.scenario.candidateMoves,
+            scoringMode: state.scenario.scoring.mode,
+            retryBehavior: state.scenario.retryBehavior,
+            revealBehavior: state.scenario.revealBehavior,
+          }
+        : scenarioById.get(state.scenarioId ?? "") ?? scenarioList[0];
       if (!scenario) {
         return {
           state,

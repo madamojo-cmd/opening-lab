@@ -251,6 +251,6 @@ export const imbalanceArenaGenerator: ProceduralMiniGameGenerator = {
       boardPreferences: input.userBoardPreference ?? null,
       deckId: null,
       miniGameId: "imbalance_arena",
-    }, imbalanceArenaGenerator, true) : null;
+    }, imbalanceArenaGenerator, true, { skipValidation: true }) : null;
   },
 };

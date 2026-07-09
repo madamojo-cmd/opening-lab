@@ -2,6 +2,14 @@ import { Chess } from "chess.js";
 import { attachConceptTagsToDailyCard, inferConceptTagsForMiniGame } from "../concepts/dailyConceptTagging";
 import { scoreDailyMiniGameAttempt } from "./dailyMiniGameScoring";
 import { hashString, normalizeText, uniqueSquares } from "./miniGameUtils";
+import {
+  enumerateMiniGameTransforms,
+  hashTransformSelection,
+  transformFenWithPieces,
+  transformSquareList,
+  transformUci,
+  type MiniGameSquareTransform,
+} from "./miniGameScenarioTransforms";
 import type {
   DailyBlundrMiniGameCard,
   DailyMiniGameAdvanceAttempt,
@@ -111,6 +119,128 @@ function buildScenarioKey(input: {
       input.source,
     ].join("|"),
   );
+}
+
+function collectFenSquares(fen: string): string[] {
+  try {
+    const chess = new Chess(fen);
+    const board = chess.board();
+    const squares: string[] = [];
+    for (let rank = 0; rank < board.length; rank += 1) {
+      for (let file = 0; file < board[rank].length; file += 1) {
+        if (!board[rank][file]) continue;
+        squares.push(`${String.fromCharCode(97 + file)}${8 - rank}`);
+      }
+    }
+    return uniqueText(squares);
+  } catch {
+    return [];
+  }
+}
+
+function transformStaticMiniGameScenario(scenario: StaticMiniGameScenario, transform: MiniGameSquareTransform): StaticMiniGameScenario | null {
+  const transformedFen = transformFenWithPieces(scenario.fen, transform);
+  const transformedExpectedMove = transformUci(scenario.expectedMoveUci, transform);
+  if (!transformedFen || !transformedExpectedMove) return null;
+
+  const transformedAcceptedMoves = uniqueSquares([
+    transformedExpectedMove,
+    ...((scenario.acceptedMoves ?? []).flatMap((move) => {
+      const transformed = transformUci(move, transform);
+      return transformed ? [transformed] : [];
+    })),
+  ]);
+  const transformedGoalSquares = transformSquareList(scenario.goalSquares, transform) ?? undefined;
+  const transformedTargetSquares = transformSquareList(scenario.targetSquares, transform) ?? undefined;
+  const transformedFlagSquares = transformSquareList(scenario.flagSquares, transform) ?? undefined;
+  const transformedCandidateMoves = Array.isArray(scenario.candidateMoves)
+    ? scenario.candidateMoves
+        .map((candidate) => {
+          const transformed = transformUci(candidate.uci, transform);
+          if (!transformed) return null;
+          return {
+            ...candidate,
+            uci: transformed,
+          };
+        })
+        .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate))
+    : undefined;
+
+  try {
+    const chess = new Chess(transformedFen.fen);
+    const validationMove = chess.move({
+      from: transformedExpectedMove.slice(0, 2) as never,
+      to: transformedExpectedMove.slice(2, 4) as never,
+      promotion: transformedExpectedMove.length > 4 ? (transformedExpectedMove.slice(4, 5) as never) : undefined,
+    });
+    if (!validationMove) return null;
+  } catch {
+    return null;
+  }
+
+  return {
+    ...scenario,
+    scenarioId: `${scenario.scenarioId}::${transform.id}`,
+    fen: transformedFen.fen,
+    expectedMoveUci: transformedExpectedMove,
+    expectedMoveSan: null,
+    acceptedMoves: transformedAcceptedMoves,
+    goalSquares: transformedGoalSquares,
+    targetSquares: transformedTargetSquares,
+    flagSquares: transformedFlagSquares,
+    candidateMoves: transformedCandidateMoves,
+    solutionSan: null,
+  };
+}
+
+export function expandStaticMiniGameScenarios(
+  ctx: DailyMiniGameGenerationContext,
+  miniGameId: DailyMiniGameId,
+  scenarios: readonly StaticMiniGameScenario[],
+): StaticMiniGameScenario[] {
+  const seed = normalizeText(ctx.seed) || hashString([ctx.dateKey, ctx.userIdOrLocalId ?? "local", ctx.deckId ?? "deck", ctx.source ?? "daily_deck", miniGameId, ctx.difficulty].join("|"));
+  const recentScenarioKeys = uniqueText(ctx.recentScenarioKeys ?? []);
+  const expanded: Array<{ scenario: StaticMiniGameScenario; score: number; key: string }> = [];
+
+  for (const scenario of scenarios) {
+    const referenceSquares = uniqueSquares([
+      ...collectFenSquares(scenario.fen),
+      ...(scenario.goalSquares ?? []),
+      ...(scenario.targetSquares ?? []),
+      ...(scenario.flagSquares ?? []),
+      scenario.expectedMoveUci.slice(0, 2),
+      scenario.expectedMoveUci.slice(2, 4),
+    ]);
+    const transforms = enumerateMiniGameTransforms(referenceSquares, {
+      allowMirrorFiles: true,
+      allowMirrorRanks: true,
+      maxFileDelta: 3,
+      maxRankDelta: 3,
+    });
+
+    for (const transform of transforms) {
+      const transformed = transformStaticMiniGameScenario(scenario, transform);
+      if (!transformed) continue;
+      const key = buildScenarioKey({
+        miniGameId,
+        theme: transformed.theme ?? transformed.note ?? transformed.summary ?? transformed.scenarioId,
+        fen: transformed.fen,
+        solutionUci: transformed.expectedMoveUci,
+        targetSquares: transformed.targetSquares,
+        goalSquares: transformed.goalSquares,
+        difficulty: ctx.difficulty,
+        source: ctx.source ?? "daily_deck",
+      });
+      const recentIndex = recentScenarioKeys.indexOf(key);
+      const recentPenalty = recentIndex >= 0 ? (recentScenarioKeys.length - recentIndex) * 1_000_000 : 0;
+      const score = hashTransformSelection(seed, `${scenario.scenarioId}|${transform.id}`, expanded.length) + recentPenalty;
+      expanded.push({ scenario: transformed, score, key });
+    }
+  }
+
+  return expanded
+    .sort((a, b) => a.score - b.score || a.key.localeCompare(b.key))
+    .map((entry) => entry.scenario);
 }
 
 function buildScenarioValidation(attempts: number, now: string): DailyMiniGameScenario["validation"] {

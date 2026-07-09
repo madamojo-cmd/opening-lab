@@ -1,12 +1,11 @@
 import { scoreDailyMiniGameAttempt } from "../dailyMiniGameScoring";
 import { normalizeText } from "../miniGameUtils";
 import { buildProceduralMiniGameCard, buildProceduralAdvanceResult } from "./miniGameLegacyAdapter";
-import { buildGeneratedMiniGameScenarioContract } from "./miniGameLegacyAdapter";
-import { validateGeneratedMiniGameScenario } from "./miniGameScenarioValidation";
 import { buildGeneratedScenarioKey, rankScenarioKeysByNovelty } from "./miniGameScenarioNovelty";
 import {
   mapGeneratedDifficultyToLegacyDifficulty,
   mapLegacyDifficultyToGeneratedDifficulty,
+  isGeneratedMiniGameDifficulty,
   type GeneratedMiniGameScenario,
   type MiniGameGenerationCandidate,
   type MiniGameGenerationInput,
@@ -23,6 +22,9 @@ import { structureBuilderGenerator } from "./generators/structureBuilderGenerato
 import { imbalanceArenaGenerator } from "./generators/imbalanceArenaGenerator";
 import { techniqueLabGenerator } from "./generators/techniqueLabGenerator";
 import { resolveSeedParts } from "./miniGameSeededRandom";
+import { adjudicateMiniGameCandidate } from "./miniGameQualityGate";
+import { buildMiniGameCandidateCacheKey, getCachedGeneratedMiniGameScenario, getCachedMiniGameCandidateResult, queueMiniGameCandidateResult } from "./miniGameEngineCache";
+import { resolveMiniGameEngineThresholds } from "./miniGameEngineThresholds";
 
 const GENERATION_ATTEMPT_LIMIT = 16;
 
@@ -49,6 +51,11 @@ type ProceduralSelection = {
   usedStaticFallback: boolean;
 };
 
+type ProceduralSelectionEntry = ProceduralSelection & {
+  scenarioKey: string;
+  engineKey: string;
+};
+
 function normalizeKey(value: string): string {
   return normalizeText(value).toLowerCase();
 }
@@ -56,6 +63,9 @@ function normalizeKey(value: string): string {
 function toGeneratedInput(input: MiniGameGenerationInput): MiniGameGenerationInput {
   return {
     ...input,
+    difficulty: isGeneratedMiniGameDifficulty(input.difficulty)
+      ? input.difficulty
+      : mapLegacyDifficultyToGeneratedDifficulty(input.difficulty),
     source: input.source ?? "daily_deck",
     seed: input.seed ?? "",
     recentScenarioKeys: input.recentScenarioKeys ?? [],
@@ -137,10 +147,11 @@ function scenarioToCandidate(
     transformIds: [...(scenario.metadata.transformIds ?? [])],
     templateId: scenario.metadata.templateId,
     scaffoldId: scenario.metadata.scaffoldId,
+    engineQuality: scenario.engineQuality ?? undefined,
   };
 }
 
-function buildCandidateKey(candidate: MiniGameGenerationCandidate, source: DailyMiniGameSource): string {
+function buildScenarioKey(candidate: MiniGameGenerationCandidate, source: DailyMiniGameSource): string {
   return buildGeneratedScenarioKey({
     miniGameId: candidate.miniGameId,
     source,
@@ -154,19 +165,54 @@ function buildCandidateKey(candidate: MiniGameGenerationCandidate, source: Daily
   });
 }
 
-function generateSelection(input: MiniGameGenerationInput): ProceduralSelection | null {
+function buildEngineCandidateKey(candidate: MiniGameGenerationCandidate): string {
+  const thresholds = resolveMiniGameEngineThresholds({
+    miniGameId: candidate.miniGameId,
+    source: candidate.source,
+    family: candidate.family,
+    motif: candidate.motif,
+    fen: candidate.board.fen,
+    sideToMove: candidate.board.sideToMove,
+    primaryMoveUci: candidate.solution.primaryMoveUci,
+    acceptedMoves: candidate.solution.acceptedMoves ?? [candidate.solution.primaryMoveUci],
+    targetSquares: candidate.overlays.targetSquares ?? candidate.overlays.keySquares ?? [],
+    orientation: candidate.board.orientation,
+  });
+
+  return buildMiniGameCandidateCacheKey({
+    descriptor: {
+      miniGameId: candidate.miniGameId,
+      source: candidate.source,
+      family: candidate.family,
+      motif: candidate.motif,
+      fen: candidate.board.fen,
+      sideToMove: candidate.board.sideToMove,
+      primaryMoveUci: candidate.solution.primaryMoveUci,
+      acceptedMoves: candidate.solution.acceptedMoves ?? [candidate.solution.primaryMoveUci],
+      targetSquares: candidate.overlays.targetSquares ?? candidate.overlays.keySquares ?? [],
+      orientation: candidate.board.orientation,
+    },
+    depth: thresholds.depth,
+    multipv: thresholds.multipv,
+  });
+}
+
+function buildSelectionEntries(input: MiniGameGenerationInput): ProceduralSelectionEntry[] | null {
   const generator = GENERATED_MINI_GAME_REGISTRY_BY_ID.get(input.miniGameId);
   if (!generator) return null;
 
   const source = input.source ?? "daily_deck";
   const recentScenarioKeys = input.recentScenarioKeys ?? [];
+  const normalizedDifficulty = isGeneratedMiniGameDifficulty(input.difficulty)
+    ? input.difficulty
+    : mapLegacyDifficultyToGeneratedDifficulty(input.difficulty);
 
-  const validCandidates: Array<{ candidate: MiniGameGenerationCandidate; key: string; seed: string | number; index: number }> = [];
+  const validCandidates: ProceduralSelectionEntry[] = [];
   const seenKeys = new Set<string>();
   const baseSeed = normalizeText(input.seed) || resolveSeedParts([input.dateKey, input.miniGameId, source, input.userId ?? "local"]);
 
   for (let attempt = 0; attempt < GENERATION_ATTEMPT_LIMIT; attempt += 1) {
-    const seed = attempt === 0 ? baseSeed : resolveSeedParts([baseSeed, input.miniGameId, source, input.difficulty, input.dateKey, input.userId ?? "local", attempt]);
+    const seed = attempt === 0 ? baseSeed : resolveSeedParts([baseSeed, input.miniGameId, source, normalizedDifficulty, input.dateKey, input.userId ?? "local", attempt]);
     const attemptInput: MiniGameGenerationInput = {
       ...toGeneratedInput(input),
       source,
@@ -188,41 +234,34 @@ function generateSelection(input: MiniGameGenerationInput): ProceduralSelection 
       continue;
     }
 
-    const key = buildCandidateKey(candidate, source);
+    const key = buildScenarioKey(candidate, source);
     if (seenKeys.has(key)) {
       continue;
     }
 
-    try {
-      const context = toLegacyGenerationContext(attemptInput, seed, candidate.difficulty);
-      const scenario = buildGeneratedMiniGameScenarioContract(candidate, context, generator, false);
-      const validation = validateGeneratedMiniGameScenario(scenario);
-      if (!validation.valid) {
-        continue;
-      }
-      seenKeys.add(key);
-      validCandidates.push({ candidate, key, seed, index: validCandidates.length });
-    } catch {
-      continue;
-    }
+    seenKeys.add(key);
+    validCandidates.push({ candidate, scenarioKey: key, engineKey: buildEngineCandidateKey(candidate), seed, usedStaticFallback: false });
   }
 
   if (validCandidates.length > 0) {
     const rankedKeys = rankScenarioKeysByNovelty({
-      candidateKeys: validCandidates.map((entry, index) => ({ key: entry.key, index })),
+      candidateKeys: validCandidates.map((entry, index) => ({ key: entry.scenarioKey, index })),
       recentScenarioKeys,
     });
-    const selectedKey = rankedKeys[0] ?? validCandidates[0]?.key ?? null;
-    const selected = validCandidates.find((entry) => entry.key === selectedKey) ?? validCandidates[0];
-    if (selected) {
-      return {
-        candidate: selected.candidate,
-        seed: selected.seed,
-        usedStaticFallback: false,
-      };
-    }
+    const ordered = rankedKeys
+      .map((key) => validCandidates.find((entry) => entry.scenarioKey === key))
+      .filter((entry): entry is ProceduralSelectionEntry => Boolean(entry));
+    return ordered.length > 0 ? ordered : validCandidates;
   }
 
+  return null;
+}
+
+function buildFallbackSelection(input: MiniGameGenerationInput): ProceduralSelectionEntry | null {
+  const generator = GENERATED_MINI_GAME_REGISTRY_BY_ID.get(input.miniGameId);
+  if (!generator) return null;
+  const source = input.source ?? "daily_deck";
+  const baseSeed = normalizeText(input.seed) || resolveSeedParts([input.dateKey, input.miniGameId, source, input.userId ?? "local"]);
   const fallbackScenario = generator.buildFallbackScenario({
     ...toGeneratedInput(input),
     source,
@@ -232,15 +271,12 @@ function generateSelection(input: MiniGameGenerationInput): ProceduralSelection 
     return null;
   }
 
-  const fallbackValidation = validateGeneratedMiniGameScenario(fallbackScenario);
-  if (!fallbackValidation.valid) {
-    return null;
-  }
-
   return {
     candidate: scenarioToCandidate(fallbackScenario, generator),
     seed: fallbackScenario.metadata.seed ?? baseSeed,
     usedStaticFallback: true,
+    scenarioKey: buildScenarioKey(scenarioToCandidate(fallbackScenario, generator), source),
+    engineKey: buildEngineCandidateKey(scenarioToCandidate(fallbackScenario, generator)),
   };
 }
 
@@ -248,32 +284,111 @@ export function getGeneratedMiniGameGenerator(miniGameId: DailyMiniGameId): Proc
   return GENERATED_MINI_GAME_REGISTRY_BY_ID.get(miniGameId) ?? null;
 }
 
-export function generateMiniGameScenario(input: MiniGameGenerationInput): GeneratedMiniGameScenario | null {
-  const selection = generateSelection(input);
-  if (!selection) {
-    return null;
-  }
+function requestSelectionAdjudication(selection: ProceduralSelection, generator: ProceduralMiniGameGenerator, input: MiniGameGenerationInput): string {
+  const candidateKey = buildEngineCandidateKey(selection.candidate);
+  void queueMiniGameCandidateResult(candidateKey, () =>
+    adjudicateMiniGameCandidate({
+      candidate: selection.candidate,
+      generator,
+      generationInput: {
+        ...toGeneratedInput(input),
+        source: input.source ?? "daily_deck",
+        seed: selection.seed,
+      },
+      usedStaticFallback: selection.usedStaticFallback,
+    }),
+  );
+  return candidateKey;
+}
 
+function resolveCachedScenario(candidateKey: string): GeneratedMiniGameScenario | null {
+  return getCachedGeneratedMiniGameScenario(candidateKey);
+}
+
+function resolveGeneratedSelection(input: MiniGameGenerationInput): ProceduralSelectionEntry | null {
   const generator = getGeneratedMiniGameGenerator(input.miniGameId);
-  if (!generator) {
-    return null;
+  if (!generator) return null;
+  const entries = buildSelectionEntries(input);
+  if (entries && entries.length > 0) {
+    let queuedPending = false;
+    let sawUncached = false;
+    for (const entry of entries) {
+      const cached = getCachedMiniGameCandidateResult(entry.engineKey);
+      if (cached?.accepted && cached.scenario) {
+        return entry;
+      }
+      if (!cached) {
+        sawUncached = true;
+        if (!queuedPending) {
+          requestSelectionAdjudication(entry, generator, input);
+          queuedPending = true;
+        }
+      }
+    }
+    if (sawUncached) {
+      return null;
+    }
+  }
+  const fallbackSelection = buildFallbackSelection(input);
+  if (!fallbackSelection) return null;
+  const cached = getCachedMiniGameCandidateResult(fallbackSelection.engineKey);
+  if (cached?.accepted && cached.scenario) {
+    return fallbackSelection;
+  }
+  requestSelectionAdjudication(fallbackSelection, generator, input);
+  return null;
+}
+
+export function generateMiniGameScenario(input: MiniGameGenerationInput): GeneratedMiniGameScenario | null {
+  const selection = resolveGeneratedSelection(input);
+  if (!selection) return null;
+  return resolveCachedScenario(selection.engineKey);
+}
+
+export async function generateMiniGameScenarioAsync(input: MiniGameGenerationInput): Promise<GeneratedMiniGameScenario | null> {
+  const generator = getGeneratedMiniGameGenerator(input.miniGameId);
+  if (!generator) return null;
+  const entries = buildSelectionEntries(input) ?? [];
+  for (const entry of entries) {
+    const cached = getCachedMiniGameCandidateResult(entry.engineKey);
+    if (cached?.accepted && cached.scenario) {
+      return cached.scenario as GeneratedMiniGameScenario;
+    }
+    if (cached && !cached.accepted) {
+      continue;
+    }
+    const result = await adjudicateMiniGameCandidate({
+      candidate: entry.candidate,
+      generator,
+      generationInput: {
+        ...toGeneratedInput(input),
+        source: input.source ?? "daily_deck",
+        seed: entry.seed,
+      },
+      usedStaticFallback: entry.usedStaticFallback,
+    });
+    if (result.accepted) {
+      return result.scenario as GeneratedMiniGameScenario;
+    }
   }
 
-  const context = toLegacyGenerationContext(
-    {
+  const fallbackSelection = buildFallbackSelection(input);
+  if (!fallbackSelection) return null;
+  const cachedFallback = getCachedMiniGameCandidateResult(fallbackSelection.engineKey);
+  if (cachedFallback?.accepted && cachedFallback.scenario) {
+    return cachedFallback.scenario as GeneratedMiniGameScenario;
+  }
+  const fallbackResult = await adjudicateMiniGameCandidate({
+    candidate: fallbackSelection.candidate,
+    generator,
+    generationInput: {
       ...toGeneratedInput(input),
       source: input.source ?? "daily_deck",
-      seed: selection.seed,
+      seed: fallbackSelection.seed,
     },
-    selection.seed,
-    selection.candidate.difficulty,
-  );
-
-  try {
-    return buildGeneratedMiniGameScenarioContract(selection.candidate, context, generator, selection.usedStaticFallback);
-  } catch {
-    return null;
-  }
+    usedStaticFallback: fallbackSelection.usedStaticFallback,
+  });
+  return fallbackResult.accepted ? (fallbackResult.scenario as GeneratedMiniGameScenario) : null;
 }
 
 export function buildProceduralMiniGameDefinition(generator: ProceduralMiniGameGenerator): DailyMiniGameDefinition {
@@ -292,7 +407,7 @@ export function buildProceduralMiniGameDefinition(generator: ProceduralMiniGameG
     canAppearInStandalonePractice: generator.canAppearInStandalonePractice ?? true,
     selectionPriority: generator.selectionPriority,
     generate(ctx: DailyMiniGameGenerationContext): DailyBlundrMiniGameCard | null {
-      const selection = generateSelection({
+      const selection = resolveGeneratedSelection({
         miniGameId: generator.id,
         seed: ctx.seed ?? ctx.dateKey,
         difficulty: mapLegacyDifficultyToGeneratedDifficulty(ctx.difficulty),
@@ -306,13 +421,18 @@ export function buildProceduralMiniGameDefinition(generator: ProceduralMiniGameG
         return null;
       }
 
+      const scenario = resolveCachedScenario(selection.engineKey);
+      if (!scenario) {
+        return null;
+      }
+      const scenarioCandidate = scenarioToCandidate(scenario, generator);
       const legacyContext: DailyMiniGameGenerationContext = {
         ...ctx,
         source: ctx.source ?? "daily_deck",
         seed: selection.seed,
-        difficulty: mapGeneratedDifficultyToLegacyDifficulty(selection.candidate.difficulty),
+        difficulty: mapGeneratedDifficultyToLegacyDifficulty(scenarioCandidate.difficulty),
       };
-      const bundle = buildProceduralMiniGameCard(selection.candidate, legacyContext, generator, selection.usedStaticFallback);
+      const bundle = buildProceduralMiniGameCard(scenarioCandidate, legacyContext, generator, scenario.metadata.usedStaticFallback);
       return bundle.card as DailyBlundrMiniGameCard;
     },
     scoreAttempt: (args) => scoreDailyMiniGameAttempt(args),

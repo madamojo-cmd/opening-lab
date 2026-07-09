@@ -9,6 +9,7 @@ import type {
 } from "./dailyMiniGameTypes";
 import { scoreDailyMiniGameAttempt } from "./dailyMiniGameScoring";
 import { hashString, normalizeText, squareDistance } from "./miniGameUtils";
+import { enumerateMiniGameTransforms, hashTransformSelection, transformSquare } from "./miniGameScenarioTransforms";
 import { attachConceptTagsToDailyCard, inferConceptTagsForMiniGame } from "../concepts/dailyConceptTagging";
 
 type KingRaceScenario = {
@@ -113,17 +114,49 @@ function selectScenario(ctx: DailyMiniGameGenerationContext): KingRaceScenario {
   const minRank = difficultyRank(ctx.difficulty);
   const eligible = KING_RACE_SCENARIOS.filter((_, index) => index <= Math.max(0, Math.min(KING_RACE_SCENARIOS.length - 1, minRank + 1)));
   const pool = eligible.length ? eligible : KING_RACE_SCENARIOS.slice(0, 1);
-  const seed = resolveScenarioSeed(ctx);
   const source = ctx.source ?? "daily_deck";
   const recentScenarioKeys = new Set((ctx.recentScenarioKeys ?? []).map((value) => normalizeText(value)).filter(Boolean));
-  const seedValue = weightedSeedValue(`${seed}|${source}|${ctx.difficulty}|king_race`);
-  const startIndex = pool.length > 0 ? seedValue % pool.length : 0;
-  const rotated = [...pool.slice(startIndex), ...pool.slice(0, startIndex)];
-  for (const scenario of rotated) {
-    const key = buildScenarioKey(scenario, source);
-    if (!recentScenarioKeys.has(key)) return scenario;
+  const variants = pool.flatMap((scenario) => {
+    const transforms = enumerateMiniGameTransforms([scenario.whiteKing, scenario.blackKing, scenario.goalSquare], {
+      allowMirrorFiles: true,
+      allowMirrorRanks: true,
+      maxFileDelta: 3,
+      maxRankDelta: 3,
+    });
+    return transforms
+      .map((transform) => transformKingRaceScenario(scenario, transform))
+      .filter((entry): entry is KingRaceScenario => Boolean(entry) && isValidSetup(entry.whiteKing, entry.blackKing));
+  });
+  if (!variants.length) {
+    return pool[0] ?? KING_RACE_SCENARIOS[0];
   }
-  return rotated[0] ?? pool[0];
+  const seed = resolveScenarioSeed(ctx);
+  const ranked = variants
+    .map((scenario, index) => {
+      const key = buildScenarioKey(scenario, source);
+      const recentIndex = Array.from(recentScenarioKeys).indexOf(key);
+      const recencyPenalty = recentIndex >= 0 ? (recentScenarioKeys.size - recentIndex) * 1_000_000 : 0;
+      const score = hashTransformSelection(seed, `${key}|king_race`, index) + recencyPenalty;
+      return { scenario, score, key };
+    })
+    .sort((a, b) => a.score - b.score || a.key.localeCompare(b.key));
+  for (const entry of ranked) {
+    if (!recentScenarioKeys.has(entry.key)) return entry.scenario;
+  }
+  return ranked[0]?.scenario ?? pool[0] ?? KING_RACE_SCENARIOS[0];
+}
+
+function transformKingRaceScenario(scenario: KingRaceScenario, transform: Parameters<typeof transformSquare>[1]): KingRaceScenario | null {
+  const whiteKing = transformSquare(scenario.whiteKing, transform);
+  const blackKing = transformSquare(scenario.blackKing, transform);
+  const goalSquare = transformSquare(scenario.goalSquare, transform);
+  if (!whiteKing || !blackKing || !goalSquare) return null;
+  return {
+    whiteKing,
+    blackKing,
+    goalSquare,
+    moveLimitOffset: scenario.moveLimitOffset,
+  };
 }
 
 function resolveSolutionMove(fen: string, goalSquare: string): { from: string; to: string; uci: string; san: string | null } | null {

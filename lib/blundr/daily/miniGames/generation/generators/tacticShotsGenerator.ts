@@ -265,6 +265,6 @@ export const tacticShotsGenerator: ProceduralMiniGameGenerator = {
       boardPreferences: input.userBoardPreference ?? null,
       deckId: null,
       miniGameId: "tactic_shots",
-    }, tacticShotsGenerator, true) : null;
+    }, tacticShotsGenerator, true, { skipValidation: true }) : null;
   },
 };

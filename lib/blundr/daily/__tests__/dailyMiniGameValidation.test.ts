@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 
 import { validateGeneratedMiniGames, validateMiniGameCard, validateMiniGameRegistry } from "../validation/dailyMiniGameValidation";
-import { makeMiniGameContext, makeValidMiniGameCards } from "./dailyValidationFixtures";
+import { makeMiniGameContext, makeValidMiniGameCards, warmMiniGameCacheForContext } from "./dailyValidationFixtures";
 
-export function testDailyMiniGameValidation(): void {
+export async function testDailyMiniGameValidation(): Promise<void> {
+  await warmMiniGameCacheForContext();
   assert.ok(validateMiniGameRegistry().valid);
 
   const cards = makeValidMiniGameCards();
@@ -35,5 +36,4 @@ export function testDailyMiniGameValidation(): void {
   assert.ok(validateGeneratedMiniGames(makeMiniGameContext()).valid);
 }
 
-testDailyMiniGameValidation();
-console.log("dailyMiniGameValidation ok");
+void testDailyMiniGameValidation().then(() => console.log("dailyMiniGameValidation ok"));

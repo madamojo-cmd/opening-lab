@@ -245,6 +245,6 @@ export const structureBuilderGenerator: ProceduralMiniGameGenerator = {
       boardPreferences: input.userBoardPreference ?? null,
       deckId: null,
       miniGameId: "structure_builder",
-    }, structureBuilderGenerator, true) : null;
+    }, structureBuilderGenerator, true, { skipValidation: true }) : null;
   },
 };

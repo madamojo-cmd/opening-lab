@@ -2,6 +2,7 @@ import { Chess, type Move } from "chess.js";
 import type { DailyBlundrMiniGameCard, DailyMiniGameAdvanceResult, DailyMiniGameDefinition, DailyMiniGameGenerationContext, DailyMiniGameScenario, DailyMiniGameState } from "./dailyMiniGameTypes";
 import { scoreDailyMiniGameAttempt } from "./dailyMiniGameScoring";
 import { hashString, normalizeText, squareDistance, squareToCoords, coordsToSquare } from "./miniGameUtils";
+import { enumerateMiniGameTransforms, hashTransformSelection, transformSquare } from "./miniGameScenarioTransforms";
 import { attachConceptTagsToDailyCard, inferConceptTagsForMiniGame } from "../concepts/dailyConceptTagging";
 
 type KnightGymScenario = {
@@ -17,6 +18,10 @@ const KNIGHT_GYM_SCENARIOS: KnightGymScenario[] = [
   { whiteKing: "a1", blackKing: "h8", startKnight: "d2", targetSquares: ["c4"] },
   { whiteKing: "a1", blackKing: "h8", startKnight: "f3", targetSquares: ["e5"] },
   { whiteKing: "a1", blackKing: "h8", startKnight: "c2", targetSquares: ["e3"] },
+  { whiteKing: "c3", blackKing: "f7", startKnight: "e4", targetSquares: ["d6"] },
+  { whiteKing: "c4", blackKing: "g7", startKnight: "e5", targetSquares: ["f7"] },
+  { whiteKing: "d3", blackKing: "h7", startKnight: "f4", targetSquares: ["e6"] },
+  { whiteKing: "d4", blackKing: "h7", startKnight: "f5", targetSquares: ["e7"] },
 ];
 
 const KNIGHT_GYM_RECOMMENDED_FOR = ["intro", "beginner", "early_intermediate", "intermediate", "advanced", "expert"] as const;
@@ -100,20 +105,51 @@ function isValidSetup(scenario: KnightGymScenario): boolean {
 }
 
 function selectScenario(ctx: DailyMiniGameGenerationContext): KnightGymScenario {
-  const rank = difficultyRank(ctx.difficulty);
-  const eligible = KNIGHT_GYM_SCENARIOS.filter((_, index) => index <= Math.max(0, Math.min(KNIGHT_GYM_SCENARIOS.length - 1, rank + 1)));
-  const pool = eligible.length ? eligible : KNIGHT_GYM_SCENARIOS.slice(0, 1);
-  const seed = resolveScenarioSeed(ctx);
+  const pool = KNIGHT_GYM_SCENARIOS;
   const source = ctx.source ?? "daily_deck";
   const recentScenarioKeys = new Set((ctx.recentScenarioKeys ?? []).map((value) => normalizeText(value)).filter(Boolean));
-  const seedValue = weightedSeedValue(`${seed}|${source}|${ctx.difficulty}|knight_gymnasium`);
-  const startIndex = pool.length > 0 ? seedValue % pool.length : 0;
-  const rotated = [...pool.slice(startIndex), ...pool.slice(0, startIndex)];
-  for (const scenario of rotated) {
-    const key = buildScenarioKey(scenario, source);
-    if (!recentScenarioKeys.has(key)) return scenario;
+  const variants = pool.flatMap((scenario) => {
+    const transforms = enumerateMiniGameTransforms([scenario.whiteKing, scenario.blackKing, scenario.startKnight, ...scenario.targetSquares], {
+      allowMirrorFiles: true,
+      allowMirrorRanks: true,
+      maxFileDelta: 3,
+      maxRankDelta: 3,
+    });
+    return transforms
+      .map((transform) => transformKnightGymScenario(scenario, transform))
+      .filter((entry): entry is KnightGymScenario => Boolean(entry) && isValidSetup(entry));
+  });
+  if (!variants.length) {
+    return pool[0] ?? KNIGHT_GYM_SCENARIOS[0];
   }
-  return rotated[0] ?? pool[0];
+  const seed = resolveScenarioSeed(ctx);
+  const ranked = variants
+    .map((scenario, index) => {
+      const key = buildScenarioKey(scenario, source);
+      const recentIndex = Array.from(recentScenarioKeys).indexOf(key);
+      const recencyPenalty = recentIndex >= 0 ? (recentScenarioKeys.size - recentIndex) * 1_000_000 : 0;
+      const score = hashTransformSelection(seed, `${key}|knight_gymnasium`, index) + recencyPenalty;
+      return { scenario, score, key };
+    })
+    .sort((a, b) => a.score - b.score || a.key.localeCompare(b.key));
+  for (const entry of ranked) {
+    if (!recentScenarioKeys.has(entry.key)) return entry.scenario;
+  }
+  return ranked[0]?.scenario ?? pool[0] ?? KNIGHT_GYM_SCENARIOS[0];
+}
+
+function transformKnightGymScenario(scenario: KnightGymScenario, transform: Parameters<typeof transformSquare>[1]): KnightGymScenario | null {
+  const whiteKing = transformSquare(scenario.whiteKing, transform);
+  const blackKing = transformSquare(scenario.blackKing, transform);
+  const startKnight = transformSquare(scenario.startKnight, transform);
+  const targetSquares = scenario.targetSquares.map((square) => transformSquare(square, transform));
+  if (!whiteKing || !blackKing || !startKnight || targetSquares.some((square) => !square)) return null;
+  return {
+    whiteKing,
+    blackKing,
+    startKnight,
+    targetSquares: targetSquares.filter((square): square is string => Boolean(square)),
+  };
 }
 
 function shortestKnightPath(start: string, targets: readonly string[]): number {

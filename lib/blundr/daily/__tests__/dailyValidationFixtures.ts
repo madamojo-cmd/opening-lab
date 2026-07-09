@@ -4,8 +4,11 @@ import { buildDailyBlundrDeck } from "../dailyBlundrDeckBuilder";
 import { DAILY_MINI_GAME_REGISTRY } from "../miniGames/dailyMiniGameRegistry";
 import { DAILY_TRAINING_TARGET_REGISTRY } from "../trainingTargets/dailyTrainingTargetRegistry";
 import type { DailyBlundrCard, DailyBlundrMasteryState } from "../dailyBlundrTypes";
-import type { DailyMiniGameGenerationContext, DailyBlundrMiniGameCard } from "../miniGames/dailyMiniGameTypes";
+import type { DailyMiniGameGenerationContext, DailyBlundrMiniGameCard, DailyMiniGameId } from "../miniGames/dailyMiniGameTypes";
 import type { DailyTrainingTargetGenerationContext, DailyBlundrTrainingTargetCard } from "../trainingTargets/dailyTrainingTargetTypes";
+import { generateMiniGameScenarioAsync } from "../miniGames/generation/generatedMiniGameRegistry";
+import { getDailyBlundrDateKey } from "../dailyBlundrStorage";
+import { buildPracticeBundle } from "@/components/review/MiniGamePracticeRunner";
 
 export const VALIDATION_DATE_KEY = "2026-07-02";
 export const VALIDATION_NOW = "2026-07-02T12:00:00.000Z";
@@ -129,4 +132,55 @@ export function makeValidMiniGameCards(): DailyBlundrMiniGameCard[] {
 
 export function makeValidTrainingTargetCards(): DailyBlundrTrainingTargetCard[] {
   return DAILY_TRAINING_TARGET_REGISTRY.map((definition) => definition.generate(makeTrainingTargetContext())!).filter((card): card is DailyBlundrTrainingTargetCard => Boolean(card));
+}
+
+export async function warmMiniGameCacheForContext(context: DailyMiniGameGenerationContext = makeMiniGameContext()): Promise<void> {
+  const seed = context.seed ?? context.dateKey;
+  await Promise.all(
+    DAILY_MINI_GAME_REGISTRY.map((definition) =>
+      generateMiniGameScenarioAsync({
+        miniGameId: definition.id,
+        seed,
+        difficulty: context.difficulty,
+        source: context.source ?? "daily_deck",
+        userBoardPreference: context.boardPreferences ?? null,
+        recentScenarioKeys: context.recentScenarioKeys ?? [],
+        dateKey: context.dateKey,
+        userId: context.userIdOrLocalId ?? null,
+      }),
+    ),
+  );
+}
+
+export async function warmPracticeBundleCache(
+  miniGameId: DailyMiniGameId,
+  nonce: number,
+  recentScenarioKeys: readonly string[],
+  userIdOrLocalId: string | null,
+): Promise<void> {
+  const definition = DAILY_MINI_GAME_REGISTRY.find((entry) => entry.id === miniGameId);
+  if (!definition) return;
+  const dateKey = `${getDailyBlundrDateKey()}:${definition.id}:${nonce}`;
+  await generateMiniGameScenarioAsync({
+    miniGameId: definition.id,
+    seed: `${definition.id}|${dateKey}|${nonce}|standalone_review|${userIdOrLocalId ?? "local"}`,
+    difficulty: definition.recommendedFor[0] ?? "beginner",
+    source: "standalone_review",
+    userBoardPreference: null,
+    recentScenarioKeys,
+    dateKey,
+    userId: userIdOrLocalId,
+  });
+}
+
+export async function waitForPracticeBundle(
+  miniGameId: string,
+  nonce: number,
+  recentScenarioKeys: readonly string[],
+  userIdOrLocalId: string | null,
+): Promise<ReturnType<typeof buildPracticeBundle>> {
+  const definition = DAILY_MINI_GAME_REGISTRY.find((entry) => entry.id === miniGameId);
+  if (!definition) return null;
+  await warmPracticeBundleCache(definition.id, nonce, recentScenarioKeys, userIdOrLocalId);
+  return buildPracticeBundle(miniGameId, nonce, recentScenarioKeys, userIdOrLocalId);
 }

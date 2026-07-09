@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 
-import { buildMiniGameRunnerScenarioFromCard, buildPracticeBundle } from "@/components/review/MiniGamePracticeRunner";
+import { buildMiniGameRunnerScenarioFromCard } from "@/components/review/MiniGamePracticeRunner";
 import { resetLocalAccountState, setLocalAccountCurrentUserId } from "../../accounts/localAccountStorage";
 import { buildBoardRenderConfig } from "../../board/boardRenderConfig";
+import { waitForPracticeBundle } from "./dailyValidationFixtures";
 
+void (async () => {
 const lockedWhite = buildBoardRenderConfig({
   boardThemeId: "default",
   boardOrientation: "auto",
@@ -22,7 +24,7 @@ const userId = "mini-game-orientation-user";
 resetLocalAccountState(userId);
 setLocalAccountCurrentUserId(userId);
 
-const bundle = buildPracticeBundle("king_race", 0, [], userId);
+const bundle = await waitForPracticeBundle("king_race", 0, [], userId);
 assert.ok(bundle);
 
 const scenario = buildMiniGameRunnerScenarioFromCard(bundle!.card);
@@ -31,3 +33,4 @@ assert.equal(scenario?.board.lockedOrientation, true);
 assert.equal(scenario?.board.orientation, bundle?.card.miniGame.learnerSide);
 
 console.log("dailyMiniGameBoardOrientationStability.test.ts passed");
+})();

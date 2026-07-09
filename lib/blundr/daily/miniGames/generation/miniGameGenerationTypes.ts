@@ -1,8 +1,9 @@
 import type { BlundrBoardPreferences } from "@/lib/blundr/board/boardThemeTypes";
 import type { Square } from "@/lib/blundr/geometry/boardTypes";
 import type { DailyMiniGameId, DailyMiniGameSkillId, DailyMiniGameSource } from "../dailyMiniGameTypes";
+import type { MiniGameEngineQuality } from "./miniGameEngineQualityTypes";
 
-export const MINI_GAME_GENERATOR_VERSION = "8n-procedural-v1" as const;
+export const MINI_GAME_GENERATOR_VERSION = "8p-stockfish-adjudicated-v1" as const;
 
 export type GeneratedMiniGameDifficulty = "easy" | "medium" | "hard";
 
@@ -68,6 +69,7 @@ export type GeneratedMiniGameScenario = {
     objectiveValidationPassed: true;
     solutionVerified: true;
   };
+  engineQuality?: MiniGameEngineQuality;
 };
 
 export type MiniGameGeneratorAnalysis = {
@@ -108,6 +110,7 @@ export type MiniGameGenerationCandidate = {
   transformIds?: string[];
   templateId?: string;
   scaffoldId?: string;
+  engineQuality?: MiniGameEngineQuality | null;
 };
 
 export type MiniGameGenerationInput = {

@@ -2,6 +2,7 @@ import { Chess } from "chess.js";
 import type { Square } from "@/lib/blundr/geometry/boardTypes";
 import { normalizeFen } from "./miniGameFenBuilder";
 import { isGeneratedMiniGameDifficulty, type GeneratedMiniGameScenario, type MiniGameScenarioValidationIssue, type MiniGameScenarioValidationResult } from "./miniGameGenerationTypes";
+import { isMiniGameEngineVerdict } from "./miniGameEngineQualityTypes";
 import { normalizeSquare } from "./miniGameBoardGeometry";
 import { isLegalMove } from "./miniGameMoveRules";
 
@@ -125,6 +126,22 @@ export function validateGeneratedMiniGameScenario(scenario: GeneratedMiniGameSce
   }
   if (!Array.isArray(scenario.metadata?.transformIds)) {
     issues.push(issue("missing_transform_ids", "Transform ids must be an array.", "metadata.transformIds"));
+  }
+  if (!scenario.engineQuality) {
+    issues.push(issue("missing_engine_quality", "Engine quality metadata is required.", "engineQuality"));
+  } else {
+    if (scenario.engineQuality.engine !== "stockfish") {
+      issues.push(issue("invalid_engine", "Engine quality must come from Stockfish.", "engineQuality.engine"));
+    }
+    if (scenario.engineQuality.adjudicated !== true) {
+      issues.push(issue("unadjudicated_engine", "Engine quality must be adjudicated.", "engineQuality.adjudicated"));
+    }
+    if (!isMiniGameEngineVerdict(scenario.engineQuality.verdict)) {
+      issues.push(issue("invalid_engine_verdict", "Engine quality verdict is invalid.", "engineQuality.verdict"));
+    }
+    if (!Array.isArray(scenario.engineQuality.notes)) {
+      issues.push(issue("missing_engine_notes", "Engine quality notes must be an array.", "engineQuality.notes"));
+    }
   }
   if (!validateSerializable(scenario)) {
     issues.push(issue("non_serializable", "Scenario must be serializable."));

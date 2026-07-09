@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 
 import { makeFormationKey, detectDuplicateFenKeys, detectDuplicateNoveltyKeys, summarizeNoveltyCoverage, validateNoveltyKeys } from "../validation/dailyNoveltyValidation";
-import { makeSampleDeckCards, makeValidMiniGameCards } from "./dailyValidationFixtures";
+import { makeSampleDeckCards, makeValidMiniGameCards, warmMiniGameCacheForContext } from "./dailyValidationFixtures";
 
-export function testDailyNoveltyValidation(): void {
+export async function testDailyNoveltyValidation(): Promise<void> {
+  await warmMiniGameCacheForContext();
   const miniGameCard = makeValidMiniGameCards()[0]!;
   const noveltyKey = miniGameCard.miniGame.noveltyKey;
   const formationHash = miniGameCard.miniGame.formationHash;
@@ -71,5 +72,4 @@ export function testDailyNoveltyValidation(): void {
   assert.ok(summary.some((bucket) => bucket.key === "unique_novelty"));
 }
 
-testDailyNoveltyValidation();
-console.log("dailyNoveltyValidation ok");
+void testDailyNoveltyValidation().then(() => console.log("dailyNoveltyValidation ok"));

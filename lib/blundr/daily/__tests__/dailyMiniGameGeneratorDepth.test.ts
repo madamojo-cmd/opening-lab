@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 
+import { generateMiniGameScenarioAsync } from "../miniGames/generation/generatedMiniGameRegistry";
 import { DAILY_MINI_GAME_REGISTRY } from "../miniGames/dailyMiniGameRegistry";
 import { makeMiniGameContext } from "./dailyValidationFixtures";
 
-function resolveScenarioKey(card: ReturnType<(typeof DAILY_MINI_GAME_REGISTRY)[number]["generate"]>): string {
-  return card?.miniGame.scenario?.novelty.scenarioKey ?? card?.miniGame.noveltyKey ?? card?.cardKey ?? "";
+void (async () => {
+function resolveScenarioKey(scenario: { scenarioKey?: string; novelty?: { scenarioKey?: string } } | null | undefined): string {
+  return scenario?.scenarioKey ?? scenario?.novelty?.scenarioKey ?? "";
 }
 
 for (const definition of DAILY_MINI_GAME_REGISTRY) {
@@ -14,16 +16,18 @@ for (const definition of DAILY_MINI_GAME_REGISTRY) {
   const unique250 = new Set<string>();
 
   for (let index = 0; index < 250; index += 1) {
-    const card = definition.generate(
-      makeMiniGameContext({
-        seed: `depth-${definition.id}-${index}`,
-        source: "daily_deck",
-        userIdOrLocalId: "depth-user",
-        difficulty,
-      }),
-    );
-    assert.ok(card, `Expected a generated card for ${definition.id}`);
-    const key = resolveScenarioKey(card);
+    const scenario = await generateMiniGameScenarioAsync({
+      miniGameId: definition.id,
+      seed: `depth-${definition.id}-${index}`,
+      difficulty,
+      source: "daily_deck",
+      userBoardPreference: { boardOrientation: "white" as const },
+      recentScenarioKeys: [],
+      dateKey: "2026-07-09",
+      userId: "depth-user",
+    });
+    assert.ok(scenario, `Expected a generated scenario for ${definition.id}`);
+    const key = resolveScenarioKey(scenario);
     unique250.add(key);
     if (index < 150) unique150.add(key);
     if (index < 100) unique100.add(key);
@@ -42,29 +46,60 @@ for (const definition of DAILY_MINI_GAME_REGISTRY) {
     userIdOrLocalId: "depth-user",
     difficulty,
   });
-  const sameA = definition.generate(sameSeedContext);
-  const sameB = definition.generate(sameSeedContext);
-  assert.ok(sameA, `Expected a same-seed card for ${definition.id}`);
-  assert.ok(sameB, `Expected a repeated same-seed card for ${definition.id}`);
+  const sameA = await generateMiniGameScenarioAsync({
+    miniGameId: definition.id,
+    seed: sameSeedContext.seed ?? sameSeedContext.dateKey,
+    difficulty,
+    source: sameSeedContext.source,
+    userBoardPreference: sameSeedContext.boardPreferences ?? null,
+    recentScenarioKeys: sameSeedContext.recentScenarioKeys ?? [],
+    dateKey: sameSeedContext.dateKey,
+    userId: sameSeedContext.userIdOrLocalId ?? null,
+  });
+  const sameB = await generateMiniGameScenarioAsync({
+    miniGameId: definition.id,
+    seed: sameSeedContext.seed ?? sameSeedContext.dateKey,
+    difficulty,
+    source: sameSeedContext.source,
+    userBoardPreference: sameSeedContext.boardPreferences ?? null,
+    recentScenarioKeys: sameSeedContext.recentScenarioKeys ?? [],
+    dateKey: sameSeedContext.dateKey,
+    userId: sameSeedContext.userIdOrLocalId ?? null,
+  });
+  assert.ok(sameA, `Expected a same-seed scenario for ${definition.id}`);
+  assert.ok(sameB, `Expected a repeated same-seed scenario for ${definition.id}`);
   assert.equal(resolveScenarioKey(sameA), resolveScenarioKey(sameB), `Expected same seed to reproduce the same scenario key for ${definition.id}`);
 
-  const differentA = definition.generate({
-    ...sameSeedContext,
+  const differentA = await generateMiniGameScenarioAsync({
+    miniGameId: definition.id,
     seed: `depth-different-a-${definition.id}`,
+    difficulty,
+    source: sameSeedContext.source,
+    userBoardPreference: sameSeedContext.boardPreferences ?? null,
+    recentScenarioKeys: sameSeedContext.recentScenarioKeys ?? [],
+    dateKey: sameSeedContext.dateKey,
+    userId: sameSeedContext.userIdOrLocalId ?? null,
   });
-  const differentB = definition.generate({
-    ...sameSeedContext,
+  const differentB = await generateMiniGameScenarioAsync({
+    miniGameId: definition.id,
     seed: `depth-different-b-${definition.id}`,
+    difficulty,
+    source: sameSeedContext.source,
+    userBoardPreference: sameSeedContext.boardPreferences ?? null,
+    recentScenarioKeys: sameSeedContext.recentScenarioKeys ?? [],
+    dateKey: sameSeedContext.dateKey,
+    userId: sameSeedContext.userIdOrLocalId ?? null,
   });
-  assert.ok(differentA, `Expected a different-seed card for ${definition.id}`);
-  assert.ok(differentB, `Expected a different-seed card for ${definition.id}`);
+  assert.ok(differentA, `Expected a different-seed scenario for ${definition.id}`);
+  assert.ok(differentB, `Expected a different-seed scenario for ${definition.id}`);
   assert.notEqual(resolveScenarioKey(differentA), resolveScenarioKey(differentB), `Expected different seeds to produce different scenario keys for ${definition.id}`);
   assert.ok(
-    differentA?.miniGame.scenario?.fen !== differentB?.miniGame.scenario?.fen ||
-      differentA?.miniGame.scenario?.solution?.uci !== differentB?.miniGame.scenario?.solution?.uci ||
-      differentA?.miniGame.scenario?.targetSquares?.join(",") !== differentB?.miniGame.scenario?.targetSquares?.join(","),
+    differentA?.board.fen !== differentB?.board.fen ||
+      differentA?.solution.primaryMoveUci !== differentB?.solution.primaryMoveUci ||
+      differentA?.overlays.targetSquares?.join(",") !== differentB?.overlays.targetSquares?.join(","),
     `Expected different seeds to change board content or placement for ${definition.id}`,
   );
 }
 
 console.log("dailyMiniGameGeneratorDepth.test.ts passed");
+})();

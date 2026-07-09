@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 
 import { validateDailyCard, validateDailyCards } from "../validation/dailyCardValidation";
-import { makeSampleDeckCards, makeValidMiniGameCards, makeValidRecallCard, makeValidTrainingTargetCards } from "./dailyValidationFixtures";
+import { makeSampleDeckCards, makeValidMiniGameCards, makeValidRecallCard, makeValidTrainingTargetCards, warmMiniGameCacheForContext } from "./dailyValidationFixtures";
 
-export function testDailyCardValidation(): void {
+export async function testDailyCardValidation(): Promise<void> {
+  await warmMiniGameCacheForContext();
   const recallCard = makeValidRecallCard();
   assert.ok(validateDailyCard(recallCard).valid);
 
@@ -40,5 +41,4 @@ export function testDailyCardValidation(): void {
   assert.ok(validateDailyCards(makeSampleDeckCards()).valid);
 }
 
-testDailyCardValidation();
-console.log("dailyCardValidation ok");
+void testDailyCardValidation().then(() => console.log("dailyCardValidation ok"));

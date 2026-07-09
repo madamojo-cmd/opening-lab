@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 
 import { reconcileDailyBlundrSession } from "../dailyBlundrStorage";
+import { generateMiniGameScenarioAsync } from "../miniGames/generation/generatedMiniGameRegistry";
 import { DAILY_MINI_GAME_REGISTRY } from "../miniGames/dailyMiniGameRegistry";
 
+void (async () => {
 const dateKey = "2026-07-06:deck-insertion";
 const now = "2026-07-06T12:10:00.000Z";
 
 for (const definition of DAILY_MINI_GAME_REGISTRY) {
-  const card = definition.generate({
+  const context = {
     dateKey,
     now,
     mastery: null,
@@ -19,7 +21,24 @@ for (const definition of DAILY_MINI_GAME_REGISTRY) {
     recentMiniGameIds: [],
     recentFenKeys: [],
     sessionMiniGameIds: [],
+    source: "daily_deck" as const,
+    seed: dateKey,
+    userIdOrLocalId: "deck-insertion-user",
+    boardPreferences: null,
+    deckId: null,
+    miniGameId: definition.id,
+  };
+  await generateMiniGameScenarioAsync({
+    miniGameId: definition.id,
+    seed: context.seed,
+    difficulty: context.difficulty,
+    source: context.source,
+    userBoardPreference: context.boardPreferences,
+    recentScenarioKeys: [],
+    dateKey: context.dateKey,
+    userId: context.userIdOrLocalId,
   });
+  const card = definition.generate(context);
 
   assert.ok(card);
   if (!card) continue;
@@ -38,3 +57,4 @@ for (const definition of DAILY_MINI_GAME_REGISTRY) {
 }
 
 console.log("dailyMiniGameDeckInsertion.test.ts passed");
+})();

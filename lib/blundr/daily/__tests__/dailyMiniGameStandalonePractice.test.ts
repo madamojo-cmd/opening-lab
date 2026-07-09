@@ -7,7 +7,9 @@ import { loadDailyBlundrOverview } from "../dailyBlundrReadModel";
 import { loadBlundrProgressSummary } from "../../progress/progressSummaryService";
 import { buildMiniGameRunnerScenarioFromCard } from "@/components/review/MiniGamePracticeRunner";
 import { createInitialMiniGameRunnerState } from "../miniGames/runner/miniGameRunnerState";
+import { waitForPracticeBundle } from "./dailyValidationFixtures";
 
+void (async () => {
 const userId = "mini-game-practice-user";
 const now = new Date().toISOString();
 
@@ -15,7 +17,7 @@ resetLocalAccountState(userId);
 setLocalAccountCurrentUserId(userId);
 clearLocalLearningEvents();
 
-const practiceBundle = buildPracticeBundle("king_race", 0, [], userId);
+const practiceBundle = await waitForPracticeBundle("king_race", 0, [], userId);
 assert.ok(practiceBundle);
 assert.equal(practiceBundle?.card.miniGame.scenario?.source, "standalone_review");
 assert.equal(practiceBundle?.card.miniGame.completed, false);
@@ -29,7 +31,7 @@ const practiceState = createInitialMiniGameRunnerState(practiceScenario);
 assert.equal(practiceState.status, "idle");
 assert.equal(practiceState.boardFen, practiceScenario?.board.fen);
 
-const nextPracticeBundle = buildPracticeBundle(
+const nextPracticeBundle = await waitForPracticeBundle(
   "king_race",
   1,
   [practiceBundle?.card.miniGame.scenario?.novelty.scenarioKey ?? ""],
@@ -67,3 +69,4 @@ assert.equal(summary.trainingVolume.minigamesToday >= 1, true);
 assert.equal(summary.trainingVolume.dailyBlundrToday, before.reviewAttempts.length);
 
 console.log("dailyMiniGameStandalonePractice.test.ts passed");
+})();

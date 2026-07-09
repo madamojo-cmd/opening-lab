@@ -4,11 +4,12 @@ import path from "node:path";
 
 import {
   GENERATED_MINI_GAME_GENERATORS,
-  generateMiniGameScenario,
+  generateMiniGameScenarioAsync,
   getGeneratedMiniGameGenerator,
 } from "../miniGames/generation/generatedMiniGameRegistry";
 import { validateGeneratedMiniGameScenario } from "../miniGames/generation/miniGameScenarioValidation";
 
+void (async () => {
 const ROOT = process.cwd();
 const GENERATOR_FILES = [
   "lib/blundr/daily/miniGames/generation/generators/tacticShotsGenerator.ts",
@@ -47,7 +48,7 @@ for (const generator of GENERATED_MINI_GAME_GENERATORS) {
   assert.equal(typeof generator.classifyDifficulty, "function", `${generator.id} is missing classifyDifficulty`);
   assert.equal(typeof generator.buildFallbackScenario, "function", `${generator.id} is missing buildFallbackScenario`);
 
-  const scenario = generateMiniGameScenario(makeInput(generator.id, `architecture-${generator.id}`));
+  const scenario = await generateMiniGameScenarioAsync(makeInput(generator.id, `architecture-${generator.id}`));
   assert.ok(scenario, `Expected a scenario for ${generator.id}`);
   assert.equal(scenario?.miniGameId, generator.id);
   assert.equal(scenario?.metadata.generatorKind, "procedural");
@@ -69,7 +70,7 @@ if (fallbackGenerator) {
   const originalGenerateCandidate = mutable.generateCandidate;
   try {
     mutable.generateCandidate = () => null;
-    const fallbackScenario = generateMiniGameScenario(makeInput("king_race", "architecture-fallback", "daily_deck"));
+    const fallbackScenario = await generateMiniGameScenarioAsync(makeInput("king_race", "architecture-fallback", "daily_deck"));
     assert.ok(fallbackScenario, "Expected a fallback scenario when candidate generation fails");
     assert.equal(fallbackScenario?.metadata.usedStaticFallback, true, "Fallback scenario should be marked as static fallback");
     assert.equal(fallbackScenario?.metadata.generatorKind, "procedural");
@@ -80,3 +81,4 @@ if (fallbackGenerator) {
 }
 
 console.log("dailyMiniGameTrueGeneratorArchitecture.test.ts passed");
+})();

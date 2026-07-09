@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 
-import { generateMiniGameScenario, getGeneratedMiniGameGenerator } from "../miniGames/generation/generatedMiniGameRegistry";
+import { generateMiniGameScenarioAsync, getGeneratedMiniGameGenerator } from "../miniGames/generation/generatedMiniGameRegistry";
 import { verifyMiniGameSolution } from "../miniGames/generation/miniGameSolutionVerifier";
 import type { MiniGameGenerationCandidate } from "../miniGames/generation/miniGameGenerationTypes";
 
+void (async () => {
 function makeInput(miniGameId: MiniGameGenerationCandidate["miniGameId"], seed: string) {
   return {
     miniGameId,
@@ -27,7 +28,7 @@ for (const miniGameId of [
   "knight_gymnasium",
   "pawn_wars",
 ] as const) {
-  const scenario = generateMiniGameScenario(makeInput(miniGameId, `verifier-${miniGameId}`));
+  const scenario = await generateMiniGameScenarioAsync(makeInput(miniGameId, `verifier-${miniGameId}`));
   assert.ok(scenario, `Expected a scenario for ${miniGameId}`);
   assert.equal(scenario?.solution.verification.verified, true, `Expected verified solution for ${miniGameId}`);
   assert.ok(scenario?.solution.acceptedMoves.includes(scenario.solution.primaryMoveUci), `Primary move should be accepted for ${miniGameId}`);
@@ -56,3 +57,4 @@ assert.equal(rejected.verified, false, "Expected an illegal accepted move to be 
 assert.equal(rejected.verifier, "illegal_accepted_move");
 
 console.log("dailyMiniGameSolutionVerifier.test.ts passed");
+})();

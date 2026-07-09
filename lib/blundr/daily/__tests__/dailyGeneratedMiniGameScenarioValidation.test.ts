@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 
+import { generateMiniGameScenarioAsync } from "../miniGames/generation/generatedMiniGameRegistry";
+import { validateGeneratedMiniGameScenario } from "../miniGames/generation/miniGameScenarioValidation";
 import { DAILY_MINI_GAME_REGISTRY } from "../miniGames/dailyMiniGameRegistry";
-import { validateMiniGameScenario } from "../validation/dailyMiniGameValidation";
 import { makeMiniGameContext } from "./dailyValidationFixtures";
 
+void (async () => {
 const baseContext = makeMiniGameContext({
   seed: "scenario-validation",
   source: "daily_deck",
@@ -11,47 +13,71 @@ const baseContext = makeMiniGameContext({
 });
 
 for (const definition of DAILY_MINI_GAME_REGISTRY) {
-  const card = definition.generate({
-    ...baseContext,
+  const scenario = await generateMiniGameScenarioAsync({
+    miniGameId: definition.id,
+    seed: baseContext.seed ?? baseContext.dateKey,
     difficulty: definition.recommendedFor[0] ?? "beginner",
+    source: baseContext.source,
+    userBoardPreference: baseContext.boardPreferences ?? null,
+    recentScenarioKeys: baseContext.recentScenarioKeys ?? [],
+    dateKey: baseContext.dateKey,
+    userId: baseContext.userIdOrLocalId ?? null,
   });
-  assert.ok(card, `Expected a generated card for ${definition.id}`);
-  assert.ok(card?.miniGame.scenario, `Expected a generated scenario for ${definition.id}`);
-  assert.ok(validateMiniGameScenario(card?.miniGame.scenario).valid, `Expected a valid generated scenario for ${definition.id}`);
+  assert.ok(scenario, `Expected a generated scenario for ${definition.id}`);
+  assert.ok(validateGeneratedMiniGameScenario(scenario).valid, `Expected a valid generated scenario for ${definition.id}`);
 }
 
-const standaloneCard = DAILY_MINI_GAME_REGISTRY[0]!.generate({
-  ...baseContext,
+const standaloneScenario = await generateMiniGameScenarioAsync({
+  miniGameId: DAILY_MINI_GAME_REGISTRY[0]!.id,
+  seed: baseContext.seed ?? baseContext.dateKey,
+  difficulty: DAILY_MINI_GAME_REGISTRY[0]!.recommendedFor[0] ?? "beginner",
   source: "standalone_review",
-  difficulty: DAILY_MINI_GAME_REGISTRY[0]!.recommendedFor[0] ?? "beginner",
+  userBoardPreference: baseContext.boardPreferences ?? null,
+  recentScenarioKeys: baseContext.recentScenarioKeys ?? [],
+  dateKey: baseContext.dateKey,
+  userId: baseContext.userIdOrLocalId ?? null,
 });
-assert.ok(standaloneCard?.miniGame.scenario);
-assert.equal(standaloneCard?.miniGame.scenario?.source, "standalone_review");
-assert.ok(validateMiniGameScenario(standaloneCard?.miniGame.scenario).valid);
+assert.ok(standaloneScenario);
+assert.equal(standaloneScenario?.source, "standalone_review");
+assert.ok(validateGeneratedMiniGameScenario(standaloneScenario).valid);
 
-const referenceScenario = DAILY_MINI_GAME_REGISTRY[0]!.generate({
-  ...baseContext,
+const referenceScenario = await generateMiniGameScenarioAsync({
+  miniGameId: DAILY_MINI_GAME_REGISTRY[0]!.id,
+  seed: baseContext.seed ?? baseContext.dateKey,
   difficulty: DAILY_MINI_GAME_REGISTRY[0]!.recommendedFor[0] ?? "beginner",
-})!.miniGame.scenario!;
+  source: baseContext.source,
+  userBoardPreference: baseContext.boardPreferences ?? null,
+  recentScenarioKeys: baseContext.recentScenarioKeys ?? [],
+  dateKey: baseContext.dateKey,
+  userId: baseContext.userIdOrLocalId ?? null,
+});
+assert.ok(referenceScenario);
 
-const invalidSource = validateMiniGameScenario({ ...referenceScenario, source: "bad_source" as never });
+const invalidSource = validateGeneratedMiniGameScenario({ ...referenceScenario, source: "bad_source" as never });
 assert.ok(!invalidSource.valid);
 assert.ok(invalidSource.issues.some((issue) => issue.code === "invalid_source"));
 
-const invalidFen = validateMiniGameScenario({ ...referenceScenario, fen: "bad fen" });
+const invalidFen = validateGeneratedMiniGameScenario({
+  ...referenceScenario,
+  board: { ...referenceScenario.board, fen: "bad fen" },
+});
 assert.ok(!invalidFen.valid);
-assert.ok(invalidFen.issues.some((issue) => issue.category === "fen"));
+assert.ok(invalidFen.issues.some((issue) => issue.code === "invalid_fen"));
 
-const emptyAcceptedMoves = validateMiniGameScenario({ ...referenceScenario, acceptedMoves: [] });
+const emptyAcceptedMoves = validateGeneratedMiniGameScenario({
+  ...referenceScenario,
+  solution: { ...referenceScenario.solution, acceptedMoves: [] },
+});
 assert.ok(!emptyAcceptedMoves.valid);
 assert.ok(emptyAcceptedMoves.issues.some((issue) => issue.code === "empty_accepted_moves"));
 
-const missingExplanation = validateMiniGameScenario({ ...referenceScenario, explanation: "" });
+const missingExplanation = validateGeneratedMiniGameScenario({ ...referenceScenario, explanation: "" });
 assert.ok(!missingExplanation.valid);
 assert.ok(missingExplanation.issues.some((issue) => issue.code === "missing_explanation"));
 
-const missingConceptTags = validateMiniGameScenario({ ...referenceScenario, conceptTags: [] });
+const missingConceptTags = validateGeneratedMiniGameScenario({ ...referenceScenario, conceptTags: [] });
 assert.ok(!missingConceptTags.valid);
 assert.ok(missingConceptTags.issues.some((issue) => issue.code === "missing_concept_tags"));
 
 console.log("dailyGeneratedMiniGameScenarioValidation ok");
+})();

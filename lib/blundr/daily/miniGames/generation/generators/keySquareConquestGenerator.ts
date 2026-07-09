@@ -204,6 +204,6 @@ export const keySquareConquestGenerator: ProceduralMiniGameGenerator = {
       boardPreferences: input.userBoardPreference ?? null,
       deckId: null,
       miniGameId: "key_square_conquest",
-    }, keySquareConquestGenerator, true) : null;
+    }, keySquareConquestGenerator, true, { skipValidation: true }) : null;
   },
 };

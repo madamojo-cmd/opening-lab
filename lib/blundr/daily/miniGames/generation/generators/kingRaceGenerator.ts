@@ -186,6 +186,6 @@ export const kingRaceGenerator: ProceduralMiniGameGenerator = {
       boardPreferences: input.userBoardPreference ?? null,
       deckId: null,
       miniGameId: "king_race",
-    }, kingRaceGenerator, true) : null;
+    }, kingRaceGenerator, true, { skipValidation: true }) : null;
   },
 };

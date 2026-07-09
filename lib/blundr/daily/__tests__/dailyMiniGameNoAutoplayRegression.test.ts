@@ -3,18 +3,20 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { DailyBlundrBoard } from "@/components/daily/DailyBlundrBoard";
-import { buildMiniGameRunnerScenarioFromCard, buildPracticeBundle } from "@/components/review/MiniGamePracticeRunner";
+import { buildMiniGameRunnerScenarioFromCard } from "@/components/review/MiniGamePracticeRunner";
 import { resetLocalAccountState, setLocalAccountCurrentUserId } from "../../accounts/localAccountStorage";
 import { DAILY_MINI_GAME_REGISTRY } from "../miniGames/dailyMiniGameRegistry";
 import { createInitialMiniGameRunnerState, miniGameRunnerReducer } from "../miniGames/runner/miniGameRunnerState";
+import { waitForPracticeBundle } from "./dailyValidationFixtures";
 
+void (async () => {
 const userId = "mini-game-no-autoplay-user";
 
 resetLocalAccountState(userId);
 setLocalAccountCurrentUserId(userId);
 
 for (const definition of DAILY_MINI_GAME_REGISTRY) {
-  const bundle = buildPracticeBundle(definition.id, 0, [], userId);
+  const bundle = await waitForPracticeBundle(definition.id, 0, [], userId);
   assert.ok(bundle, `Expected a practice bundle for ${definition.id}`);
 
   const miniGame = bundle!.card.miniGame;
@@ -59,3 +61,4 @@ for (const definition of DAILY_MINI_GAME_REGISTRY) {
 }
 
 console.log("dailyMiniGameNoAutoplayRegression.test.ts passed");
+})();

@@ -195,6 +195,6 @@ export const knightGymnasiumGenerator: ProceduralMiniGameGenerator = {
       boardPreferences: input.userBoardPreference ?? null,
       deckId: null,
       miniGameId: "knight_gymnasium",
-    }, knightGymnasiumGenerator, true) : null;
+    }, knightGymnasiumGenerator, true, { skipValidation: true }) : null;
   },
 };

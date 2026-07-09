@@ -5,11 +5,12 @@ import { attachConceptTagsToDailyCard, inferConceptTagsForMiniGame } from "../..
 import { normalizeText, hashString, uniqueSquares } from "../miniGameUtils";
 import { applyMove, listLegalMoves, moveToUci } from "./miniGameMoveRules";
 import { buildGeneratedScenarioKey } from "./miniGameScenarioNovelty";
-import { mapGeneratedDifficultyToLegacyDifficulty, type GeneratedMiniGameDifficulty, type GeneratedMiniGameScenario, type MiniGameGenerationCandidate, type ProceduralMiniGameGenerator } from "./miniGameGenerationTypes";
+import { MINI_GAME_GENERATOR_VERSION, mapGeneratedDifficultyToLegacyDifficulty, type GeneratedMiniGameDifficulty, type GeneratedMiniGameScenario, type MiniGameGenerationCandidate, type MiniGameGenerationInput, type ProceduralMiniGameGenerator } from "./miniGameGenerationTypes";
 import { validateGeneratedMiniGameScenario } from "./miniGameScenarioValidation";
 import { validateMiniGameObjective } from "./miniGameObjectiveValidation";
 import { verifyMiniGameSolution } from "./miniGameSolutionVerifier";
 import { classifyMiniGameDifficulty } from "./miniGameDifficultyClassifier";
+import type { MiniGameEngineQuality } from "./miniGameEngineQualityTypes";
 
 function nowIso(now?: string): string {
   return normalizeText(now) || new Date().toISOString();
@@ -92,9 +93,10 @@ export function buildLegacyMiniGameScenario(
     },
     overlays: candidate.overlays,
     conceptTags: candidate.conceptTags,
+    engineQuality: candidate.engineQuality ?? undefined,
     metadata: {
       seed,
-      generatorVersion: "8n-procedural-v1",
+      generatorVersion: MINI_GAME_GENERATOR_VERSION,
       generatorKind: "procedural",
       usedStaticFallback,
       transformIds: candidate.transformIds ?? [],
@@ -300,6 +302,10 @@ export function buildGeneratedMiniGameScenarioContract(
   input: DailyMiniGameGenerationContext,
   generator: ProceduralMiniGameGenerator,
   usedStaticFallback = false,
+  options?: {
+    engineQuality?: MiniGameEngineQuality | null;
+    skipValidation?: boolean;
+  },
 ): GeneratedMiniGameScenario {
   const source = input.source ?? "daily_deck";
   const seed = normalizeText(input.seed) || `${input.dateKey}:${input.userIdOrLocalId ?? "local"}:${generator.id}:${candidate.family}`;
@@ -316,7 +322,7 @@ export function buildGeneratedMiniGameScenarioContract(
   });
   const verification = verifyMiniGameSolution(candidate);
   const objective = validateMiniGameObjective(candidate);
-  return {
+  const scenario: GeneratedMiniGameScenario = {
     scenarioKey,
     miniGameId: generator.id,
     source,
@@ -334,6 +340,7 @@ export function buildGeneratedMiniGameScenarioContract(
     instruction: candidate.instruction,
     goal: candidate.goal,
     explanation: candidate.explanation,
+    engineQuality: options?.engineQuality ?? candidate.engineQuality ?? undefined,
     solution: {
       primaryMoveUci: candidate.solution.primaryMoveUci,
       acceptedMoves: candidate.solution.acceptedMoves ?? [candidate.solution.primaryMoveUci],
@@ -351,7 +358,7 @@ export function buildGeneratedMiniGameScenarioContract(
     conceptTags: [...candidate.conceptTags],
     metadata: {
       seed,
-      generatorVersion: "8n-procedural-v1",
+      generatorVersion: MINI_GAME_GENERATOR_VERSION,
       generatorKind: "procedural",
       usedStaticFallback,
       transformIds: candidate.transformIds ?? [],
@@ -360,6 +367,15 @@ export function buildGeneratedMiniGameScenarioContract(
       solutionVerified: verification.verified,
     },
   };
+
+  if (!options?.skipValidation) {
+    const validation = validateGeneratedMiniGameScenario(scenario);
+    if (!validation.valid) {
+      throw new Error(`Procedural mini-game scenario failed validation: ${validation.issues.map((issue) => issue.code).join(", ")}`);
+    }
+  }
+
+  return scenario;
 }
 
 export function buildProceduralAdvanceResult(state: DailyMiniGameState, attempt: DailyMiniGameAdvanceAttempt): DailyMiniGameAdvanceResult {

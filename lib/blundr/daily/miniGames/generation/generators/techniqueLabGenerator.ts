@@ -241,6 +241,6 @@ export const techniqueLabGenerator: ProceduralMiniGameGenerator = {
       boardPreferences: input.userBoardPreference ?? null,
       deckId: null,
       miniGameId: "technique_lab",
-    }, techniqueLabGenerator, true) : null;
+    }, techniqueLabGenerator, true, { skipValidation: true }) : null;
   },
 };

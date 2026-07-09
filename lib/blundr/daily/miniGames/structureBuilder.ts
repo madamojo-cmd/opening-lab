@@ -66,6 +66,91 @@ const STRUCTURE_BUILDER_SCENARIOS: StaticMiniGameScenario[] = [
     moveLimit: 1,
     bestKnownMoves: 1,
   },
+  {
+    scenarioId: "midboard_break_exd5",
+    fen: buildBoardFenFromPieces(
+      [
+        { square: "c3", piece: "K" },
+        { square: "e4", piece: "P" },
+        { square: "d5", piece: "p" },
+        { square: "g6", piece: "k" },
+      ],
+      "w",
+    ),
+    prompt: "Break the center from a tighter midboard structure.",
+    summary: "Midboard break with exd5",
+    note: "Midboard break with exd5",
+    expectedMoveUci: "e4d5",
+    goalSquares: ["d5"],
+    targetSquares: ["d5"],
+    flagSquares: ["d5"],
+    moveLimit: 1,
+    bestKnownMoves: 1,
+  },
+  {
+    scenarioId: "midboard_break_cxd5",
+    fen: buildBoardFenFromPieces(
+      [
+        { square: "d3", piece: "K" },
+        { square: "c4", piece: "P" },
+        { square: "d5", piece: "p" },
+        { square: "h6", piece: "k" },
+      ],
+      "w",
+    ),
+    prompt: "Choose the pawn break that opens the file from the center.",
+    summary: "Midboard break with cxd5",
+    note: "Midboard break with cxd5",
+    expectedMoveUci: "c4d5",
+    goalSquares: ["d5"],
+    targetSquares: ["d5"],
+    flagSquares: ["d5"],
+    moveLimit: 1,
+    bestKnownMoves: 1,
+  },
+  {
+    scenarioId: "midboard_minority_break_bxc5",
+    fen: buildBoardFenFromPieces(
+      [
+        { square: "c3", piece: "K" },
+        { square: "b4", piece: "P" },
+        { square: "c5", piece: "p" },
+        { square: "g6", piece: "k" },
+      ],
+      "w",
+    ),
+    prompt: "Use the minority-style break that opens the file from the center.",
+    summary: "Midboard minority break on c5",
+    note: "Midboard minority break on c5",
+    expectedMoveUci: "b4c5",
+    goalSquares: ["c5"],
+    targetSquares: ["c5"],
+    flagSquares: ["c5"],
+    moveLimit: 1,
+    bestKnownMoves: 1,
+  },
+  {
+    scenarioId: "midboard_break_exd5_dual",
+    fen: buildBoardFenFromPieces(
+      [
+        { square: "d2", piece: "K" },
+        { square: "e4", piece: "P" },
+        { square: "d5", piece: "p" },
+        { square: "f5", piece: "p" },
+        { square: "g7", piece: "k" },
+      ],
+      "w",
+    ),
+    prompt: "Break through the center when both files are contested.",
+    summary: "Dual pawn break with exd5",
+    note: "Dual pawn break with exd5",
+    expectedMoveUci: "e4d5",
+    goalSquares: ["d5"],
+    targetSquares: ["d5"],
+    flagSquares: ["d5"],
+    moveLimit: 1,
+    bestKnownMoves: 1,
+  },
 ];
 
 export const structureBuilderDefinition = createStaticMiniGameDefinition(
@@ -94,4 +179,3 @@ export const structureBuilderDefinition = createStaticMiniGameDefinition(
   },
   STRUCTURE_BUILDER_SCENARIOS,
 );
-

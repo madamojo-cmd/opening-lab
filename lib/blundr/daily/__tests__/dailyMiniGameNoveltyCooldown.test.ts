@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 
-import { generateMiniGameScenario } from "../miniGames/generation/generatedMiniGameRegistry";
+import { generateMiniGameScenarioAsync } from "../miniGames/generation/generatedMiniGameRegistry";
 import { buildGeneratedScenarioKey, rankScenarioKeysByNovelty } from "../miniGames/generation/miniGameScenarioNovelty";
 
+void (async () => {
 const baseInput = {
   miniGameId: "king_race" as const,
   seed: "novelty-base",
@@ -14,17 +15,17 @@ const baseInput = {
   userId: "novelty-user",
 };
 
-const firstDaily = generateMiniGameScenario(baseInput);
+const firstDaily = await generateMiniGameScenarioAsync(baseInput);
 assert.ok(firstDaily, "Expected an initial daily scenario");
 
-const cooledDaily = generateMiniGameScenario({
+const cooledDaily = await generateMiniGameScenarioAsync({
   ...baseInput,
   recentScenarioKeys: [firstDaily!.scenarioKey],
 });
 assert.ok(cooledDaily, "Expected a cooled scenario");
 assert.notEqual(cooledDaily?.scenarioKey, firstDaily?.scenarioKey, "Expected the next scenario to avoid an immediate repeat");
 
-const standalone = generateMiniGameScenario({
+const standalone = await generateMiniGameScenarioAsync({
   ...baseInput,
   source: "standalone_review",
   recentScenarioKeys: [firstDaily!.scenarioKey],
@@ -68,3 +69,4 @@ const ranked = rankScenarioKeysByNovelty({
 assert.deepEqual(ranked, ["candidate-c", "candidate-a", "candidate-b"], "Expected least-recently-used ranking when the pool is exhausted");
 
 console.log("dailyMiniGameNoveltyCooldown.test.ts passed");
+})();

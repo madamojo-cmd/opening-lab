@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 
 import { buildDailyCoverageReport, formatDailyCoverageReportMarkdown, summarizeDailyValidationIssues } from "../validation/dailyCoverageReport";
 import { makeValidationIssue } from "../validation/dailyValidationUtils";
-import { makeSampleDeckCards } from "./dailyValidationFixtures";
+import { makeSampleDeckCards, warmMiniGameCacheForContext } from "./dailyValidationFixtures";
 
-export function testDailyCoverageReport(): void {
+export async function testDailyCoverageReport(): Promise<void> {
+  await warmMiniGameCacheForContext();
   const items = makeSampleDeckCards();
   const report = buildDailyCoverageReport({ generatedAt: "2026-07-02T12:00:00.000Z", items, issues: [] });
 
@@ -41,5 +42,4 @@ export function testDailyCoverageReport(): void {
   assert.equal(issueSummary.errorCount, 0);
 }
 
-testDailyCoverageReport();
-console.log("dailyCoverageReport ok");
+void testDailyCoverageReport().then(() => console.log("dailyCoverageReport ok"));

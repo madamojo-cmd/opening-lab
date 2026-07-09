@@ -243,6 +243,6 @@ export const pawnWarsGenerator: ProceduralMiniGameGenerator = {
       boardPreferences: input.userBoardPreference ?? null,
       deckId: null,
       miniGameId: "pawn_wars",
-    }, pawnWarsGenerator, true) : null;
+    }, pawnWarsGenerator, true, { skipValidation: true }) : null;
   },
 };

@@ -9,6 +9,7 @@ import type {
 } from "./dailyMiniGameTypes";
 import { scoreDailyMiniGameAttempt } from "./dailyMiniGameScoring";
 import { hashString, normalizeText, squareToCoords } from "./miniGameUtils";
+import { enumerateMiniGameTransforms, hashTransformSelection, transformSquare } from "./miniGameScenarioTransforms";
 import { attachConceptTagsToDailyCard, inferConceptTagsForMiniGame } from "../concepts/dailyConceptTagging";
 
 type PawnWarsObjective = "promotion" | "passed_pawn";
@@ -114,17 +115,51 @@ function selectScenario(ctx: DailyMiniGameGenerationContext): PawnWarsScenario {
   const rank = difficultyRank(ctx.difficulty);
   const eligible = PAWN_WARS_SCENARIOS.filter((_, index) => index <= Math.max(0, Math.min(PAWN_WARS_SCENARIOS.length - 1, rank + 1)));
   const pool = eligible.length ? eligible : PAWN_WARS_SCENARIOS.slice(0, 1);
-  const seed = resolveScenarioSeed(ctx);
   const source = ctx.source ?? "daily_deck";
   const recentScenarioKeys = new Set((ctx.recentScenarioKeys ?? []).map((value) => normalizeText(value)).filter(Boolean));
-  const seedValue = weightedSeedValue(`${seed}|${source}|${ctx.difficulty}|pawn_wars`);
-  const startIndex = pool.length > 0 ? seedValue % pool.length : 0;
-  const rotated = [...pool.slice(startIndex), ...pool.slice(0, startIndex)];
-  for (const scenario of rotated) {
-    const key = buildScenarioKey(scenario, source);
-    if (!recentScenarioKeys.has(key)) return scenario;
+  const variants = pool.flatMap((scenario) => {
+    const transforms = enumerateMiniGameTransforms([scenario.whitePawn, ...scenario.blackPawns, scenario.goalSquare], {
+      allowMirrorFiles: true,
+      allowMirrorRanks: false,
+      maxFileDelta: 3,
+      maxRankDelta: 2,
+    });
+    return transforms
+      .map((transform) => transformPawnWarsScenario(scenario, transform))
+      .filter((entry): entry is PawnWarsScenario => Boolean(entry) && isValidSetup(entry));
+  });
+  if (!variants.length) {
+    return pool[0] ?? PAWN_WARS_SCENARIOS[0];
   }
-  return rotated[0] ?? pool[0];
+  const seed = resolveScenarioSeed(ctx);
+  const ranked = variants
+    .map((scenario, index) => {
+      const key = buildScenarioKey(scenario, source);
+      const recentIndex = Array.from(recentScenarioKeys).indexOf(key);
+      const recencyPenalty = recentIndex >= 0 ? (recentScenarioKeys.size - recentIndex) * 1_000_000 : 0;
+      const score = hashTransformSelection(seed, `${key}|pawn_wars`, index) + recencyPenalty;
+      return { scenario, score, key };
+    })
+    .sort((a, b) => a.score - b.score || a.key.localeCompare(b.key));
+  for (const entry of ranked) {
+    if (!recentScenarioKeys.has(entry.key)) return entry.scenario;
+  }
+  return ranked[0]?.scenario ?? pool[0] ?? PAWN_WARS_SCENARIOS[0];
+}
+
+function transformPawnWarsScenario(scenario: PawnWarsScenario, transform: Parameters<typeof transformSquare>[1]): PawnWarsScenario | null {
+  const whitePawn = transformSquare(scenario.whitePawn, transform);
+  const goalSquare = transformSquare(scenario.goalSquare, transform);
+  const blackPawns = scenario.blackPawns.map((square) => transformSquare(square, transform));
+  if (!whitePawn || !goalSquare || blackPawns.some((square) => !square)) return null;
+  return {
+    whiteKing: scenario.whiteKing,
+    blackKing: scenario.blackKing,
+    whitePawn,
+    blackPawns: blackPawns.filter((square): square is string => Boolean(square)),
+    objective: scenario.objective,
+    goalSquare,
+  };
 }
 
 function resolveSolutionMove(fen: string, scenario: PawnWarsScenario): { from: string; to: string; uci: string; san: string | null } | null {
