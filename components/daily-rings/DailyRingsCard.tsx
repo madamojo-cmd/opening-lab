@@ -6,20 +6,27 @@ import { ChevronRight, Flame, RefreshCw, Sparkles, Target } from "lucide-react";
 
 import { BLUNDR_ANALYTICS_EVENTS } from "@/lib/blundr/analytics/blundrAnalyticsEvents";
 import { trackBlundrAnalyticsEvent } from "@/lib/blundr/analytics/blundrAnalyticsService";
+import { createDefaultDailyRingDay } from "@/lib/blundr/daily-rings/dailyRingProgress";
 import { getLocalAccountCurrentUserId } from "@/lib/blundr/accounts/localAccountStorage";
+import { BLUNDR_LOCAL_DEMO_USER_ID } from "@/lib/blundr/persistence/persistenceKeys";
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
 import { getDailyRingSnapshotSummary, loadDailyRingSnapshot } from "@/lib/blundr/daily-rings/dailyRingService";
+import { reconcileDailyBlundrRingCompletionForToday } from "@/lib/blundr/daily-rings/dailyRingBlundrReconciliation";
 import { BLUNDR_DAILY_RING_REFRESH_EVENT } from "@/lib/blundr/daily-rings/dailyRingRefreshSignal";
-import type { DailyRingCompletionResultLike, DailyRingDayRecord, DailyRingSnapshot } from "@/lib/blundr/daily-rings/dailyRingTypes";
-import { DailyRingSummary } from "./DailyRingSummary";
+import type { DailyRingCompletionResultLike, DailyRingSnapshot } from "@/lib/blundr/daily-rings/dailyRingTypes";
+import { createDefaultStreakRecord } from "@/lib/blundr/streaks/streakService";
 import { DailyRingTempoCallout } from "./DailyRingTempoCallout";
 import { DailyRingCompletionBanner } from "./DailyRingCompletionBanner";
+import { NestedDailyRings, getNestedDailyRingStatusLabel, getNestedDailyRingStyle } from "./NestedDailyRings";
 import { StreakSummaryCard } from "@/components/streaks/StreakSummaryCard";
 import { TempoCacheCard } from "@/components/rewards/TempoCacheCard";
 
 function classNames(...classes: Array<string | false | null | undefined>): string {
   return classes.filter(Boolean).join(" ");
 }
+
+const PLACEHOLDER_ISO = "1970-01-01T00:00:00.000Z";
+const PLACEHOLDER_LOCAL_DATE = "1970-01-01";
 
 type DailyRingsCardProps = {
   repertoireProgress: RepertoireProgress;
@@ -30,62 +37,121 @@ type DailyRingsCardProps = {
   className?: string;
 };
 
-function getRingProgress(dayRecord: DailyRingDayRecord) {
+function getRingProgress(snapshot: DailyRingSnapshot) {
   return [
     {
       ringId: "daily_tempo" as const,
-      label: "Daily Tempo",
+      label: "Tempo",
       description: "Train your opening rhythm.",
-      progress: dayRecord.dailyTempo.progress,
-      goal: dayRecord.dailyTempo.goal,
-      closed: dayRecord.dailyTempo.closed,
-      percent: Math.min(100, Math.round((Math.min(dayRecord.dailyTempo.progress, dayRecord.dailyTempo.goal) / Math.max(1, dayRecord.dailyTempo.goal)) * 100)),
+      progress: snapshot.tempo.current,
+      goal: snapshot.tempo.target,
+      percent: snapshot.tempo.percent,
+      closed: snapshot.tempo.complete,
     },
     {
       ringId: "daily_battery" as const,
-      label: "Daily Battery",
+      label: "Battery",
       description: "Play the position after the book ends.",
-      progress: dayRecord.dailyBattery.progress,
-      goal: dayRecord.dailyBattery.goal,
-      closed: dayRecord.dailyBattery.closed,
-      percent: Math.min(100, Math.round((Math.min(dayRecord.dailyBattery.progress, dayRecord.dailyBattery.goal) / Math.max(1, dayRecord.dailyBattery.goal)) * 100)),
+      progress: snapshot.battery.current,
+      goal: snapshot.battery.target,
+      percent: snapshot.battery.percent,
+      closed: snapshot.battery.complete,
     },
     {
       ringId: "daily_blundr" as const,
-      label: "Daily Blundr",
+      label: "Blundr",
       description: "Review what needs to stick.",
-      progress: dayRecord.dailyBlundr.progress,
-      goal: dayRecord.dailyBlundr.goal,
-      closed: dayRecord.dailyBlundr.closed,
-      percent: Math.min(100, Math.round((Math.min(dayRecord.dailyBlundr.progress, dayRecord.dailyBlundr.goal) / Math.max(1, dayRecord.dailyBlundr.goal)) * 100)),
+      progress: snapshot.blundr.current,
+      goal: snapshot.blundr.target,
+      percent: snapshot.blundr.percent,
+      closed: snapshot.blundr.complete,
     },
   ];
 }
 
-export function DailyRingsCard({ repertoireProgress, refreshKey, completionResult, onStartTraining, dailyBlundrHref = "/daily", className }: DailyRingsCardProps) {
-  const [snapshot, setSnapshot] = useState<DailyRingSnapshot>(() => loadDailyRingSnapshot({ userId: getLocalAccountCurrentUserId() }));
-  const trackedViewKeyRef = useRef<string | null>(null);
+function buildLoadingDailyRingSnapshot(): DailyRingSnapshot {
+  const userId = BLUNDR_LOCAL_DEMO_USER_ID;
+  const localDate = PLACEHOLDER_LOCAL_DATE;
+  const dayRecord = createDefaultDailyRingDay({
+    userId,
+    localDate,
+    dailyTempoGoal: 10,
+    dailyBatteryGoal: 3,
+    dailyBlundrGoal: 1,
+    now: PLACEHOLDER_ISO,
+  });
+  const streakRecord = createDefaultStreakRecord(userId, PLACEHOLDER_ISO);
+  return {
+    userId,
+    localDate,
+    dayRecord,
+    streakRecord,
+    tempo: {
+      current: 0,
+      target: dayRecord.dailyTempo.goal,
+      percent: 0,
+      complete: false,
+    },
+    battery: {
+      current: 0,
+      target: dayRecord.dailyBattery.goal,
+      percent: 0,
+      complete: false,
+    },
+    blundr: {
+      current: 0,
+      target: dayRecord.dailyBlundr.goal,
+      percent: 0,
+      complete: false,
+    },
+    allComplete: false,
+    updatedAt: dayRecord.updatedAt,
+  };
+}
 
-  function refreshSnapshot() {
-    setSnapshot(loadDailyRingSnapshot({ userId: getLocalAccountCurrentUserId() }));
+export function DailyRingsCard({ repertoireProgress, refreshKey, completionResult, onStartTraining, dailyBlundrHref = "/daily", className }: DailyRingsCardProps) {
+  const [snapshot, setSnapshot] = useState<DailyRingSnapshot>(() => buildLoadingDailyRingSnapshot());
+  const trackedViewKeyRef = useRef<string | null>(null);
+  const isPlaceholderSnapshot = snapshot.userId === BLUNDR_LOCAL_DEMO_USER_ID && snapshot.localDate === PLACEHOLDER_LOCAL_DATE && snapshot.updatedAt === PLACEHOLDER_ISO;
+
+  async function refreshSnapshot() {
+    const userId = getLocalAccountCurrentUserId();
+    try {
+      await reconcileDailyBlundrRingCompletionForToday({ userId });
+    } catch {
+      // Keep showing the current local snapshot if reconciliation fails.
+    }
+    setSnapshot(loadDailyRingSnapshot({ userId }));
   }
 
   useEffect(() => {
-    refreshSnapshot();
+    void refreshSnapshot();
   }, [refreshKey, repertoireProgress.updatedAt, completionResult?.activityEvent?.id, completionResult?.activityAlreadyApplied, completionResult?.ok]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const handleRefresh = () => refreshSnapshot();
+    const handleRefresh = () => {
+      void refreshSnapshot();
+    };
     window.addEventListener(BLUNDR_DAILY_RING_REFRESH_EVENT, handleRefresh);
     window.addEventListener("storage", handleRefresh);
+    window.addEventListener("focus", handleRefresh);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void refreshSnapshot();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
     return () => {
       window.removeEventListener(BLUNDR_DAILY_RING_REFRESH_EVENT, handleRefresh);
       window.removeEventListener("storage", handleRefresh);
+      window.removeEventListener("focus", handleRefresh);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
 
   useEffect(() => {
+    if (isPlaceholderSnapshot) return;
     const viewKey = `${snapshot.userId}:${snapshot.localDate}`;
     if (trackedViewKeyRef.current === viewKey) return;
     trackedViewKeyRef.current = viewKey;
@@ -93,13 +159,18 @@ export function DailyRingsCard({ repertoireProgress, refreshKey, completionResul
       userId: snapshot.userId,
       localDate: snapshot.localDate,
       currentStreakDays: snapshot.streakRecord.currentStreakDays,
-      allRingsClosed: snapshot.dayRecord.allRingsClosed,
+      allRingsClosed: snapshot.allComplete,
     });
-  }, [snapshot.userId, snapshot.localDate, snapshot.streakRecord.currentStreakDays, snapshot.dayRecord.allRingsClosed]);
+  }, [isPlaceholderSnapshot, snapshot.userId, snapshot.localDate, snapshot.streakRecord.currentStreakDays, snapshot.allComplete]);
 
-  const ringItems = getRingProgress(snapshot.dayRecord);
-  const allClosed = snapshot.dayRecord.allRingsClosed;
-  const incompleteDailyBlundr = !snapshot.dayRecord.dailyBlundr.closed;
+  const ringItems = getRingProgress(snapshot);
+  const allClosed = snapshot.allComplete;
+  const incompleteDailyBlundr = !snapshot.blundr.complete;
+  const closedRingCount = ringItems.filter((ring) => ring.closed).length;
+  const remainingRingCount = Math.max(0, ringItems.length - closedRingCount);
+  const tempoCalloutMessage = allClosed
+    ? "All rings closed. Your Blundr habit is closed for today."
+    : `Close ${remainingRingCount} more ring${remainingRingCount === 1 ? "" : "s"} to keep your streak alive.`;
 
   return (
     <section className={classNames("rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm", className)}>
@@ -111,7 +182,9 @@ export function DailyRingsCard({ repertoireProgress, refreshKey, completionResul
         </div>
         <button
           type="button"
-          onClick={() => setSnapshot(loadDailyRingSnapshot({ userId: getLocalAccountCurrentUserId() }))}
+          onClick={() => {
+            void refreshSnapshot();
+          }}
           className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm"
           aria-label="Refresh daily rings"
         >
@@ -128,9 +201,33 @@ export function DailyRingsCard({ repertoireProgress, refreshKey, completionResul
             rewardHistory={completionResult.rewardHistory ?? null}
           />
         ) : null}
-        {ringItems.map((ring) => (
-          <DailyRingSummary key={ring.ringId} label={ring.label} description={ring.description} progress={ring.progress} goal={ring.goal} percent={ring.percent} closed={ring.closed} />
-        ))}
+        <div className="rounded-[1.5rem] bg-[#f8f5ef] px-4 py-5 ring-1 ring-stone-100">
+          <NestedDailyRings rings={ringItems} closedCount={closedRingCount} totalCount={ringItems.length} allClosed={allClosed} streakDays={snapshot.streakRecord.currentStreakDays} />
+        </div>
+        <div className="grid gap-2">
+        {ringItems.map((ring, index) => {
+            const ringStyle = getNestedDailyRingStyle(ring, index);
+            return (
+            <div key={ring.ringId} className="rounded-2xl bg-[#fbfcf7] px-3 py-3 ring-1 ring-stone-100">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-black text-stone-950">{ring.label}</div>
+                  <div className="mt-0.5 truncate text-xs font-medium text-stone-500">{ring.description}</div>
+                </div>
+                <div className={classNames("shrink-0 rounded-full px-2.5 py-1 text-[11px] font-black", ring.closed ? "bg-green-50 text-green-700" : "bg-stone-100 text-stone-500")}>
+                  {ring.progress}/{ring.goal}
+                </div>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ backgroundColor: ringStyle.track }}>
+                <div className="h-full rounded-full" style={{ width: `${ring.percent}%`, backgroundColor: ringStyle.stroke }} />
+              </div>
+              <div className="mt-2 text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">
+                {getNestedDailyRingStatusLabel(ring)}
+              </div>
+            </div>
+            );
+          })}
+        </div>
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -144,7 +241,7 @@ export function DailyRingsCard({ repertoireProgress, refreshKey, completionResul
           <p className="mt-2 text-sm leading-6 text-stone-600">
             {repertoireProgress.lockedOpeningIds.length > 0
               ? `${repertoireProgress.nextUnlockProgressPct}% toward the next unlock.`
-              : "All eligible MVP openings are unlocked."}
+              : "All current openings are unlocked."}
           </p>
           <div className="mt-4 rounded-2xl bg-white px-3 py-3 text-sm font-semibold text-stone-600 ring-1 ring-stone-100">
             {getDailyRingSnapshotSummary(snapshot)}
@@ -152,7 +249,7 @@ export function DailyRingsCard({ repertoireProgress, refreshKey, completionResul
         </div>
       </div>
 
-      <DailyRingTempoCallout className="mt-4" message={allClosed ? "All rings closed. Your Blundr habit is locked in for today." : "Close all three rings to keep your streak alive."} />
+      <DailyRingTempoCallout className="mt-4" message={tempoCalloutMessage} />
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <button
@@ -170,7 +267,7 @@ export function DailyRingsCard({ repertoireProgress, refreshKey, completionResul
             incompleteDailyBlundr ? "bg-white text-green-700 ring-1 ring-green-200" : "bg-stone-100 text-stone-500",
           )}
         >
-          {incompleteDailyBlundr ? "Open Daily Blundr" : "Daily Blundr complete"}
+          {incompleteDailyBlundr ? "Complete Daily Blundr" : "Daily Blundr complete"}
           <Target size={16} />
         </Link>
       </div>

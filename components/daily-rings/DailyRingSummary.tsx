@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Lock, Sparkles } from "lucide-react";
+import { CheckCircle2, Sparkles } from "lucide-react";
 
 import { DailyRingMeter } from "./DailyRingMeter";
 
@@ -29,9 +29,9 @@ export function DailyRingSummary({ label, description, progress, goal, percent, 
           </div>
           <p className="mt-2 text-sm leading-6 text-stone-600">{description}</p>
         </div>
-        <div className={classNames("inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em]", closed ? "bg-green-50 text-green-700" : "bg-stone-100 text-stone-500")}>
-          {closed ? <CheckCircle2 size={13} /> : <Lock size={13} />}
-          {closed ? "Closed" : "Locked"}
+        <div className={classNames("inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em]", closed ? "bg-green-50 text-green-700" : percent > 0 ? "bg-blue-50 text-blue-700" : "bg-stone-100 text-stone-500")}>
+          {closed ? <CheckCircle2 size={13} /> : <Sparkles size={13} />}
+          {closed ? "Complete" : percent > 0 ? "In progress" : "Open"}
         </div>
       </div>
       <div className="mt-3 flex items-end justify-between gap-3">
@@ -39,7 +39,7 @@ export function DailyRingSummary({ label, description, progress, goal, percent, 
           <div className="text-2xl font-black tracking-tight text-stone-950">
             {progress} / {goal}
           </div>
-          <div className="text-xs font-semibold text-stone-500">{closed ? "Ring complete for today." : "Keep going to close this ring."}</div>
+          <div className="text-xs font-semibold text-stone-500">{closed ? "Ring complete for today." : percent > 0 ? "Keep going to close this ring." : "Open for today."}</div>
         </div>
         <div className="min-w-[96px]">
           <DailyRingMeter percent={percent} closed={closed} />
