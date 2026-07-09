@@ -86,6 +86,7 @@ export function DailyBlundrCardPlayer({
         onMoveAttempt={onBoardMoveAttempt}
         squareClickMode={isTrainingTarget && trainingInteractionKind === "square_click"}
         openingColor={openingColor}
+        forcedOrientation={isMiniGame ? activeMiniGameState?.learnerSide ?? card.miniGame?.learnerSide ?? null : null}
         onSquareClick={
           isTrainingTarget && trainingInteractionKind === "square_click"
             ? (square) => onSquareClick?.(square)

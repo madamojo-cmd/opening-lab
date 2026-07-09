@@ -24,7 +24,7 @@ function describeCoordinate(square: string): string {
   return square;
 }
 
-export function DailyBlundrBoard({ fen, disabled, onMoveAttempt, onSquareClick, squareClickMode, openingColor }: DailyBlundrBoardProps) {
+export function DailyBlundrBoard({ fen, disabled, onMoveAttempt, onSquareClick, squareClickMode, openingColor, forcedOrientation }: DailyBlundrBoardProps) {
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [boardPreferences, setBoardPreferences] = useState(() => createDefaultBoardPreferences());
   const game = useMemo(() => {
@@ -40,13 +40,12 @@ export function DailyBlundrBoard({ fen, disabled, onMoveAttempt, onSquareClick, 
         boardThemeId: boardPreferences.boardThemeId,
         pieceSetId: boardPreferences.pieceSetId,
         showCoordinates: boardPreferences.showCoordinates,
-        boardOrientation: boardPreferences.boardOrientation,
+        boardOrientation: forcedOrientation ?? boardPreferences.boardOrientation,
         openingColor,
-        fenTurn: game?.turn() === "b" ? "black" : "white",
         source: boardPreferences.source,
         updatedAt: boardPreferences.updatedAt,
       }),
-    [boardPreferences, game, openingColor],
+    [boardPreferences, forcedOrientation, game, openingColor],
   );
   const orientation = renderConfig.boardOrientation;
 
@@ -109,8 +108,8 @@ export function DailyBlundrBoard({ fen, disabled, onMoveAttempt, onSquareClick, 
                 disabled={disabled}
                 onClick={() => {
                   if (disabled) return;
+                  onSquareClick?.(square, piece);
                   if (squareClickMode) {
-                    onSquareClick?.(square, piece);
                     return;
                   }
                   const outcome = resolveDailyBoardClick({

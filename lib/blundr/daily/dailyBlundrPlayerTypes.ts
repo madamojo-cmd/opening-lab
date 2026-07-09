@@ -74,6 +74,7 @@ export type DailyBlundrBoardProps = {
   onSquareClick?: (square: string, piece: { type: string; color: string } | null) => void;
   squareClickMode?: boolean;
   openingColor?: "white" | "black" | null;
+  forcedOrientation?: "white" | "black" | null;
 };
 
 export type DailyBlundrSupportControlsProps = {
