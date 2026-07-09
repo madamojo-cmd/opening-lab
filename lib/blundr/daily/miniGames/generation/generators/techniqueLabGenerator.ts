@@ -1,6 +1,7 @@
 import { buildGeneratedMiniGameScenarioContract } from "../miniGameLegacyAdapter";
 import { createGeneratorRandom } from "../miniGameCandidateFactory";
 import { classifyMiniGameDifficulty } from "../miniGameDifficultyClassifier";
+import { validateTrainingQuality } from "../miniGameTrainingQualityGate";
 import { validateMiniGameObjective } from "../miniGameObjectiveValidation";
 import { verifyMiniGameSolution } from "../miniGameSolutionVerifier";
 import type { GeneratedMiniGameScenario, MiniGameGenerationInput, ProceduralMiniGameGenerator } from "../miniGameGenerationTypes";
@@ -31,7 +32,7 @@ function buildTechniqueFamilyCandidate(input: MiniGameGenerationInput, family: (
         prompt: "Take direct opposition.",
         instruction: "Move the king into direct opposition.",
         goal: "Hold direct opposition.",
-        explanation: "Direct opposition is the point of the endgame technique.",
+        explanation: "Because the kings line up on the same file, direct opposition keeps the enemy king out.",
         conceptTags: ["opposition", "king endgame"],
         analysis: { complexity: 22, candidateCount: 4 },
       }),
@@ -45,7 +46,7 @@ function buildTechniqueFamilyCandidate(input: MiniGameGenerationInput, family: (
         prompt: "Take distant opposition.",
         instruction: "Move the king toward distant opposition.",
         goal: "Hold distant opposition.",
-        explanation: "Distant opposition sets up the next king step.",
+        explanation: "Because the king keeps the opposition from afar, the next king step stays under control.",
         conceptTags: ["opposition", "distance"],
         analysis: { complexity: 24, candidateCount: 4 },
       }),
@@ -58,7 +59,7 @@ function buildTechniqueFamilyCandidate(input: MiniGameGenerationInput, family: (
         prompt: "Find the triangulation step.",
         instruction: "Triangulate with the king.",
         goal: "Use the spare tempo.",
-        explanation: "The king route uses triangulation to gain a tempo.",
+        explanation: "Because the king walks a triangle, it steals a tempo and gains the key square.",
         conceptTags: ["triangulation", "king endgame"],
         analysis: { complexity: 30, forcing: true, candidateCount: 5 },
       }),
@@ -70,8 +71,8 @@ function buildTechniqueFamilyCandidate(input: MiniGameGenerationInput, family: (
         keySquare: "e5",
         prompt: "Create the zugzwang position.",
         instruction: "Move the king into zugzwang geometry.",
-        goal: "Force zugzwang.",
-        explanation: "Zugzwang appears when the king move improves the position.",
+        goal: "Hold the draw.",
+        explanation: "Because the side to move is forced to waste tempo, zugzwang holds the draw.",
         conceptTags: ["zugzwang", "endgame"],
         analysis: { complexity: 34, forcing: true, candidateCount: 5 },
       }),
@@ -86,7 +87,7 @@ function buildTechniqueFamilyCandidate(input: MiniGameGenerationInput, family: (
         prompt: "Put the rook behind the passed pawn.",
         instruction: "Lift the rook behind the pawn.",
         goal: "Rook behind the passed pawn.",
-        explanation: "The rook belongs behind the passed pawn.",
+        explanation: "Because the rook sits behind the passed pawn, it supports the advance and the promotion race.",
         conceptTags: ["rook endgame", "passed pawn"],
         analysis: { complexity: 28, candidateCount: 4 },
       }),
@@ -101,7 +102,7 @@ function buildTechniqueFamilyCandidate(input: MiniGameGenerationInput, family: (
         prompt: "Cut off the king with the rook.",
         instruction: "Move the rook to cut off the king.",
         goal: "Keep the king cut off.",
-        explanation: "The rook cuts off the enemy king from the pawn path.",
+        explanation: "Because the rook cuts off the enemy king, it blocks the pawn path and keeps control.",
         conceptTags: ["rook cutoff", "endgame"],
         analysis: { complexity: 30, candidateCount: 4 },
       }),
@@ -116,7 +117,7 @@ function buildTechniqueFamilyCandidate(input: MiniGameGenerationInput, family: (
         prompt: "Build the Lucena-like bridge.",
         instruction: "Move the rook into the bridge square.",
         goal: "Build the bridge.",
-        explanation: "The bridge square sets up the Lucena-like technique.",
+        explanation: "Because the bridge square sets up the Lucena-like technique, it converts the rook ending.",
         conceptTags: ["lucena", "rook endgame"],
         analysis: { complexity: 36, forcing: true, candidateCount: 5 },
       }),
@@ -131,7 +132,7 @@ function buildTechniqueFamilyCandidate(input: MiniGameGenerationInput, family: (
         prompt: "Set up the Philidor-like defense.",
         instruction: "Move the rook to the defensive file.",
         goal: "Hold the Philidor defense.",
-        explanation: "The rook holds the file in Philidor-like style.",
+        explanation: "Because the rook holds the file, the Philidor-like defense keeps the draw intact.",
         conceptTags: ["philidor", "rook endgame"],
         analysis: { complexity: 34, candidateCount: 5 },
       }),
@@ -146,7 +147,7 @@ function buildTechniqueFamilyCandidate(input: MiniGameGenerationInput, family: (
         prompt: "Create the outside passer.",
         instruction: "Push the outside pawn.",
         goal: "Create the passer.",
-        explanation: "The outside passer stretches the defender.",
+        explanation: "Because the outside passer stretches the defender, it supports the winning promotion race.",
         conceptTags: ["outside passer", "endgame"],
         analysis: { complexity: 28, candidateCount: 4 },
       }),
@@ -159,13 +160,27 @@ function buildTechniqueFamilyCandidate(input: MiniGameGenerationInput, family: (
         prompt: "Simplify into the won ending.",
         instruction: "Move to the simplifying square.",
         goal: "Trade into the better ending.",
-        explanation: "The simplification converts the advantage.",
+        explanation: "Because the simplification converts the advantage, it turns the ending into a win.",
         conceptTags: ["simplification", "endgame"],
         analysis: { complexity: 24, candidateCount: 4 },
       }),
   } as const;
 
   return configs[family]();
+}
+
+function pickValidTechniqueFamilyCandidate(input: MiniGameGenerationInput, families: readonly (typeof TECHNIQUE_FAMILIES)[number][]) {
+  const rng = createGeneratorRandom(input, "technique_lab:valid_pick");
+  const validCandidates: NonNullable<ReturnType<typeof buildTechniqueFamilyCandidate>>[] = [];
+  for (const family of families) {
+    const candidate = buildTechniqueFamilyCandidate(input, family);
+    if (!candidate) continue;
+    if (!validateMiniGameObjective(candidate).passed) continue;
+    if (!verifyMiniGameSolution(candidate).verified) continue;
+    if (!validateTrainingQuality(candidate).passed) continue;
+    validCandidates.push(candidate);
+  }
+  return validCandidates.length > 0 ? rng.pick(validCandidates) : null;
 }
 
 export function buildDirectOppositionCandidate(input: MiniGameGenerationInput) {
@@ -215,13 +230,15 @@ export const techniqueLabGenerator: ProceduralMiniGameGenerator = {
   selectionPriority: 10,
   generateCandidate(input: MiniGameGenerationInput) {
     const rng = createGeneratorRandom(input, "technique_lab:family");
-    return buildTechniqueFamilyCandidate(input, rng.pick(TECHNIQUE_FAMILIES) ?? "direct_opposition");
+    return pickValidTechniqueFamilyCandidate(input, rng.shuffle(TECHNIQUE_FAMILIES)) ?? pickValidTechniqueFamilyCandidate(input, TECHNIQUE_FAMILIES);
   },
   validateObjective: validateMiniGameObjective,
   verifySolution: verifyMiniGameSolution,
   classifyDifficulty: classifyMiniGameDifficulty,
   buildFallbackScenario(input: MiniGameGenerationInput): GeneratedMiniGameScenario | null {
-    const candidate = buildTechniqueFamilyCandidate(input, "direct_opposition") ?? buildTechniqueFamilyCandidate({ ...input, seed: `${input.seed}:fallback` }, "simplification");
+    const candidate =
+      pickValidTechniqueFamilyCandidate(input, TECHNIQUE_FAMILIES) ??
+      pickValidTechniqueFamilyCandidate({ ...input, seed: `${input.seed}:fallback` }, [...TECHNIQUE_FAMILIES].reverse() as typeof TECHNIQUE_FAMILIES);
     return candidate ? buildGeneratedMiniGameScenarioContract(candidate, {
       dateKey: input.dateKey,
       now: new Date().toISOString(),

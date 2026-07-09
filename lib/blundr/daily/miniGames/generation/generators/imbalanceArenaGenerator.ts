@@ -1,6 +1,7 @@
 import { buildGeneratedMiniGameScenarioContract } from "../miniGameLegacyAdapter";
 import { createGeneratorRandom } from "../miniGameCandidateFactory";
 import { classifyMiniGameDifficulty } from "../miniGameDifficultyClassifier";
+import { validateTrainingQuality } from "../miniGameTrainingQualityGate";
 import { validateMiniGameObjective } from "../miniGameObjectiveValidation";
 import { verifyMiniGameSolution } from "../miniGameSolutionVerifier";
 import type { GeneratedMiniGameScenario, MiniGameGenerationInput, ProceduralMiniGameGenerator } from "../miniGameGenerationTypes";
@@ -39,15 +40,15 @@ function buildImbalanceFamilyCandidate(input: MiniGameGenerationInput, family: (
     good_knight_bad_bishop: () =>
       buildKnightMoveCandidate(input, {
         family,
-        motif: "good knight vs bad bishop",
+        motif: "good_knight_bad_bishop",
         from: "f3",
         to: "e5",
         targetSquares: ["d7"],
         prompt: "Activate the good knight against the bad bishop.",
         instruction: "Jump the knight to the outpost.",
         goal: "Improve the knight against the bishop.",
-        explanation: "The knight outpost makes the bishop worse.",
-        conceptTags: ["knight", "bishop"],
+        explanation: "Because the knight outpost lands on e5, it improves the knight against the bad bishop.",
+        conceptTags: ["good knight", "bad bishop", "knight"],
         analysis: { complexity: 32, candidateCount: 4 },
       }),
     rook_activity_open_file: () =>
@@ -61,7 +62,7 @@ function buildImbalanceFamilyCandidate(input: MiniGameGenerationInput, family: (
         prompt: "Activate the rook on the open file.",
         instruction: "Move the rook to the open file.",
         goal: "Occupy the open file.",
-        explanation: "The rook becomes active on the open file.",
+        explanation: "Because the rook lands on the open file, it becomes active and pressures the file.",
         conceptTags: ["rook activity", "open file"],
         analysis: { complexity: 28, candidateCount: 4 },
       }),
@@ -76,7 +77,7 @@ function buildImbalanceFamilyCandidate(input: MiniGameGenerationInput, family: (
         prompt: "Find the exchange sacrifice.",
         instruction: "Sacrifice the exchange for compensation.",
         goal: "Gain compensation.",
-        explanation: "The sacrifice opens lines and creates compensation.",
+        explanation: "Because the sacrifice opens lines, it creates compensation and keeps the initiative.",
         conceptTags: ["exchange sac", "compensation"],
         analysis: { complexity: 42, forcing: true, candidateCount: 5 },
       }),
@@ -106,9 +107,9 @@ function buildImbalanceFamilyCandidate(input: MiniGameGenerationInput, family: (
         prompt: "Claim more space.",
         instruction: "Push the pawn to gain space.",
         goal: "Increase space on the board.",
-        explanation: "The pawn push claims central space.",
+        explanation: "Because the pawn push claims central space, it creates more room for the pieces.",
         conceptTags: ["space", "pawn"],
-        analysis: { complexity: 22, candidateCount: 4 },
+        analysis: { complexity: 22, forcing: true, candidateCount: 4 },
       }),
     opposite_colored_bishop_attack: () =>
       buildSliderMoveCandidate(input, {
@@ -135,7 +136,7 @@ function buildImbalanceFamilyCandidate(input: MiniGameGenerationInput, family: (
         prompt: "Use initiative while down material.",
         instruction: "Move the queen aggressively.",
         goal: "Keep the initiative.",
-        explanation: "The initiative compensates for the material deficit.",
+        explanation: "Because the queen activity keeps the attack alive, it compensates for the material deficit.",
         conceptTags: ["initiative", "material imbalance"],
         analysis: { complexity: 40, forcing: true, candidateCount: 5 },
       }),
@@ -169,6 +170,28 @@ function buildImbalanceFamilyCandidate(input: MiniGameGenerationInput, family: (
   } as const;
 
   return configs[family]();
+}
+
+function pickValidImbalanceFamilyCandidate(input: MiniGameGenerationInput, families: readonly (typeof IMBALANCE_FAMILIES)[number][]) {
+  const rng = createGeneratorRandom(input, "imbalance_arena:valid_pick");
+  const validCandidates: NonNullable<ReturnType<typeof buildImbalanceFamilyCandidate>>[] = [];
+  for (const family of families) {
+    const candidate = buildImbalanceFamilyCandidate(input, family);
+    if (!candidate) {
+      continue;
+    }
+    if (!validateMiniGameObjective(candidate).passed) {
+      continue;
+    }
+    if (!verifyMiniGameSolution(candidate).verified) {
+      continue;
+    }
+    if (!validateTrainingQuality(candidate).passed) {
+      continue;
+    }
+    validCandidates.push(candidate);
+  }
+  return validCandidates.length > 0 ? rng.pick(validCandidates) : null;
 }
 
 function buildQueenMoveCandidate(input: MiniGameGenerationInput, config: Parameters<typeof buildSliderMoveCandidate>[1]) {
@@ -225,13 +248,16 @@ export const imbalanceArenaGenerator: ProceduralMiniGameGenerator = {
   selectionPriority: 10,
   generateCandidate(input: MiniGameGenerationInput) {
     const rng = createGeneratorRandom(input, "imbalance_arena:family");
-    return buildImbalanceFamilyCandidate(input, rng.pick(IMBALANCE_FAMILIES) ?? "bishop_pair_open");
+    const families = rng.shuffle(IMBALANCE_FAMILIES);
+    return pickValidImbalanceFamilyCandidate(input, families) ?? pickValidImbalanceFamilyCandidate(input, IMBALANCE_FAMILIES);
   },
   validateObjective: validateMiniGameObjective,
   verifySolution: verifyMiniGameSolution,
   classifyDifficulty: classifyMiniGameDifficulty,
   buildFallbackScenario(input: MiniGameGenerationInput): GeneratedMiniGameScenario | null {
-    const candidate = buildImbalanceFamilyCandidate(input, "bishop_pair_open") ?? buildImbalanceFamilyCandidate({ ...input, seed: `${input.seed}:fallback` }, "rook_activity_open_file");
+    const candidate =
+      pickValidImbalanceFamilyCandidate(input, IMBALANCE_FAMILIES) ??
+      pickValidImbalanceFamilyCandidate({ ...input, seed: `${input.seed}:fallback` }, [...IMBALANCE_FAMILIES].reverse() as typeof IMBALANCE_FAMILIES);
     return candidate ? buildGeneratedMiniGameScenarioContract(candidate, {
       dateKey: input.dateKey,
       now: new Date().toISOString(),

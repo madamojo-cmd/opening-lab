@@ -18,6 +18,35 @@ function pickSafeKingSquare(
   return rng.pick(safeAll) ?? preferred[0] ?? "h8";
 }
 
+function pickSafePawnSquare(
+  rng: ReturnType<typeof createGeneratorRandom>,
+  goal: Square,
+  occupied: readonly Square[],
+): Square {
+  const candidateOffsets: Array<[number, number]> = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+    [1, 1],
+    [1, -1],
+    [-1, 1],
+    [-1, -1],
+    [2, 0],
+    [-2, 0],
+    [0, 2],
+    [0, -2],
+  ];
+  const candidates = candidateOffsets
+    .map(([fileOffset, rankOffset]) => squareFromOffset(goal, fileOffset, rankOffset))
+    .filter((square): square is Square => Boolean(square) && square !== goal && occupied.every((entry) => entry !== square));
+  if (candidates.length > 0) {
+    return rng.pick(candidates) ?? candidates[0] ?? goal;
+  }
+  const safeAll = ALL_SQUARES.filter((square) => square !== goal && occupied.every((entry) => entry !== square)) as Square[];
+  return rng.pick(safeAll) ?? goal;
+}
+
 export function buildKingMoveCandidate(
   input: MiniGameGenerationInput,
   config: {
@@ -49,7 +78,7 @@ export function buildKingMoveCandidate(
   if (config.targetSquare) {
     addPlacement(placements, config.targetSquare, config.sideToMove === "b" ? "P" : "p");
   } else {
-    const pawnSquare = squareFromOffset(goal, rng.bool(0.5) ? 0 : 1, rng.bool(0.5) ? 2 : -2) ?? goal;
+    const pawnSquare = pickSafePawnSquare(rng, goal, [whiteKing, blackKing, goal]);
     addPlacement(placements, pawnSquare, config.sideToMove === "b" ? "p" : "P");
   }
   for (const extra of config.extraPlacements ?? []) addPlacement(placements, extra.square, extra.piece);

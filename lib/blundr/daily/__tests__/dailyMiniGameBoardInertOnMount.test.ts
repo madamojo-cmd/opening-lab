@@ -5,6 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { DailyBlundrBoard } from "@/components/daily/DailyBlundrBoard";
 import { buildMiniGameRunnerScenarioFromCard } from "@/components/review/MiniGamePracticeRunner";
 import { resetLocalAccountState, setLocalAccountCurrentUserId } from "../../accounts/localAccountStorage";
+import { buildMiniGameBoardFeedback } from "../miniGames/runner/miniGameBoardFeedbackAdapter";
+import { createInitialMiniGameRunnerState } from "../miniGames/runner/miniGameRunnerState";
 import { waitForPracticeBundle } from "./dailyValidationFixtures";
 
 void (async () => {
@@ -18,6 +20,7 @@ assert.ok(bundle, "Expected a practice bundle for king_race");
 
 const scenario = buildMiniGameRunnerScenarioFromCard(bundle!.card);
 assert.ok(scenario, "Expected a runner scenario for king_race");
+const idleFeedback = buildMiniGameBoardFeedback(scenario!, createInitialMiniGameRunnerState(scenario));
 
 let squareClicks = 0;
 let moveAttempts = 0;
@@ -26,6 +29,9 @@ const markup = renderToStaticMarkup(
     fen: scenario!.board.fen,
     forcedOrientation: scenario!.board.orientation,
     openingColor: scenario!.board.orientation,
+    boardVisuals: idleFeedback.boardVisuals,
+    squareStyles: idleFeedback.squareStyles,
+    animationClassName: idleFeedback.animationClassName,
     onSquareClick: () => {
       squareClicks += 1;
     },

@@ -25,6 +25,7 @@ import { resolveSeedParts } from "./miniGameSeededRandom";
 import { adjudicateMiniGameCandidate } from "./miniGameQualityGate";
 import { buildMiniGameCandidateCacheKey, getCachedGeneratedMiniGameScenario, getCachedMiniGameCandidateResult, queueMiniGameCandidateResult } from "./miniGameEngineCache";
 import { resolveMiniGameEngineThresholds } from "./miniGameEngineThresholds";
+import { validateTrainingQuality } from "./miniGameTrainingQualityGate";
 
 const GENERATION_ATTEMPT_LIMIT = 16;
 
@@ -233,6 +234,10 @@ function buildSelectionEntries(input: MiniGameGenerationInput): ProceduralSelect
     if (!verification.verified) {
       continue;
     }
+    const trainingQuality = validateTrainingQuality(candidate);
+    if (!trainingQuality.passed) {
+      continue;
+    }
 
     const key = buildScenarioKey(candidate, source);
     if (seenKeys.has(key)) {
@@ -270,13 +275,17 @@ function buildFallbackSelection(input: MiniGameGenerationInput): ProceduralSelec
   if (!fallbackScenario) {
     return null;
   }
+  const candidate = scenarioToCandidate(fallbackScenario, generator);
+  if (!validateTrainingQuality(candidate).passed) {
+    return null;
+  }
 
   return {
-    candidate: scenarioToCandidate(fallbackScenario, generator),
+    candidate,
     seed: fallbackScenario.metadata.seed ?? baseSeed,
     usedStaticFallback: true,
-    scenarioKey: buildScenarioKey(scenarioToCandidate(fallbackScenario, generator), source),
-    engineKey: buildEngineCandidateKey(scenarioToCandidate(fallbackScenario, generator)),
+    scenarioKey: buildScenarioKey(candidate, source),
+    engineKey: buildEngineCandidateKey(candidate),
   };
 }
 

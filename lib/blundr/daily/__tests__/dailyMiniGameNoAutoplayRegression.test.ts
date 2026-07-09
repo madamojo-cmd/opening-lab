@@ -6,6 +6,7 @@ import { DailyBlundrBoard } from "@/components/daily/DailyBlundrBoard";
 import { buildMiniGameRunnerScenarioFromCard } from "@/components/review/MiniGamePracticeRunner";
 import { resetLocalAccountState, setLocalAccountCurrentUserId } from "../../accounts/localAccountStorage";
 import { DAILY_MINI_GAME_REGISTRY } from "../miniGames/dailyMiniGameRegistry";
+import { buildMiniGameBoardFeedback } from "../miniGames/runner/miniGameBoardFeedbackAdapter";
 import { createInitialMiniGameRunnerState, miniGameRunnerReducer } from "../miniGames/runner/miniGameRunnerState";
 import { waitForPracticeBundle } from "./dailyValidationFixtures";
 
@@ -33,6 +34,11 @@ for (const definition of DAILY_MINI_GAME_REGISTRY) {
   assert.equal(initialState.boardFen, scenario!.board.fen);
   assert.equal(initialState.revealed, false);
 
+  const idleFeedback = buildMiniGameBoardFeedback(scenario!, initialState);
+  assert.equal(Object.keys(idleFeedback.squareStyles).length, 0, `Expected ${definition.id} idle feedback to stay visual-only`);
+  assert.equal(idleFeedback.boardVisuals, null, `Expected ${definition.id} idle feedback to hide answer visuals`);
+  assert.equal(idleFeedback.animationClassName, null, `Expected ${definition.id} idle feedback to stay inert`);
+
   const loadedState = miniGameRunnerReducer(initialState, { type: "LOAD_SCENARIO", scenario: scenario! });
   assert.equal(loadedState.status, "idle");
   assert.equal(loadedState.boardFen, scenario!.board.fen);
@@ -47,6 +53,9 @@ for (const definition of DAILY_MINI_GAME_REGISTRY) {
       fen: scenario!.board.fen,
       forcedOrientation: scenario!.board.orientation,
       openingColor: scenario!.board.orientation,
+      boardVisuals: idleFeedback.boardVisuals,
+      squareStyles: idleFeedback.squareStyles,
+      animationClassName: idleFeedback.animationClassName,
       onSquareClick: () => {
         squareClicks += 1;
       },

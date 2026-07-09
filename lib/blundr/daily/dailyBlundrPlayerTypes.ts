@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 import type { DailyBlundrAttempt, DailyBlundrCard, DailyBlundrSession } from "./dailyBlundrTypes";
 import type { DailyBlundrMasteryState } from "./dailyBlundrTypes";
 import type { DailyBlundrReviewAttempt, DailyBlundrReviewCard } from "./dailyBlundrReviewTypes";
@@ -6,6 +8,7 @@ import type { DailyBlundrReviewStats } from "./dailyBlundrReviewStats";
 import type { DailyBlundrCardPlayMode } from "./dailyBlundrTypes";
 import type { DailyMiniGameAdvanceResult, DailyMiniGameState } from "./miniGames/dailyMiniGameTypes";
 import type { DailyTrainingTargetAdvanceResult, DailyTrainingTargetState } from "./trainingTargets/dailyTrainingTargetTypes";
+import type { BoardVisualUiModel } from "@/lib/blundr/presentation/uiSurfaceAdapter";
 
 export type { DailyBlundrCardPlayMode } from "./dailyBlundrTypes";
 
@@ -75,6 +78,9 @@ export type DailyBlundrBoardProps = {
   squareClickMode?: boolean;
   openingColor?: "white" | "black" | null;
   forcedOrientation?: "white" | "black" | null;
+  boardVisuals?: BoardVisualUiModel | null;
+  squareStyles?: Record<string, CSSProperties>;
+  animationClassName?: string | null;
 };
 
 export type DailyBlundrSupportControlsProps = {

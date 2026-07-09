@@ -13,9 +13,12 @@ import { getDailyMiniGameDefinition } from "@/lib/blundr/daily/miniGames/dailyMi
 import type { DailyBlundrMiniGameCard, DailyMiniGameAdvanceResult, DailyMiniGameId, DailyMiniGameState } from "@/lib/blundr/daily/miniGames/dailyMiniGameTypes";
 import type { DailyBlundrBoardMoveAttempt } from "@/lib/blundr/daily/dailyBlundrPlayerTypes";
 import { parseUciMove } from "@/lib/blundr/daily/miniGames/generation/miniGameMoveRules";
+import { BLUNDR_MINIGAME_ENGINE_CACHE_READY_EVENT } from "@/lib/blundr/daily/miniGames/generation/miniGameEngineCache";
 import type { Square } from "@/lib/blundr/geometry/boardTypes";
 import { readLocalBoardPreferences } from "@/lib/blundr/board/boardPreferenceService";
 import { ProfileSettingsIcon } from "@/components/navigation/ProfileSettingsIcon";
+import { BlundrStateCard } from "@/components/blundr/ui";
+import { buildMiniGameBoardFeedback } from "@/lib/blundr/daily/miniGames/runner/miniGameBoardFeedbackAdapter";
 import {
   canSubmitMove,
   createInitialMiniGameRunnerState,
@@ -161,59 +164,6 @@ function advanceMiniGame(card: DailyBlundrMiniGameCard, state: DailyMiniGameStat
   return definition.advance(state, attempt);
 }
 
-function squareToOverlayPoint(square: Square, orientation: "white" | "black"): { x: number; y: number } | null {
-  const text = normalizeText(square).toLowerCase();
-  if (!/^[a-h][1-8]$/.test(text)) return null;
-  const fileIndex = text.charCodeAt(0) - 97;
-  const rankNumber = Number(text[1]);
-  if (orientation === "white") {
-    return { x: fileIndex * 12.5 + 6.25, y: (8 - rankNumber) * 12.5 + 6.25 };
-  }
-  return { x: (7 - fileIndex) * 12.5 + 6.25, y: (rankNumber - 1) * 12.5 + 6.25 };
-}
-
-function MiniGameSolutionOverlay({
-  active,
-  orientation,
-  from,
-  to,
-}: {
-  active: boolean;
-  orientation: "white" | "black";
-  from: Square;
-  to: Square;
-}) {
-  if (!active) return null;
-  const fromPoint = squareToOverlayPoint(from, orientation);
-  const toPoint = squareToOverlayPoint(to, orientation);
-  if (!fromPoint || !toPoint) return null;
-
-  return (
-    <div className="pointer-events-none absolute inset-0">
-      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full">
-        <defs>
-          <marker id="mini-game-solution-arrow" markerWidth="7" markerHeight="7" refX="5.5" refY="3.5" orient="auto">
-            <path d="M0,0 L7,3.5 L0,7 Z" fill="#2563eb" />
-          </marker>
-        </defs>
-        <line
-          x1={fromPoint.x}
-          y1={fromPoint.y}
-          x2={toPoint.x}
-          y2={toPoint.y}
-          stroke="#2563eb"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          markerEnd="url(#mini-game-solution-arrow)"
-          opacity="0.9"
-        />
-        <circle cx={fromPoint.x} cy={fromPoint.y} r="3.8" fill="#1d4ed8" opacity="0.8" />
-        <circle cx={toPoint.x} cy={toPoint.y} r="4.4" fill="#3b82f6" opacity="0.9" />
-      </svg>
-    </div>
-  );
-}
-
 function MiniGameRunnerPanel({
   bundle,
   homeHref,
@@ -232,6 +182,13 @@ function MiniGameRunnerPanel({
   const [miniGameState, setMiniGameState] = useState<DailyMiniGameState | null>(() => cloneMiniGameState(bundle.card.miniGame));
   const validationLockRef = useRef(false);
   const debugEnabled = process.env.NEXT_PUBLIC_BLUNDR_MINIGAME_DEBUG === "1";
+  const activeScenario = runnerState.scenario ?? scenario;
+  const boardFeedback = useMemo(() => {
+    if (!activeScenario) {
+      return { squareStyles: {}, boardVisuals: null, animationClassName: null };
+    }
+    return buildMiniGameBoardFeedback(activeScenario, runnerState);
+  }, [activeScenario, runnerState]);
 
   useEffect(() => {
     validationLockRef.current = false;
@@ -292,7 +249,7 @@ function MiniGameRunnerPanel({
     if (boardDisabled) return;
     const clickedSquare = normalizeText(square).toLowerCase();
     const selectedSquare = runnerState.selectedSquare;
-    const turn = scenario.board.sideToMove;
+    const turn = activeScenario.board.sideToMove;
     const isOwnPiece = Boolean(piece && piece.color === turn);
     if (!isOwnPiece) {
       if (selectedSquare && selectedSquare === clickedSquare) {
@@ -459,41 +416,38 @@ function MiniGameRunnerPanel({
 
           <div className="relative">
             <DailyBlundrBoard
-              fen={runnerState.boardFen || scenario.board.fen}
+              fen={runnerState.boardFen || activeScenario.board.fen}
               disabled={boardDisabled}
               onSquareClick={handleSquareClick}
               onMoveAttempt={handleMoveAttempt}
-              openingColor={scenario.board.orientation}
-              forcedOrientation={scenario.board.orientation}
-            />
-            <MiniGameSolutionOverlay
-              active={runnerState.revealed}
-              orientation={scenario.board.orientation}
-              from={scenario.solution.from}
-              to={scenario.solution.to}
+              openingColor={activeScenario.board.orientation}
+              forcedOrientation={activeScenario.board.orientation}
+              boardVisuals={boardFeedback.boardVisuals}
+              squareStyles={boardFeedback.squareStyles}
+              animationClassName={boardFeedback.animationClassName}
             />
           </div>
 
           {runnerState.revealed ? (
             <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
               <div className="text-xs font-black uppercase tracking-[0.22em] text-amber-700">Answer</div>
-              <p className="mt-2 font-semibold">Blundr was looking for {scenario.solution.primaryMoveUci}.</p>
+              <p className="mt-2 font-semibold">Blundr was looking for {activeScenario.solution.primaryMoveUci}.</p>
               <p className="mt-2 text-sm leading-6 text-amber-900/90">
-                From <span className="font-black">{scenario.solution.from}</span> to <span className="font-black">{scenario.solution.to}</span>
+                From <span className="font-black">{activeScenario.solution.from}</span> to <span className="font-black">{activeScenario.solution.to}</span>
               </p>
-              <p className="mt-2 text-sm leading-6 text-amber-900/90">{scenario.explanation}</p>
-              {scenario.solution.acceptedMoves.length ? (
+              <p className="mt-2 text-sm leading-6 text-amber-900/90">{activeScenario.explanation}</p>
+              {activeScenario.solution.acceptedMoves.length ? (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {scenario.solution.acceptedMoves.slice(0, 4).map((move) => (
+                  {activeScenario.solution.acceptedMoves.slice(0, 4).map((move) => (
                     <span key={move} className="rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-amber-700 ring-1 ring-amber-200">
                       {move}
                     </span>
                   ))}
                 </div>
               ) : null}
-              {scenario.overlays.targetSquares?.length ? (
+              {activeScenario.overlays.targetSquares?.length ? (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {scenario.overlays.targetSquares.map((square) => (
+                  {activeScenario.overlays.targetSquares.map((square) => (
                     <span key={square} className="rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-amber-700 ring-1 ring-amber-200">
                       {square}
                     </span>
@@ -587,12 +541,24 @@ function MiniGameRunnerPanel({
 
 export function MiniGamePracticeRunner({ miniGameId, homeHref = "/", reviewHref = "/review", settingsHref = "/settings" }: MiniGamePracticeRunnerProps) {
   const [practiceNonce, setPracticeNonce] = useState(0);
+  const [engineRefreshTick, setEngineRefreshTick] = useState(0);
   const recentScenarioKeysRef = useRef<string[]>([]);
   const userIdOrLocalId = useMemo(() => getLocalAccountCurrentUserId() ?? "local", []);
   const practiceBundle = useMemo(
     () => buildPracticeBundle(miniGameId, practiceNonce, recentScenarioKeysRef.current, userIdOrLocalId),
-    [miniGameId, practiceNonce, userIdOrLocalId],
+    [miniGameId, practiceNonce, engineRefreshTick, userIdOrLocalId],
   );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleCacheReady = () => {
+      setEngineRefreshTick((value) => value + 1);
+    };
+    window.addEventListener(BLUNDR_MINIGAME_ENGINE_CACHE_READY_EVENT, handleCacheReady);
+    return () => {
+      window.removeEventListener(BLUNDR_MINIGAME_ENGINE_CACHE_READY_EVENT, handleCacheReady);
+    };
+  }, []);
 
   useEffect(() => {
     const scenarioKey = normalizeText(practiceBundle?.card.miniGame?.scenario?.novelty.scenarioKey);
@@ -643,7 +609,14 @@ export function MiniGamePracticeRunner({ miniGameId, homeHref = "/", reviewHref 
   }
 
   if (!practiceBundle) {
-    return null;
+    return (
+      <BlundrStateCard
+        kind="loading"
+        eyebrow="Minigames"
+        title="Loading an adjudicated practice game."
+        copy="Blundr is checking the next scenario through Stockfish before it appears."
+      />
+    );
   }
 
   return (

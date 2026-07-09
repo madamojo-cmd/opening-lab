@@ -181,6 +181,13 @@ export async function waitForPracticeBundle(
 ): Promise<ReturnType<typeof buildPracticeBundle>> {
   const definition = DAILY_MINI_GAME_REGISTRY.find((entry) => entry.id === miniGameId);
   if (!definition) return null;
-  await warmPracticeBundleCache(definition.id, nonce, recentScenarioKeys, userIdOrLocalId);
-  return buildPracticeBundle(miniGameId, nonce, recentScenarioKeys, userIdOrLocalId);
+  for (let offset = 0; offset < 5; offset += 1) {
+    const attemptNonce = nonce + offset;
+    await warmPracticeBundleCache(definition.id, attemptNonce, recentScenarioKeys, userIdOrLocalId);
+    const bundle = buildPracticeBundle(miniGameId, attemptNonce, recentScenarioKeys, userIdOrLocalId);
+    if (bundle) {
+      return bundle;
+    }
+  }
+  return null;
 }

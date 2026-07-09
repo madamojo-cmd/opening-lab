@@ -13,6 +13,18 @@ import {
   resolveBoardPieceTypographyClasses,
 } from "@/lib/blundr/board/boardPieceRendering";
 import { resolveDailyBoardClick } from "@/lib/blundr/daily/dailyBoardInteraction";
+import { VisualRecipeLayer } from "@/components/board/VisualRecipeLayer";
+
+function squareToBoardPoint(square: string, orientation: "white" | "black"): { x: number; y: number } | null {
+  const text = String(square ?? "").trim().toLowerCase();
+  if (!/^[a-h][1-8]$/.test(text)) return null;
+  const fileIndex = text.charCodeAt(0) - 97;
+  const rankNumber = Number(text[1]);
+  if (orientation === "white") {
+    return { x: fileIndex * 12.5 + 6.25, y: (8 - rankNumber) * 12.5 + 6.25 };
+  }
+  return { x: (7 - fileIndex) * 12.5 + 6.25, y: (rankNumber - 1) * 12.5 + 6.25 };
+}
 
 function squareFromCoords(fileIndex: number, rankIndex: number, orientation: "white" | "black"): string {
   const file = orientation === "white" ? fileIndex : 7 - fileIndex;
@@ -24,7 +36,18 @@ function describeCoordinate(square: string): string {
   return square;
 }
 
-export function DailyBlundrBoard({ fen, disabled, onMoveAttempt, onSquareClick, squareClickMode, openingColor, forcedOrientation }: DailyBlundrBoardProps) {
+export function DailyBlundrBoard({
+  fen,
+  disabled,
+  onMoveAttempt,
+  onSquareClick,
+  squareClickMode,
+  openingColor,
+  forcedOrientation,
+  boardVisuals,
+  squareStyles,
+  animationClassName,
+}: DailyBlundrBoardProps) {
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [boardPreferences, setBoardPreferences] = useState(() => createDefaultBoardPreferences());
   const game = useMemo(() => {
@@ -70,10 +93,10 @@ export function DailyBlundrBoard({ fen, disabled, onMoveAttempt, onSquareClick, 
     };
   }, []);
 
-  const legalTargets = useMemo(() => {
+  const legalMoves = useMemo(() => {
     if (!game || !selectedSquare) return [];
     try {
-      return game.moves({ square: selectedSquare as Square, verbose: true }).map((move) => move.to);
+      return game.moves({ square: selectedSquare as Square, verbose: true }) as Array<{ to: string; captured?: string | null }>;
     } catch {
       return [];
     }
@@ -90,17 +113,33 @@ export function DailyBlundrBoard({ fen, disabled, onMoveAttempt, onSquareClick, 
   const board = game.board();
   const ranks = orientation === "white" ? [...board] : [...board].reverse();
 
+  const boardAnimationClass = String(animationClassName ?? "").trim();
+
   return (
-    <div className="overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-sm">
-      <div className="grid grid-cols-8">
-        {ranks.map((rank, rankIndex) =>
-          (orientation === "white" ? rank : [...rank].reverse()).map((piece, fileIndex) => {
+    <div className={`overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-sm ${boardAnimationClass}`.trim()}>
+      <div className="relative aspect-square w-full">
+        <VisualRecipeLayer
+          primitives={[]}
+          surfaceVisuals={boardVisuals}
+          centerFor={(square) => squareToBoardPoint(square, orientation) ?? { x: 0, y: 0 }}
+        />
+        <div className="relative z-10 grid h-full w-full grid-cols-8">
+          {ranks.map((rank, rankIndex) =>
+            (orientation === "white" ? rank : [...rank].reverse()).map((piece, fileIndex) => {
             const square = squareFromCoords(fileIndex, rankIndex, orientation);
             const rowIndex = orientation === "white" ? rankIndex : 7 - rankIndex;
             const colIndex = orientation === "white" ? fileIndex : 7 - fileIndex;
             const isDark = (rowIndex + colIndex) % 2 === 1;
             const isSelected = selectedSquare === square;
-            const isTarget = legalTargets.includes(square as Square);
+            const legalMove = legalMoves.find((move) => move.to === square);
+            const legalTargetStyle = legalMove
+              ? {
+                  background: `radial-gradient(circle, ${legalMove.captured ? "rgba(239,68,68,.38)" : "rgba(22,163,74,.46)"} 0%, ${legalMove.captured ? "rgba(239,68,68,.38)" : "rgba(22,163,74,.46)"} 18%, transparent 23%)`,
+                  boxShadow: legalMove.captured
+                    ? "inset 0 0 0 3px rgba(239,68,68,.58)"
+                    : "inset 0 0 0 2px rgba(22,163,74,.30)",
+                }
+              : undefined;
             return (
               <button
                 key={square}
@@ -125,8 +164,12 @@ export function DailyBlundrBoard({ fen, disabled, onMoveAttempt, onSquareClick, 
                     onMoveAttempt?.(outcome.attempt);
                   }
                 }}
-                className={`relative flex aspect-square items-center justify-center text-2xl font-black transition ${isDark ? renderConfig.theme.squareDarkClassName : renderConfig.theme.squareLightClassName} ${isSelected ? "ring-4 ring-inset ring-green-800" : ""} ${isTarget && !squareClickMode ? "after:absolute after:h-3 after:w-3 after:rounded-full after:bg-green-600/75 after:content-['']" : ""} ${squareClickMode ? "cursor-pointer" : ""}`}
+                className={`relative flex aspect-square items-center justify-center text-2xl font-black transition ${isDark ? renderConfig.theme.squareDarkClassName : renderConfig.theme.squareLightClassName} ${isSelected ? "ring-4 ring-inset ring-green-800" : ""} ${squareClickMode ? "cursor-pointer" : ""}`}
                 aria-label={describeCoordinate(square)}
+                style={{
+                  ...(squareStyles?.[square] ?? {}),
+                  ...(legalTargetStyle ?? {}),
+                }}
               >
                 <span
                   aria-hidden
@@ -137,8 +180,9 @@ export function DailyBlundrBoard({ fen, disabled, onMoveAttempt, onSquareClick, 
                 </span>
               </button>
             );
-          }),
-        )}
+            }),
+          )}
+        </div>
       </div>
       <div className="flex items-center justify-between bg-stone-50 px-3 py-2 text-[11px] font-black uppercase tracking-[0.2em] text-stone-500">
         <span>{orientation === "white" ? "White at bottom" : "Black at bottom"}</span>

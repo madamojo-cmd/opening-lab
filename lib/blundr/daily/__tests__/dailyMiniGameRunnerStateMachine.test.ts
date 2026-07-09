@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { resetLocalAccountState, setLocalAccountCurrentUserId } from "../../accounts/localAccountStorage";
 import { DAILY_MINI_GAME_REGISTRY } from "../miniGames/dailyMiniGameRegistry";
 import { buildMiniGameRunnerScenarioFromCard } from "@/components/review/MiniGamePracticeRunner";
+import { buildMiniGameBoardFeedback } from "../miniGames/runner/miniGameBoardFeedbackAdapter";
 import {
   canSubmitMove,
   createInitialMiniGameRunnerState,
@@ -105,12 +106,22 @@ for (const definition of DAILY_MINI_GAME_REGISTRY) {
   assert.equal(correct.selectedSquare, null);
   assert.equal(correct.revealed, false);
 
+  const correctFeedback = buildMiniGameBoardFeedback(scenario, correct);
+  assert.equal(Boolean(correctFeedback.animationClassName), true, `Expected ${definition.id} correct move feedback to animate`);
+  assert.equal(Boolean(correctFeedback.squareStyles[scenario.solution.from]), true, `Expected ${definition.id} correct move feedback to highlight the move origin`);
+  assert.equal(Boolean(correctFeedback.squareStyles[scenario.solution.to]), true, `Expected ${definition.id} correct move feedback to highlight the move destination`);
+  assert.equal(Boolean(correctFeedback.boardVisuals), true, `Expected ${definition.id} correct move feedback to keep trainer-style board visuals available`);
+
   const revealed = miniGameRunnerReducer(correct, { type: "USER_REVEAL" });
   assert.equal(revealed.status, "revealed");
   assert.equal(revealed.boardFen, scenario.board.fen);
   assert.equal(revealed.revealed, true);
   assert.equal(shouldShowReveal(revealed), false);
   assert.equal(shouldAllowRetry(revealed), false);
+
+  const revealFeedback = buildMiniGameBoardFeedback(scenario, revealed);
+  assert.equal(Boolean(revealFeedback.boardVisuals), true, `Expected ${definition.id} reveal feedback to show trainer-style answer visuals`);
+  assert.equal(Boolean(revealFeedback.boardVisuals?.visualRecipes.some((recipe) => recipe.from === scenario.solution.from && recipe.to === scenario.solution.to)), true);
 
   const nextScenario = miniGameRunnerReducer(revealed, { type: "USER_NEXT_SCENARIO" });
   assert.equal(nextScenario.status, "idle");
