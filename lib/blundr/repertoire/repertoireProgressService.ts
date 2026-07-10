@@ -3,6 +3,8 @@ import { trackBlundrAnalyticsEvent } from "../analytics/blundrAnalyticsService";
 import { getLocalAccountCurrentUserId, getLocalRepertoirePointEvents, getLocalRepertoireUnlockEvents, getLocalTrainingProfile, getLocalUserRepertoire, setLocalAccountCurrentUserId, appendLocalRepertoirePointEvent, appendLocalRepertoireUnlockEvent, upsertLocalUserRepertoire } from "../accounts/localAccountStorage";
 import type { StarterPackId, UserRepertoire } from "../accounts/accountTypes";
 import { getOnboardingAuthSession } from "../onboarding/onboardingAuth";
+import { readBlundrBackendEnv } from "../backend/backendEnv";
+import { isBlundrWriteUserResolutionFailure, resolveWriteUserForMode } from "../accounts/accountSession";
 import { getDefaultStarterPack, getStarterPackById, getStarterPackOpeningIds } from "../onboarding/starterPacks";
 import { buildLockedOpeningIds, getEligibleRepertoireOpeningIds, normalizeOpeningPool } from "./repertoireOpeningPool";
 import { applyRepertoirePointEvent, createRepertoirePointEvent, getPointAwardForSource } from "./repertoirePoints";
@@ -22,17 +24,34 @@ type RepertoirePersistenceOptions = {
   syncRemote?: boolean;
 };
 
+type ActiveWriteUserResolution =
+  | {
+      ok: true;
+      userId: string;
+    }
+  | {
+      ok: false;
+      code: "auth_required";
+      message: string;
+    };
+
+function isActiveWriteUserResolutionFailure(result: ActiveWriteUserResolution): result is Extract<ActiveWriteUserResolution, { ok: false }> {
+  return result.ok === false;
+}
+
 type RepertoirePointAwardInput = RepertoireProgressLoadOptions & {
   source: RepertoirePointSource;
   points?: number;
   openingId?: string;
   dailySessionId?: string;
   completionId?: string;
+  syncRemote?: boolean;
 };
 
 type RepertoireUnlockRequest = RepertoireProgressLoadOptions & {
   openingId: string;
   syncRemote?: boolean;
+  sourceEventId?: string;
 };
 
 type RepertoireProgressSnapshot = {
@@ -48,10 +67,32 @@ type RepertoirePersistenceResult =
     }
   | {
       ok: false;
-      code: string;
+      code: "auth_required" | "shared_sync_failed";
       message: string;
-      progress: RepertoireProgress;
     };
+
+type RepertoireSaveResult =
+  | {
+      ok: true;
+      progress: RepertoireProgress;
+    }
+  | {
+      ok: false;
+      code: "auth_required" | "shared_sync_failed";
+      message: string;
+    };
+
+export function isRepertoirePersistenceFailure(result: RepertoirePersistenceResult): result is Extract<RepertoirePersistenceResult, { ok: false }> {
+  return result.ok === false;
+}
+
+export function isRepertoireSaveFailure(result: RepertoireSaveResult): result is Extract<RepertoireSaveResult, { ok: false }> {
+  return result.ok === false;
+}
+
+export function isRepertoireUnlockFailure(result: RepertoireUnlockResult): result is Extract<RepertoireUnlockResult, { ok: false }> {
+  return result.ok === false;
+}
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -81,6 +122,25 @@ function resolveUserId(input?: string | null): string {
   const normalized = normalizeText(input);
   if (normalized) return normalized;
   return setLocalAccountCurrentUserId(getLocalAccountCurrentUserId());
+}
+
+async function resolveActiveUserId(input?: string | null): Promise<ActiveWriteUserResolution> {
+  const env = readBlundrBackendEnv();
+  const resolved = await resolveWriteUserForMode({
+    requestedUserId: input,
+    storageModeSetting: env.storageModeSetting,
+  });
+  if (isBlundrWriteUserResolutionFailure(resolved)) {
+    return {
+      ok: false,
+      code: resolved.code,
+      message: resolved.message,
+    };
+  }
+  return {
+    ok: true,
+    userId: resolved.userId,
+  };
 }
 
 function resolveStarterPackId(userId: string, starterPackId?: StarterPackId | null): StarterPackId {
@@ -156,9 +216,9 @@ function toStoredProgress(progress: RepertoireProgress, allOpeningIds?: readonly
   return normalized;
 }
 
-async function syncProgressToBackend(progress: RepertoireProgress): Promise<void> {
+export async function syncRepertoireProgressToAccount(progress: RepertoireProgress): Promise<boolean> {
   const session = await getOnboardingAuthSession().catch(() => null);
-  if (!session?.accessToken) return;
+  if (!session?.accessToken) return false;
   try {
     const response = await fetch("/api/blundr/repertoire/sync", {
       method: "POST",
@@ -169,11 +229,9 @@ async function syncProgressToBackend(progress: RepertoireProgress): Promise<void
       cache: "no-store",
       body: JSON.stringify({ progress }),
     });
-    if (!response.ok) {
-      return;
-    }
+    return response.ok;
   } catch {
-    // Local progress is still authoritative if backend sync is unavailable.
+    return false;
   }
 }
 
@@ -256,12 +314,41 @@ export function loadRepertoireProgress(input: RepertoireProgressLoadOptions = {}
   return normalized;
 }
 
-export async function saveRepertoireProgress(progress: RepertoireProgress, options: RepertoirePersistenceOptions = {}): Promise<RepertoireProgress> {
-  const normalized = persistProgressLocally(progress);
-  if (options.syncRemote !== false) {
-    await syncProgressToBackend(normalized);
+export async function saveRepertoireProgress(progress: RepertoireProgress, options: RepertoirePersistenceOptions = {}): Promise<RepertoireSaveResult> {
+  const userResolution = await resolveActiveUserId(progress.userId);
+  if (isActiveWriteUserResolutionFailure(userResolution)) {
+    return {
+      ok: false,
+      code: userResolution.code,
+      message: userResolution.message,
+    };
   }
-  return normalized;
+
+  const normalizedProgress = {
+    ...progress,
+    userId: userResolution.userId,
+  };
+
+  const env = readBlundrBackendEnv();
+  const session = await getOnboardingAuthSession().catch(() => null);
+  const shouldSyncRemote = options.syncRemote !== false && env.storageModeSetting !== "local_demo" && Boolean(session?.accessToken);
+
+  if (shouldSyncRemote) {
+    const synced = await syncRepertoireProgressToAccount(normalizedProgress);
+    if (!synced) {
+      return {
+        ok: false,
+        code: "shared_sync_failed",
+        message: "Shared repertoire persistence failed.",
+      };
+    }
+  }
+
+  const normalized = persistProgressLocally(normalizedProgress);
+  return {
+    ok: true,
+    progress: normalized,
+  };
 }
 
 export function recordRepertoirePointEvent(event: RepertoirePointEvent): RepertoirePointEvent {
@@ -289,7 +376,15 @@ export function recordRepertoireUnlockEvent(event: RepertoireUnlockEvent): Reper
 }
 
 export async function earnAndPersistRepertoirePoints(input: RepertoirePointAwardInput): Promise<RepertoirePersistenceResult> {
-  const userId = resolveUserId(input.userId);
+  const userResolution = await resolveActiveUserId(input.userId);
+  if (isActiveWriteUserResolutionFailure(userResolution)) {
+    return {
+      ok: false,
+      code: userResolution.code,
+      message: userResolution.message,
+    };
+  }
+  const userId = userResolution.userId;
   const current = loadRepertoireProgress({
     userId,
     starterPackId: input.starterPackId ?? null,
@@ -306,47 +401,69 @@ export async function earnAndPersistRepertoirePoints(input: RepertoirePointAward
     createdAt: input.now ?? nowIso(),
   });
   const nextProgress = applyRepertoirePointEvent(current, event);
-  const saved = await saveRepertoireProgress(nextProgress);
+  const saved = await saveRepertoireProgress(nextProgress, { syncRemote: input.syncRemote !== false });
+  if (isRepertoireSaveFailure(saved)) {
+    return {
+      ok: false,
+      code: saved.code,
+      message: saved.message,
+    };
+  }
   trackBlundrAnalyticsEvent(BLUNDR_ANALYTICS_EVENTS.OPENING_UNLOCK_PROGRESS_EARNED, {
     userId,
     source: input.source,
     points: event.points,
     openingId: input.openingId ?? null,
     dailySessionId: input.dailySessionId ?? null,
-    availablePoints: saved.availablePoints,
-    lifetimePoints: saved.lifetimePoints,
+    availablePoints: saved.progress.availablePoints,
+    lifetimePoints: saved.progress.lifetimePoints,
   });
   return {
     ok: true,
-    progress: saved,
+    progress: saved.progress,
     event,
   };
 }
 
 export async function unlockAndPersistOpening(input: RepertoireUnlockRequest): Promise<RepertoireUnlockResult> {
-  const userId = resolveUserId(input.userId);
+  const userResolution = await resolveActiveUserId(input.userId);
+  if (isActiveWriteUserResolutionFailure(userResolution)) {
+    return {
+      ok: false,
+      code: userResolution.code,
+      message: userResolution.message,
+    };
+  }
+  const userId = userResolution.userId;
   const current = loadRepertoireProgress({
     userId,
     starterPackId: input.starterPackId ?? null,
     allOpeningIds: input.allOpeningIds,
     now: input.now,
   });
-  const result = unlockOpening(current, input.openingId);
-  if (!result.ok) {
+  const result = unlockOpening(current, input.openingId, { sourceEventId: input.sourceEventId });
+  if (isRepertoireUnlockFailure(result)) {
     return result;
   }
   const saved = await saveRepertoireProgress(result.progress, { syncRemote: input.syncRemote });
+  if (isRepertoireSaveFailure(saved)) {
+    return {
+      ok: false,
+      code: saved.code,
+      message: saved.message,
+    };
+  }
   trackBlundrAnalyticsEvent(BLUNDR_ANALYTICS_EVENTS.OPENING_UNLOCKED, {
     userId,
     openingId: input.openingId,
     pointsSpent: result.event.pointsSpent,
     unlockIndex: result.event.unlockIndex,
-    availablePoints: saved.availablePoints,
-    lifetimePoints: saved.lifetimePoints,
+    availablePoints: saved.progress.availablePoints,
+    lifetimePoints: saved.progress.lifetimePoints,
   });
   return {
     ok: true,
-    progress: saved,
+    progress: saved.progress,
     event: result.event,
   };
 }

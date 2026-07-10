@@ -8,7 +8,7 @@ export type RewardTriggerContext = {
   userId: string;
   localDate: string;
   trigger: RewardTrigger;
-  triggerEventId: string;
+  triggerEventId?: string;
   ringId?: "daily_tempo" | "daily_battery" | "daily_blundr";
   allRingsCompletionCount?: number;
   streakDays?: number;
@@ -55,6 +55,9 @@ export type RewardBatchResult = {
   pityTriggered: boolean;
   guaranteedCacheGranted: boolean;
   state: TempoCacheState;
+  sharedSyncFailed?: boolean;
+  sharedSyncFailureCode?: "shared_sync_failed";
+  sharedSyncFailureMessage?: string;
 };
 
 export type TempoCacheResult = {
@@ -66,4 +69,7 @@ export type TempoCacheResult = {
   randomBonusGranted: boolean;
   pityTriggered: boolean;
   guaranteedCacheGranted: boolean;
+  sharedSyncFailed?: boolean;
+  sharedSyncFailureCode?: "shared_sync_failed";
+  sharedSyncFailureMessage?: string;
 };

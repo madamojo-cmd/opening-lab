@@ -19,6 +19,13 @@ export type DailyRingProgress = {
   closedAt?: string;
 };
 
+export type DailyRingSnapshotProgress = {
+  current: number;
+  target: number;
+  percent: number;
+  complete: boolean;
+};
+
 export type DailyRingActivityEvent = {
   id: string;
   userId: string;
@@ -62,6 +69,10 @@ export type DailyRingSnapshot = {
   localDate: string;
   dayRecord: DailyRingDayRecord;
   streakRecord: StreakProgressRecord;
+  tempo: DailyRingSnapshotProgress;
+  battery: DailyRingSnapshotProgress;
+  blundr: DailyRingSnapshotProgress;
+  allComplete: boolean;
   updatedAt: string;
 };
 
@@ -119,6 +130,9 @@ export type DailyRingCompletionResult = {
   rewardGrants?: RewardGrantRecord[];
   rewardHistory?: UserRewardHistory;
   tempoCacheState?: TempoCacheState;
+  sharedSyncFailed?: boolean;
+  sharedSyncFailureCode?: "shared_sync_failed";
+  sharedSyncFailureMessage?: string;
   streakMilestone?: {
     milestoneDays: 7 | 30;
     pointsAwarded: number;
@@ -144,3 +158,11 @@ export type DailyRingCompletionFailure = {
 };
 
 export type DailyRingCompletionResultLike = DailyRingCompletionResult | DailyRingCompletionFailure;
+
+export function isDailyRingCompletionSuccess(result: DailyRingCompletionResultLike): result is DailyRingCompletionResult {
+  return result.ok === true;
+}
+
+export function isDailyRingCompletionFailure(result: DailyRingCompletionResultLike): result is DailyRingCompletionFailure {
+  return result.ok === false;
+}

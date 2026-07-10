@@ -25,6 +25,10 @@ export type PersistenceResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: PersistenceError };
 
+export function isPersistenceFailure<T>(result: PersistenceResult<T>): result is Extract<PersistenceResult<T>, { ok: false }> {
+  return result.ok === false;
+}
+
 export type BlundrPersistenceAdapter = {
   mode: BlundrAccountMode;
   getTrainingProfile(userId: string): Promise<PersistenceResult<UserTrainingProfile | null>>;
@@ -44,6 +48,7 @@ export type BlundrPersistenceAdapter = {
   upsertStreakRecord(record: StreakRecord): Promise<PersistenceResult<StreakRecord>>;
   getRewardHistory(userId: string): Promise<PersistenceResult<UserRewardHistory | null>>;
   upsertRewardHistory(history: UserRewardHistory): Promise<PersistenceResult<UserRewardHistory>>;
+  getRewardRolls(userId: string): Promise<PersistenceResult<RewardRoll[]>>;
   appendRewardRoll(roll: RewardRoll): Promise<PersistenceResult<RewardRoll>>;
   saveValidationSnapshot(snapshot: ValidationSnapshot): Promise<PersistenceResult<ValidationSnapshot>>;
 };

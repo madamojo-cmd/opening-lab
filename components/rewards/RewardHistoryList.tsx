@@ -35,7 +35,14 @@ export function RewardHistoryList({ className, limit = 6, title = "Reward histor
   const [snapshot, setSnapshot] = useState(() => loadRewardHistorySnapshot(getLocalAccountCurrentUserId()));
 
   useEffect(() => {
-    setSnapshot(loadRewardHistorySnapshot(getLocalAccountCurrentUserId()));
+    const handleRefresh = () => {
+      setSnapshot(loadRewardHistorySnapshot(getLocalAccountCurrentUserId()));
+    };
+    handleRefresh();
+    window.addEventListener("storage", handleRefresh);
+    return () => {
+      window.removeEventListener("storage", handleRefresh);
+    };
   }, [limit]);
 
   const rows = useMemo(() => {
@@ -56,7 +63,7 @@ export function RewardHistoryList({ className, limit = 6, title = "Reward histor
           </div>
           <h3 className="mt-3 text-lg font-black tracking-tight text-stone-950">Recent Tempo Cache results</h3>
           <p className="mt-2 text-sm leading-6 text-stone-600">
-            Rewards stay rare and deterministic. Training still drives the main progression loop.
+            Rewards stay rare and restrained. Training still drives the main progression loop.
           </p>
         </div>
         <div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-stone-600">
@@ -67,7 +74,10 @@ export function RewardHistoryList({ className, limit = 6, title = "Reward histor
       {rows.length > 0 ? (
         <div className="mt-4 grid gap-3">
           {rows.map((roll) => {
-            const reward = roll.reward!;
+            const reward = {
+              ...roll.reward!,
+              amount: roll.reward?.amount ?? 0,
+            };
             const applied = snapshot.history.appliedRewardIds.includes(reward.id);
             return (
               <div key={roll.id} className="flex items-start gap-3 rounded-[1.5rem] bg-[#fbfcf7] p-3 ring-1 ring-stone-200">

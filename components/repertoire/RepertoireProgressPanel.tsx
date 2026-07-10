@@ -2,20 +2,28 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, BookOpen, RefreshCw, Settings, Sparkles } from "lucide-react";
+import { ArrowLeft, BookOpen, RefreshCw, Sparkles } from "lucide-react";
 import { BLUNDR_EMPTY_STATE_ASSETS, BLUNDR_TEMPO_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
 import { BLUNDR_ANALYTICS_EVENTS } from "@/lib/blundr/analytics/blundrAnalyticsEvents";
 import { trackBlundrAnalyticsEvent } from "@/lib/blundr/analytics/blundrAnalyticsService";
 import { getLocalAccountCurrentUserId } from "@/lib/blundr/accounts/localAccountStorage";
 import { getStarterPackById } from "@/lib/blundr/onboarding/starterPacks";
-import { loadRepertoireProgress, unlockAndPersistOpening } from "@/lib/blundr/repertoire/repertoireProgressService";
+import { getRewardInventory, spendChoiceTokenOnOpening, spendOpeningFragmentsOnOpening } from "@/lib/blundr/rewards/rewardInventoryService";
+import { isRepertoireUnlockFailure, loadRepertoireProgress, unlockAndPersistOpening } from "@/lib/blundr/repertoire/repertoireProgressService";
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
+import type { RewardInventoryView } from "@/lib/blundr/rewards/rewardInventoryTypes";
 import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
+import { BlundrCard, BlundrChip, BlundrStateCard } from "@/components/blundr/ui";
+import { ProfileSettingsIcon } from "@/components/navigation/ProfileSettingsIcon";
+import { RepertoireUnlockModal } from "./RepertoireUnlockModal";
 import { RepertoireOpeningGrid } from "./RepertoireOpeningGrid";
 import { RepertoirePointsSummary } from "./RepertoirePointsSummary";
+import { RepertoireRewardInventoryCard } from "./RepertoireRewardInventoryCard";
 import { RepertoireTempoCallout } from "./RepertoireTempoCallout";
 import { RepertoireUnlockProgress } from "./RepertoireUnlockProgress";
 import { RewardHistoryList } from "@/components/rewards/RewardHistoryList";
+import { getLockedOpeningCards } from "@/lib/blundr/repertoire/repertoireUnlockService";
+import type { RepertoireUnlockMethod } from "@/lib/blundr/repertoire/repertoireUnlockFlow";
 
 type RepertoireProgressPanelProps = {
   onTrainOpening?: (openingId: string) => void;
@@ -33,24 +41,59 @@ function useRepertoireProgress(initialUserId: string): [string, RepertoireProgre
   const [progress, setProgress] = useState<RepertoireProgress>(() => loadRepertoireProgress({ userId: initialUserId }));
 
   useEffect(() => {
-    const nextUserId = getLocalAccountCurrentUserId();
-    setUserId(nextUserId);
-    setProgress(loadRepertoireProgress({ userId: nextUserId }));
+    const handleRefresh = () => {
+      const nextUserId = getLocalAccountCurrentUserId();
+      setUserId(nextUserId);
+      setProgress(loadRepertoireProgress({ userId: nextUserId }));
+    };
+    handleRefresh();
+    window.addEventListener("storage", handleRefresh);
+    return () => {
+      window.removeEventListener("storage", handleRefresh);
+    };
   }, [initialUserId]);
 
   return [userId, progress, setProgress];
 }
 
+function useRewardInventory(initialUserId: string): [string, RewardInventoryView, (inventory: RewardInventoryView) => void] {
+  const [userId, setUserId] = useState(initialUserId);
+  const [inventory, setInventory] = useState<RewardInventoryView>(() => getRewardInventory(initialUserId));
+
+  useEffect(() => {
+    const handleRefresh = () => {
+      const nextUserId = getLocalAccountCurrentUserId();
+      setUserId(nextUserId);
+      setInventory(getRewardInventory(nextUserId));
+    };
+    handleRefresh();
+    window.addEventListener("storage", handleRefresh);
+    return () => {
+      window.removeEventListener("storage", handleRefresh);
+    };
+  }, [initialUserId]);
+
+  return [userId, inventory, setInventory];
+}
+
 export function RepertoireProgressPanel({ onTrainOpening, homeHref = "/", className, embedded = false }: RepertoireProgressPanelProps) {
   const initialUserId = getLocalAccountCurrentUserId();
   const [userId, progress, setProgress] = useRepertoireProgress(initialUserId);
+  const [, rewardInventory, setRewardInventory] = useRewardInventory(initialUserId);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [unlockingOpeningId, setUnlockingOpeningId] = useState<string | null>(null);
+  const [unlockModalOpen, setUnlockModalOpen] = useState(false);
+  const [selectedUnlockOpeningId, setSelectedUnlockOpeningId] = useState<string | null>(null);
 
   const starterPack = useMemo(() => getStarterPackById(progress.selectedStarterPackId), [progress.selectedStarterPackId]);
   const unlockedCount = progress.unlockedOpeningIds.length;
   const lockedCount = progress.lockedOpeningIds.length;
+  const lockedCards = useMemo(() => getLockedOpeningCards(progress), [progress.lockedOpeningIds.join("|"), progress.availablePoints, progress.selectedStarterPackId, progress.updatedAt]);
+  const selectedUnlockCard = useMemo(
+    () => lockedCards.find((card) => card.openingId === selectedUnlockOpeningId) ?? null,
+    [lockedCards, selectedUnlockOpeningId],
+  );
 
   useEffect(() => {
     trackBlundrAnalyticsEvent(BLUNDR_ANALYTICS_EVENTS.REPERTOIRE_PAGE_VIEWED, {
@@ -60,35 +103,11 @@ export function RepertoireProgressPanel({ onTrainOpening, homeHref = "/", classN
     });
   }, [userId]);
 
-  async function handleUnlock(openingId: string) {
-    setUnlockingOpeningId(openingId);
+  function handleUnlock(openingId: string) {
     setErrorMessage(null);
     setStatusMessage(null);
-    trackBlundrAnalyticsEvent(BLUNDR_ANALYTICS_EVENTS.REPERTOIRE_UNLOCK_ATTEMPTED, {
-      userId,
-      openingId,
-    });
-    try {
-      const result = await unlockAndPersistOpening({
-        userId,
-        openingId,
-        starterPackId: progress.selectedStarterPackId,
-      });
-      if (result.ok === false) {
-        const error = result;
-        setErrorMessage(error.message);
-        trackBlundrAnalyticsEvent(BLUNDR_ANALYTICS_EVENTS.REPERTOIRE_UNLOCK_FAILED, {
-          userId,
-          openingId,
-          code: error.code,
-        });
-        return;
-      }
-      setProgress(result.progress);
-      setStatusMessage("Opening unlocked.");
-    } finally {
-      setUnlockingOpeningId(null);
-    }
+    setSelectedUnlockOpeningId(openingId);
+    setUnlockModalOpen(true);
   }
 
   function handleTrainOpening(openingId: string) {
@@ -96,7 +115,90 @@ export function RepertoireProgressPanel({ onTrainOpening, homeHref = "/", classN
       onTrainOpening(openingId);
       return;
     }
-    setStatusMessage("Open this opening from Home to start training.");
+    setStatusMessage("Open this opening from Train to start training.");
+  }
+
+  async function handleUnlockConfirm(method: RepertoireUnlockMethod, attemptId: string) {
+    if (!selectedUnlockCard) {
+      return { ok: false as const, message: "Choose an opening to unlock." };
+    }
+
+    setUnlockingOpeningId(selectedUnlockCard.openingId);
+    setErrorMessage(null);
+    setStatusMessage(null);
+    trackBlundrAnalyticsEvent(BLUNDR_ANALYTICS_EVENTS.REPERTOIRE_UNLOCK_ATTEMPTED, {
+      userId,
+      openingId: selectedUnlockCard.openingId,
+      method,
+      attemptId,
+    });
+
+    try {
+      if (method === "repertoire_points") {
+        const result = await unlockAndPersistOpening({
+          userId,
+          openingId: selectedUnlockCard.openingId,
+          starterPackId: progress.selectedStarterPackId,
+          sourceEventId: attemptId,
+        });
+        if (isRepertoireUnlockFailure(result)) {
+          setErrorMessage(result.message);
+          trackBlundrAnalyticsEvent(BLUNDR_ANALYTICS_EVENTS.REPERTOIRE_UNLOCK_FAILED, {
+            userId,
+            openingId: selectedUnlockCard.openingId,
+            code: result.code,
+            method,
+          });
+          return { ok: false as const, message: result.message };
+        }
+        setProgress(result.progress);
+        setRewardInventory(getRewardInventory(userId));
+        setUnlockModalOpen(false);
+        setSelectedUnlockOpeningId(null);
+        setStatusMessage(`Unlocked ${selectedUnlockCard.openingName}.`);
+        return { ok: true as const, message: `Unlocked ${selectedUnlockCard.openingName}.` };
+      }
+
+      const spendResult =
+        method === "opening_fragments"
+          ? await spendOpeningFragmentsOnOpening({
+              userId,
+              openingId: selectedUnlockCard.openingId,
+              sourceEventId: attemptId,
+            })
+          : await spendChoiceTokenOnOpening({
+              userId,
+              openingId: selectedUnlockCard.openingId,
+              sourceEventId: attemptId,
+            });
+
+      if (spendResult.code !== "auth_required") {
+        if (spendResult.inventory) {
+          setRewardInventory(spendResult.inventory);
+        }
+        if (spendResult.progress) {
+          setProgress(spendResult.progress);
+        } else {
+          setProgress(loadRepertoireProgress({ userId }));
+        }
+      }
+      if (!spendResult.applied) {
+        setErrorMessage(spendResult.message);
+        trackBlundrAnalyticsEvent(BLUNDR_ANALYTICS_EVENTS.REPERTOIRE_UNLOCK_FAILED, {
+          userId,
+          openingId: selectedUnlockCard.openingId,
+          code: spendResult.code,
+          method,
+        });
+        return { ok: false as const, message: spendResult.message };
+      }
+      setUnlockModalOpen(false);
+      setSelectedUnlockOpeningId(null);
+      setStatusMessage(spendResult.message);
+      return { ok: true as const, message: spendResult.message };
+    } finally {
+      setUnlockingOpeningId(null);
+    }
   }
 
   return (
@@ -115,18 +217,14 @@ export function RepertoireProgressPanel({ onTrainOpening, homeHref = "/", classN
           </div>
           {!embedded ? (
             <div className="flex items-center gap-2">
-              <Link href="/settings" className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm" aria-label="Open settings">
-                <Settings size={18} />
-              </Link>
+              <ProfileSettingsIcon />
               <Link href={homeHref} className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm" aria-label="Back to home">
                 <ArrowLeft size={18} />
               </Link>
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <Link href="/settings" className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm" aria-label="Open settings">
-                <Settings size={18} />
-              </Link>
+              <ProfileSettingsIcon />
               <button type="button" onClick={() => setProgress(loadRepertoireProgress({ userId }))} className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm" aria-label="Refresh repertoire">
                 <RefreshCw size={18} />
               </button>
@@ -158,29 +256,22 @@ export function RepertoireProgressPanel({ onTrainOpening, homeHref = "/", classN
         <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-900 shadow-sm">{statusMessage}</div>
       ) : null}
       {errorMessage ? (
-        <div className="rounded-2xl border border-stone-200 bg-white p-4 text-sm font-semibold text-stone-700 shadow-sm">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-            <BlundrAssetImage
-              asset={BLUNDR_EMPTY_STATE_ASSETS.errorSafeFallback}
-              alt="Safe fallback"
-              variant="emptyState"
-              className="mx-auto sm:mx-0 sm:shrink-0"
-            />
-            <div>
-              <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">Safe fallback</div>
-              <p className="mt-2 text-sm leading-6 text-stone-700">{errorMessage}</p>
-            </div>
-          </div>
-        </div>
+        <BlundrStateCard
+          kind="error"
+          eyebrow="Could not unlock"
+          title="This opening stayed locked."
+          copy={errorMessage}
+        />
       ) : null}
 
       <RepertoirePointsSummary progress={progress} />
+      <RepertoireRewardInventoryCard inventory={rewardInventory} />
       <RepertoireUnlockProgress progress={progress} />
 
       <RepertoireTempoCallout />
       <RewardHistoryList />
 
-      <div className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
+      <BlundrCard>
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">Current state</div>
@@ -188,11 +279,11 @@ export function RepertoireProgressPanel({ onTrainOpening, homeHref = "/", classN
               {unlockedCount} unlocked, {lockedCount} locked
             </div>
           </div>
-          <div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-600">
-            {progress.nextUnlockCost > 0 ? `${progress.nextUnlockCost} points next` : "All MVP lines unlocked"}
-          </div>
+          <BlundrChip tone={progress.nextUnlockCost > 0 ? "stone" : "green"}>
+            {progress.nextUnlockCost > 0 ? `${progress.nextUnlockCost} points next` : "All lines unlocked"}
+          </BlundrChip>
         </div>
-      </div>
+      </BlundrCard>
 
       <RepertoireOpeningGrid
         progress={progress}
@@ -200,26 +291,26 @@ export function RepertoireProgressPanel({ onTrainOpening, homeHref = "/", classN
         onTrainOpening={handleTrainOpening}
         unlockingOpeningId={unlockingOpeningId}
         emptyLockedState={
-          <div className="rounded-[1.5rem] border border-stone-200 bg-white p-4 text-sm leading-6 text-stone-600 shadow-sm">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-              <BlundrAssetImage
-                asset={BLUNDR_EMPTY_STATE_ASSETS.emptyRepertoire}
-                alt="Empty repertoire"
-                variant="emptyState"
-                className="mx-auto sm:mx-0 sm:shrink-0"
-              />
-              <div>
-                <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">All set</div>
-                <p className="mt-2">
-                  All eligible MVP openings are unlocked. Keep training to build points for future packs.
-                </p>
-                <p className="mt-2 text-xs font-semibold text-stone-500">
-                  Tempo will widen the pool when new repertoire is ready.
-                </p>
-              </div>
-            </div>
-          </div>
+          <BlundrStateCard
+            kind="success"
+            asset={BLUNDR_EMPTY_STATE_ASSETS.emptyRepertoire}
+            eyebrow="All set"
+            title="All current openings are unlocked."
+            copy="Keep training to build points for future repertoire packs."
+          />
         }
+      />
+
+      <RepertoireUnlockModal
+        open={unlockModalOpen}
+        card={selectedUnlockCard}
+        progress={progress}
+        inventory={rewardInventory}
+        onClose={() => {
+          setUnlockModalOpen(false);
+          setSelectedUnlockOpeningId(null);
+        }}
+        onConfirm={handleUnlockConfirm}
       />
 
       <div className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">

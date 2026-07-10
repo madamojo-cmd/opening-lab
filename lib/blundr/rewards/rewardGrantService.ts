@@ -1,7 +1,10 @@
 import { BLUNDR_ANALYTICS_EVENTS } from "../analytics/blundrAnalyticsEvents";
 import { trackBlundrAnalyticsEvent } from "../analytics/blundrAnalyticsService";
 import type { RewardRoll } from "../accounts/accountTypes";
-import { earnAndPersistRepertoirePoints } from "../repertoire/repertoireProgressService";
+import { normalizeStarterPackId } from "../accounts/accountDefaults";
+import { getStarterPackById } from "../onboarding/starterPacks";
+import { earnAndPersistRepertoirePoints, isRepertoirePersistenceFailure } from "../repertoire/repertoireProgressService";
+import { grantChoiceTokens, grantOpeningFragments, type RewardInventoryActionResult } from "./rewardInventoryService";
 import type { RewardGrantMode } from "./rewardTypes";
 
 function nowIso(): string {
@@ -18,10 +21,13 @@ export type RewardGrantApplicationInput = {
   grantMode: RewardGrantMode;
   now?: string;
   starterPackId?: string | null;
+  syncRemote?: boolean;
 };
 
 export type RewardGrantApplicationResult = {
   ok: true;
+  applied: boolean;
+  code: "applied" | "duplicate";
   grant: {
     id: string;
     rewardId: string;
@@ -39,16 +45,19 @@ export type RewardGrantApplicationResult = {
     grantMode: RewardGrantMode;
     createdAt: string;
   };
-  pointResult: Awaited<ReturnType<typeof earnAndPersistRepertoirePoints>>;
+  pointResult?: Awaited<ReturnType<typeof earnAndPersistRepertoirePoints>>;
+  inventoryResult?: RewardInventoryActionResult;
 };
 
 export type RewardGrantApplicationFailure = {
   ok: false;
   code: string;
   message: string;
+  inventoryResult?: RewardInventoryActionResult;
+  pointResult?: Awaited<ReturnType<typeof earnAndPersistRepertoirePoints>>;
 };
 
-export function buildRewardGrantRecord(input: RewardGrantApplicationInput): RewardGrantApplicationResult["grant"] | RewardGrantApplicationFailure {
+export function buildRewardGrantRecord(input: RewardGrantApplicationInput, applied = true): RewardGrantApplicationResult["grant"] | RewardGrantApplicationFailure {
   const reward = input.roll.reward;
   if (!input.roll.didReward || !reward) {
     return {
@@ -58,6 +67,8 @@ export function buildRewardGrantRecord(input: RewardGrantApplicationInput): Rewa
     };
   }
   const amount = Math.max(0, Number(reward.amount) || 0);
+  const pointsApplied = reward.rewardType === "opening_fragment" || reward.rewardType === "choice_token" ? 0 : amount;
+  const pendingChoice = reward.rewardType === "choice_token";
   return {
     id: `${input.roll.id}:${reward.id}:grant`,
     rewardId: reward.id,
@@ -69,9 +80,9 @@ export function buildRewardGrantRecord(input: RewardGrantApplicationInput): Rewa
     amount,
     displayName: reward.displayName,
     description: reward.description,
-    pointsApplied: amount,
-    applied: true,
-    pendingChoice: false,
+    pointsApplied,
+    applied,
+    pendingChoice,
     grantMode: input.grantMode,
     createdAt: normalizeText(input.now) || input.roll.rolledAt || nowIso(),
   };
@@ -82,7 +93,7 @@ export async function applyRewardGrant(input: RewardGrantApplicationInput): Prom
   if ("ok" in record && !record.ok) {
     return record;
   }
-  const grant = record;
+  const grant = record as RewardGrantApplicationResult["grant"];
   const reward = input.roll.reward;
   if (!reward) {
     return {
@@ -92,22 +103,96 @@ export async function applyRewardGrant(input: RewardGrantApplicationInput): Prom
     };
   }
 
-  const pointResult = await earnAndPersistRepertoirePoints({
-    userId: input.userId,
-    source: "reward_bonus",
-    points: Math.max(0, Number(reward.amount) || 0),
-    completionId: reward.id,
-    starterPackId: input.starterPackId ?? undefined,
-    now: normalizeText(input.now) || undefined,
-  });
-  if (!pointResult.ok) {
-    return {
-      ok: false,
-      code: pointResult.error.code,
-      message: pointResult.error.message,
-    };
+  let pointResult: Awaited<ReturnType<typeof earnAndPersistRepertoirePoints>> | undefined;
+  let inventoryResult: RewardInventoryActionResult | undefined;
+  if (reward.rewardType === "opening_fragment") {
+    inventoryResult = await grantOpeningFragments({
+      userId: input.userId,
+      amount: Math.max(1, Number(reward.amount) || 1),
+      sourceEventId: reward.id,
+      now: normalizeText(input.now) || undefined,
+      syncRemote: input.syncRemote,
+    });
+    if (!inventoryResult.ok) {
+      return {
+        ok: false,
+        code: inventoryResult.code,
+        message: inventoryResult.message,
+        inventoryResult,
+      };
+    }
+    if (!inventoryResult.applied) {
+      if (inventoryResult.code === "duplicate") {
+        return {
+          ok: true,
+          applied: false,
+          code: "duplicate",
+          grant: buildRewardGrantRecord(input, false) as RewardGrantApplicationResult["grant"],
+          inventoryResult,
+        };
+      }
+      return {
+        ok: false,
+        code: inventoryResult.code,
+        message: inventoryResult.message,
+        inventoryResult,
+      };
+    }
+  } else if (reward.rewardType === "choice_token") {
+    inventoryResult = await grantChoiceTokens({
+      userId: input.userId,
+      amount: Math.max(1, Number(reward.amount) || 1),
+      sourceEventId: reward.id,
+      now: normalizeText(input.now) || undefined,
+      syncRemote: input.syncRemote,
+    });
+    if (!inventoryResult.ok) {
+      return {
+        ok: false,
+        code: inventoryResult.code,
+        message: inventoryResult.message,
+        inventoryResult,
+      };
+    }
+    if (!inventoryResult.applied) {
+      if (inventoryResult.code === "duplicate") {
+        return {
+          ok: true,
+          applied: false,
+          code: "duplicate",
+          grant: buildRewardGrantRecord(input, false) as RewardGrantApplicationResult["grant"],
+          inventoryResult,
+        };
+      }
+      return {
+        ok: false,
+        code: inventoryResult.code,
+        message: inventoryResult.message,
+        inventoryResult,
+      };
+    }
+  } else {
+    const starterPackId = getStarterPackById(normalizeStarterPackId(input.starterPackId) ?? null)?.id ?? null;
+    pointResult = await earnAndPersistRepertoirePoints({
+      userId: input.userId,
+      source: "reward_bonus",
+      points: Math.max(0, Number(reward.amount) || 0),
+      completionId: reward.id,
+      starterPackId,
+      now: normalizeText(input.now) || undefined,
+      syncRemote: input.syncRemote,
+    });
+    if (isRepertoirePersistenceFailure(pointResult)) {
+      return {
+        ok: false,
+        code: pointResult.code,
+        message: pointResult.message,
+        pointResult,
+      };
+    }
   }
 
+  const appliedGrant = buildRewardGrantRecord(input, true) as RewardGrantApplicationResult["grant"];
   trackBlundrAnalyticsEvent(BLUNDR_ANALYTICS_EVENTS.REWARD_GRANTED, {
     userId: input.userId,
     rewardRollId: input.roll.id,
@@ -116,7 +201,8 @@ export async function applyRewardGrant(input: RewardGrantApplicationInput): Prom
     grantMode: input.grantMode,
     rarity: reward.rarity,
     rewardType: reward.rewardType,
-    amount: grant.pointsApplied,
+    amount: grant.amount,
+    pointsApplied: grant.pointsApplied,
   });
   trackBlundrAnalyticsEvent(BLUNDR_ANALYTICS_EVENTS.REWARD_APPLIED, {
     userId: input.userId,
@@ -126,13 +212,16 @@ export async function applyRewardGrant(input: RewardGrantApplicationInput): Prom
     grantMode: input.grantMode,
     rarity: reward.rarity,
     rewardType: reward.rewardType,
+    amount: grant.amount,
     pointsApplied: grant.pointsApplied,
   });
 
   return {
     ok: true,
-    grant,
+    applied: true,
+    code: "applied",
+    grant: appliedGrant,
     pointResult,
+    inventoryResult,
   };
 }
-
