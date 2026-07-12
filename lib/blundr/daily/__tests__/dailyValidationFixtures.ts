@@ -8,7 +8,7 @@ import type { DailyMiniGameGenerationContext, DailyBlundrMiniGameCard, DailyMini
 import type { DailyTrainingTargetGenerationContext, DailyBlundrTrainingTargetCard } from "../trainingTargets/dailyTrainingTargetTypes";
 import { generateMiniGameScenarioAsync } from "../miniGames/generation/generatedMiniGameRegistry";
 import { getDailyBlundrDateKey } from "../dailyBlundrStorage";
-import { buildPracticeBundle } from "@/components/review/MiniGamePracticeRunner";
+import { buildLegacyPracticeBundle as buildPracticeBundle } from "@/lib/blundr/daily/miniGames/legacyMiniGamePractice";
 
 export const VALIDATION_DATE_KEY = "2026-07-02";
 export const VALIDATION_NOW = "2026-07-02T12:00:00.000Z";

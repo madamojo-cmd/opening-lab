@@ -32,7 +32,7 @@ export function RepertoireUnlockProgress({ progress, className }: RepertoireUnlo
         <div className="h-3 rounded-full bg-green-700 transition-all duration-300" style={{ width: `${pct}%` }} />
       </div>
       <div className="mt-2 flex items-center justify-between text-xs font-semibold text-stone-500">
-        <span>{hasLocked ? "Keep training to unlock the next opening." : "No locked openings remain in the MVP pool."}</span>
+        <span>{hasLocked ? "Keep training to unlock the next opening." : "No locked openings remain right now."}</span>
         <span>{nextCost > 0 ? `${nextCost} points` : "Ready"}</span>
       </div>
     </section>

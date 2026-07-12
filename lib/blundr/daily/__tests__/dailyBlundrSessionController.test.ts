@@ -149,6 +149,18 @@ export function testDailyBlundrSessionController(): void {
   assert.equal(completed.dateKey, session.dateKey);
   assert.equal(completed.startedAt, session.startedAt);
   assert.equal(completed.rewardClaimedAt, null);
+
+  const wrong = applyDailyBlundrAttemptToSession(session, makeAttempt(firstCard, {
+    id: "attempt-wrong",
+    correct: false,
+    outcome: "incorrect",
+    attemptedMoveUci: "a2a3",
+    attemptedMoveSan: "a3",
+  }));
+  assert.equal(isDailyBlundrCardComplete(wrong, firstCard.cardKey), false);
+  assert.equal(isDailyBlundrSessionComplete(wrong), false);
+  assert.equal(wrong.completedCardIds.length, 0);
+  assert.equal(wrong.attempts.length, 1);
 }
 
 testDailyBlundrSessionController();

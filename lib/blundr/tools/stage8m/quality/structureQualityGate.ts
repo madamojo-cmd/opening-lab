@@ -1,0 +1,1 @@
+import type { PawnStructureDelta } from '../types'; export function passesStructureQuality(p: PawnStructureDelta): boolean { return p.meaningful && Boolean(p.summary && p.beforeTags && p.afterTags); }

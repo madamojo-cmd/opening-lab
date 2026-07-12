@@ -71,9 +71,9 @@ export const REWARD_GRANT_MODE_LABELS = {
 } as const satisfies Record<RewardGrantMode, string>;
 
 export const REWARD_CACHE_COPY = {
-  intro: "Tempo found a bonus for your training.",
+  intro: "Tempo found a reward for your training.",
   applied: "Reward applied.",
-  choiceTokenLimit: "Choice targeting is not enabled in MVP, so this bonus is applied as repertoire points.",
+  choiceTokenLimit: "Choice Token ready. Pick one locked opening to unlock.",
 } as const;
 
 export const REWARD_ANIMATION_ASSETS = {

@@ -18,8 +18,15 @@ export function DailyRingMeter({ percent, closed, className }: DailyRingMeterPro
         <span>{closed ? "Closed" : "Open"}</span>
         <span>{clamped}%</span>
       </div>
-      <div className="h-2 rounded-full bg-stone-100">
-        <div className={classNames("h-2 rounded-full transition-all duration-300", closed ? "bg-green-700" : "bg-green-500")} style={{ width: `${clamped}%` }} />
+      <div className={classNames("h-2 overflow-hidden rounded-full bg-stone-100 ring-1 ring-stone-200", closed ? "shadow-[0_0_0_1px_rgba(61,186,110,0.12)]" : "")}>
+        <div
+          className={classNames(
+            "h-full rounded-full transition-[width,box-shadow,opacity] duration-500 ease-out",
+            closed ? "bg-green-700 shadow-[0_0_14px_rgba(61,186,110,0.28)]" : "bg-green-500",
+          )}
+          style={{ width: `${clamped}%`, opacity: clamped > 0 ? 1 : 0.45 }}
+          aria-hidden
+        />
       </div>
     </div>
   );

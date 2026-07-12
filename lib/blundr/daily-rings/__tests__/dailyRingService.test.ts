@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 
-import { createDefaultTrainingProfile } from "@/lib/blundr/accounts/accountDefaults";
+import { createDefaultRewardHistory, createDefaultTrainingProfile } from "@/lib/blundr/accounts/accountDefaults";
 import { resetLocalAccountState, setLocalAccountCurrentUserId, upsertLocalTrainingProfile } from "@/lib/blundr/accounts/localAccountStorage";
 import { loadRepertoireProgress } from "@/lib/blundr/repertoire/repertoireProgressService";
-import { completeDailyRingActivity, buildDailyRingCompletionResult, loadDailyRingSnapshot } from "../dailyRingService";
+import { applyTempoCacheRewardBatchToDailyRingResult, completeDailyRingActivity, buildDailyRingCompletionResult, loadDailyRingSnapshot } from "../dailyRingService";
 
 function installLocalStorageMock(): () => void {
   const entries = new Map<string, string>();
@@ -80,6 +80,43 @@ async function main(): Promise<void> {
     assert.equal(preview.repertoirePointsAwarded, 1);
     assert.equal(preview.xpAwarded, 10);
   }
+
+  const sharedSyncFailureResult = applyTempoCacheRewardBatchToDailyRingResult(
+    {
+      ...(preview as any),
+      rewardPointsAwarded: 0,
+      rewardRolls: [],
+      rewardGrants: [],
+      rewardHistory: createDefaultRewardHistory(userId, "2026-07-04T08:00:00.000Z"),
+      tempoCacheState: "closed",
+      sharedSyncFailed: undefined,
+      sharedSyncFailureCode: undefined,
+      sharedSyncFailureMessage: undefined,
+      pointAwards: preview.pointAwards.filter((award) => award.source !== "reward_bonus"),
+      summaryLines: preview.summaryLines.filter((line) => !/reward|fragment|token/i.test(line)),
+      tempoMessage: preview.tempoMessage,
+    },
+    {
+      rewardPointsAwarded: 0,
+      rewardRolls: [],
+      rewardGrants: [],
+      rewardHistory: createDefaultRewardHistory(userId, "2026-07-04T08:00:00.000Z"),
+      state: "closed",
+      sharedSyncFailed: true,
+      sharedSyncFailureCode: "shared_sync_failed",
+      sharedSyncFailureMessage: "Shared reward persistence failed. Please retry.",
+    },
+    "2026-07-04T08:00:00.000Z",
+  );
+  assert.equal(sharedSyncFailureResult.sharedSyncFailed, true);
+  assert.equal(sharedSyncFailureResult.sharedSyncFailureCode, "shared_sync_failed");
+  assert.match(sharedSyncFailureResult.sharedSyncFailureMessage ?? "", /Shared reward persistence failed/i);
+  assert.equal(sharedSyncFailureResult.rewardGrants?.length, 0);
+  assert.equal(sharedSyncFailureResult.rewardPointsAwarded, 0);
+  assert.equal(sharedSyncFailureResult.repertoirePointsAwarded, preview.repertoirePointsAwarded);
+  assert.equal(sharedSyncFailureResult.dayRecord.repertoirePointsEarnedToday, preview.dayRecord.repertoirePointsEarnedToday);
+  assert.equal(sharedSyncFailureResult.tempoMessage, "Shared reward persistence failed. Please retry.");
+  assert.ok(sharedSyncFailureResult.summaryLines.some((line) => /Shared reward persistence failed/i.test(line)));
 
   const opening = await completeDailyRingActivity({
     userId,

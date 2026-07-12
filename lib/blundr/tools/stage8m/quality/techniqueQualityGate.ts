@@ -1,0 +1,1 @@
+export function passesTechniqueQuality(p: Record<string, unknown>): boolean { return typeof p.family === 'string' && typeof p.ruleSentence === 'string' && Number(p.searchDepth) >= 4 && Array.isArray(p.principalVariation); }

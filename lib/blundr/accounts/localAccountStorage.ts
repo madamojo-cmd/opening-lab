@@ -25,8 +25,10 @@ import type {
   ValidationSnapshot,
 } from "./accountTypes";
 import { BLUNDR_LOCAL_ACCOUNT_STORAGE_KEY, BLUNDR_LOCAL_DEMO_USER_ID } from "../persistence/persistenceKeys";
+import { buildInitialRepertoireFromStarterPack } from "../onboarding/starterPacks";
 import { normalizeRepertoirePointEvent, normalizeRepertoireUnlockEvent, sortRepertoirePointEvents, sortRepertoireUnlockEvents } from "../repertoire/repertoireEvents";
 import type { RepertoirePointEvent, RepertoireUnlockEvent } from "../repertoire/repertoireTypes";
+import { createDefaultRewardInventory, normalizeRewardInventory, trimRewardInventoryEvents, withRewardInventoryEvent, type RewardInventoryEvent, type RewardInventorySnapshot } from "../rewards/rewardInventoryTypes";
 
 export type LocalAccountBundle = {
   schemaVersion: 1;
@@ -41,6 +43,7 @@ export type LocalAccountBundle = {
   streakRecordsByUserId: Record<string, StreakRecord>;
   rewardHistoryByUserId: Record<string, UserRewardHistory>;
   rewardRollsByUserId: Record<string, RewardRoll[]>;
+  rewardInventoriesByUserId: Record<string, RewardInventorySnapshot>;
   validationSnapshotsById: Record<string, ValidationSnapshot>;
   developerAuditLogById: Record<string, DeveloperAuditLogEntry>;
   updatedAt: string | null;
@@ -59,6 +62,7 @@ const DEFAULT_BUNDLE: LocalAccountBundle = {
   streakRecordsByUserId: {},
   rewardHistoryByUserId: {},
   rewardRollsByUserId: {},
+  rewardInventoriesByUserId: {},
   validationSnapshotsById: {},
   developerAuditLogById: {},
   updatedAt: null,
@@ -267,6 +271,12 @@ function normalizeRewardHistory(raw: unknown): UserRewardHistory | null {
   const appliedRewardIds = Array.isArray(appliedRewardIdsRaw)
     ? Array.from(new Set(appliedRewardIdsRaw.map((entry) => normalizeText(entry)).filter(Boolean)))
     : [];
+  const openingFragments = Math.max(0, Number(raw.openingFragments ?? raw.opening_fragments ?? 0) || 0);
+  const choiceTokens = Math.max(0, Number(raw.choiceTokens ?? raw.choice_tokens ?? 0) || 0);
+  const rewardInventoryAppliedEventIdsRaw = raw.rewardInventoryAppliedEventIds ?? raw.reward_inventory_applied_event_ids;
+  const rewardInventoryAppliedEventIds = Array.isArray(rewardInventoryAppliedEventIdsRaw)
+    ? Array.from(new Set(rewardInventoryAppliedEventIdsRaw.map((entry) => normalizeText(entry)).filter(Boolean)))
+    : [];
   return {
     ...base,
     allRingsDaysSinceRandomReward,
@@ -275,7 +285,21 @@ function normalizeRewardHistory(raw: unknown): UserRewardHistory | null {
     lastRandomBonusAt: normalizeText(raw.lastRandomBonusAt ?? raw.last_random_bonus_at) || undefined,
     lastPityGuaranteeLocalDate: normalizeText(raw.lastPityGuaranteeLocalDate ?? raw.last_pity_guarantee_local_date) || undefined,
     appliedRewardIds,
+    openingFragments,
+    choiceTokens,
+    rewardInventoryAppliedEventIds,
     updatedAt: normalizeText(raw.updatedAt) || base.updatedAt,
+  };
+}
+
+function normalizeRewardInventoryRecord(raw: unknown): RewardInventorySnapshot | null {
+  const normalized = normalizeRewardInventory(raw);
+  if (!normalized) return null;
+  return {
+    ...createDefaultRewardInventory(normalized.userId, normalized.updatedAt),
+    ...normalized,
+    appliedEventIds: Array.from(new Set(normalized.appliedEventIds ?? [])),
+    events: trimRewardInventoryEvents(normalized.events ?? []),
   };
 }
 
@@ -377,6 +401,7 @@ function normalizeBundle(raw: unknown): LocalAccountBundle {
     streakRecordsByUserId: {},
     rewardHistoryByUserId: {},
     rewardRollsByUserId: {},
+    rewardInventoriesByUserId: {},
     validationSnapshotsById: {},
     developerAuditLogById: {},
     updatedAt: normalizeText(raw.updatedAt) || null,
@@ -421,6 +446,10 @@ function normalizeBundle(raw: unknown): LocalAccountBundle {
   for (const [userId, value] of Object.entries(normalizeMap<Record<string, unknown>>(raw.rewardRollsByUserId))) {
     const items = Array.isArray(value) ? value.map(normalizeRewardRoll).filter((entry): entry is RewardRoll => Boolean(entry)) : [];
     if (items.length) next.rewardRollsByUserId[normalizeText(userId)] = items;
+  }
+  for (const [userId, value] of Object.entries(normalizeMap<Record<string, unknown>>(raw.rewardInventoriesByUserId))) {
+    const inventory = normalizeRewardInventoryRecord(value);
+    if (inventory) next.rewardInventoriesByUserId[normalizeText(userId) || inventory.userId] = inventory;
   }
   for (const [id, value] of Object.entries(normalizeMap<Record<string, unknown>>(raw.validationSnapshotsById))) {
     const snapshot = normalizeValidationSnapshot(value);
@@ -650,6 +679,33 @@ export function upsertLocalRewardHistory(history: UserRewardHistory): UserReward
   return cloneJson(normalized);
 }
 
+export function resetLocalRewardHistory(userId?: string): UserRewardHistory {
+  const normalizedUserId = normalizeText(userId) || getLocalAccountCurrentUserId();
+  const history = createDefaultRewardHistory(normalizedUserId);
+  updateLocalAccountBundle((bundle) => {
+    bundle.rewardHistoryByUserId[normalizedUserId] = history;
+    bundle.updatedAt = history.updatedAt;
+    return bundle;
+  });
+  return cloneJson(history);
+}
+
+export function resetLocalRewardRolls(userId?: string): RewardRoll[] {
+  const normalizedUserId = normalizeText(userId) || getLocalAccountCurrentUserId();
+  updateLocalAccountBundle((bundle) => {
+    delete bundle.rewardRollsByUserId[normalizedUserId];
+    bundle.updatedAt = nowIso();
+    return bundle;
+  });
+  return [];
+}
+
+export function resetLocalTempoCacheState(userId?: string): { history: UserRewardHistory; rewardRolls: RewardRoll[] } {
+  const history = resetLocalRewardHistory(userId);
+  const rewardRolls = resetLocalRewardRolls(userId);
+  return { history, rewardRolls };
+}
+
 export function getLocalRewardRolls(userId: string): RewardRoll[] {
   return cloneJson(readStoredBundle().rewardRollsByUserId[normalizeText(userId)] ?? []);
 }
@@ -664,6 +720,86 @@ export function appendLocalRewardRoll(roll: RewardRoll): RewardRoll {
     return bundle;
   });
   return cloneJson(normalized);
+}
+
+export function getLocalRewardInventory(userId: string): RewardInventorySnapshot | null {
+  return cloneJson(readStoredBundle().rewardInventoriesByUserId[normalizeText(userId)] ?? null);
+}
+
+export function upsertLocalRewardInventory(inventory: RewardInventorySnapshot): RewardInventorySnapshot {
+  const normalized = normalizeRewardInventoryRecord(inventory) ?? createDefaultRewardInventory(normalizeText(inventory.userId) || getLocalAccountCurrentUserId());
+  updateLocalAccountBundle((bundle) => {
+    bundle.rewardInventoriesByUserId[normalized.userId] = {
+      ...normalized,
+      events: trimRewardInventoryEvents(normalized.events ?? []),
+    };
+    bundle.currentUserId = bundle.currentUserId ?? normalized.userId;
+    bundle.updatedAt = normalized.updatedAt;
+    return bundle;
+  });
+  return cloneJson(normalized);
+}
+
+export function appendLocalRewardInventoryEvent(event: RewardInventoryEvent): RewardInventorySnapshot {
+  const current = getLocalRewardInventory(event.userId) ?? createDefaultRewardInventory(normalizeText(event.userId) || getLocalAccountCurrentUserId());
+  const next = withRewardInventoryEvent(current, event);
+  return upsertLocalRewardInventory(next);
+}
+
+export function resetLocalRewardInventory(userId?: string): RewardInventorySnapshot {
+  const normalizedUserId = normalizeText(userId) || getLocalAccountCurrentUserId();
+  const inventory = createDefaultRewardInventory(normalizedUserId);
+  updateLocalAccountBundle((bundle) => {
+    bundle.rewardInventoriesByUserId[normalizedUserId] = inventory;
+    bundle.updatedAt = inventory.updatedAt;
+    return bundle;
+  });
+  return cloneJson(inventory);
+}
+
+export function resetLocalDailyRetentionProgress(userId?: string, localDate?: string): DailyRetentionProgress {
+  const normalizedUserId = normalizeText(userId) || getLocalAccountCurrentUserId();
+  const currentProfile = getLocalTrainingProfile(normalizedUserId) ?? createDefaultTrainingProfile(normalizedUserId);
+  const normalizedDate = normalizeText(localDate) || new Date().toISOString().slice(0, 10);
+  const progress = createDefaultDailyRetentionProgress(normalizedUserId, normalizedDate, {
+    dailyTempoGoal: currentProfile.dailyTempoGoal,
+    dailyBatteryGoal: currentProfile.dailyBatteryGoal,
+    dailyBlundrGoal: currentProfile.dailyBlundrGoal,
+  });
+  updateLocalAccountBundle((bundle) => {
+    bundle.dailyRetentionProgressByKey[dailyRetentionKey(normalizedUserId, normalizedDate)] = progress;
+    bundle.updatedAt = progress.updatedAt;
+    return bundle;
+  });
+  return cloneJson(progress);
+}
+
+export function resetLocalStreakRecord(userId?: string): StreakRecord {
+  const normalizedUserId = normalizeText(userId) || getLocalAccountCurrentUserId();
+  const record = createDefaultStreakRecord(normalizedUserId);
+  updateLocalAccountBundle((bundle) => {
+    bundle.streakRecordsByUserId[normalizedUserId] = record;
+    bundle.updatedAt = record.updatedAt;
+    return bundle;
+  });
+  return cloneJson(record);
+}
+
+export function resetLocalRepertoireState(userId?: string): UserRepertoire {
+  const normalizedUserId = normalizeText(userId) || getLocalAccountCurrentUserId();
+  const profile = getLocalTrainingProfile(normalizedUserId);
+  const repertoire = buildInitialRepertoireFromStarterPack({
+    userId: normalizedUserId,
+    starterPackId: profile?.selectedStarterPackId ?? "classical_attacker",
+  });
+  updateLocalAccountBundle((bundle) => {
+    bundle.repertoiresByUserId[normalizedUserId] = repertoire;
+    bundle.repertoirePointEventsByUserId[normalizedUserId] = [];
+    bundle.repertoireUnlockEventsByUserId[normalizedUserId] = [];
+    bundle.updatedAt = repertoire.updatedAt;
+    return bundle;
+  });
+  return cloneJson(repertoire);
 }
 
 export function saveLocalValidationSnapshot(snapshot: ValidationSnapshot): ValidationSnapshot {

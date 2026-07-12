@@ -1,0 +1,2 @@
+import assert from 'node:assert/strict'; import test from 'node:test'; import { scoreExplanation } from '../explain/explanationQuality';
+test('specific explanation passes and generic text fails', () => { assert.equal(scoreExplanation('Nd5 creates an outpost on d5 and improves the knight after the move.', ['Nc3 fails because it does not prevent a pawn chase.']).score, 100); assert.ok(scoreExplanation('This is the best move.', []).score < 50); });

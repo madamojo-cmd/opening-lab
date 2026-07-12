@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { buildPracticeBundle } from "@/components/review/MiniGamePracticeRunner";
+import { buildLegacyPracticeBundle as buildPracticeBundle } from "@/lib/blundr/daily/miniGames/legacyMiniGamePractice";
 import { resetLocalAccountState, setLocalAccountCurrentUserId } from "../../accounts/localAccountStorage";
 import { clearLocalLearningEvents, createLearningSessionId, recordLearningEvent } from "../../learning/learningEvents";
 import { loadDailyBlundrOverview } from "../dailyBlundrReadModel";

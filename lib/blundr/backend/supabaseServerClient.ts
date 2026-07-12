@@ -13,7 +13,7 @@ export function createBlundrSupabaseServerClient(input: BlundrSupabaseServerClie
   if (!hasSupabaseCredentials(env)) return null;
   const headers: Record<string, string> = {};
   const accessToken = String(input.accessToken ?? "").trim();
-  if (accessToken) headers.authorization = `Bearer ${accessToken}`;
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
   return createClient(env.supabaseUrl!, env.supabaseAnonKey!, {
     auth: {
       autoRefreshToken: false,

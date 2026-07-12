@@ -1,0 +1,3 @@
+import { createBaseQualityGate, type QualityGate, type QualityGateInput } from './baseQualityGate';
+export interface KingRaceQualityInput extends QualityGateInput { proof: { criticalSquares?: string[]; squareOfPawn?: string[]; principalVariation?: string[]; verificationDepth?: number; scoreAfter?: number; }; }
+export function createKingRaceQualityGate(): QualityGate { const base = createBaseQualityGate(); return { passes(input: KingRaceQualityInput) { return base.passes(input) && Boolean((input.proof.criticalSquares?.length || input.proof.squareOfPawn?.length) && input.proof.principalVariation?.length && (input.proof.verificationDepth ?? 0) >= 4 && Number.isFinite(input.proof.scoreAfter)); } }; }

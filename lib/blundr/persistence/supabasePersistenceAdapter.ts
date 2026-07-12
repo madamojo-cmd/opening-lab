@@ -1,6 +1,7 @@
 // server-only: do not import into client components.
 
 import { createBlundrSupabaseServerClient } from "../backend/supabaseServerClient";
+import { createBlundrSupabaseAdminClient } from "../backend/supabaseAdminClient";
 import { BLUNDR_PERSISTENCE_TABLES } from "./persistenceKeys";
 import type { BlundrAccountMode, DailyRetentionProgress, OpeningUnlockEvent, OpeningUnlockProgress, RewardRoll, StreakRecord, UserRepertoire, UserRewardHistory, UserTrainingProfile, ValidationSnapshot } from "../accounts/accountTypes";
 import {
@@ -124,6 +125,9 @@ type SupabaseRewardHistoryRow = {
   last_random_bonus_at: string | null;
   last_pity_guarantee_local_date: string | null;
   applied_reward_ids: string[] | null;
+  opening_fragments: number;
+  choice_tokens: number;
+  reward_inventory_applied_event_ids: string[] | null;
   updated_at: string;
 };
 
@@ -442,6 +446,11 @@ function mapRewardHistoryRow(history: UserRewardHistory): SupabaseRewardHistoryR
     last_random_bonus_at: history.lastRandomBonusAt ?? null,
     last_pity_guarantee_local_date: history.lastPityGuaranteeLocalDate ?? null,
     applied_reward_ids: Array.isArray(history.appliedRewardIds) ? normalizeStringArray(history.appliedRewardIds) : [],
+    opening_fragments: Math.max(0, Number(history.openingFragments) || 0),
+    choice_tokens: Math.max(0, Number(history.choiceTokens) || 0),
+    reward_inventory_applied_event_ids: Array.isArray(history.rewardInventoryAppliedEventIds)
+      ? normalizeStringArray(history.rewardInventoryAppliedEventIds)
+      : [],
     updated_at: normalizeText(history.updatedAt) || nowIso(),
   };
 }
@@ -457,6 +466,9 @@ function mapRewardHistoryRowToModel(row: SupabaseRewardHistoryRow | null): UserR
     lastRandomBonusAt: row.last_random_bonus_at ?? undefined,
     lastPityGuaranteeLocalDate: row.last_pity_guarantee_local_date ?? undefined,
     appliedRewardIds: normalizeStringArray(row.applied_reward_ids),
+    openingFragments: Math.max(0, Number(row.opening_fragments) || 0),
+    choiceTokens: Math.max(0, Number(row.choice_tokens) || 0),
+    rewardInventoryAppliedEventIds: normalizeStringArray(row.reward_inventory_applied_event_ids),
     updatedAt: row.updated_at || base.updatedAt,
   };
 }
@@ -514,12 +526,15 @@ function mapValidationSnapshotRowToModel(row: SupabaseValidationSnapshotRow | nu
   };
 }
 
-function getClient(accessToken?: string | null): SupabaseClientType | null {
+function getClient(accessToken?: string | null, useAdminClient = false): SupabaseClientType | null {
+  if (useAdminClient) {
+    return createBlundrSupabaseAdminClient() as SupabaseClientType | null;
+  }
   return createBlundrSupabaseServerClient({ accessToken }) as SupabaseClientType | null;
 }
 
-async function runClientOperation<T>(accessToken: string | null | undefined, operation: (client: SupabaseClientType) => Promise<PersistenceResult<T>>): Promise<PersistenceResult<T>> {
-  const client = getClient(accessToken);
+async function runClientOperation<T>(accessToken: string | null | undefined, useAdminClient: boolean, operation: (client: SupabaseClientType) => Promise<PersistenceResult<T>>): Promise<PersistenceResult<T>> {
+  const client = getClient(accessToken, useAdminClient);
   if (!client) {
     return err("supabase_unavailable", "Supabase credentials are not available.", null, false);
   }
@@ -533,21 +548,23 @@ async function runClientOperation<T>(accessToken: string | null | undefined, ope
 export type SupabasePersistenceAdapterInput = {
   accessToken?: string | null;
   mode?: BlundrAccountMode;
+  useAdminClient?: boolean;
 };
 
 export function createBlundrSupabasePersistenceAdapter(input: SupabasePersistenceAdapterInput = {}): BlundrPersistenceAdapter {
   const accessToken = input.accessToken ?? null;
+  const useAdminClient = Boolean(input.useAdminClient);
   return {
     mode: input.mode ?? "authenticated",
     async getTrainingProfile(userId: string) {
-      return runClientOperation(accessToken, async (client) => {
+      return runClientOperation(accessToken, useAdminClient, async (client) => {
         const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.userProfiles).select("*").eq("user_id", userId).maybeSingle();
         if (error) return err("supabase_query_failed", "Could not load training profile.", error, true);
         return ok(mapTrainingProfileRowToModel(data as SupabaseUserProfileRow | null));
       });
     },
     async upsertTrainingProfile(profile: UserTrainingProfile) {
-      return runClientOperation(accessToken, async (client) => {
+      return runClientOperation(accessToken, useAdminClient, async (client) => {
         const row = mapTrainingProfileRow(profile);
         const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.userProfiles).upsert(row, { onConflict: "user_id" }).select("*").maybeSingle();
         if (error) return err("supabase_write_failed", "Could not save training profile.", error, true);
@@ -555,14 +572,14 @@ export function createBlundrSupabasePersistenceAdapter(input: SupabasePersistenc
       });
     },
     async getUserRepertoire(userId: string) {
-      return runClientOperation(accessToken, async (client) => {
+      return runClientOperation(accessToken, useAdminClient, async (client) => {
         const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.userRepertoires).select("*").eq("user_id", userId).maybeSingle();
         if (error) return err("supabase_query_failed", "Could not load repertoire.", error, true);
         return ok(mapRepertoireRowToModel(data as SupabaseUserRepertoireRow | null));
       });
     },
     async upsertUserRepertoire(repertoire: UserRepertoire) {
-      return runClientOperation(accessToken, async (client) => {
+      return runClientOperation(accessToken, useAdminClient, async (client) => {
         const row = mapRepertoireRow(repertoire);
         const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.userRepertoires).upsert(row, { onConflict: "user_id" }).select("*").maybeSingle();
         if (error) return err("supabase_write_failed", "Could not save repertoire.", error, true);
@@ -570,14 +587,14 @@ export function createBlundrSupabasePersistenceAdapter(input: SupabasePersistenc
       });
     },
     async getRepertoirePointEvents(userId: string) {
-      return runClientOperation(accessToken, async (client) => {
+      return runClientOperation(accessToken, useAdminClient, async (client) => {
         const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.repertoirePointEvents).select("*").eq("user_id", userId).order("created_at", { ascending: true });
         if (error) return err("supabase_query_failed", "Could not load repertoire point events.", error, true);
         return ok((data ?? []).map((row) => mapRepertoirePointEventRowToModel(row as SupabaseRepertoirePointEventRow)).filter((entry): entry is RepertoirePointEvent => Boolean(entry)));
       });
     },
     async appendRepertoirePointEvent(event: RepertoirePointEvent) {
-      return runClientOperation(accessToken, async (client) => {
+      return runClientOperation(accessToken, useAdminClient, async (client) => {
         const row = mapRepertoirePointEventRow(event);
         const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.repertoirePointEvents).upsert(row, { onConflict: "id" }).select("*").maybeSingle();
         if (error) return err("supabase_write_failed", "Could not save repertoire point event.", error, true);
@@ -585,14 +602,14 @@ export function createBlundrSupabasePersistenceAdapter(input: SupabasePersistenc
       });
     },
     async getRepertoireUnlockEvents(userId: string) {
-      return runClientOperation(accessToken, async (client) => {
+      return runClientOperation(accessToken, useAdminClient, async (client) => {
         const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.repertoireUnlockEvents).select("*").eq("user_id", userId).order("created_at", { ascending: true });
         if (error) return err("supabase_query_failed", "Could not load repertoire unlock events.", error, true);
         return ok((data ?? []).map((row) => mapRepertoireUnlockEventRowToModel(row as SupabaseRepertoireUnlockEventRow)).filter((entry): entry is RepertoireUnlockEvent => Boolean(entry)));
       });
     },
     async appendRepertoireUnlockEvent(event: RepertoireUnlockEvent) {
-      return runClientOperation(accessToken, async (client) => {
+      return runClientOperation(accessToken, useAdminClient, async (client) => {
         const row = mapRepertoireUnlockEventRow(event);
         const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.repertoireUnlockEvents).upsert(row, { onConflict: "id" }).select("*").maybeSingle();
         if (error) return err("supabase_write_failed", "Could not save repertoire unlock event.", error, true);
@@ -600,14 +617,14 @@ export function createBlundrSupabasePersistenceAdapter(input: SupabasePersistenc
       });
     },
     async getDailyRetentionProgress(userId: string, localDate: string) {
-      return runClientOperation(accessToken, async (client) => {
+      return runClientOperation(accessToken, useAdminClient, async (client) => {
         const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.dailyRetentionProgress).select("*").eq("user_id", userId).eq("local_date", localDate).maybeSingle();
         if (error) return err("supabase_query_failed", "Could not load daily retention progress.", error, true);
         return ok(mapDailyRetentionRowToModel(data as SupabaseDailyRetentionProgressRow | null));
       });
     },
     async upsertDailyRetentionProgress(progress: DailyRetentionProgress) {
-      return runClientOperation(accessToken, async (client) => {
+      return runClientOperation(accessToken, useAdminClient, async (client) => {
         const row = mapDailyRetentionRow(progress);
         const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.dailyRetentionProgress).upsert(row, { onConflict: "user_id,local_date" }).select("*").maybeSingle();
         if (error) return err("supabase_write_failed", "Could not save daily retention progress.", error, true);
@@ -615,14 +632,14 @@ export function createBlundrSupabasePersistenceAdapter(input: SupabasePersistenc
       });
     },
     async getOpeningUnlockProgress(userId: string) {
-      return runClientOperation(accessToken, async (client) => {
+      return runClientOperation(accessToken, useAdminClient, async (client) => {
         const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.openingUnlockProgress).select("*").eq("user_id", userId);
         if (error) return err("supabase_query_failed", "Could not load opening unlock progress.", error, true);
         return ok((data ?? []).map((row) => mapOpeningUnlockProgressRowToModel(row as SupabaseOpeningUnlockProgressRow)));
       });
     },
     async upsertOpeningUnlockProgress(progress: OpeningUnlockProgress) {
-      return runClientOperation(accessToken, async (client) => {
+      return runClientOperation(accessToken, useAdminClient, async (client) => {
         const row = mapOpeningUnlockProgressRow(progress);
         const { error } = await client.from(BLUNDR_PERSISTENCE_TABLES.openingUnlockProgress).upsert(row, { onConflict: "user_id,opening_id" });
         if (error) return err("supabase_write_failed", "Could not save opening unlock progress.", error, true);
@@ -630,7 +647,7 @@ export function createBlundrSupabasePersistenceAdapter(input: SupabasePersistenc
       });
     },
     async appendOpeningUnlockEvent(event: OpeningUnlockEvent) {
-      return runClientOperation(accessToken, async (client) => {
+      return runClientOperation(accessToken, useAdminClient, async (client) => {
         const row = mapOpeningUnlockEventRow(event);
         const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.openingUnlockEvents).insert(row).select("*").maybeSingle();
         if (error) return err("supabase_write_failed", "Could not save opening unlock event.", error, true);
@@ -638,14 +655,14 @@ export function createBlundrSupabasePersistenceAdapter(input: SupabasePersistenc
       });
     },
     async getStreakRecord(userId: string) {
-      return runClientOperation(accessToken, async (client) => {
+      return runClientOperation(accessToken, useAdminClient, async (client) => {
         const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.streakRecords).select("*").eq("user_id", userId).maybeSingle();
         if (error) return err("supabase_query_failed", "Could not load streak record.", error, true);
         return ok(mapStreakRecordRowToModel(data as SupabaseStreakRecordRow | null));
       });
     },
     async upsertStreakRecord(record: StreakRecord) {
-      return runClientOperation(accessToken, async (client) => {
+      return runClientOperation(accessToken, useAdminClient, async (client) => {
         const row = mapStreakRecordRow(record);
         const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.streakRecords).upsert(row, { onConflict: "user_id" }).select("*").maybeSingle();
         if (error) return err("supabase_write_failed", "Could not save streak record.", error, true);
@@ -653,30 +670,37 @@ export function createBlundrSupabasePersistenceAdapter(input: SupabasePersistenc
       });
     },
     async getRewardHistory(userId: string) {
-      return runClientOperation(accessToken, async (client) => {
+      return runClientOperation(accessToken, useAdminClient, async (client) => {
         const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.rewardHistory).select("*").eq("user_id", userId).maybeSingle();
         if (error) return err("supabase_query_failed", "Could not load reward history.", error, true);
         return ok(mapRewardHistoryRowToModel(data as SupabaseRewardHistoryRow | null));
       });
     },
     async upsertRewardHistory(history: UserRewardHistory) {
-      return runClientOperation(accessToken, async (client) => {
+      return runClientOperation(accessToken, useAdminClient, async (client) => {
         const row = mapRewardHistoryRow(history);
         const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.rewardHistory).upsert(row, { onConflict: "user_id" }).select("*").maybeSingle();
         if (error) return err("supabase_write_failed", "Could not save reward history.", error, true);
         return ok(mapRewardHistoryRowToModel(data as SupabaseRewardHistoryRow | null) ?? cloneJson(history));
       });
     },
+    async getRewardRolls(userId: string) {
+      return runClientOperation(accessToken, useAdminClient, async (client) => {
+        const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.rewardRolls).select("*").eq("user_id", userId).order("rolled_at", { ascending: true });
+        if (error) return err("supabase_query_failed", "Could not load reward rolls.", error, true);
+        return ok((data ?? []).map((row) => mapRewardRollRowToModel(row as SupabaseRewardRollRow)).filter((entry): entry is RewardRoll => Boolean(entry)));
+      });
+    },
     async appendRewardRoll(roll: RewardRoll) {
-      return runClientOperation(accessToken, async (client) => {
+      return runClientOperation(accessToken, useAdminClient, async (client) => {
         const row = mapRewardRollRow(roll);
-        const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.rewardRolls).upsert(row, { onConflict: "id" }).select("*").maybeSingle();
+        const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.rewardRolls).upsert(row, { onConflict: "id", ignoreDuplicates: true }).select("*").maybeSingle();
         if (error) return err("supabase_write_failed", "Could not save reward roll.", error, true);
         return ok((data ? mapRewardRollRowToModel(data as SupabaseRewardRollRow) : roll) ?? roll);
       });
     },
     async saveValidationSnapshot(snapshot: ValidationSnapshot) {
-      return runClientOperation(accessToken, async (client) => {
+      return runClientOperation(accessToken, useAdminClient, async (client) => {
         const row = mapValidationSnapshotRow(snapshot);
         const { data, error } = await client.from(BLUNDR_PERSISTENCE_TABLES.validationSnapshots).upsert(row, { onConflict: "id" }).select("*").maybeSingle();
         if (error) return err("supabase_write_failed", "Could not save validation snapshot.", error, true);

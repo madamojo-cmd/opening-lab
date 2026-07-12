@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAccountPersistenceAdapter } from "@/lib/blundr/accounts/accountRepository";
 import { getCurrentBlundrUser } from "@/lib/blundr/accounts/accountSession";
 import { normalizeRepertoirePointEvent, normalizeRepertoireUnlockEvent } from "@/lib/blundr/repertoire/repertoireEvents";
-import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
+import type { RepertoirePointEvent, RepertoireProgress, RepertoireUnlockEvent } from "@/lib/blundr/repertoire/repertoireTypes";
 
 export const dynamic = "force-dynamic";
 
@@ -24,8 +24,22 @@ async function readBody(request: NextRequest): Promise<Record<string, unknown>> 
   }
 }
 
+export function rebasePointEventOwnership(event: RepertoirePointEvent, userId: string): RepertoirePointEvent {
+  return {
+    ...event,
+    userId,
+  };
+}
+
+export function rebaseUnlockEventOwnership(event: RepertoireUnlockEvent, userId: string): RepertoireUnlockEvent {
+  return {
+    ...event,
+    userId,
+  };
+}
+
 export async function POST(request: NextRequest) {
-  const user = await getCurrentBlundrUser({ request, allowLocalFallback: true });
+  const user = await getCurrentBlundrUser({ request, allowLocalFallback: false });
   if (!user) {
     return NextResponse.json(
       {
@@ -54,18 +68,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (normalizeText(progress.userId) && normalizeText(progress.userId) !== user.userId) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: {
-          code: "user_mismatch",
-          message: "Progress belongs to a different user.",
-        },
-      },
-      { status: 400 },
-    );
-  }
+  const normalizedProgress: RepertoireProgress = {
+    ...progress,
+    userId: user.userId,
+  };
 
   const adapter = getAccountPersistenceAdapter({
     user,
@@ -76,31 +82,31 @@ export async function POST(request: NextRequest) {
 
   const repertoireSave = await adapter.upsertUserRepertoire({
     userId: user.userId,
-    selectedStarterPackId: progress.selectedStarterPackId,
-    unlockedOpeningIds: Array.isArray(progress.unlockedOpeningIds) ? progress.unlockedOpeningIds.slice() : [],
-    lockedOpeningIds: Array.isArray(progress.lockedOpeningIds) ? progress.lockedOpeningIds.slice() : [],
-    openingUnlockPoints: Math.max(0, Number(progress.availablePoints) || 0),
-    updatedAt: progress.updatedAt,
+    selectedStarterPackId: normalizedProgress.selectedStarterPackId,
+    unlockedOpeningIds: Array.isArray(normalizedProgress.unlockedOpeningIds) ? normalizedProgress.unlockedOpeningIds.slice() : [],
+    lockedOpeningIds: Array.isArray(normalizedProgress.lockedOpeningIds) ? normalizedProgress.lockedOpeningIds.slice() : [],
+    openingUnlockPoints: Math.max(0, Number(normalizedProgress.availablePoints) || 0),
+    updatedAt: normalizedProgress.updatedAt,
   });
   if (!repertoireSave.ok) {
     return NextResponse.json(repertoireSave, { status: 500 });
   }
 
-  const pointEvents = Array.isArray(progress.pointEvents) ? progress.pointEvents : [];
+  const pointEvents = Array.isArray(normalizedProgress.pointEvents) ? normalizedProgress.pointEvents : [];
   for (const rawEvent of pointEvents) {
     const event = normalizeRepertoirePointEvent(rawEvent);
     if (!event) continue;
-    const saveResult = await adapter.appendRepertoirePointEvent(event);
+    const saveResult = await adapter.appendRepertoirePointEvent(rebasePointEventOwnership(event, user.userId));
     if (!saveResult.ok) {
       return NextResponse.json(saveResult, { status: 500 });
     }
   }
 
-  const unlockEvents = Array.isArray(progress.unlockEvents) ? progress.unlockEvents : [];
+  const unlockEvents = Array.isArray(normalizedProgress.unlockEvents) ? normalizedProgress.unlockEvents : [];
   for (const rawEvent of unlockEvents) {
     const event = normalizeRepertoireUnlockEvent(rawEvent);
     if (!event) continue;
-    const saveResult = await adapter.appendRepertoireUnlockEvent(event);
+    const saveResult = await adapter.appendRepertoireUnlockEvent(rebaseUnlockEventOwnership(event, user.userId));
     if (!saveResult.ok) {
       return NextResponse.json(saveResult, { status: 500 });
     }
@@ -110,6 +116,7 @@ export async function POST(request: NextRequest) {
     ok: true,
     data: {
       repertoire: repertoireSave.data,
+      progress: normalizedProgress,
       pointEventCount: pointEvents.length,
       unlockEventCount: unlockEvents.length,
     },

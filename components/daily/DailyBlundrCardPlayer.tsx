@@ -25,6 +25,10 @@ export function DailyBlundrCardPlayer({
   locked,
   miniGameState,
   trainingTargetState,
+  boardFenOverride,
+  boardVisuals,
+  squareStyles,
+  animationClassName,
   onMoveInputChange,
   onSubmitMove,
   onBoardMoveAttempt,
@@ -42,7 +46,8 @@ export function DailyBlundrCardPlayer({
     ? activeMiniGameState?.currentFen ?? card.miniGame?.currentFen ?? card.fen
     : isTrainingTarget
       ? activeTrainingTargetState?.currentFen ?? card.trainingTarget?.currentFen ?? card.fen
-      : card.fen;
+    : card.fen;
+  const renderedBoardFen = boardFenOverride || boardFen;
   const answerVisible = support.answerShown || support.usedReveal;
   const expectedMove = resolveExpectedMoveLabel(card.expectedMoveUci, card.expectedMoveSan);
   const movesRemaining = isMiniGame && activeMiniGameState ? Math.max(0, activeMiniGameState.moveLimit - activeMiniGameState.plyCount) : null;
@@ -81,12 +86,15 @@ export function DailyBlundrCardPlayer({
       </div>
 
       <DailyBlundrBoard
-        fen={boardFen}
+        fen={renderedBoardFen}
         disabled={locked || Boolean(isMiniGame && activeMiniGameState?.completed) || Boolean(isTrainingTarget && activeTrainingTargetState?.completed) || (!isMiniGame && !isTrainingTarget && mode === "reveal_only")}
         onMoveAttempt={onBoardMoveAttempt}
         squareClickMode={isTrainingTarget && trainingInteractionKind === "square_click"}
         openingColor={openingColor}
         forcedOrientation={isMiniGame ? activeMiniGameState?.learnerSide ?? card.miniGame?.learnerSide ?? null : null}
+        boardVisuals={boardVisuals}
+        squareStyles={squareStyles}
+        animationClassName={animationClassName}
         onSquareClick={
           isTrainingTarget && trainingInteractionKind === "square_click"
             ? (square) => onSquareClick?.(square)

@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { BLUNDR_BRAND_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
+import { BlundrSharedAccountHydrator } from "@/components/account/BlundrSharedAccountHydrator";
+import { RewardPopupHost } from "@/components/rewards/RewardPopupHost";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -21,7 +23,11 @@ export const viewport: Viewport = { themeColor: "#166534", width: "device-width"
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <BlundrSharedAccountHydrator />
+        <RewardPopupHost />
+        {children}
+      </body>
     </html>
   );
 }

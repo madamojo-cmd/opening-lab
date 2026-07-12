@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { BlundrButton, BlundrCard, BlundrChip, BlundrStateCard } from "@/components/blundr/ui";
 import { recordBatteryLineCompleted, recordBlundrTaskCompleted, recordTempoRunCompleted, buildBatteryLineCompletionId, buildBlundrTaskCompletionId, buildTempoRunCompletionId } from "@/lib/blundr/daily-rings/dailyRingGameplayEvents";
@@ -12,6 +12,8 @@ import { getLocalLearningEvents, clearLocalLearningEvents, recordLearningEvent }
 import { getLocalStreakRecord, getLocalTrainingProfile, resetLocalAccountState, resetLocalDailyRetentionProgress, resetLocalRewardHistory, resetLocalRewardRolls, resetLocalRepertoireState, resetLocalStreakRecord } from "@/lib/blundr/accounts/localAccountStorage";
 import { hydrateSharedAccountBootstrap } from "@/lib/blundr/accounts/accountHydration";
 import { grantChoiceTokens, grantOpeningFragments, getRewardInventory, getRewardInventoryEventLog, resetChoiceTokensForDev, resetOpeningFragmentsForDev, resetRewardInventoryForDev, spendChoiceTokenOnOpening, spendOpeningFragmentsOnOpening } from "@/lib/blundr/rewards/rewardInventoryService";
+import { applyRewardGrant } from "@/lib/blundr/rewards/rewardGrantService";
+import { adaptRewardGrantToPresentation, type RewardPresentationModel } from "@/lib/blundr/rewards/rewardPresentationAdapter";
 import { loadRewardHistorySnapshot } from "@/lib/blundr/rewards/rewardHistoryService";
 import { clearRewardPopupQueue, enqueueRewardPopup } from "@/lib/blundr/rewards/rewardPopupBus";
 import type { TempoCacheState } from "@/lib/blundr/rewards/rewardTypes";
@@ -20,14 +22,12 @@ import type { RewardsPersistenceTarget } from "@/lib/blundr/rewards/rewardTarget
 import { isDailyRingCompletionFailure, isDailyRingCompletionSuccess, type DailyRingCompletionResultLike } from "@/lib/blundr/daily-rings/dailyRingTypes";
 import { isRepertoirePersistenceFailure, isRepertoireUnlockFailure } from "@/lib/blundr/repertoire/repertoireProgressService";
 import { RewardsTargetPanel } from "./RewardsTargetPanel";
-import { RewardsStatePanel } from "./RewardsStatePanel";
-import { RewardsTriggerPanel } from "./RewardsTriggerPanel";
-import { RewardsPopupPreviewPanel } from "./RewardsPopupPreviewPanel";
 import { RewardsAdminGrantPanel } from "./RewardsAdminGrantPanel";
 import { RewardsResetPanel } from "./RewardsResetPanel";
 import { RewardsEventLog } from "./RewardsEventLog";
-import { RewardsMobilePreview } from "./RewardsMobilePreview";
+import { RewardsValidationConsole } from "./RewardsValidationConsole";
 import type { RewardsDebugSnapshot, RewardsEventLogEntry, RewardsPreviewKind } from "./rewardsDebugTypes";
+import { comparePreviewState, type PreviewMutationResult } from "./rewardsValidationModel";
 
 type RewardsDebugPanelProps = {
   userId: string;
@@ -262,34 +262,6 @@ function dispatchUnlockSuccessPopup(input: {
   });
 }
 
-function dispatchTempoCachePopup(input: {
-  id: string;
-  userId: string;
-  state: TempoCacheState;
-  title: string;
-  description: string;
-  rewardGrants: RewardPopupTempoCacheEvent["rewardGrants"];
-  rewardHistory: RewardPopupTempoCacheEvent["rewardHistory"];
-  sharedSyncFailed?: boolean;
-  sharedSyncFailureMessage?: string;
-}) {
-  enqueueRewardPopup({
-    id: createIdempotencyKey(`popup:${input.id}`, input.userId),
-    kind: "tempo_cache",
-    preview: false,
-    title: input.title,
-    description: input.description,
-    createdAt: nowIso(),
-    variant: input.state === "closed" ? "C" : input.state === "opening" ? "A" : "B",
-    state: input.state,
-    rewardGrants: input.rewardGrants,
-    rewardHistory: input.rewardHistory,
-    sharedSyncFailed: input.sharedSyncFailed,
-    sharedSyncFailureCode: input.sharedSyncFailed ? "shared_sync_failed" : undefined,
-    sharedSyncFailureMessage: input.sharedSyncFailureMessage,
-  });
-}
-
 function dispatchAdminGrantPopup(input: {
   id: string;
   userId: string;
@@ -357,7 +329,7 @@ function summarizeDaily(snapshot: RewardsDebugSnapshot): string {
 }
 
 function summarizeInventory(snapshot: RewardsDebugSnapshot): string {
-  return `points=${snapshot.repertoire.availablePoints}; fragments=${snapshot.rewardInventory.openingFragments}; tokens=${snapshot.rewardInventory.choiceTokens}; credits=${snapshot.rewardInventory.availableFragmentUnlockCredits}`;
+  return `points=${snapshot.repertoire.availablePoints}; fragments=${snapshot.rewardInventory.openingFragments}; tokens=${snapshot.rewardInventory.choiceTokens}`;
 }
 
 function summarizeRewardRolls(snapshot: RewardsDebugSnapshot): string {
@@ -447,6 +419,7 @@ export function RewardsDebugPanel({ userId, mode, email, target, className }: Re
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedOpeningId, setSelectedOpeningId] = useState<string | null>(() => snapshot.repertoire.lockedOpeningIds[0] ?? null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const mutationInFlightRef = useRef(false);
 
   const previewLabel = preview.kind === "none" ? null : preview.title;
   const snapshotView = useMemo(() => ({ ...snapshot, tempoCacheState, pendingPopupLabel: previewLabel }), [snapshot, tempoCacheState, previewLabel]);
@@ -503,7 +476,13 @@ export function RewardsDebugPanel({ userId, mode, email, target, className }: Re
     return `${summarizeDaily(nextSnapshot)} | ${summarizeInventory(nextSnapshot)} | streak=${nextSnapshot.streak?.currentStreak ?? 0}/${nextSnapshot.streak?.longestStreak ?? 0}`;
   }
 
-  function logPreview(actionId: string, previewState: RewardsPreviewKind) {
+  function logPreview(actionId: string, previewState: RewardsPreviewKind): PreviewMutationResult {
+    const stateForComparison = {
+      repertoire: { availablePoints: snapshotView.repertoire.availablePoints, unlockedOpeningIds: snapshotView.repertoire.unlockedOpeningIds },
+      rewardInventory: { openingFragments: snapshotView.rewardInventory.openingFragments, choiceTokens: snapshotView.rewardInventory.choiceTokens },
+      rewardHistory: { appliedRewardIds: snapshotView.rewardHistory.appliedRewardIds, allRingsDaysSinceRandomReward: snapshotView.rewardHistory.allRingsDaysSinceRandomReward },
+      daily: { tempo: { current: snapshotView.daily.tempo.current }, battery: { current: snapshotView.daily.battery.current }, blundr: { current: snapshotView.daily.blundr.current } },
+    };
     const label = previewState.kind === "none" ? "none" : previewState.title;
     setPreview(previewState);
     const popupEvent = buildRewardPopupFromPreview({
@@ -533,12 +512,99 @@ export function RewardsDebugPanel({ userId, mode, email, target, className }: Re
     );
     setStatusMessage(`Previewing ${label}.`);
     setErrorMessage(null);
+    return comparePreviewState(stateForComparison, stateForComparison);
   }
 
-  async function handleAction(triggerId: string) {
-    const idempotencyKey = createIdempotencyKey(triggerId, userId);
+  async function executeVariableReward(input: {
+    rewardType: "unlock_points" | "opening_fragment" | "choice_token" | "future_reward";
+    amount: number;
+    displayName: string;
+    description: string;
+    rarity: "common" | "uncommon" | "rare" | "epic";
+    eventId: string;
+  }): Promise<RewardPresentationModel | null> {
+    if (input.rewardType === "future_reward") {
+      setErrorMessage("Unknown future reward types are presentation-only until an approved domain policy exists.");
+      return null;
+    }
+    const roll = {
+      id: input.eventId,
+      userId,
+      trigger: "weekly_cache" as const,
+      rolledAt: nowIso(),
+      didReward: true,
+      seed: `dev-variable:${input.eventId}`,
+      reward: {
+        id: `${input.eventId}:reward`,
+        rarity: input.rarity,
+        rewardType: input.rewardType,
+        amount: input.amount,
+        displayName: input.displayName,
+        description: input.description,
+      },
+    };
+    const result = await applyRewardGrant({
+      userId,
+      roll,
+      grantMode: "guaranteed_cache",
+      now: nowIso(),
+      syncRemote: target.isAuthenticatedShared,
+    });
+    if ("message" in result) {
+      setErrorMessage(result.message);
+      return null;
+    }
+    if (!result.applied) {
+      setErrorMessage("Duplicate event; no reward was applied.");
+      return null;
+    }
+    const presentation = adaptRewardGrantToPresentation(result.grant, "Variable Tempo Cache test");
+    if (result.grant.rewardType !== "unlock_points" && result.grant.rewardType !== "opening_fragment" && result.grant.rewardType !== "choice_token") {
+      setErrorMessage("This reward type has no direct success popup mapping.");
+      return null;
+    }
+    dispatchRewardSuccessPopup({
+      id: input.eventId,
+      userId,
+      title: presentation.displayName,
+      description: presentation.description,
+      rarity: presentation.rarity,
+      rewardType: result.grant.rewardType,
+      amount: result.grant.amount,
+      grant: result.grant,
+    });
+    appendEventLog(buildEventLogEntry({
+      id: input.eventId,
+      trigger: "variable_tempo_cache",
+      action: "Execute variable Tempo Cache reward",
+      rewardGenerated: presentation.displayName,
+      storageUpdated: "Canonical reward grant persisted",
+      popupShown: "Published after applied:true",
+      persistenceTarget: persistenceTargetLabel,
+      idempotencyKey: input.eventId,
+      beforeSummary: beforeSummary(),
+      afterSummary: beforeSummary(),
+      success: true,
+    }));
+    await refreshState(tempoCacheState, previewLabel);
+    return presentation;
+  }
+
+  async function handleAction(triggerId: string, options?: { points?: number }) {
+    if (mutationInFlightRef.current || busyAction) {
+      setErrorMessage("Another rewards transaction is still in flight. Wait for it to finish.");
+      return;
+    }
+    const replayTarget = triggerId === "replay_last_event" ? eventLog.at(-1) ?? null : null;
+    if (triggerId === "replay_last_event" && !replayTarget) {
+      setErrorMessage("There is no prior transaction to replay.");
+      return;
+    }
+    const effectiveTriggerId = replayTarget?.trigger ?? triggerId;
+    const idempotencyKey = replayTarget?.idempotencyKey ?? createIdempotencyKey(effectiveTriggerId, userId);
     const before = beforeSummary();
-    setBusyAction(triggerId);
+    mutationInFlightRef.current = true;
+    setBusyAction(effectiveTriggerId);
     setErrorMessage(null);
     setStatusMessage(null);
 
@@ -550,7 +616,7 @@ export function RewardsDebugPanel({ userId, mode, email, target, className }: Re
       let success = true;
       let error: string | undefined;
 
-      switch (triggerId) {
+      switch (effectiveTriggerId) {
         case "tempo_increment": {
           const openingId = selectedOpeningId ?? snapshotView.repertoire.unlockedOpeningIds[0] ?? snapshotView.repertoire.lockedOpeningIds[0] ?? "tempo-dev-opening";
           const result = await recordTempoRunCompleted({
@@ -897,10 +963,11 @@ export function RewardsDebugPanel({ userId, mode, email, target, className }: Re
           break;
         }
         case "grant_small_points": {
+          const requestedPoints = Math.max(1, Math.floor(options?.points ?? 10));
           const result = await earnAndPersistRepertoirePoints({
             userId,
             source: "manual_dev_adjustment",
-            points: 10,
+            points: requestedPoints,
             completionId: idempotencyKey,
             starterPackId: snapshotView.repertoire.selectedStarterPackId,
             now: nowIso(),
@@ -918,7 +985,7 @@ export function RewardsDebugPanel({ userId, mode, email, target, className }: Re
               message: result.message,
             });
           } else {
-            rewardGenerated = "+10 repertoire points";
+            rewardGenerated = `+${requestedPoints} repertoire points`;
             storageUpdated = "Repertoire points";
             setStatusMessage("Small repertoire point grant applied.");
             dispatchRewardSuccessPopup({
@@ -928,7 +995,7 @@ export function RewardsDebugPanel({ userId, mode, email, target, className }: Re
               description: "A steady progress grant for training.",
               rarity: "common",
               rewardType: "unlock_points",
-              amount: 10,
+              amount: requestedPoints,
             });
           }
           break;
@@ -971,10 +1038,11 @@ export function RewardsDebugPanel({ userId, mode, email, target, className }: Re
           break;
         }
         case "grant_epic_bonus": {
+          const requestedPoints = Math.max(1, Math.floor(options?.points ?? 100));
           const result = await earnAndPersistRepertoirePoints({
             userId,
             source: "manual_dev_adjustment",
-            points: 100,
+            points: requestedPoints,
             completionId: idempotencyKey,
             starterPackId: snapshotView.repertoire.selectedStarterPackId,
             now: nowIso(),
@@ -992,7 +1060,7 @@ export function RewardsDebugPanel({ userId, mode, email, target, className }: Re
               message: result.message,
             });
           } else {
-            rewardGenerated = "+100 repertoire points";
+            rewardGenerated = `+${requestedPoints} repertoire points`;
             storageUpdated = "Repertoire points";
             setStatusMessage("Epic bonus applied.");
             dispatchRewardSuccessPopup({
@@ -1002,7 +1070,7 @@ export function RewardsDebugPanel({ userId, mode, email, target, className }: Re
               description: "Epic bonus applied as repertoire points.",
               rarity: "epic",
               rewardType: "unlock_points",
-              amount: 100,
+              amount: requestedPoints,
             });
           }
           break;
@@ -1750,6 +1818,9 @@ export function RewardsDebugPanel({ userId, mode, email, target, className }: Re
           break;
       }
 
+      if (success && popupShown === "None" && (effectiveTriggerId.startsWith("grant_") || effectiveTriggerId.includes("unlock") || effectiveTriggerId.startsWith("spend_"))) {
+        popupShown = "Reward presentation published";
+      }
       await refreshState(nextTempoCacheState, previewLabel);
       const after = loadSnapshot(userId, nextTempoCacheState, previewLabel);
       if (triggerId === "tempo_increment" || triggerId === "tempo_complete" || triggerId === "battery_increment" || triggerId === "battery_complete" || triggerId === "blundr_increment" || triggerId === "blundr_complete" || triggerId === "all_rings_celebration" || triggerId.startsWith("simulate_")) {
@@ -1762,7 +1833,7 @@ export function RewardsDebugPanel({ userId, mode, email, target, className }: Re
       appendEventLog(
         buildEventLogEntry({
           id: idempotencyKey,
-          trigger: triggerId,
+          trigger: effectiveTriggerId,
           action:
             triggerId.startsWith("reset_")
               ? "Reset local state"
@@ -1802,6 +1873,7 @@ export function RewardsDebugPanel({ userId, mode, email, target, className }: Re
         }),
       );
     } finally {
+      mutationInFlightRef.current = false;
       setBusyAction(null);
     }
   }
@@ -1842,68 +1914,22 @@ export function RewardsDebugPanel({ userId, mode, email, target, className }: Re
 
       <RewardsTargetPanel target={target} />
 
-      <RewardsStatePanel snapshot={snapshotView} onRefresh={() => { void refreshState(tempoCacheState, previewLabel); }} />
-
-      <RewardsTriggerPanel
+      <RewardsValidationConsole
+        mode={mode}
+        snapshot={snapshotView}
+        eventLog={eventLog}
+        selectedOpeningId={selectedOpeningId}
         lockedOpeningIds={lockedOpeningIds}
-        selectedOpeningId={selectedOpeningId}
         onSelectOpening={setSelectedOpeningId}
-        onTrigger={(triggerId) => void handleAction(triggerId)}
-      />
-
-      {mode === "developer_admin" ? (
-        <RewardsAdminGrantPanel
-          target={target}
-          adminUserId={userId}
-          adminEmail={email}
-          onRefreshState={async () => refreshState(tempoCacheState, previewLabel)}
-          appendEventLog={appendEventLog}
-        />
-      ) : null}
-
-      <RewardsPopupPreviewPanel
-        selectedOpeningId={selectedOpeningId}
-        currentStreakDays={currentStreakDays}
-        onPreview={(previewId) => {
-          void handleAction(previewId);
-        }}
-        onClearPreview={() => {
-          void handleAction("preview_clear");
-        }}
-      />
-
-      <RewardsMobilePreview snapshot={snapshotView} preview={preview} />
-
-      <BlundrCard className="space-y-3">
-        <div className="text-xs font-black uppercase tracking-[0.22em] text-stone-500">Quick notes</div>
-        <div className="grid gap-2 text-sm leading-6 text-stone-600 sm:grid-cols-2">
-          <div className="rounded-2xl bg-[#fbfcf7] p-3 ring-1 ring-stone-100">
-            Opening Fragments are real. Three fragments unlock one user-selected opening.
-          </div>
-          <div className="rounded-2xl bg-[#fbfcf7] p-3 ring-1 ring-stone-100">
-            Choice Tokens unlock one selected opening immediately.
-          </div>
-          <div className="rounded-2xl bg-[#fbfcf7] p-3 ring-1 ring-stone-100">
-            Repertoire Points remain the steady progression currency.
-          </div>
-          <div className="rounded-2xl bg-[#fbfcf7] p-3 ring-1 ring-stone-100">
-            Review and minigame simulations only record learning events in MVP.
-          </div>
-        </div>
-      </BlundrCard>
-
-      <RewardsResetPanel onReset={(resetId) => void handleReset(resetId)} />
-
-      <RewardsEventLog
-        entries={eventLog}
-        onClear={() => setEventLog([])}
-        onCopy={async () => {
-          if (typeof navigator !== "undefined" && navigator.clipboard) {
-            await navigator.clipboard.writeText(JSON.stringify(eventLog, null, 2));
-          }
-        }}
+        onPreview={(previewState) => logPreview(`validation:${previewState.kind}`, previewState)}
+        onExecuteVariableReward={executeVariableReward}
+        onTrigger={(triggerId, options) => void handleAction(triggerId, options)}
         onRefresh={() => { void refreshState(tempoCacheState, previewLabel); }}
+        stateExtras={<RewardsResetPanel onReset={(resetId) => void handleReset(resetId)} />}
+        transactionExtras={mode === "developer_admin" ? <RewardsAdminGrantPanel target={target} adminUserId={userId} adminEmail={email} onRefreshState={async () => refreshState(tempoCacheState, previewLabel)} appendEventLog={appendEventLog} /> : null}
+        dailyExtras={<RewardsEventLog entries={eventLog} onClear={() => setEventLog([])} onCopy={async () => { if (typeof navigator !== "undefined" && navigator.clipboard) await navigator.clipboard.writeText(JSON.stringify(eventLog, null, 2)); }} onRefresh={() => { void refreshState(tempoCacheState, previewLabel); }} />}
       />
+
     </section>
   );
 }

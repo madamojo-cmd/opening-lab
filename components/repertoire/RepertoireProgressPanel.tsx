@@ -22,6 +22,7 @@ import { RepertoireRewardInventoryCard } from "./RepertoireRewardInventoryCard";
 import { RepertoireTempoCallout } from "./RepertoireTempoCallout";
 import { RepertoireUnlockProgress } from "./RepertoireUnlockProgress";
 import { RewardHistoryList } from "@/components/rewards/RewardHistoryList";
+import { enqueueRewardPopup } from "@/lib/blundr/rewards/rewardPopupBus";
 import { getLockedOpeningCards } from "@/lib/blundr/repertoire/repertoireUnlockService";
 import type { RepertoireUnlockMethod } from "@/lib/blundr/repertoire/repertoireUnlockFlow";
 
@@ -153,6 +154,19 @@ export function RepertoireProgressPanel({ onTrainOpening, homeHref = "/", classN
         }
         setProgress(result.progress);
         setRewardInventory(getRewardInventory(userId));
+        enqueueRewardPopup({
+          id: attemptId,
+          kind: "unlock_success",
+          preview: false,
+          title: "Opening unlocked",
+          description: `Only ${selectedUnlockCard.openingName} was unlocked.`,
+          createdAt: new Date().toISOString(),
+          openingId: selectedUnlockCard.openingId,
+          openingName: selectedUnlockCard.openingName,
+          methodLabel: "Repertoire Points",
+          before: { points: progress.availablePoints, fragments: rewardInventory.openingFragments, tokens: rewardInventory.choiceTokens },
+          after: { points: result.progress.availablePoints, fragments: rewardInventory.openingFragments, tokens: rewardInventory.choiceTokens },
+        });
         setUnlockModalOpen(false);
         setSelectedUnlockOpeningId(null);
         setStatusMessage(`Unlocked ${selectedUnlockCard.openingName}.`);
@@ -192,6 +206,23 @@ export function RepertoireProgressPanel({ onTrainOpening, homeHref = "/", classN
         });
         return { ok: false as const, message: spendResult.message };
       }
+      enqueueRewardPopup({
+        id: attemptId,
+        kind: "unlock_success",
+        preview: false,
+        title: "Opening unlocked",
+        description: `Only ${selectedUnlockCard.openingName} was unlocked.`,
+        createdAt: new Date().toISOString(),
+        openingId: selectedUnlockCard.openingId,
+        openingName: selectedUnlockCard.openingName,
+        methodLabel: method === "opening_fragments" ? "Opening Fragments" : "Choice Token",
+        before: { points: progress.availablePoints, fragments: rewardInventory.openingFragments, tokens: rewardInventory.choiceTokens },
+        after: {
+          points: spendResult.progress?.availablePoints ?? progress.availablePoints,
+          fragments: spendResult.inventory?.openingFragments ?? rewardInventory.openingFragments,
+          tokens: spendResult.inventory?.choiceTokens ?? rewardInventory.choiceTokens,
+        },
+      });
       setUnlockModalOpen(false);
       setSelectedUnlockOpeningId(null);
       setStatusMessage(spendResult.message);

@@ -4,6 +4,7 @@ import {
   buildNestedDailyRingLayout,
   getNestedDailyRingStyle,
   normalizeNestedDailyRingItems,
+  percentArraysEqual,
   NESTED_DAILY_RING_CENTER,
   NESTED_DAILY_RING_CENTER_SIZE,
   NESTED_DAILY_RING_VIEW_BOX,
@@ -66,6 +67,11 @@ function main(): void {
   ]);
   assert.equal(reordered.some((ring) => ring.ringId === "daily_blundr"), true);
   assert.equal(getNestedDailyRingStyle(reordered[0], 0).stroke, blundrStyle.stroke);
+
+  assert.equal(percentArraysEqual([0, 25, 100], [0, 25, 100]), true);
+  assert.equal(percentArraysEqual([0, 25, 100], [0, 25.0005, 100]), true);
+  assert.equal(percentArraysEqual([0, 25, 100], [0, 26, 100]), false);
+  assert.equal(percentArraysEqual([0, 25], [0, 25, 100]), false);
 }
 
 main();

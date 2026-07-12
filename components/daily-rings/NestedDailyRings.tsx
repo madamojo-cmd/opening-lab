@@ -88,6 +88,10 @@ function clampPercent(percent: number): number {
   return Math.max(0, Math.min(100, percent));
 }
 
+export function percentArraysEqual(left: readonly number[], right: readonly number[]): boolean {
+  return left.length === right.length && left.every((value, index) => Math.abs(value - right[index]) < 0.001);
+}
+
 export function normalizeNestedDailyRingItems(rings: NestedDailyRingItem[]): Required<NestedDailyRingItem>[] {
   return rings.slice(0, 3).map((ring, index) => ({
     ...ring,
@@ -161,7 +165,9 @@ export function NestedDailyRings({ rings, closedCount, totalCount, allClosed, st
   const reducedMotion = usePrefersReducedMotion();
   const normalizedRings = useMemo(() => normalizeNestedDailyRingItems(rings), [rings]);
   const ringSignature = normalizedRings.map((ring) => `${ring.ringId}:${ring.progress}:${ring.goal}:${ring.percent}:${ring.closed ? "1" : "0"}`).join("|");
-  const [displayPercents, setDisplayPercents] = useState<number[]>(() => normalizedRings.map(() => 0));
+  const stableNormalizedRings = useMemo(() => normalizedRings, [ringSignature]);
+  const targetPercents = useMemo(() => stableNormalizedRings.map((ring) => ring.percent), [ringSignature, stableNormalizedRings]);
+  const [displayPercents, setDisplayPercents] = useState<number[]>(() => targetPercents.map(() => 0));
   const [pulseRingIds, setPulseRingIds] = useState<Set<string>>(() => new Set());
   const [celebrateAll, setCelebrateAll] = useState(false);
   const previousClosedRef = useRef<Record<string, boolean>>({});
@@ -169,27 +175,39 @@ export function NestedDailyRings({ rings, closedCount, totalCount, allClosed, st
   const hasMountedRef = useRef(false);
   const pulseTimeoutRef = useRef<number | null>(null);
   const celebrateTimeoutRef = useRef<number | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
+    if (animationFrameRef.current !== null) {
+      window.cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
     if (reducedMotion) {
-      setDisplayPercents(normalizedRings.map((ring) => ring.percent));
+      setDisplayPercents((previous) => (percentArraysEqual(previous, targetPercents) ? previous : [...targetPercents]));
       return;
     }
 
-    const frame = window.requestAnimationFrame(() => {
-      setDisplayPercents(normalizedRings.map((ring) => ring.percent));
+    animationFrameRef.current = window.requestAnimationFrame(() => {
+      animationFrameRef.current = null;
+      setDisplayPercents((previous) => (percentArraysEqual(previous, targetPercents) ? previous : [...targetPercents]));
     });
 
-    return () => window.cancelAnimationFrame(frame);
-  }, [ringSignature, reducedMotion, normalizedRings]);
+    return () => {
+      if (animationFrameRef.current !== null) {
+        window.cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
+  }, [targetPercents, reducedMotion]);
 
   useEffect(() => {
     const nextClosed: Record<string, boolean> = {};
     const newlyClosed: string[] = [];
     const wasAllClosed = previousAllClosedRef.current;
-    const nowAllClosed = normalizedRings.length > 0 && normalizedRings.every((ring) => ring.closed);
+    const nowAllClosed = stableNormalizedRings.length > 0 && stableNormalizedRings.every((ring) => ring.closed);
 
-    for (const ring of normalizedRings) {
+    for (const ring of stableNormalizedRings) {
       const ringKey = ring.ringId ?? ring.label;
       const wasClosed = previousClosedRef.current[ringKey] ?? false;
       nextClosed[ringKey] = ring.closed;
@@ -251,9 +269,9 @@ export function NestedDailyRings({ rings, closedCount, totalCount, allClosed, st
         celebrateTimeoutRef.current = null;
       }
     };
-  }, [ringSignature, reducedMotion, normalizedRings]);
+  }, [ringSignature, reducedMotion, stableNormalizedRings]);
 
-  const ringLayout = useMemo(() => buildNestedDailyRingLayout(normalizedRings, displayPercents), [displayPercents, normalizedRings]);
+  const ringLayout = useMemo(() => buildNestedDailyRingLayout(stableNormalizedRings, displayPercents), [displayPercents, stableNormalizedRings]);
   const summaryLabel = allClosed ? "Complete" : closedCount > 0 ? "In progress" : "Open";
 
   return (

@@ -2,7 +2,7 @@
 
 import { CheckCircle2, XCircle } from "lucide-react";
 
-import type { DailyRingCompletionResultLike } from "@/lib/blundr/daily-rings/dailyRingTypes";
+import { isDailyRingCompletionFailure, type DailyRingCompletionResultLike } from "@/lib/blundr/daily-rings/dailyRingTypes";
 import { BLUNDR_TEMPO_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
 import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 import { XpGainPill } from "@/components/xp/XpGainPill";
@@ -19,7 +19,7 @@ type DailyRingCompletionBannerProps = {
 export function DailyRingCompletionBanner({ result, className }: DailyRingCompletionBannerProps) {
   if (!result) return null;
 
-  if (!result.ok) {
+  if (isDailyRingCompletionFailure(result)) {
     return (
       <div className={classNames("rounded-3xl border border-stone-200 bg-white p-4 shadow-sm", className)}>
         <div className="flex items-center gap-2 text-sm font-black text-stone-900">
@@ -27,6 +27,23 @@ export function DailyRingCompletionBanner({ result, className }: DailyRingComple
           Completion unavailable
         </div>
         <p className="mt-2 text-sm leading-6 text-stone-600">{result.message}</p>
+      </div>
+    );
+  }
+
+  if (result.sharedSyncFailed) {
+    return (
+      <div className={classNames("rounded-3xl border border-amber-200 bg-amber-50 p-4 shadow-sm", className)}>
+        <div className="flex items-center gap-2 text-sm font-black text-amber-900">
+          <XCircle size={16} className="text-amber-600" />
+          Reward sync failed
+        </div>
+        <p className="mt-2 text-sm leading-6 text-amber-800">
+          {result.sharedSyncFailureMessage ?? "Shared reward persistence failed. Please retry."}
+        </p>
+        <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">
+          Daily ring progress stayed recorded.
+        </p>
       </div>
     );
   }

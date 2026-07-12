@@ -61,6 +61,10 @@ export type DailyBlundrCardPlayerProps = {
   locked: boolean;
   miniGameState?: DailyMiniGameState | null;
   trainingTargetState?: DailyTrainingTargetState | null;
+  boardFenOverride?: string | null;
+  boardVisuals?: BoardVisualUiModel | null;
+  squareStyles?: Record<string, CSSProperties>;
+  animationClassName?: string | null;
   onMoveInputChange: (value: string) => void;
   onSubmitMove: (value: string) => void;
   onBoardMoveAttempt: (attempt: DailyBlundrBoardMoveAttempt) => void;

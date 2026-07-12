@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Chess, type PieceSymbol, type Square } from "chess.js";
 import { DailyBlundrCardPlayer } from "@/components/daily/DailyBlundrCardPlayer";
 import { DailyBlundrCardFeedback } from "@/components/daily/DailyBlundrCardFeedback";
 import { DailyBlundrSessionSummary } from "@/components/daily/DailyBlundrSessionSummary";
@@ -38,6 +39,14 @@ function nowIso(): string {
 
 function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+function isSquare(value: string): value is Square {
+  return /^[a-h][1-8]$/.test(value);
+}
+
+function isPromotion(value: string): value is PieceSymbol {
+  return value === "q" || value === "r" || value === "b" || value === "n";
 }
 
 function cloneMiniGameState(state: DailyMiniGameState | null | undefined): DailyMiniGameState | null {
@@ -202,6 +211,7 @@ export function DailyBlundrPlayer({
   });
   const [miniGameState, setMiniGameState] = useState<DailyMiniGameState | null>(null);
   const [trainingTargetState, setTrainingTargetState] = useState<DailyTrainingTargetState | null>(null);
+  const [wrongReview, setWrongReview] = useState<{ originalFen: string; wrongFen: string; correctFen: string; phase: "wrong" | "rewinding" | "demonstrating" | "resetting" | "retry" } | null>(null);
   const attemptStartedAtRef = useRef<number | null>(null);
   const submissionLockRef = useRef<string | null>(null);
 
@@ -215,6 +225,7 @@ export function DailyBlundrPlayer({
       setMoveInput("");
       setSupport({ usedReveal: false, revealedAt: null, answerShown: false });
       submissionLockRef.current = null;
+      setWrongReview(null);
       if (currentCard.kind === "mini_game") {
         setMiniGameState(cloneMiniGameState(currentCard.miniGame));
         setTrainingTargetState(null);
@@ -401,7 +412,51 @@ export function DailyBlundrPlayer({
       scoring,
       reviewAttempt,
     });
+    if (!scoring.correct && scoring.outcome === "incorrect") {
+      const originalFen = currentCard.fen;
+      let wrongFen = originalFen;
+      let correctFen = originalFen;
+      try {
+        const wrongGame = new Chess(originalFen);
+        const wrongMove = scoring.attemptedMoveUci ?? "";
+        if (/^[a-h][1-8][a-h][1-8][nbrq]?$/.test(wrongMove)) {
+          const from = wrongMove.slice(0, 2);
+          const to = wrongMove.slice(2, 4);
+          const promotion = wrongMove.slice(4);
+          if (isSquare(from) && isSquare(to) && (!promotion || isPromotion(promotion))) {
+            wrongGame.move({ from, to, promotion: promotion || undefined });
+            wrongFen = wrongGame.fen();
+          }
+        }
+        const correctGame = new Chess(originalFen);
+        const correctMove = scoring.expectedMoveUci ?? currentCard.expectedMoveUci ?? "";
+        if (/^[a-h][1-8][a-h][1-8][nbrq]?$/.test(correctMove)) {
+          const from = correctMove.slice(0, 2);
+          const to = correctMove.slice(2, 4);
+          const promotion = correctMove.slice(4);
+          if (isSquare(from) && isSquare(to) && (!promotion || isPromotion(promotion))) {
+            correctGame.move({ from, to, promotion: promotion || undefined });
+            correctFen = correctGame.fen();
+          }
+        }
+      } catch {
+        wrongFen = originalFen;
+        correctFen = originalFen;
+      }
+      setWrongReview({ originalFen, wrongFen, correctFen, phase: "wrong" });
+    }
   }
+
+  useEffect(() => {
+    if (!wrongReview || wrongReview.phase === "retry") return;
+    const nextPhase = wrongReview.phase === "wrong" ? "rewinding" : wrongReview.phase === "rewinding" ? "demonstrating" : wrongReview.phase === "demonstrating" ? "resetting" : "retry";
+    const delay = wrongReview.phase === "demonstrating" ? 800 : 300;
+    const timer = window.setTimeout(() => {
+      setWrongReview((current) => current ? { ...current, phase: nextPhase } : current);
+      if (nextPhase === "retry") setFeedback({ message: "Try again. Replay the correct move yourself.", tone: "warning" });
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [wrongReview]);
 
   function commitMiniGameAttempt(result: DailyMiniGameAdvanceResult, attempt: { from: string; to: string; uci: string; san: string | null }) {
     if (!session || !currentCard || currentCard.kind !== "mini_game" || !currentCard.miniGame) return;
@@ -663,7 +718,10 @@ export function DailyBlundrPlayer({
         support={support}
         miniGameState={miniGameState}
         trainingTargetState={trainingTargetState}
-        locked={submissionLockRef.current === currentCard.cardKey}
+        locked={submissionLockRef.current === currentCard.cardKey || Boolean(wrongReview && wrongReview.phase !== "retry")}
+        boardFenOverride={wrongReview ? (wrongReview.phase === "wrong" ? wrongReview.wrongFen : wrongReview.phase === "demonstrating" ? wrongReview.correctFen : wrongReview.originalFen) : null}
+        squareStyles={wrongReview?.phase === "demonstrating" ? { [currentCard.expectedMoveUci?.slice(0, 2) ?? ""]: { boxShadow: "inset 0 0 0 3px rgba(22,163,74,.72)" }, [currentCard.expectedMoveUci?.slice(2, 4) ?? ""]: { boxShadow: "inset 0 0 0 3px rgba(22,163,74,.72)" } } : undefined}
+        animationClassName={wrongReview && wrongReview.phase !== "retry" ? "animate-pulse" : null}
         onMoveInputChange={setMoveInput}
         onSubmitMove={(value) => commitRecallAttempt({ attemptedMove: value, usedReveal: support.usedReveal })}
         onBoardMoveAttempt={(attempt) => {

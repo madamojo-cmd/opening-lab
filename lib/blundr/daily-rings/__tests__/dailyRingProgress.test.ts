@@ -37,6 +37,17 @@ assert.equal(duplicateOpening.activityAlreadyApplied, true);
 assert.equal(duplicateOpening.repertoirePointsAwarded, 0);
 assert.equal(duplicateOpening.xpAwarded, 0);
 
+const clampedOpening = applyDailyRingActivity(opening.dayRecord, {
+  userId: "user-1",
+  source: "opening_run_completed",
+  completionId: "opening-2",
+  createdAt: now,
+  openingId: "italian-white",
+});
+assert.equal(clampedOpening.dayRecord.dailyTempo.progress, 1);
+assert.equal(clampedOpening.dayRecord.dailyTempo.goal, 1);
+assert.equal(clampedOpening.ringClosedThisAction, false);
+
 const continuation = applyDailyRingActivity(opening.dayRecord, {
   userId: "user-1",
   source: "continuation_completed",

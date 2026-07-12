@@ -29,6 +29,10 @@ function hasRareReward(rewardGrants: readonly RewardGrantRecord[]): boolean {
   return rewardGrants.some((grant) => grant.rarity === "rare" || grant.rarity === "epic");
 }
 
+function formatStateLabel(state: TempoCacheState): string {
+  return state.replace(/_/g, " ");
+}
+
 export function TempoCacheCard({ state, rewardGrants = [], rewardHistory, className, onPrimaryAction, primaryActionLabel }: TempoCacheCardProps) {
   const streakCache = isStreakCache(rewardGrants);
   const rareReward = hasRareReward(rewardGrants);
@@ -67,7 +71,7 @@ export function TempoCacheCard({ state, rewardGrants = [], rewardHistory, classN
             </div>
           </div>
           <div className="rounded-full bg-green-50 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-green-700 ring-1 ring-green-200">
-            {state}
+            {formatStateLabel(state)}
           </div>
         </div>
 
@@ -82,13 +86,13 @@ export function TempoCacheCard({ state, rewardGrants = [], rewardHistory, classN
             <div className="rounded-[1.5rem] bg-[#fbfcf7] p-4 ring-1 ring-stone-200">
               <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-green-700">
                 <span className="inline-flex h-2 w-2 rounded-full bg-green-500" />
-                Closed state
+                Not ready yet
               </div>
               <p className="mt-2 text-sm leading-6 text-stone-700">
-                Tempo Cache rewards never replace deterministic training. They only add extra repertoire points on top of your regular progress.
+                Tempo Cache rewards never replace training. They only add a small extra boost on top of your regular progress.
               </p>
               <p className="mt-2 text-xs leading-5 text-stone-500">
-                If a future reward lands, Tempo will reveal it here and apply it through repertoire points.
+                When a reward lands, Tempo will reveal it here and apply the right reward type to your account.
               </p>
             </div>
           </div>
@@ -120,7 +124,7 @@ export function TempoCacheCard({ state, rewardGrants = [], rewardHistory, classN
 
             {rewardHistory ? (
               <div className="rounded-[1.5rem] bg-stone-50 p-3 text-xs leading-5 text-stone-600 ring-1 ring-stone-200">
-                <div className="font-black uppercase tracking-[0.18em] text-stone-500">Pity tracker</div>
+                <div className="font-black uppercase tracking-[0.18em] text-stone-500">Reward cadence</div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <span className="rounded-full bg-white px-3 py-1 font-black text-stone-700 ring-1 ring-stone-200">
                     {rewardHistory.allRingsDaysSinceRandomReward} all-ring days since random bonus

@@ -70,6 +70,8 @@ function buildOutcomeFromReward(roll: RewardRoll, context: RewardTriggerContext,
     return buildMissedOutcome(roll, context, grantMode, "missing_reward");
   }
   const amount = Math.max(0, Number(roll.reward.amount) || 0);
+  const pointsApplied = roll.reward.rewardType === "opening_fragment" || roll.reward.rewardType === "choice_token" ? 0 : amount;
+  const pendingChoice = roll.reward.rewardType === "choice_token";
   return {
     roll,
     reward: roll.reward,
@@ -84,9 +86,9 @@ function buildOutcomeFromReward(roll: RewardRoll, context: RewardTriggerContext,
       amount,
       displayName: roll.reward.displayName,
       description: roll.reward.description,
-      pointsApplied: amount,
+      pointsApplied,
       applied: true,
-      pendingChoice: false,
+      pendingChoice,
       grantMode,
       createdAt: roll.rolledAt,
     },
@@ -158,9 +160,9 @@ export function evaluateRewardRoll(context: RewardTriggerContext, existingRolls:
           amount: Math.max(0, Number(reward.amount) || 0),
           displayName: reward.displayName,
           description: reward.description,
-          pointsApplied: Math.max(0, Number(reward.amount) || 0),
+          pointsApplied: reward.rewardType === "opening_fragment" || reward.rewardType === "choice_token" ? 0 : Math.max(0, Number(reward.amount) || 0),
           applied: true,
-          pendingChoice: false,
+          pendingChoice: reward.rewardType === "choice_token",
           grantMode: grantMode ?? "guaranteed_cache",
           createdAt: normalizeText(context.now) || roll.rolledAt,
         }

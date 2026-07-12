@@ -84,11 +84,11 @@ export function persistRewardHistoryLocally(userId: string, history: UserRewardH
   };
 }
 
-export async function syncRewardStateToAccount(userId: string, input: RewardHistorySnapshot): Promise<void> {
+export async function syncRewardStateToAccount(userId: string, input: RewardHistorySnapshot): Promise<boolean> {
   const session = await getOnboardingAuthSession().catch(() => null);
-  if (!session?.accessToken) return;
+  if (!session?.accessToken) return false;
   try {
-    await fetch("/api/blundr/rewards/sync", {
+    const response = await fetch("/api/blundr/rewards/sync", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -101,7 +101,10 @@ export async function syncRewardStateToAccount(userId: string, input: RewardHist
         rewardRolls: input.rewardRolls,
       }),
     });
+    if (!response.ok) return false;
+    const payload: unknown = await response.json().catch(() => null);
+    return Boolean(payload && typeof payload === "object" && "ok" in payload && payload.ok === true);
   } catch {
-    // Local reward state stays authoritative when remote sync is unavailable.
+    return false;
   }
 }

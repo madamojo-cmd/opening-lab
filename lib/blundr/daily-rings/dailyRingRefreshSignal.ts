@@ -5,6 +5,9 @@ export type DailyRingRefreshDetail = {
   localDate: string;
   source: string;
   activityEventId?: string | null;
+  ringId?: string | null;
+  ringClosedThisAction?: boolean;
+  allRingsClosedThisAction?: boolean;
   updatedAt: string;
 };
 
@@ -22,6 +25,9 @@ export function notifyDailyRingRefresh(detail: DailyRingRefreshDetail): void {
           localDate: normalizeText(detail.localDate),
           source: normalizeText(detail.source),
           activityEventId: normalizeText(detail.activityEventId) || null,
+          ringId: normalizeText(detail.ringId) || null,
+          ringClosedThisAction: Boolean(detail.ringClosedThisAction),
+          allRingsClosedThisAction: Boolean(detail.allRingsClosedThisAction),
           updatedAt: normalizeText(detail.updatedAt),
         },
       }),

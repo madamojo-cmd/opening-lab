@@ -1,0 +1,1 @@
+import type { ImbalanceProof } from '../types'; export function passesImbalanceQuality(p: ImbalanceProof): boolean { return p.activityDelta >= 1.5 && p.durableFeatures.length > 0 && p.relevantPieces.length > 1; }

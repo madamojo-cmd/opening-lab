@@ -49,6 +49,12 @@ async function main(): Promise<void> {
     const localDate = getDailyBlundrDateKey();
     resetLocalAccountState(userId);
     setLocalAccountCurrentUserId(userId);
+    const defaultSnapshot = loadDailyRingSnapshot({ userId, localDate });
+    assert.equal(defaultSnapshot.tempo.target, 10);
+    assert.equal(defaultSnapshot.battery.target, 3);
+    assert.equal(defaultSnapshot.blundr.target, 1);
+    assert.equal(defaultSnapshot.allComplete, false);
+
     upsertLocalTrainingProfile({
       ...createDefaultTrainingProfile(userId, now),
       dailyTempoGoal: 2,
@@ -65,8 +71,10 @@ async function main(): Promise<void> {
     );
 
     const before = loadDailyRingSnapshot({ userId, localDate });
-    assert.equal(before.dayRecord.dailyTempo.progress, 0);
-    assert.equal(before.dayRecord.dailyTempo.closed, false);
+    assert.equal(before.tempo.current, 0);
+    assert.equal(before.tempo.target, 2);
+    assert.equal(before.tempo.complete, false);
+    assert.equal(before.allComplete, false);
 
     const first = await completeDailyRingActivity({
       userId,
@@ -90,7 +98,11 @@ async function main(): Promise<void> {
     assert.equal(getLocalDailyRetentionProgress(userId, localDate)?.rings.dailyTempo.progress, first.dayRecord.dailyTempo.progress);
 
     const after = loadDailyRingSnapshot({ userId, localDate });
-    assert.equal(after.dayRecord.dailyTempo.progress, first.dayRecord.dailyTempo.progress);
+    assert.equal(after.tempo.current, first.dayRecord.dailyTempo.progress);
+    assert.equal(after.tempo.target, 2);
+    assert.equal(after.tempo.percent, 50);
+    assert.equal(after.tempo.complete, false);
+    assert.equal(after.allComplete, false);
 
     const duplicate = await completeDailyRingActivity({
       userId,
@@ -108,7 +120,57 @@ async function main(): Promise<void> {
     assert.equal(duplicate.ok, true);
     if (!duplicate.ok) throw new Error(duplicate.message);
     assert.equal(duplicate.activityAlreadyApplied, true);
-    assert.equal(loadDailyRingSnapshot({ userId, localDate }).dayRecord.dailyTempo.progress, after.dayRecord.dailyTempo.progress);
+    assert.equal(loadDailyRingSnapshot({ userId, localDate }).tempo.current, after.tempo.current);
+
+    upsertLocalTrainingProfile({
+      ...(getLocalTrainingProfile(userId) ?? createDefaultTrainingProfile(userId, now)),
+      dailyTempoGoal: 5,
+      updatedAt: now,
+    });
+    const retargeted = loadDailyRingSnapshot({ userId, localDate });
+    assert.equal(retargeted.tempo.target, 5);
+    assert.equal(retargeted.tempo.current, after.tempo.current);
+    assert.equal(retargeted.tempo.percent, 20);
+    assert.equal(retargeted.tempo.complete, false);
+
+    upsertLocalDailyRetentionProgress({
+      ...createDefaultDailyRetentionProgress(userId, localDate, {
+        dailyTempoGoal: 2,
+        dailyBatteryGoal: 1,
+        dailyBlundrGoal: 1,
+      }, now),
+      rings: {
+        dailyTempo: {
+          type: "daily_tempo",
+          goal: 2,
+          progress: 4,
+          completed: false,
+          completedAt: null,
+        },
+        dailyBattery: {
+          type: "daily_battery",
+          goal: 1,
+          progress: 1,
+          completed: true,
+          completedAt: now,
+        },
+        dailyBlundr: {
+          type: "daily_blundr",
+          goal: 1,
+          progress: 1,
+          completed: true,
+          completedAt: now,
+        },
+      },
+      updatedAt: now,
+    });
+    const reloaded = loadDailyRingSnapshot({ userId, localDate });
+    assert.equal(reloaded.tempo.current, 4);
+    assert.equal(reloaded.tempo.target, 5);
+    assert.equal(reloaded.tempo.percent, 80);
+    assert.equal(reloaded.tempo.complete, false);
+    assert.equal(getLocalTrainingProfile(userId)?.dailyTempoGoal, 5);
+    assert.equal(getLocalDailyRetentionProgress(userId, localDate)?.rings.dailyTempo.goal, 2);
   } finally {
     restore();
     resetLocalAccountState(userIdFromTest());

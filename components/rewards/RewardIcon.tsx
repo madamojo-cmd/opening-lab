@@ -1,11 +1,15 @@
 "use client";
 
-import type { RewardGrantRecord } from "@/lib/blundr/rewards/rewardTypes";
 import { BLUNDR_REWARD_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
 import { REWARD_KIND_ASSETS } from "@/lib/blundr/rewards/rewardConstants";
 import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 
-type RewardIconReward = Pick<RewardGrantRecord, "rarity" | "rewardType" | "displayName" | "description" | "amount"> & {
+type RewardIconReward = {
+  rarity: "common" | "uncommon" | "rare" | "epic";
+  rewardType: string;
+  displayName?: string;
+  description?: string;
+  amount?: number;
   id?: string;
 };
 

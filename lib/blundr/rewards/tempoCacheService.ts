@@ -50,6 +50,11 @@ export type TempoCacheEvaluationInput = {
   rewardHistory?: UserRewardHistory | null;
   rewardRolls?: readonly RewardRoll[] | null;
   now?: string;
+  syncRemote?: boolean;
+  deps?: {
+    evaluateRewardRoll?: typeof evaluateRewardRoll;
+    applyRewardGrant?: typeof applyRewardGrant;
+  };
 };
 
 function buildTriggerContexts(input: TempoCacheEvaluationInput, history: UserRewardHistory): RewardTriggerContext[] {
@@ -149,16 +154,22 @@ export async function evaluateTempoCacheRewards(input: TempoCacheEvaluationInput
   const currentHistory = snapshot.history;
   const existingRolls = snapshot.rewardRolls;
   const contexts = buildTriggerContexts(input, currentHistory);
+  const evaluateRewardRollFn = input.deps?.evaluateRewardRoll ?? evaluateRewardRoll;
+  const applyRewardGrantFn = input.deps?.applyRewardGrant ?? applyRewardGrant;
   const rewardRolls: RewardRoll[] = [];
   const rewardGrants: RewardGrantRecord[] = [];
   let rewardPointsAwarded = 0;
   let randomBonusGranted = false;
   let guaranteedCacheGranted = false;
   let pityTriggered = false;
+  let sharedSyncFailed = false;
+  let sharedSyncFailureMessage: string | undefined;
+  let hadRewardGrantAttempt = false;
 
   for (const context of contexts) {
-    const outcome = evaluateRewardRoll(context, [...existingRolls, ...rewardRolls]);
-    if (outcome.roll.id && !existingRolls.some((roll) => roll.id === outcome.roll.id) && !rewardRolls.some((roll) => roll.id === outcome.roll.id)) {
+    const outcome = evaluateRewardRollFn(context, [...existingRolls, ...rewardRolls]);
+    const hasNewRoll = Boolean(outcome.roll.id && !existingRolls.some((roll) => roll.id === outcome.roll.id) && !rewardRolls.some((roll) => roll.id === outcome.roll.id));
+    if (hasNewRoll) {
       rewardRolls.push(outcome.roll);
     }
 
@@ -196,15 +207,31 @@ export async function evaluateTempoCacheRewards(input: TempoCacheEvaluationInput
     const rewardId = outcome.reward?.id ?? null;
     const alreadyApplied = Boolean(rewardId && currentHistory.appliedRewardIds.includes(rewardId));
     if (outcome.grant && outcome.reward) {
+      hadRewardGrantAttempt = true;
       if (!alreadyApplied) {
-        const appliedGrant = await applyRewardGrant({
+        const appliedGrant = await applyRewardGrantFn({
           userId: input.userId,
           roll: outcome.roll,
           grantMode: outcome.grantMode ?? "guaranteed_cache",
           now: normalizeText(input.now) || undefined,
           starterPackId: input.starterPackId ?? null,
+          syncRemote: input.syncRemote,
         });
         if (!appliedGrant.ok) {
+          if (hasNewRoll) {
+            rewardRolls.pop();
+          }
+          if (appliedGrant.code === "shared_sync_failed") {
+            sharedSyncFailed = true;
+            sharedSyncFailureMessage = appliedGrant.message;
+            break;
+          }
+          continue;
+        }
+        if (!appliedGrant.applied) {
+          if (hasNewRoll) {
+            rewardRolls.pop();
+          }
           continue;
         }
         rewardGrants.push(appliedGrant.grant);
@@ -240,6 +267,24 @@ export async function evaluateTempoCacheRewards(input: TempoCacheEvaluationInput
     randomBonusGranted = true;
   }
 
+  if (hadRewardGrantAttempt && rewardGrants.length === 0) {
+    return {
+      userId: input.userId,
+      localDate: input.localDate,
+      rewardHistory: currentHistory,
+      rewardRolls: existingRolls,
+      rewardGrants: [],
+      rewardPointsAwarded: 0,
+      randomBonusGranted: false,
+      pityTriggered: false,
+      guaranteedCacheGranted: false,
+      state: "closed",
+      sharedSyncFailed,
+      sharedSyncFailureCode: sharedSyncFailed ? "shared_sync_failed" : undefined,
+      sharedSyncFailureMessage,
+    };
+  }
+
   const finalHistory = applyRewardHistoryBatch(currentHistory, {
     localDate: input.localDate,
     now: normalizeText(input.now) || undefined,
@@ -250,10 +295,12 @@ export async function evaluateTempoCacheRewards(input: TempoCacheEvaluationInput
   });
   const mergedRolls = uniqueById([...existingRolls, ...rewardRolls]);
   persistRewardHistoryLocally(input.userId, finalHistory, rewardRolls);
-  await syncRewardStateToAccount(input.userId, {
-    history: finalHistory,
-    rewardRolls: mergedRolls,
-  });
+  if (input.syncRemote !== false) {
+    await syncRewardStateToAccount(input.userId, {
+      history: finalHistory,
+      rewardRolls: mergedRolls,
+    });
+  }
 
   return {
     userId: input.userId,
@@ -266,5 +313,8 @@ export async function evaluateTempoCacheRewards(input: TempoCacheEvaluationInput
     pityTriggered,
     guaranteedCacheGranted,
     state: rewardGrants.length > 0 ? "applied" : "closed",
+    sharedSyncFailed,
+    sharedSyncFailureCode: sharedSyncFailed ? "shared_sync_failed" : undefined,
+    sharedSyncFailureMessage,
   };
 }

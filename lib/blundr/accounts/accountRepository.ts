@@ -12,6 +12,7 @@ export type AccountRepositoryContext = {
   mode?: BlundrAccountMode;
   accessToken?: string | null;
   allowLocalFallback?: boolean;
+  useAdminClient?: boolean;
 };
 
 function normalizeText(value: unknown): string {
@@ -24,6 +25,7 @@ export function getAccountPersistenceAdapter(context: AccountRepositoryContext =
     mode: context.mode,
     accessToken: context.accessToken ?? context.user?.accessToken ?? null,
     allowLocalFallback: context.allowLocalFallback,
+    useAdminClient: context.useAdminClient,
   });
 }
 
@@ -77,6 +79,10 @@ export async function readRewardHistory(userId: string, context: AccountReposito
 
 export async function saveRewardHistory(history: UserRewardHistory, context: AccountRepositoryContext = {}): Promise<PersistenceResult<UserRewardHistory>> {
   return getAccountPersistenceAdapter(context).upsertRewardHistory(history);
+}
+
+export async function readRewardRolls(userId: string, context: AccountRepositoryContext = {}): Promise<PersistenceResult<RewardRoll[]>> {
+  return getAccountPersistenceAdapter(context).getRewardRolls(userId);
 }
 
 export async function appendRewardRoll(roll: RewardRoll, context: AccountRepositoryContext = {}): Promise<PersistenceResult<RewardRoll>> {

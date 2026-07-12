@@ -1,4 +1,5 @@
 import type { DailyBlundrDifficulty } from "../daily/dailyBlundrTypes";
+import type { RewardInventorySnapshot } from "../rewards/rewardInventoryTypes";
 
 export type RatingBandId =
   | "new_to_openings"
@@ -155,6 +156,9 @@ export type UserRewardHistory = {
   lastRandomBonusAt?: string;
   lastPityGuaranteeLocalDate?: string;
   appliedRewardIds: string[];
+  openingFragments: number;
+  choiceTokens: number;
+  rewardInventoryAppliedEventIds: string[];
   updatedAt: string;
 };
 
@@ -204,6 +208,8 @@ export type UserAccountBootstrap = {
   repertoire: UserRepertoire;
   streakRecord: StreakRecord;
   rewardHistory: UserRewardHistory;
+  rewardInventory: RewardInventorySnapshot;
+  rewardRolls: RewardRoll[];
   dailyRetentionProgress: DailyRetentionProgress;
 };
 

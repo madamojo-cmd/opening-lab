@@ -1,0 +1,2 @@
+import { mkdirSync, writeFileSync } from 'node:fs'; import * as path from 'node:path'; import type { Rejection, Stage8MScenario } from '../types';
+export function writeHumanAudit(file: string, accepted: Stage8MScenario[], rejected: Rejection[]) { mkdirSync(path.dirname(file), { recursive: true }); const queue = accepted.filter((s) => s.validation.humanAuditRequired || !s.validation.runtimeReady); writeFileSync(file, JSON.stringify({ version: 'stage8m.v1', generatedAt: 'deterministic-output-no-timestamp', queue, rejectionSamples: rejected.slice(0, 250) }, null, 2)); }

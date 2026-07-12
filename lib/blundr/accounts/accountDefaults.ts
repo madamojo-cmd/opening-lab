@@ -112,6 +112,9 @@ export function createDefaultRewardHistory(userId: string, now = nowIso()): User
     lastRandomBonusAt: undefined,
     lastPityGuaranteeLocalDate: undefined,
     appliedRewardIds: [],
+    openingFragments: 0,
+    choiceTokens: 0,
+    rewardInventoryAppliedEventIds: [],
   };
 }
 

@@ -53,8 +53,21 @@ export function pickRewardTypeForRarity(rarity: RewardRarity): VariableRewardTyp
   }
 }
 
-export function buildRewardDisplayName(rarity: RewardRarity, amount: number, grantLabel: string): string {
+export function resolveRewardAmount(rarity: RewardRarity, rewardType: VariableRewardType, seed: string): number {
+  if (rewardType === "opening_fragment" || rewardType === "choice_token") {
+    return 1;
+  }
+  return pickRewardAmount(rarity, seed);
+}
+
+export function buildRewardDisplayName(rarity: RewardRarity, rewardType: VariableRewardType, amount: number, grantLabel: string): string {
   const label = REWARD_RARITY_LABELS[rarity];
+  if (rewardType === "opening_fragment") {
+    return `${label} Opening Fragment`;
+  }
+  if (rewardType === "choice_token") {
+    return `${label} Choice Token`;
+  }
   if (rarity === "rare") {
     return `${label} ${grantLabel}`;
   }
@@ -64,15 +77,15 @@ export function buildRewardDisplayName(rarity: RewardRarity, amount: number, gra
   return `${label} ${grantLabel}`;
 }
 
-export function buildRewardDescription(rarity: RewardRarity, amount: number, grantLabel: string, grantModeLabel: string): string {
-  if (rarity === "rare") {
-    return `Tempo found a choose-progress token. MVP applies it as +${amount} repertoire points.`;
+export function buildRewardDescription(rarity: RewardRarity, rewardType: VariableRewardType, amount: number, grantLabel: string, grantModeLabel: string): string {
+  if (rewardType === "opening_fragment") {
+    return `Opening fragment added to inventory. Collect 3 to choose a locked opening.`;
+  }
+  if (rewardType === "choice_token") {
+    return `Choice token added to inventory. Choose one locked opening to unlock.`;
   }
   if (rarity === "epic") {
     return `Epic bonus applied as +${amount} repertoire points.`;
-  }
-  if (rarity === "uncommon") {
-    return `Opening fragment visual only. Tempo turns it into +${amount} repertoire points for MVP.`;
   }
   return `Common bonus applied as +${amount} repertoire points.`;
 }
@@ -106,8 +119,8 @@ export function buildRewardReward(input: {
   pityBonus?: boolean;
 }): VariableReward {
   const rarity = pickRewardRarity(`${normalizeText(input.userId)}:${normalizeText(input.triggerEventId)}:${normalizeText(input.trigger)}`, input.forcedRarity ?? input.rarity ?? null);
-  const amount = pickRewardAmount(rarity, `${normalizeText(input.userId)}:${normalizeText(input.triggerEventId)}:${normalizeText(input.trigger)}`);
   const rewardType = pickRewardTypeForRarity(rarity);
+  const amount = resolveRewardAmount(rarity, rewardType, `${normalizeText(input.userId)}:${normalizeText(input.triggerEventId)}:${normalizeText(input.trigger)}`);
   return {
     id: buildRewardId({
       triggerEventId: input.triggerEventId,
@@ -118,8 +131,8 @@ export function buildRewardReward(input: {
     rarity,
     rewardType,
     amount,
-    displayName: buildRewardDisplayName(rarity, amount, input.grantLabel),
-    description: buildRewardDescription(rarity, amount, input.grantLabel, input.grantModeLabel),
+    displayName: buildRewardDisplayName(rarity, rewardType, amount, input.grantLabel),
+    description: buildRewardDescription(rarity, rewardType, amount, input.grantLabel, input.grantModeLabel),
   };
 }
 

@@ -34,7 +34,7 @@ async function readBody(request: NextRequest): Promise<Record<string, unknown>> 
 }
 
 export async function POST(request: NextRequest) {
-  const user = await getCurrentBlundrUser({ request, allowLocalFallback: true });
+  const user = await getCurrentBlundrUser({ request, allowLocalFallback: false });
   if (!user) {
     return NextResponse.json(
       {
@@ -64,31 +64,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (normalizeText(dayRecord.userId) && normalizeText(dayRecord.userId) !== user.userId) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: {
-          code: "user_mismatch",
-          message: "Daily ring progress belongs to a different user.",
-        },
-      },
-      { status: 400 },
-    );
-  }
-
-  if (normalizeText(streakRecord.userId) && normalizeText(streakRecord.userId) !== user.userId) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: {
-          code: "user_mismatch",
-          message: "Streak record belongs to a different user.",
-        },
-      },
-      { status: 400 },
-    );
-  }
+  const normalizedDayRecord: DailyRetentionProgress = {
+    ...dayRecord,
+    userId: user.userId,
+  };
+  const normalizedStreakRecord: StreakRecord = {
+    ...streakRecord,
+    userId: user.userId,
+  };
 
   const adapter = getAccountPersistenceAdapter({
     user,
@@ -98,7 +81,7 @@ export async function POST(request: NextRequest) {
   });
 
   const progressSave = await adapter.upsertDailyRetentionProgress({
-    ...dayRecord,
+    ...normalizedDayRecord,
     userId: user.userId,
   });
   if (!progressSave.ok) {
@@ -106,7 +89,7 @@ export async function POST(request: NextRequest) {
   }
 
   const streakSave = await adapter.upsertStreakRecord({
-    ...streakRecord,
+    ...normalizedStreakRecord,
     userId: user.userId,
   });
   if (!streakSave.ok) {
@@ -118,6 +101,7 @@ export async function POST(request: NextRequest) {
     data: {
       dailyRetentionProgress: progressSave.data,
       streakRecord: streakSave.data,
+      dayRecord: normalizedDayRecord,
     },
   });
 }

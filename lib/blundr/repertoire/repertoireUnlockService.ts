@@ -113,7 +113,7 @@ export function earnRepertoirePoints(progress: RepertoireProgress, event: Repert
   });
 }
 
-export function unlockOpening(progress: RepertoireProgress, openingId: string): RepertoireUnlockResult {
+export function unlockOpening(progress: RepertoireProgress, openingId: string, input: { sourceEventId?: string } = {}): RepertoireUnlockResult {
   const normalizedOpeningId = normalizeText(openingId);
   if (!normalizedOpeningId) {
     return { ok: false, code: "opening_not_found", message: "Choose an opening to unlock." };
@@ -146,6 +146,7 @@ export function unlockOpening(progress: RepertoireProgress, openingId: string): 
       openingId: normalizedOpeningId,
       unlockIndex,
       createdAt: nowIso(),
+      sourceEventId: input.sourceEventId,
     }),
     userId: normalizedProgress.userId,
     openingId: normalizedOpeningId,
@@ -158,6 +159,7 @@ export function unlockOpening(progress: RepertoireProgress, openingId: string): 
       openingId: normalizedOpeningId,
       unlockIndex,
       createdAt: nowIso(),
+      sourceEventId: input.sourceEventId,
     }),
     userId: normalizedProgress.userId,
     openingId: normalizedOpeningId,
@@ -186,6 +188,87 @@ export function unlockOpening(progress: RepertoireProgress, openingId: string): 
       unlockedOpeningIds,
       lockedOpeningIds,
       availablePoints: nextAvailablePoints,
+    } as RepertoireProgress),
+    updatedAt: event.createdAt,
+  });
+  return {
+    ok: true,
+    progress: nextProgress,
+    event,
+  };
+}
+
+export function unlockOpeningWithoutSpendingPoints(progress: RepertoireProgress, openingId: string, input: { sourceEventId?: string } = {}): RepertoireUnlockResult {
+  const normalizedOpeningId = normalizeText(openingId);
+  if (!normalizedOpeningId) {
+    return { ok: false, code: "opening_not_found", message: "Choose an opening to unlock." };
+  }
+  const allOpeningIds = getEligibleRepertoireOpeningIds();
+  if (!allOpeningIds.includes(normalizedOpeningId)) {
+    return { ok: false, code: "opening_not_found", message: "That opening is not available in the current repertoire pool." };
+  }
+  const normalizedProgress = normalizeProgressEvents(progress);
+  if (!normalizedProgress.lockedOpeningIds.includes(normalizedOpeningId)) {
+    return { ok: false, code: "opening_not_locked", message: "That opening is already unlocked." };
+  }
+
+  const unlockIndex = normalizedProgress.unlockEvents.length + 1;
+  const unlockedOpeningIds = normalizeUnlockedOpenings(
+    {
+      ...normalizedProgress,
+      unlockedOpeningIds: [...normalizedProgress.unlockedOpeningIds, normalizedOpeningId],
+    },
+    allOpeningIds,
+  );
+  const lockedOpeningIds = buildLockedOpeningIds(allOpeningIds, unlockedOpeningIds);
+  const createdAt = nowIso();
+  const event: RepertoireUnlockEvent = normalizeRepertoireUnlockEvent({
+    id: createRepertoireUnlockEventId({
+      userId: normalizedProgress.userId,
+      openingId: normalizedOpeningId,
+      unlockIndex,
+      createdAt,
+      sourceEventId: input.sourceEventId,
+    }),
+    userId: normalizedProgress.userId,
+    openingId: normalizedOpeningId,
+    pointsSpent: 0,
+    unlockIndex,
+    createdAt,
+  }) ?? {
+    id: createRepertoireUnlockEventId({
+      userId: normalizedProgress.userId,
+      openingId: normalizedOpeningId,
+      unlockIndex,
+      createdAt,
+      sourceEventId: input.sourceEventId,
+    }),
+    userId: normalizedProgress.userId,
+    openingId: normalizedOpeningId,
+    pointsSpent: 0,
+    unlockIndex,
+    createdAt,
+  };
+  const nextUnlockEvents = sortRepertoireUnlockEvents([...normalizedProgress.unlockEvents, event]);
+  const nextProgress = normalizeProgressEvents({
+    ...normalizedProgress,
+    availablePoints: normalizedProgress.availablePoints,
+    spentPoints: normalizedProgress.spentPoints,
+    lifetimePoints: normalizedProgress.lifetimePoints,
+    unlockedOpeningIds,
+    lockedOpeningIds,
+    unlockEvents: nextUnlockEvents,
+    nextUnlockCost: getNextUnlockCost({
+      ...normalizedProgress,
+      unlockedOpeningIds,
+      lockedOpeningIds,
+      availablePoints: normalizedProgress.availablePoints,
+    } as RepertoireProgress),
+    nextUnlockProgressPct: getUnlockProgressPct({
+      ...normalizedProgress,
+      unlockedOpeningIds,
+      lockedOpeningIds,
+      availablePoints: normalizedProgress.availablePoints,
     } as RepertoireProgress),
     updatedAt: event.createdAt,
   });

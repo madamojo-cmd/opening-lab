@@ -1,0 +1,2 @@
+import assert from 'node:assert/strict'; import test from 'node:test'; import { createBaseQualityGate } from '../quality/baseQualityGate';
+test('base gate rejects incomplete proof', () => { const gate = createBaseQualityGate(); assert.equal(gate.passes({ legalFen: true, legalMove: true, proofComplete: true, explanationSpecific: true, proof: { a: 1, b: 2 } }), false); assert.equal(gate.passes({ legalFen: true, legalMove: true, proofComplete: true, explanationSpecific: true, proof: { a: 1, b: 2, c: 3 } }), true); });

@@ -29,5 +29,8 @@ export function applyDailyBlundrAttemptToSession(session: DailyBlundrSession, at
     return session;
   }
   const withAttempt = addDailyBlundrAttempt(session, attempt);
+  if (!attempt.correct || attempt.outcome !== "correct") {
+    return withAttempt;
+  }
   return markDailyBlundrSessionCardComplete(withAttempt, attempt.cardId, attempt.completedAt);
 }

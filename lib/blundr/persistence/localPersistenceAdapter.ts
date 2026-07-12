@@ -10,6 +10,7 @@ import {
   getLocalRepertoirePointEvents,
   getLocalRepertoireUnlockEvents,
   getLocalRewardHistory,
+  getLocalRewardRolls,
   getLocalStreakRecord,
   getLocalTrainingProfile,
   getLocalUserRepertoire,
@@ -178,6 +179,13 @@ export function createBlundrLocalPersistenceAdapter(mode: BlundrAccountMode = "l
         return ok(upsertLocalRewardHistory(history));
       } catch (cause) {
         return withLocalError("Could not save local reward history.", cause);
+      }
+    },
+    async getRewardRolls(userId: string) {
+      try {
+        return ok(getLocalRewardRolls(userId));
+      } catch (cause) {
+        return withLocalError("Could not read local reward rolls.", cause);
       }
     },
     async appendRewardRoll(roll: RewardRoll) {

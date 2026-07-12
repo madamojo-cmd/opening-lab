@@ -65,6 +65,6 @@ export type RepertoireUnlockResult =
     }
   | {
       ok: false;
-      code: "opening_not_locked" | "opening_not_found" | "insufficient_points" | "invalid_repertoire";
+      code: "opening_not_locked" | "opening_not_found" | "insufficient_points" | "invalid_repertoire" | "auth_required" | "shared_sync_failed";
       message: string;
     };

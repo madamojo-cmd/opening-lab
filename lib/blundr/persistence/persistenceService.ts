@@ -11,6 +11,7 @@ export type BlundrPersistenceServiceInput = {
   mode?: BlundrAccountMode;
   accessToken?: string | null;
   allowLocalFallback?: boolean;
+  useAdminClient?: boolean;
 };
 
 function normalizeText(value: unknown): string {
@@ -18,6 +19,7 @@ function normalizeText(value: unknown): string {
 }
 
 function shouldUseLocalFallback(input: BlundrPersistenceServiceInput, envHasSupabase: boolean, mode: BlundrAccountMode): boolean {
+  if (input.useAdminClient) return false;
   if (mode === "local_demo") return true;
   if (!envHasSupabase) return true;
   if (input.allowLocalFallback === false) return false;
@@ -37,6 +39,7 @@ export function resolveBlundrPersistenceAdapter(input: BlundrPersistenceServiceI
   return createBlundrSupabasePersistenceAdapter({
     accessToken,
     mode,
+    useAdminClient: Boolean(input.useAdminClient),
   });
 }
 

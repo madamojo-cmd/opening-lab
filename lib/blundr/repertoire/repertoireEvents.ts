@@ -42,12 +42,14 @@ export function createRepertoireUnlockEventId(args: {
   openingId: string;
   unlockIndex: number;
   createdAt?: string;
+  sourceEventId?: string;
 }): string {
   return [
     normalizeText(args.userId) || "user",
     normalizeText(args.openingId) || "opening",
     Math.max(1, Number(args.unlockIndex) || 1),
     safeIso(args.createdAt),
+    normalizeText(args.sourceEventId) || "attempt",
   ].join(":");
 }
 

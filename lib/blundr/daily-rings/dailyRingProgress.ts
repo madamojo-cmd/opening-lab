@@ -30,9 +30,13 @@ function uniqueStrings(values: readonly string[]): string[] {
 }
 
 function updateRingProgress(progress: DailyRingProgress): DailyRingProgress {
-  const closed = progress.progress >= progress.goal;
+  const goal = Math.max(1, Math.round(Number(progress.goal) || 0) || 1);
+  const clampedProgress = Math.max(0, Math.min(goal, Math.round(Number(progress.progress) || 0)));
+  const closed = Boolean(progress.closed) || clampedProgress >= goal;
   return {
     ...progress,
+    goal,
+    progress: clampedProgress,
     closed,
     closedAt: closed ? progress.closedAt ?? nowIso() : progress.closedAt,
   };

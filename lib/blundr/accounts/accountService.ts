@@ -12,9 +12,10 @@ import type {
 } from "./accountTypes";
 import type { PersistenceResult } from "../persistence/persistenceTypes";
 import { getCurrentBlundrUser } from "./accountSession";
-import { readDailyRetentionProgress, readRewardHistory, readStreakRecord, readTrainingProfile, readUserRepertoire, saveDailyRetentionProgress, saveRewardHistory, saveStreakRecord, saveTrainingProfile, saveUserRepertoire } from "./accountRepository";
+import { readDailyRetentionProgress, readRewardHistory, readRewardRolls, readStreakRecord, readTrainingProfile, readUserRepertoire, saveDailyRetentionProgress, saveRewardHistory, saveStreakRecord, saveTrainingProfile, saveUserRepertoire } from "./accountRepository";
 import { syncLocalDemoStateToAccount as syncDailyStateToAccount } from "./accountSync";
 import { buildInitialRepertoireFromStarterPack } from "../onboarding/starterPacks";
+import { buildRewardInventoryView } from "../rewards/rewardInventoryTypes";
 
 export type AccountServiceContext = {
   user?: CurrentBlundrUser | null;
@@ -35,6 +36,10 @@ function localDateKey(date = new Date()): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+function normalizeText(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
 function chooseExisting<T extends { updatedAt: string }>(current: T, existing: T | null): T {
   if (!existing) return current;
   const currentUpdated = Date.parse(current.updatedAt || "");
@@ -53,6 +58,17 @@ function getPersistenceError(result: PersistenceResult<unknown>) {
 
 function failBootstrap(result: PersistenceResult<unknown>): PersistenceResult<UserAccountBootstrap> {
   return { ok: false, error: getPersistenceError(result) };
+}
+
+function buildRewardInventoryFromHistory(history: UserRewardHistory, now = nowIso()) {
+  return buildRewardInventoryView({
+    userId: history.userId,
+    openingFragments: Math.max(0, Number(history.openingFragments) || 0),
+    choiceTokens: Math.max(0, Number(history.choiceTokens) || 0),
+    appliedEventIds: Array.from(new Set(history.rewardInventoryAppliedEventIds ?? [])),
+    events: [],
+    updatedAt: normalizeText(history.updatedAt) || now,
+  });
 }
 
 async function createOrUpdate<T extends { updatedAt: string }>(
@@ -110,11 +126,12 @@ export async function getOrCreateDailyRetentionProgress(userId: string, context:
 export async function initializeAccountDefaults(userId: string, context: AccountServiceContext = {}): Promise<PersistenceResult<UserAccountBootstrap>> {
   const now = context.now ?? nowIso();
   const localDate = context.localDate ?? localDateKey(new Date(now));
-  const [profileResult, repertoireResult, streakRecordResult, rewardHistoryResult, dailyRetentionProgressResult] = await Promise.all([
+  const [profileResult, repertoireResult, streakRecordResult, rewardHistoryResult, rewardRollsResult, dailyRetentionProgressResult] = await Promise.all([
     getOrCreateTrainingProfile(userId, context),
     getOrCreateUserRepertoire(userId, context),
     getOrCreateStreakRecord(userId, context),
     getOrCreateRewardHistory(userId, context),
+    readRewardRolls(userId, context),
     getOrCreateDailyRetentionProgress(userId, { ...context, localDate, now }),
   ]);
 
@@ -122,6 +139,7 @@ export async function initializeAccountDefaults(userId: string, context: Account
   if (!repertoireResult.ok) return failBootstrap(repertoireResult);
   if (!streakRecordResult.ok) return failBootstrap(streakRecordResult);
   if (!rewardHistoryResult.ok) return failBootstrap(rewardHistoryResult);
+  if (!rewardRollsResult.ok) return failBootstrap(rewardRollsResult);
   if (!dailyRetentionProgressResult.ok) return failBootstrap(dailyRetentionProgressResult);
 
   const user = context.user ?? {
@@ -142,6 +160,8 @@ export async function initializeAccountDefaults(userId: string, context: Account
       repertoire: repertoireResult.data,
       streakRecord: streakRecordResult.data,
       rewardHistory: rewardHistoryResult.data,
+      rewardInventory: buildRewardInventoryFromHistory(rewardHistoryResult.data),
+      rewardRolls: rewardRollsResult.data,
       dailyRetentionProgress: dailyRetentionProgressResult.data,
     },
   };

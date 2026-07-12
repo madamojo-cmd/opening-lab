@@ -56,7 +56,7 @@ export function RepertoireOpeningGrid({
             <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">Locked</div>
             <div className="mt-1 text-lg font-black tracking-tight text-stone-950">{lockedCards.length} openings waiting</div>
           </div>
-          <div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-600">Tempo will open them in order</div>
+          <div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-600">Fragments and tokens choose selected openings</div>
         </div>
         {lockedCards.length > 0 ? (
           <div className="grid gap-3">
@@ -72,7 +72,7 @@ export function RepertoireOpeningGrid({
         ) : (
           emptyLockedState ?? (
             <div className="rounded-[1.5rem] border border-stone-200 bg-white p-4 text-sm leading-6 text-stone-600 shadow-sm">
-              All eligible MVP openings are unlocked. Tempo will keep widening the pool as you keep training.
+              All current openings are unlocked. Tempo will widen the pool when new repertoire is ready.
             </div>
           )
         )}

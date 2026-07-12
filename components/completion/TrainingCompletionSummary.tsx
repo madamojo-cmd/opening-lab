@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { CheckCircle2, Sparkles } from "lucide-react";
 
 import { BLUNDR_ANALYTICS_EVENTS } from "@/lib/blundr/analytics/blundrAnalyticsEvents";
 import { BLUNDR_TEMPO_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
 import { trackBlundrAnalyticsEvent } from "@/lib/blundr/analytics/blundrAnalyticsService";
-import type { DailyRingCompletionResultLike } from "@/lib/blundr/daily-rings/dailyRingTypes";
+import { isDailyRingCompletionFailure, isDailyRingCompletionSuccess, type DailyRingCompletionResultLike } from "@/lib/blundr/daily-rings/dailyRingTypes";
 import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 import { DailyRingCompletionBanner } from "@/components/daily-rings/DailyRingCompletionBanner";
 import { StreakSummaryCard } from "@/components/streaks/StreakSummaryCard";
-import { TempoCacheModal } from "@/components/rewards/TempoCacheModal";
+import { enqueueRewardPopup } from "@/lib/blundr/rewards/rewardPopupBus";
 
 function classNames(...classes: Array<string | false | null | undefined>): string {
   return classes.filter(Boolean).join(" ");
@@ -22,8 +22,6 @@ type TrainingCompletionSummaryProps = {
 };
 
 export function TrainingCompletionSummary({ result, className }: TrainingCompletionSummaryProps) {
-  const [showTempoCache, setShowTempoCache] = useState(false);
-
   useEffect(() => {
     if (!result || !result.ok) return;
     trackBlundrAnalyticsEvent(BLUNDR_ANALYTICS_EVENTS.TRAINING_COMPLETION_SUMMARY_VIEWED, {
@@ -36,16 +34,16 @@ export function TrainingCompletionSummary({ result, className }: TrainingComplet
   }, [result]);
 
   useEffect(() => {
-    if (result && result.ok && (result.rewardGrants?.length ?? 0) > 0) {
-      setShowTempoCache(true);
-      return;
-    }
-    setShowTempoCache(false);
+    if (!result || !isDailyRingCompletionSuccess(result)) return;
+    if (result.sharedSyncFailed || !result.rewardGrants?.length) return;
+    const grant = result.rewardGrants.find((entry) => entry.applied);
+    if (!grant) return;
+    enqueueRewardPopup({ id: grant.triggerEventId || grant.id, transactionId: grant.triggerEventId, kind: "tempo_cache", preview: false, title: "Tempo Cache", description: "Reveal your persisted reward.", createdAt: grant.createdAt, variant: "B", state: result.tempoCacheState ?? "applied", rewardGrants: [grant], rewardHistory: result.rewardHistory ?? null });
   }, [result]);
 
   if (!result) return null;
 
-  if (!result.ok) {
+  if (isDailyRingCompletionFailure(result)) {
     return (
       <div className={classNames("rounded-3xl border border-stone-200 bg-white p-4 shadow-sm", className)}>
         <div className="flex items-center gap-2 text-sm font-black text-stone-900">
@@ -59,18 +57,6 @@ export function TrainingCompletionSummary({ result, className }: TrainingComplet
 
   return (
     <section className={classNames("rounded-3xl border border-green-200 bg-green-50 p-4 shadow-sm", className)}>
-      {result.ok ? (
-        <TempoCacheModal
-          open={showTempoCache && (result.rewardGrants?.length ?? 0) > 0}
-          userId={result.userId}
-          localDate={result.localDate}
-          state={result.tempoCacheState ?? "applied"}
-          rewardGrants={result.rewardGrants ?? []}
-          rewardHistory={result.rewardHistory ?? null}
-          onClose={() => setShowTempoCache(false)}
-          onPrimaryAction={() => setShowTempoCache(false)}
-        />
-      ) : null}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
           <BlundrAssetImage asset={BLUNDR_TEMPO_ASSETS.reward} alt="Tempo reward" variant="tempoInline" className="mx-auto sm:mx-0 sm:shrink-0" />

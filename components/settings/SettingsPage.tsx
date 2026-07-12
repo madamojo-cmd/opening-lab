@@ -110,6 +110,7 @@ function saveBoardPreferences(preferences: BlundrBoardPreferences, authSession: 
 
 export function SettingsPage({ homeHref = "/", className }: SettingsPageProps) {
   const [authSession, setAuthSession] = useState<OnboardingAuthSession | null>(null);
+  const [sessionResolved, setSessionResolved] = useState(false);
   const [snapshot, setSnapshot] = useState(() => buildAccountSettingsSnapshot());
   const [authMode, setAuthMode] = useState<OnboardingAuthMode>("sign_in");
   const [email, setEmail] = useState("");
@@ -134,6 +135,7 @@ export function SettingsPage({ homeHref = "/", className }: SettingsPageProps) {
     void loadBlundrSettingsAuthSession().then((session) => {
       if (cancelled) return;
       setAuthSession(session);
+      setSessionResolved(true);
       const nextSnapshot = buildAccountSettingsSnapshot({
         authSession: session,
         storage: typeof window === "undefined" ? null : window.localStorage,
@@ -406,7 +408,7 @@ export function SettingsPage({ homeHref = "/", className }: SettingsPageProps) {
                   </div>
                   <div className="rounded-2xl bg-white px-4 py-3 ring-1 ring-stone-200">
                     <div className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">User id</div>
-                    <div className="mt-1 font-black text-stone-950">{snapshot.currentUserId}</div>
+                  <div className="mt-1 font-black text-stone-950">{sessionResolved ? snapshot.currentUserId : "Resolving account…"}</div>
                   </div>
                 </div>
               </div>

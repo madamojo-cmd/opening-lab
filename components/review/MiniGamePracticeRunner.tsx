@@ -9,16 +9,15 @@ import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 import { DailyBlundrBoard } from "@/components/daily/DailyBlundrBoard";
 import { DailyBlundrCardFeedback } from "@/components/daily/DailyBlundrCardFeedback";
 import { getDailyBlundrDateKey, reconcileDailyBlundrSession } from "@/lib/blundr/daily/dailyBlundrStorage";
-import { getDailyMiniGameDefinition } from "@/lib/blundr/daily/miniGames/dailyMiniGameRegistry";
 import type { DailyBlundrMiniGameCard, DailyMiniGameAdvanceResult, DailyMiniGameId, DailyMiniGameState } from "@/lib/blundr/daily/miniGames/dailyMiniGameTypes";
 import type { DailyBlundrBoardMoveAttempt } from "@/lib/blundr/daily/dailyBlundrPlayerTypes";
-import { parseUciMove } from "@/lib/blundr/daily/miniGames/generation/miniGameMoveRules";
-import { BLUNDR_MINIGAME_ENGINE_CACHE_READY_EVENT } from "@/lib/blundr/daily/miniGames/generation/miniGameEngineCache";
-import type { Square } from "@/lib/blundr/geometry/boardTypes";
-import { readLocalBoardPreferences } from "@/lib/blundr/board/boardPreferenceService";
 import { ProfileSettingsIcon } from "@/components/navigation/ProfileSettingsIcon";
 import { BlundrStateCard } from "@/components/blundr/ui";
 import { buildMiniGameBoardFeedback } from "@/lib/blundr/daily/miniGames/runner/miniGameBoardFeedbackAdapter";
+import { selectProductionScenario, type ProductionMiniGameId } from "@/lib/blundr/daily/miniGames/generated/minigameContentLoader";
+import { adaptProductionScenarioToCard, advanceProductionMiniGame } from "@/lib/blundr/daily/miniGames/generated/productionMiniGameAdapter";
+import type { Square } from "@/lib/blundr/geometry/boardTypes";
+import type { LegacyMiniGamePracticeBundle } from "@/lib/blundr/daily/miniGames/legacyMiniGamePractice";
 import {
   canSubmitMove,
   createInitialMiniGameRunnerState,
@@ -28,11 +27,7 @@ import {
   type MiniGameRunnerScenario,
 } from "@/lib/blundr/daily/miniGames/runner/miniGameRunnerState";
 
-type PracticeBundle = {
-  card: DailyBlundrMiniGameCard;
-  session: ReturnType<typeof reconcileDailyBlundrSession>;
-  sessionDateKey: string;
-};
+type PracticeBundle = LegacyMiniGamePracticeBundle;
 
 type MiniGamePracticeRunnerProps = {
   miniGameId: DailyMiniGameId | string;
@@ -40,6 +35,32 @@ type MiniGamePracticeRunnerProps = {
   reviewHref?: string;
   settingsHref?: string;
 };
+
+const BLUNDR_MINIGAME_ENGINE_CACHE_READY_EVENT = "blundr:minigame-engine-cache-ready";
+const PRODUCTION_MINIGAME_METADATA: Record<ProductionMiniGameId, { title: string; summary: string }> = {
+  tactic_shots: { title: "Tactic Shots", summary: "Find the forcing move." },
+  knight_gymnasium: { title: "Knight Gymnasium", summary: "Train knight geometry." },
+  key_square_conquest: { title: "Key Square Conquest", summary: "Claim the durable square." },
+  structure_builder: { title: "Structure Builder", summary: "Improve the pawn structure." },
+  imbalance_arena: { title: "Imbalance Arena", summary: "Convert the useful imbalance." },
+  technique_lab: { title: "Technique Lab", summary: "Apply the endgame technique." },
+  king_race: { title: "King Race", summary: "Choose the winning king route." },
+  pawn_wars: { title: "Pawn Wars", summary: "Calculate the pawn race." },
+};
+
+function isProductionMiniGameId(value: string): value is ProductionMiniGameId {
+  return Object.prototype.hasOwnProperty.call(PRODUCTION_MINIGAME_METADATA, value);
+}
+
+function parseUciMove(uci: string): { from: Square; to: Square; promotion?: string } | null {
+  const normalized = normalizeText(uci).toLowerCase();
+  if (!/^[a-h][1-8][a-h][1-8][nbrq]?$/.test(normalized)) return null;
+  return {
+    from: normalized.slice(0, 2),
+    to: normalized.slice(2, 4),
+    promotion: normalized.slice(4) || undefined,
+  };
+}
 
 function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
@@ -50,43 +71,22 @@ function cloneMiniGameState(state: DailyMiniGameState | null | undefined): Daily
   return JSON.parse(JSON.stringify(state)) as DailyMiniGameState;
 }
 
-export function buildPracticeBundle(miniGameId: string, nonce: number, recentScenarioKeys: readonly string[], userIdOrLocalId: string | null): PracticeBundle | null {
-  const definition = getDailyMiniGameDefinition(miniGameId as DailyMiniGameId);
-  if (!definition) return null;
-  const now = new Date().toISOString();
-  const dateKey = `${getDailyBlundrDateKey()}:${definition.id}:${nonce}`;
-  const boardPreferences = typeof window !== "undefined" ? readLocalBoardPreferences(window.localStorage) : null;
-  const card = definition.generate({
-    dateKey,
-    now,
-    mastery: null,
-    difficulty: definition.recommendedFor[0] ?? "beginner",
-    currentMastery: 0.25,
-    confidence: 0.25,
-    dueReviewCount: 0,
-    selectedReviewCount: 0,
-    recentMiniGameIds: [],
-    recentFenKeys: [],
-    sessionMiniGameIds: [],
-    source: "standalone_review",
-    seed: `${definition.id}|${dateKey}|${nonce}|standalone_review|${userIdOrLocalId ?? "local"}`,
-    userIdOrLocalId,
-    recentScenarioKeys,
-    boardPreferences,
-    deckId: `review:${definition.id}`,
-    miniGameId: definition.id,
+export async function buildProductionPracticeBundle(
+  miniGameId: string,
+  nonce: number,
+  recentScenarioKeys: readonly string[],
+  userIdOrLocalId: string | null,
+): Promise<PracticeBundle | null> {
+  if (!isProductionMiniGameId(miniGameId)) return null;
+  const dateKey = `${getDailyBlundrDateKey()}:${miniGameId}:${nonce}`;
+  const scenario = await selectProductionScenario({
+    miniGameId,
+    selectionKey: `${userIdOrLocalId ?? "local"}:${dateKey}:${nonce}`,
+    recentlyPlayedIds: recentScenarioKeys,
   });
-  if (!card || card.kind !== "mini_game") return null;
-  const session = reconcileDailyBlundrSession({
-    dateKey,
-    deck: [card],
-    existing: null,
-  });
-  return {
-    card,
-    session,
-    sessionDateKey: dateKey,
-  };
+  const card = adaptProductionScenarioToCard({ scenario, source: "standalone_review" });
+  const session = reconcileDailyBlundrSession({ dateKey, deck: [card], existing: null });
+  return { card, session, sessionDateKey: dateKey };
 }
 
 export function buildMiniGameRunnerScenarioFromCard(card: DailyBlundrMiniGameCard): MiniGameRunnerScenario | null {
@@ -94,8 +94,8 @@ export function buildMiniGameRunnerScenarioFromCard(card: DailyBlundrMiniGameCar
   const scenario = miniGame?.scenario ?? null;
   if (!scenario) return null;
   const parsedSolution = parseUciMove(scenario.solution.uci);
-  const from = (parsedSolution?.from ?? scenario.solution.uci.slice(0, 2)) as Square;
-  const to = (parsedSolution?.to ?? scenario.solution.uci.slice(2, 4)) as Square;
+  const from = parsedSolution?.from ?? scenario.solution.uci.slice(0, 2);
+  const to = parsedSolution?.to ?? scenario.solution.uci.slice(2, 4);
   return {
     scenarioKey: scenario.novelty.scenarioKey,
     miniGameId: miniGame.miniGameId,
@@ -118,7 +118,7 @@ export function buildMiniGameRunnerScenarioFromCard(card: DailyBlundrMiniGameCar
       acceptedMoves: [...scenario.acceptedMoves],
       from,
       to,
-      promotion: parsedSolution?.promotion,
+      promotion: parsedSolution?.promotion === "q" || parsedSolution?.promotion === "r" || parsedSolution?.promotion === "b" || parsedSolution?.promotion === "n" ? parsedSolution.promotion : undefined,
       verification: {
         verified: true,
         verifier: "legacy-mini-game-adapter",
@@ -159,9 +159,7 @@ function buildMiniGameFeedback(result: DailyMiniGameAdvanceResult | null): { mes
 }
 
 function advanceMiniGame(card: DailyBlundrMiniGameCard, state: DailyMiniGameState, attempt: DailyBlundrBoardMoveAttempt): DailyMiniGameAdvanceResult | null {
-  const definition = getDailyMiniGameDefinition(card.miniGame.miniGameId);
-  if (!definition?.advance) return null;
-  return definition.advance(state, attempt);
+  return advanceProductionMiniGame(state, attempt);
 }
 
 function MiniGameRunnerPanel({
@@ -542,12 +540,30 @@ function MiniGameRunnerPanel({
 export function MiniGamePracticeRunner({ miniGameId, homeHref = "/", reviewHref = "/review", settingsHref = "/settings" }: MiniGamePracticeRunnerProps) {
   const [practiceNonce, setPracticeNonce] = useState(0);
   const [engineRefreshTick, setEngineRefreshTick] = useState(0);
+  const [practiceBundle, setPracticeBundle] = useState<PracticeBundle | null>(null);
+  const [practiceLoading, setPracticeLoading] = useState(true);
   const recentScenarioKeysRef = useRef<string[]>([]);
   const userIdOrLocalId = useMemo(() => getLocalAccountCurrentUserId() ?? "local", []);
-  const practiceBundle = useMemo(
-    () => buildPracticeBundle(miniGameId, practiceNonce, recentScenarioKeysRef.current, userIdOrLocalId),
-    [miniGameId, practiceNonce, engineRefreshTick, userIdOrLocalId],
-  );
+
+  useEffect(() => {
+    let cancelled = false;
+    setPracticeLoading(true);
+    setPracticeBundle(null);
+    void buildProductionPracticeBundle(miniGameId, practiceNonce, recentScenarioKeysRef.current, userIdOrLocalId)
+      .then((bundle) => {
+        if (cancelled) return;
+        setPracticeBundle(bundle);
+      })
+      .catch(() => {
+        if (!cancelled) setPracticeBundle(null);
+      })
+      .finally(() => {
+        if (!cancelled) setPracticeLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [miniGameId, practiceNonce, engineRefreshTick, userIdOrLocalId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -566,9 +582,10 @@ export function MiniGamePracticeRunner({ miniGameId, homeHref = "/", reviewHref 
     recentScenarioKeysRef.current = [scenarioKey, ...recentScenarioKeysRef.current.filter((entry) => normalizeText(entry).toLowerCase() !== scenarioKey.toLowerCase())].slice(0, 8);
   }, [practiceBundle?.card.cardKey, practiceBundle?.card.miniGame?.scenario?.novelty.scenarioKey]);
 
-  const definition = useMemo(() => getDailyMiniGameDefinition(miniGameId as DailyMiniGameId), [miniGameId]);
+  const productionId = isProductionMiniGameId(miniGameId) ? miniGameId : null;
+  const metadata = productionId ? PRODUCTION_MINIGAME_METADATA[productionId] : null;
 
-  if (!definition) {
+  if (!metadata) {
     return (
       <section className="space-y-4">
         <header className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
@@ -608,7 +625,7 @@ export function MiniGamePracticeRunner({ miniGameId, homeHref = "/", reviewHref 
     );
   }
 
-  if (!practiceBundle) {
+  if (practiceLoading || !practiceBundle) {
     return (
       <BlundrStateCard
         kind="loading"
@@ -628,8 +645,8 @@ export function MiniGamePracticeRunner({ miniGameId, homeHref = "/", reviewHref 
               <Sparkles size={14} />
               Minigames
             </div>
-            <h1 className="mt-3 text-2xl font-black tracking-tight text-stone-950">{definition.displayName ?? definition.title}</h1>
-            <p className="mt-2 text-sm leading-6 text-stone-600">{definition.shortDescription ?? definition.summary}</p>
+            <h1 className="mt-3 text-2xl font-black tracking-tight text-stone-950">{metadata.title}</h1>
+            <p className="mt-2 text-sm leading-6 text-stone-600">{metadata.summary}</p>
           </div>
           <div className="flex items-center gap-2">
             <ProfileSettingsIcon />
@@ -656,7 +673,7 @@ export function MiniGamePracticeRunner({ miniGameId, homeHref = "/", reviewHref 
               </span>
             </div>
             <p className="mt-3 text-sm leading-6 text-stone-600">
-              Skills: <span className="font-black text-stone-900">{practiceBundle.card.conceptIds.join(", ")}</span>
+              Skills: <span className="font-black text-stone-900">{Array.isArray(practiceBundle.card.conceptIds) && practiceBundle.card.conceptIds.length > 0 ? practiceBundle.card.conceptIds.join(", ") : "General practice"}</span>
             </p>
             <p className="mt-2 text-sm leading-6 text-stone-600">
               Blundr uses the same board theme, move grading, and Daily controls here. Practice does not mark the Daily Blundr deck complete.
