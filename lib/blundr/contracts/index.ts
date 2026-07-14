@@ -163,6 +163,10 @@ export type DailyReducerResult =
 export type DailyActivityDefinition = {
   activityId: string;
   version: string;
+  schemaVersion: string;
+  evidenceVersion: string;
+  generatorVersion: string;
+  validatorVersion: string;
   lifecycle: readonly DailyActivityLifecycle[];
   build: (input: unknown) => unknown;
   validate: (input: unknown) => unknown;
@@ -274,7 +278,12 @@ export type FeatureFlagName =
   | "opening_access_v2"
   | "daily_core_v2"
   | "provider_ingestion"
-  | "mixed_test";
+  | "mixed_test"
+  | "daily_candidate_choice"
+  | "daily_plan_recall"
+  | "daily_same_position_different_route"
+  | "daily_continuation_challenge"
+  | "daily_punish_the_mistake";
 export const FEATURE_FLAGS: Readonly<Record<FeatureFlagName, boolean>> = {
   learning_core_v2: false,
   weakness_engine: false,
@@ -282,6 +291,11 @@ export const FEATURE_FLAGS: Readonly<Record<FeatureFlagName, boolean>> = {
   daily_core_v2: false,
   provider_ingestion: false,
   mixed_test: false,
+  daily_candidate_choice: false,
+  daily_plan_recall: false,
+  daily_same_position_different_route: false,
+  daily_continuation_challenge: false,
+  daily_punish_the_mistake: false,
 };
 
 export function isFailClosedAccess(

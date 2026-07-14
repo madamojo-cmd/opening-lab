@@ -17,3 +17,9 @@ export function getDailyActivity(
 export function getDailyActivityRegistry(): DailyRegistry {
   return new Map(registry);
 }
+
+export function registerDailyActivities(
+  definitions: readonly DailyActivityDefinition[],
+): void {
+  for (const definition of definitions) registerDailyActivity(definition);
+}

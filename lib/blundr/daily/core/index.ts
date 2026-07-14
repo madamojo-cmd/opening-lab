@@ -9,3 +9,6 @@ export * from "./dailyPresentationModel";
 export * from "./dailyPersistence";
 export * from "./dailySessionReducer";
 export * from "./dailySolutionRepository";
+export * from "./dailyActivityConformance";
+export * from "./dailyActivityTelemetry";
+export * from "./step3DailyDeckIntegration";
