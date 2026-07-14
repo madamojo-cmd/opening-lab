@@ -32,7 +32,8 @@ export function testStage2RestorePreviousBookEndingContract(): void {
 
   assert.equal(expectedMoveExists.branchCompleteEligible, false);
   assert.equal(
-    ["opponent_reply_expected", "next_user_target_exists", "selected_line_not_exhausted", "exact_node_has_children"].includes(String(expectedMoveExists.branchCompleteBlockedReason)),
+    // A prior latch is stale while the exact runtime node still has a verified next move.
+    ["opponent_reply_expected", "next_user_target_exists", "selected_line_not_exhausted", "exact_node_has_children", "stale_branch_complete_latch"].includes(String(expectedMoveExists.branchCompleteBlockedReason)),
     true,
   );
   assert.equal(expectedMoveExists.selectedLineExhausted, false);

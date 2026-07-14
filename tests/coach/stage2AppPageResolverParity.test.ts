@@ -37,8 +37,9 @@ export function testStage2AppPageResolverParity(): void {
   });
 
   assert.equal(renderState.pipelineCopyAuthorityDecision.renderedCopyAuthority, "pipeline_coach_decision");
-  assert.equal(renderState.stage2CoachingPacketResolution.kind, "safe_fallback");
-  assert.equal(renderState.stage2CoachCopyEnrichment.applied, false);
+  // This fixture is an exact approved position; the resolver must use it before fallback.
+  assert.equal(renderState.stage2CoachingPacketResolution.kind, "approved_packet");
+  assert.equal(renderState.stage2CoachCopyEnrichment.applied, true);
 
   const frameResolution = buildTrainerFrameResolution({
     trainerFrameId: 601,

@@ -1,14 +1,15 @@
 // server-only: do not import into client components.
 
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 
 import { hasSupabaseCredentials, readBlundrBackendEnv } from "./backendEnv";
+import type { BlundrSupabaseClient } from "./supabaseBrowserClient";
 
 export type BlundrSupabaseServerClientInput = {
   accessToken?: string | null;
 };
 
-export function createBlundrSupabaseServerClient(input: BlundrSupabaseServerClientInput = {}): SupabaseClient | null {
+export function createBlundrSupabaseServerClient(input: BlundrSupabaseServerClientInput = {}): BlundrSupabaseClient | null {
   const env = readBlundrBackendEnv();
   if (!hasSupabaseCredentials(env)) return null;
   const headers: Record<string, string> = {};
@@ -23,5 +24,5 @@ export function createBlundrSupabaseServerClient(input: BlundrSupabaseServerClie
     global: {
       headers,
     },
-  });
+  }) as unknown as BlundrSupabaseClient;
 }

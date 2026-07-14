@@ -96,7 +96,7 @@ export function testStage2RestrictedMoveAuthoritySeparation(): void {
     pipelineContainsDebugLeak: false,
     pipelinePassedSafety: true,
   });
-  assert.equal(approvedAuthority.coachingAuthority.kind, "safe_fallback");
+  assert.equal(approvedAuthority.coachingAuthority.kind, "approved_packet");
   assert.equal(approvedAuthority.coachingAuthority.packet?.moveUci, approvedPacket.moveUci);
   assert.equal(approvedAuthority.coachingAuthority.packet?.moveSan, approvedPacket.moveSan);
   assert.equal(Boolean(approvedAuthority.coachingAuthority.packet), true);

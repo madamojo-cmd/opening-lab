@@ -50,9 +50,8 @@ export function DailyBlundrCardPlayer({
     isTrainingTarget && activeTrainingTargetState?.interactionKind === "sequence"
       ? `Step ${Math.min((activeTrainingTargetState.plyCount ?? 0) + 1, Math.max(1, activeTrainingTargetState.expectedSequenceUci?.length ?? 1))} of ${Math.max(1, activeTrainingTargetState.expectedSequenceUci?.length ?? 1)}`
       : null;
-  const trainingExpectedLabel = isTrainingTarget && activeTrainingTargetState ? resolveTrainingTargetExpectedLabel(card, activeTrainingTargetState) : null;
+  const trainingExpectedLabel = support.answerShown && isTrainingTarget && activeTrainingTargetState ? resolveTrainingTargetExpectedLabel(card, activeTrainingTargetState) : null;
   const trainingChoices = isTrainingTarget ? activeTrainingTargetState?.candidateMoves ?? card.trainingTarget?.candidateMoves ?? [] : [];
-  const trainingSquareTargets = isTrainingTarget ? activeTrainingTargetState?.correctSquareKeys ?? activeTrainingTargetState?.targetSquares ?? card.trainingTarget?.correctSquareKeys ?? card.trainingTarget?.targetSquares ?? [] : [];
   const conceptLabels = (card.conceptIds ?? []).slice(0, 4).map((conceptId) => getDailyConceptById(conceptId)?.shortName || conceptId.split(":").pop() || conceptId);
   const openingColor = getStage2OpeningAvailability(card.repertoireId ?? null)?.learnerPerspective ?? null;
   const miniGameScenario = activeMiniGameState?.scenario ?? card.miniGame?.scenario ?? null;
@@ -132,8 +131,9 @@ export function DailyBlundrCardPlayer({
             </div>
           </div>
           <div className="rounded-2xl bg-white px-3 py-3 text-xs font-semibold text-stone-500">
-            {miniGameScenario?.goal ? `${miniGameScenario.goal}` : card.miniGame?.goalSquares?.length ? `Goal: ${card.miniGame.goalSquares.join(", ")}` : "Goal: solve the route."}
-            {card.miniGame?.targetSquares?.length ? ` Targets: ${card.miniGame.targetSquares.join(", ")}` : ""}
+            {miniGameScenario?.goal ? `${miniGameScenario.goal}` : "Goal: solve the route."}
+            {answerVisible && card.miniGame?.goalSquares?.length ? ` Targets: ${card.miniGame.goalSquares.join(", ")}` : ""}
+            {answerVisible && card.miniGame?.targetSquares?.length ? ` Targets: ${card.miniGame.targetSquares.join(", ")}` : ""}
           </div>
         </div>
       ) : isTrainingTarget ? (
@@ -152,23 +152,18 @@ export function DailyBlundrCardPlayer({
                   type="button"
                   disabled={locked}
                   onClick={() => onChoiceSelect?.(candidate.uci)}
-                  className={`rounded-2xl border px-4 py-3 text-left font-black transition ${
-                    candidate.isCorrect
-                      ? "border-green-200 bg-white text-stone-900"
-                      : "border-stone-200 bg-white text-stone-700"
-                  } ${locked ? "opacity-60" : "hover:border-green-700"}`}
+                  className={`rounded-2xl border border-stone-200 bg-white px-4 py-3 text-left font-black text-stone-700 transition ${locked ? "opacity-60" : "hover:border-green-700"}`}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <span>{candidate.label || candidate.san || candidate.uci}</span>
-                    <span className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-400">{candidate.isCorrect ? "Expected" : "Choice"}</span>
+                    <span className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-400">Choice</span>
                   </div>
-                  {candidate.explanation ? <div className="mt-1 text-xs font-semibold text-stone-500">{candidate.explanation}</div> : null}
                 </button>
               ))}
             </div>
           ) : trainingInteractionKind === "square_click" ? (
             <div className="rounded-2xl bg-white px-3 py-3 text-xs font-semibold text-stone-500">
-              {trainingSquareTargets.length ? `Click: ${trainingSquareTargets.join(", ")}` : "Click the key square Blundr marked."}
+              {support.answerShown ? "The answer is shown above." : "Click the key square that best satisfies the prompt."}
             </div>
           ) : (
             <div className="space-y-3 rounded-3xl border border-stone-200 bg-white p-4 text-sm leading-6 text-stone-600">

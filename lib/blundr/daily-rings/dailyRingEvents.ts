@@ -1,5 +1,7 @@
 import type { DailyRingActivitySource, DailyRingId } from "./dailyRingTypes";
 
+export type { DailyRingActivitySource, DailyRingId } from "./dailyRingTypes";
+
 function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
 }

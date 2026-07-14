@@ -49,13 +49,13 @@ export function testStage2CoachingResolverShell(): void {
 
   const result = resolveStage2CoachingPacket(baseContext);
   assert.equal(STAGE2_APPROVED_CONTENT_ENABLED, true, "approved_content_must_be_enabled_for_live_activation");
-  assert.equal(result.kind, "safe_fallback", "client_resolver_should_defer_approved_packet_to_api_boundary");
+  assert.equal(result.kind, "approved_packet", "exact_approved_packet_must_win_before_fallback");
 
-  if (result.kind !== "safe_fallback") return;
+  if (result.kind !== "approved_packet") return;
   assert.equal(result.packet.moveUci, "g1f3", "resolver_must_not_change_target_uci");
   assert.equal(result.packet.moveSan, packet.moveSan, "resolver_output_should_align_to_target");
-  assert.equal(result.packet.status, "approved", "fallback_packet_must_remain_safe_for_display");
-  assert.equal(result.packet.sourceFile, "stage2://safe-fallback", "client_resolver_must_not_load_approved_package");
+  assert.equal(result.packet.status, "approved", "approved_packet_must_remain_safe_for_display");
+  assert.notEqual(result.packet.sourceFile, "stage2://safe-fallback", "client_resolver_must_use_exact_approved_package");
   assert.equal(result.packet.runtimeReconciliation.status, "matched", "fallback_packet_must_match_runtime_context");
   assert.equal(result.packet.body.includes(packet.moveSan), false, "plain_hidden_body_must_not_leak_target_san");
   assert.equal(result.packet.body.includes("g1f3"), false, "plain_hidden_body_must_not_leak_target_uci");
@@ -74,9 +74,9 @@ export function testStage2CoachingResolverShell(): void {
       },
     }),
   );
-  assert.equal(showMore.kind, "safe_fallback", "show_more_path_should_remain_client_safe_until_api_packet_is_applied");
-  if (showMore.kind === "safe_fallback") {
-    assert.equal((showMore.packet.showMore ?? "").length > 0, true, "show_more_may_include_runtime_context");
+  assert.equal(showMore.kind, "approved_packet", "show_more_should_use_exact_approved_packet");
+  if (showMore.kind === "approved_packet") {
+    assert.equal((showMore.packet.showMore ?? "").length > 0, true, "show_more_must_include_approved_copy");
   }
 
   const fallback = resolveStage2CoachingPacket(

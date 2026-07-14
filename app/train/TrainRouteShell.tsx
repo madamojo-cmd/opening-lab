@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { BlundrApp } from "../page";
+import BlundrApp from "../page";
 import { TrainSelectionPage } from "@/components/training/TrainSelectionPage";
 import { resolveStage2CanonicalOpeningId } from "@/lib/blundr/openings/openingIdentity";
 

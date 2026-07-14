@@ -147,7 +147,8 @@ export function testStage2CoachingResolverSeamEnrichment(): void {
   const resolved = resolveStage2CoachingPacket(
     buildStage2CoachContext({
       openingId: "london-white",
-      playKeyBefore: "d2d4,d7d5,c1f4",
+      // This is an exact position from the generated approved package; the old sequence had no approved packet.
+      playKeyBefore: "d2d4,g8f6,c1f4,d7d5",
       learnerSide: "white",
       sideToMove: "white",
       targetUci: preservedTargetUci,
@@ -162,7 +163,7 @@ export function testStage2CoachingResolverSeamEnrichment(): void {
   const fallback = resolveStage2CoachingPacket(
     buildStage2CoachContext({
       openingId: "london-white",
-      playKeyBefore: "d2d4,d7d5,c1f4",
+      playKeyBefore: "d2d4,g8f6,c1f4,d7d5",
       learnerSide: "white",
       sideToMove: "white",
       targetUci: "a1a2",

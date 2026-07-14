@@ -18,7 +18,7 @@ export function testStage2LegalMoveDotsVisibility(): void {
   const pageSource = fs.readFileSync(path.join(REPO_ROOT, "app", "page.tsx"), "utf8");
 
   assert.equal(
-    /if\(\s*suppressPlainPreTargetHighlights\s*\|\|\s*\(!instructionTarget\?\.uci\s*&&\s*!selectedSquare\s*&&\s*selectedLegalMoves\.length===0\)\s*\)/.test(pageSource),
+    /instructionTargetFrom:\s*suppressPlainPreTargetHighlights\s*\?\s*null\s*:\s*instructionTarget\?\.from\s*\?\?\s*null/.test(pageSource),
     true,
     "app_page_missing_selection_safe_board_visibility_gate",
   );

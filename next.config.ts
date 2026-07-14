@@ -6,11 +6,9 @@ const projectRoot = path.resolve(__dirname);
 const nextConfig: NextConfig = {
   outputFileTracingRoot: projectRoot,
   allowedDevOrigins: ["127.0.0.1", "localhost"],
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   experimental: {
     webpackBuildWorker: false,
+    workerThreads: true,
   },
   turbopack: {
     root: projectRoot,

@@ -1,6 +1,6 @@
 import { BLUNDR_ANALYTICS_EVENTS } from "../analytics/blundrAnalyticsEvents";
 import { trackBlundrAnalyticsEvent } from "../analytics/blundrAnalyticsService";
-import type { RewardRoll, RewardTrigger, RewardTrigger as RewardTriggerType, UserRewardHistory } from "../accounts/accountTypes";
+import type { RewardRoll, RewardTrigger, RewardTrigger as RewardTriggerType, StarterPackId, UserRewardHistory } from "../accounts/accountTypes";
 import { getLocalRewardRolls } from "../accounts/localAccountStorage";
 import { isRewardGrantModeRandom, evaluateRewardRoll, buildRewardTriggerEventId } from "./rewardRollService";
 import { applyRewardHistoryBatch, loadRewardHistorySnapshot, persistRewardHistoryLocally, syncRewardStateToAccount } from "./rewardHistoryService";
@@ -46,7 +46,7 @@ export type TempoCacheEvaluationInput = {
   allRingsClosedThisAction: boolean;
   currentStreakDays: number;
   totalAllRingsClosedDays: number;
-  starterPackId?: string | null;
+  starterPackId?: StarterPackId | null;
   rewardHistory?: UserRewardHistory | null;
   rewardRolls?: readonly RewardRoll[] | null;
   now?: string;

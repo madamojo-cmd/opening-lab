@@ -97,7 +97,7 @@ function buildWeekGrid(todayDateKey: string, progressByKey: ReturnType<typeof re
   });
 }
 
-function countLearningEventsByDate(events: readonly ReturnType<typeof getLocalLearningEvents>[number][], predicate: (event: ReturnType<typeof getLocalLearningEvents>[number]) => boolean): Map<string, number> {
+function countLearningEventsByDate(events: ReadonlyArray<ReturnType<typeof getLocalLearningEvents>[number]>, predicate: (event: ReturnType<typeof getLocalLearningEvents>[number]) => boolean): Map<string, number> {
   const counts = new Map<string, number>();
   for (const event of events) {
     if (!predicate(event)) continue;
@@ -108,7 +108,7 @@ function countLearningEventsByDate(events: readonly ReturnType<typeof getLocalLe
   return counts;
 }
 
-function countReviewAttemptsByDate(attempts: readonly ReturnType<typeof loadDailyBlundrReviewStore>["reviewAttempts"]): Map<string, number> {
+function countReviewAttemptsByDate(attempts: ReturnType<typeof loadDailyBlundrReviewStore>["reviewAttempts"]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const attempt of attempts) {
     const localDate = localDateFromIso(attempt.completedAt);
@@ -118,7 +118,7 @@ function countReviewAttemptsByDate(attempts: readonly ReturnType<typeof loadDail
   return counts;
 }
 
-function buildReviewCardLookup(reviewCards: readonly ReturnType<typeof loadDailyBlundrReviewStore>["reviewCards"]): Map<string, ReturnType<typeof loadDailyBlundrReviewStore>["reviewCards"][number]> {
+function buildReviewCardLookup(reviewCards: ReturnType<typeof loadDailyBlundrReviewStore>["reviewCards"]): Map<string, ReturnType<typeof loadDailyBlundrReviewStore>["reviewCards"][number]> {
   const lookup = new Map<string, ReturnType<typeof loadDailyBlundrReviewStore>["reviewCards"][number]>();
   for (const card of reviewCards) {
     lookup.set(card.id, card);
@@ -131,8 +131,8 @@ function isMiniGameReviewCard(card: ReturnType<typeof loadDailyBlundrReviewStore
 }
 
 function countMiniGameReviewAttemptsByDate(input: {
-  reviewCards: readonly ReturnType<typeof loadDailyBlundrReviewStore>["reviewCards"];
-  reviewAttempts: readonly ReturnType<typeof loadDailyBlundrReviewStore>["reviewAttempts"];
+  reviewCards: ReturnType<typeof loadDailyBlundrReviewStore>["reviewCards"];
+  reviewAttempts: ReturnType<typeof loadDailyBlundrReviewStore>["reviewAttempts"];
   weekDateKeys: readonly string[];
   todayDateKey: string;
 }): { today: number; week: number } {
@@ -150,7 +150,7 @@ function countMiniGameReviewAttemptsByDate(input: {
   return { today, week };
 }
 
-function countMiniGamePracticeEventsByDate(events: readonly ReturnType<typeof getLocalLearningEvents>[number][], weekDateKeys: readonly string[], todayDateKey: string): { today: number; week: number } {
+function countMiniGamePracticeEventsByDate(events: ReadonlyArray<ReturnType<typeof getLocalLearningEvents>[number]>, weekDateKeys: readonly string[], todayDateKey: string): { today: number; week: number } {
   let today = 0;
   let week = 0;
   for (const event of events) {
@@ -164,7 +164,7 @@ function countMiniGamePracticeEventsByDate(events: readonly ReturnType<typeof ge
   return { today, week };
 }
 
-function topOpeningFromEvents(events: readonly ReturnType<typeof getLocalLearningEvents>[number][]): { openingId: string | null; openingName: string | null; count: number } {
+function topOpeningFromEvents(events: ReadonlyArray<ReturnType<typeof getLocalLearningEvents>[number]>): { openingId: string | null; openingName: string | null; count: number } {
   const counts = new Map<string, { openingName: string | null; count: number }>();
   for (const event of events) {
     if (event.source !== "train" || event.type !== "move_correct") continue;

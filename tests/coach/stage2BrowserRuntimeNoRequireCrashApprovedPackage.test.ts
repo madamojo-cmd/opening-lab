@@ -32,7 +32,7 @@ async function main(): Promise<void> {
     sideToMove: "white",
     surface: "assisted",
   });
-  assert.equal(coachingResolution.kind, "safe_fallback");
+  assert.equal(coachingResolution.kind, "approved_packet");
 }
 
 main()

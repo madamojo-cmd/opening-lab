@@ -5,8 +5,9 @@ import { BLUNDR_REWARD_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
 import { REWARD_KIND_ASSETS } from "@/lib/blundr/rewards/rewardConstants";
 import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 
-type RewardIconReward = Pick<RewardGrantRecord, "rarity" | "rewardType" | "displayName" | "description" | "amount"> & {
+type RewardIconReward = Pick<RewardGrantRecord, "rarity" | "rewardType" | "displayName" | "description"> & {
   id?: string;
+  amount?: number;
 };
 
 type RewardIconProps = {

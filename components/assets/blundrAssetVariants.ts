@@ -36,3 +36,4 @@ export const BLUNDR_VIDEO_ASSET_VARIANT_FRAME_CLASSES = {
   rewardAnimation: "w-full max-w-[clamp(16rem,82vw,28rem)] aspect-[16/11] rounded-[2rem] bg-[#fbfcf7] p-2 ring-1 ring-stone-200",
 } as const;
 
+export type BlundrVideoAssetVariant = keyof typeof BLUNDR_VIDEO_ASSET_VARIANT_FRAME_CLASSES;

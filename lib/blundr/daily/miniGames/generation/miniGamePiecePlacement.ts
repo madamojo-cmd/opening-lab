@@ -33,7 +33,7 @@ export function isSquareFree(placements: readonly MiniGamePiecePlacement[], squa
 export function findFreeSquareNear(
   placements: readonly MiniGamePiecePlacement[],
   anchor: Square,
-  deltas: readonly Array<readonly [number, number]>,
+  deltas: ReadonlyArray<readonly [number, number]>,
 ): Square | null {
   for (const [fileDelta, rankDelta] of deltas) {
     const target = translateSquare(anchor, fileDelta, rankDelta);

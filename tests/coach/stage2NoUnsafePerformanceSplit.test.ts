@@ -120,7 +120,8 @@ export function testStage2NoUnsafePerformanceSplit(): void {
     "app_page_missing_catalog_metadata_position_helper",
   );
   assert.equal(
-    /buildRuntimeTrainingLineSelection\(runtimeOpeningSelection\.selectedOpeningId,\s*\[\],\s*runtimeTrainingSessionId\)/.test(pageSource),
+    // The initial selection is seeded from the canonical selected repertoire before the runtime catalog is hydrated.
+    /useState<RuntimeWeightedTrainingLineSelection \| null>\(\(\)=>buildRuntimeTrainingLineSelection\(initialSelectedRepertoireId,\[\],runtimeTrainingSessionId\)\)/.test(pageSource),
     true,
     "app_page_missing_initial_runtime_training_line_selection",
   );

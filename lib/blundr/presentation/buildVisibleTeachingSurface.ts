@@ -97,8 +97,8 @@ export function detectPlainTeachingLeak(texts: string[], actionsJson: string, vi
   return patterns.some((pattern) => pattern.test(haystack));
 }
 
-export function buildVisibleTeachingSurface(input: BuildVisibleTeachingSurfaceInput): VisibleTeachingSurface;
 export function buildVisibleTeachingSurface(input: LegacyBuildVisibleTeachingSurfaceInput): any;
+export function buildVisibleTeachingSurface(input: BuildVisibleTeachingSurfaceInput): VisibleTeachingSurface;
 export function buildVisibleTeachingSurface(
   input: BuildVisibleTeachingSurfaceInput | LegacyBuildVisibleTeachingSurfaceInput,
 ): VisibleTeachingSurface | any {

@@ -97,8 +97,8 @@ export function testStage2TrainerFrameResolutionNoBypass(): void {
   } as any);
 
   assert.equal(renderState.stage2CoachContext.targetUci, packet.moveUci);
-  assert.equal(renderState.stage2CoachingPacketResolution.kind, "safe_fallback");
-  assert.equal(renderState.stage2CoachCopyEnrichment.applied, false);
+  assert.equal(renderState.stage2CoachingPacketResolution.kind, "approved_packet");
+  assert.equal(renderState.stage2CoachCopyEnrichment.applied, true);
   assert.equal(approvedFrameResolution.instructionTargetUci, packet.moveUci);
   assert.equal(approvedFrameResolution.acceptedTargetUci, packet.moveUci);
   assert.equal(approvedFrameResolution.approvedContent.matched, true);

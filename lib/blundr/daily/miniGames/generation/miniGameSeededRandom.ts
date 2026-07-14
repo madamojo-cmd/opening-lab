@@ -9,7 +9,7 @@ export type SeededRandom = {
   pick: <T>(values: readonly T[]) => T | null;
   sample: <T>(values: readonly T[], count: number) => T[];
   shuffle: <T>(values: readonly T[]) => T[];
-  weightedPick: <T>(values: readonly { value: T; weight: number }) => T | null;
+  weightedPick: <T>(values: ReadonlyArray<{ value: T; weight: number }>) => T | null;
   fork: (label: string) => SeededRandom;
 };
 
@@ -68,7 +68,7 @@ export function createSeededRandom(seed: string | number): SeededRandom {
       }
       return list;
     },
-    weightedPick: <T>(values: readonly { value: T; weight: number }) => {
+    weightedPick: <T>(values: ReadonlyArray<{ value: T; weight: number }>) => {
       const positive = values.filter((entry) => Number.isFinite(entry.weight) && entry.weight > 0);
       const total = positive.reduce((sum, entry) => sum + entry.weight, 0);
       if (!positive.length || total <= 0) return null;

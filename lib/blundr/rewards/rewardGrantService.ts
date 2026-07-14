@@ -1,6 +1,6 @@
 import { BLUNDR_ANALYTICS_EVENTS } from "../analytics/blundrAnalyticsEvents";
 import { trackBlundrAnalyticsEvent } from "../analytics/blundrAnalyticsService";
-import type { RewardRoll } from "../accounts/accountTypes";
+import type { RewardRoll, StarterPackId } from "../accounts/accountTypes";
 import { earnAndPersistRepertoirePoints } from "../repertoire/repertoireProgressService";
 import type { RewardGrantMode } from "./rewardTypes";
 
@@ -17,7 +17,7 @@ export type RewardGrantApplicationInput = {
   roll: RewardRoll;
   grantMode: RewardGrantMode;
   now?: string;
-  starterPackId?: string | null;
+  starterPackId?: StarterPackId | null;
 };
 
 export type RewardGrantApplicationResult = {
@@ -79,10 +79,10 @@ export function buildRewardGrantRecord(input: RewardGrantApplicationInput): Rewa
 
 export async function applyRewardGrant(input: RewardGrantApplicationInput): Promise<RewardGrantApplicationResult | RewardGrantApplicationFailure> {
   const record = buildRewardGrantRecord(input);
-  if ("ok" in record && !record.ok) {
+  if ("ok" in record) {
     return record;
   }
-  const grant = record;
+  const grant: RewardGrantApplicationResult["grant"] = record;
   const reward = input.roll.reward;
   if (!reward) {
     return {
@@ -100,11 +100,11 @@ export async function applyRewardGrant(input: RewardGrantApplicationInput): Prom
     starterPackId: input.starterPackId ?? undefined,
     now: normalizeText(input.now) || undefined,
   });
-  if (!pointResult.ok) {
+  if (pointResult.ok === false) {
     return {
       ok: false,
-      code: pointResult.error.code,
-      message: pointResult.error.message,
+      code: pointResult.code,
+      message: pointResult.message,
     };
   }
 
@@ -135,4 +135,3 @@ export async function applyRewardGrant(input: RewardGrantApplicationInput): Prom
     pointResult,
   };
 }
-

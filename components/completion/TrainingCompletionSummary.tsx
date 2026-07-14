@@ -45,7 +45,7 @@ export function TrainingCompletionSummary({ result, className }: TrainingComplet
 
   if (!result) return null;
 
-  if (!result.ok) {
+  if (result.ok === false) {
     return (
       <div className={classNames("rounded-3xl border border-stone-200 bg-white p-4 shadow-sm", className)}>
         <div className="flex items-center gap-2 text-sm font-black text-stone-900">

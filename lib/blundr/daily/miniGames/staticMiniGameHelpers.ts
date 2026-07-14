@@ -1,5 +1,6 @@
 import { Chess } from "chess.js";
-import { attachConceptTagsToDailyCard, inferConceptTagsForMiniGame } from "../concepts/dailyConceptTagging";
+import { attachConceptTagsToDailyCard, inferConceptTagsForMiniGame, normalizeConceptId } from "../concepts/dailyConceptTagging";
+import type { DailyConceptId } from "../concepts/dailyConceptTypes";
 import { scoreDailyMiniGameAttempt } from "./dailyMiniGameScoring";
 import { hashString, normalizeText, uniqueSquares } from "./miniGameUtils";
 import {
@@ -80,12 +81,12 @@ function applyMoveUci(fen: string, uci: string): { fen: string; san: string | nu
   }
 }
 
-function uniqueConceptIds(values: readonly (string | null | undefined)[]): string[] {
+function uniqueConceptIds(values: readonly (string | null | undefined)[]): DailyConceptId[] {
   return Array.from(
     new Set(
       values
-        .map((value) => normalizeText(value))
-        .filter((value) => Boolean(value) && value.startsWith("concept:")),
+        .map((value) => normalizeConceptId(value))
+        .filter((value): value is DailyConceptId => Boolean(value)),
     ),
   );
 }
@@ -467,7 +468,7 @@ function buildScenarioContract(input: {
     ...inferConceptTagsForMiniGame(input.miniGameId, input.skillIds),
   ]);
 
-  const card = attachConceptTagsToDailyCard(
+  const card = attachConceptTagsToDailyCard<DailyBlundrMiniGameCard>(
     {
       source: "daily_attempt",
       cardKey: `mini:${input.miniGameId}:${state.formationHash}`,

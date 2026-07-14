@@ -1,4 +1,5 @@
 import type { DailyBlundrAttemptOutcome, DailyBlundrCard, DailyBlundrDifficulty, DailyBlundrMasteryState } from "../dailyBlundrTypes";
+export type { DailyBlundrCard, DailyBlundrDifficulty } from "../dailyBlundrTypes";
 import type { BlundrBoardPreferences } from "@/lib/blundr/board/boardThemeTypes";
 import type { DailyValidationIssue } from "../validation/dailyValidationTypes";
 
@@ -165,7 +166,7 @@ export type DailyMiniGameGenerationContext = {
   recentFenKeys: readonly string[];
   sessionMiniGameIds: readonly DailyMiniGameId[];
   source?: DailyMiniGameSource;
-  seed?: string | null;
+  seed?: string | number | null;
   userIdOrLocalId?: string | null;
   recentScenarioKeys?: readonly string[];
   boardPreferences?: Partial<BlundrBoardPreferences> | null;

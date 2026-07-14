@@ -11,7 +11,7 @@ export const STREAK_MILESTONES = {
     pointsAwarded: 150,
     xpAwarded: 1000,
   },
-} as const satisfies Record<string, StreakMilestoneBonus>;
+} as const satisfies Record<string, Omit<StreakMilestoneBonus, "eventId">>;
 
 function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
@@ -21,11 +21,11 @@ function normalizeDays(days: number): number {
   return Math.max(1, Math.floor(Number(days) || 1));
 }
 
-export function getAllStreakMilestones(): readonly StreakMilestoneBonus[] {
+export function getAllStreakMilestones(): readonly Omit<StreakMilestoneBonus, "eventId">[] {
   return [STREAK_MILESTONES.sevenDay, STREAK_MILESTONES.thirtyDay];
 }
 
-export function getStreakMilestoneByDays(days: number): StreakMilestoneBonus | null {
+export function getStreakMilestoneByDays(days: number): Omit<StreakMilestoneBonus, "eventId"> | null {
   const normalized = normalizeDays(days);
   if (normalized === 7) return STREAK_MILESTONES.sevenDay;
   if (normalized === 30) return STREAK_MILESTONES.thirtyDay;
@@ -59,4 +59,3 @@ export function getStreakMilestoneBonusesForStreakDays(args: {
   }
   return bonuses;
 }
-

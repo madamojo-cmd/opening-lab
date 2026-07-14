@@ -25,6 +25,10 @@ export function fileIndex(file: string): number {
   return FILES.indexOf(file as (typeof FILES)[number]);
 }
 
+export function rankIndex(rank: number): number {
+  return Number.isInteger(rank) && rank >= 1 && rank <= 8 ? rank - 1 : -1;
+}
+
 export function squareFrom(file: number, rank: number): Square | null {
   if (file < 0 || file > 7 || rank < 1 || rank > 8) return null;
   return `${FILES[file]}${rank}`;

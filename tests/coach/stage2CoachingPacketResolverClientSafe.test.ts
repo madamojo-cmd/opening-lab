@@ -28,9 +28,10 @@ async function main(): Promise<void> {
     surface: "assisted",
   });
 
-  assert.equal(exact.kind, "safe_fallback");
-  if (exact.kind === "safe_fallback") {
-    assert.equal(exact.packet.sourceFile, "stage2://safe-fallback");
+  // The exact approved packet is now client-safe through the compact generated package.
+  assert.equal(exact.kind, "approved_packet");
+  if (exact.kind === "approved_packet") {
+    assert.notEqual(exact.packet.sourceFile, "stage2://safe-fallback");
     assert.equal(exact.packet.openingId, "london-white");
     assert.equal(exact.packet.moveUci, "d2d4");
   }

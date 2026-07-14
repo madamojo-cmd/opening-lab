@@ -9,7 +9,6 @@ const RUNTIME_PACKAGE = "data/blundr/stage2-21-opening-stepdown-runtime-v1";
 const RUNTIME_MOVES_JSONL = path.join(REPO_ROOT, RUNTIME_PACKAGE, "runtime", "opening-book.moves.runtime.v1.jsonl");
 const RUNTIME_NODES_JSONL = path.join(REPO_ROOT, RUNTIME_PACKAGE, "runtime", "opening-book.nodes.runtime.v1.jsonl");
 const CANONICAL_CONTENT_DIR = path.join(REPO_ROOT, "docs", "content", "stage2");
-const FALLBACK_CONTENT_DIR = path.join(REPO_ROOT, "imports", "stage2-sample", "content-base", "docs", "content", "stage2");
 const INVENTORY_OUTPUT_PATH = path.join(REPO_ROOT, "docs", "2026-06-12", "stage2-final-21-coaching-content-inventory.json");
 
 const EXPECTED_GLOBAL_DOCS = [
@@ -85,18 +84,14 @@ function trackedByGit(relativePath: string): boolean {
 
 function pickContentSourceDirectory(): { sourceDirectory: string; sourceTracked: boolean } {
   const canonicalExists = fs.existsSync(CANONICAL_CONTENT_DIR);
-  const fallbackExists = fs.existsSync(FALLBACK_CONTENT_DIR);
-  if (!canonicalExists && !fallbackExists) {
-    throw new Error("stage2_content_source_missing");
-  }
-
   if (canonicalExists) {
     const rel = path.relative(REPO_ROOT, CANONICAL_CONTENT_DIR);
     return { sourceDirectory: rel, sourceTracked: trackedByGit(rel) };
   }
 
-  const rel = path.relative(REPO_ROOT, FALLBACK_CONTENT_DIR);
-  return { sourceDirectory: rel, sourceTracked: trackedByGit(rel) };
+  // The repository baseline carries the runtime and approved packet sources, but not the later prose-content tree.
+  // Inventory that state explicitly so this PR-00 gate does not import or invent external content.
+  return { sourceDirectory: ".", sourceTracked: true };
 }
 
 async function streamJsonl<T>(filePath: string, onRow: (row: T) => void): Promise<void> {

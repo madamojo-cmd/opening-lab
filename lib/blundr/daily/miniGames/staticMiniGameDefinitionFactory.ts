@@ -70,7 +70,7 @@ export function createStaticMiniGameDefinition(config: StaticMiniGameDefinitionC
           ctx,
           skillIds: config.skillIds,
           conceptIds: config.conceptIds,
-          tags: config.tags,
+          tags: config.tags ? [...config.tags] : undefined,
           difficultyWeight: config.difficultyWeight,
           selectionPriority: config.selectionPriority,
           displayName: config.displayName,

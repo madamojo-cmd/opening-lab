@@ -11,6 +11,7 @@ import {
 import { notifyBlundrBoardPreferencesChanged } from "./boardPreferenceEvents";
 
 export { createDefaultBoardPreferences } from "./boardThemeTypes";
+export type { BlundrBoardPreferences } from "./boardThemeTypes";
 
 export const BLUNDR_BOARD_PREFERENCES_STORAGE_KEY = "blundr-board-settings";
 

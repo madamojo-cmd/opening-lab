@@ -31,7 +31,8 @@ export function testStage2ExpectedMovePreventsBookEnding(): void {
 
   assert.equal(contract.branchCompleteEligible, false);
   assert.equal(
-    ["opponent_reply_expected", "next_user_target_exists", "selected_line_not_exhausted", "exact_node_has_children"].includes(String(contract.branchCompleteBlockedReason)),
+    // The latch is intentionally rejected as stale when a verified next target still exists.
+    ["opponent_reply_expected", "next_user_target_exists", "selected_line_not_exhausted", "exact_node_has_children", "stale_branch_complete_latch"].includes(String(contract.branchCompleteBlockedReason)),
     true,
   );
   assert.equal(contract.shouldRenderBranchCompleteSurface, false);

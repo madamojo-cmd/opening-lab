@@ -1,4 +1,4 @@
-import { STAGE2_APPROVED_CONTENT_APPROVED_PACKETS } from "./stage2ApprovedContentPackage.generated";
+import { STAGE2_APPROVED_CONTENT_APPROVED_PACKETS } from "./stage2ApprovedContentPackage.client.generated";
 import {
   STAGE2_APPROVED_CONTENT_APPROVED_PACKAGE_ID,
   STAGE2_APPROVED_CONTENT_CANDIDATE_PACKAGE_ID,
@@ -19,6 +19,11 @@ const DEFAULT_APPROVED_PACKETS_PATHS = [
 ] as const;
 
 const KNOWN_APPROVED_PACKET_PATHS = new Set(DEFAULT_APPROVED_PACKETS_PATHS.map((entry) => normalizeText(entry)));
+
+function isKnownApprovedPacketPath(value: string): boolean {
+  const normalized = normalizeText(value);
+  return [...KNOWN_APPROVED_PACKET_PATHS].some((knownPath) => normalized === knownPath || knownPath.endsWith(`/${normalized}`));
+}
 
 type Stage2ApprovedContentSurfaceCopy = {
   title: string;
@@ -201,7 +206,7 @@ function materializeApprovedPacketSurface(
 function getApprovedPacketsForRequestedPaths(approvedPacketsPaths: string[] = [...DEFAULT_APPROVED_PACKETS_PATHS]): Stage2ApprovedContentPromotedPacket[] {
   const normalizedPaths = approvedPacketsPaths.map((entry) => normalizeText(entry)).filter(Boolean);
   if (normalizedPaths.length === 0) return [];
-  const knownPathRequested = normalizedPaths.some((entry) => KNOWN_APPROVED_PACKET_PATHS.has(entry));
+  const knownPathRequested = normalizedPaths.some((entry) => isKnownApprovedPacketPath(entry));
   return knownPathRequested ? STAGE2_APPROVED_CONTENT_APPROVED_PACKETS : [];
 }
 
@@ -210,7 +215,7 @@ export function resolveStage2ApprovedContentPacket(
   approvedPacketsPath: string = DEFAULT_APPROVED_PACKETS_PATH,
 ): Stage2ApprovedContentResolverResult {
   const resolvedApprovedPacketsPath = normalizeText(request.approvedPacketsPath ?? approvedPacketsPath) || DEFAULT_APPROVED_PACKETS_PATH;
-  if (!KNOWN_APPROVED_PACKET_PATHS.has(resolvedApprovedPacketsPath)) {
+  if (!isKnownApprovedPacketPath(resolvedApprovedPacketsPath)) {
     return { kind: "none", reason: "approved_bundle_missing" };
   }
   const surface = normalizeText(request.surface) as Stage2ApprovedContentResolverRequest["surface"];

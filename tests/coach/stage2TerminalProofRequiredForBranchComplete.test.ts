@@ -14,6 +14,9 @@ export function testStage2TerminalProofRequiredForBranchComplete(): void {
     isUserTurn: true,
     selectedOpeningId: "italian-white",
     selectedLineId: "italian-white",
+    selectedOpeningRuntimeAvailable: true,
+    runtimeAvailable: true,
+    selectedLineCompleteConfirmed: true,
     activeLineName: "Italian Game",
     fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
     expectedMoveResolution: {
@@ -113,6 +116,9 @@ export function testStage2TerminalProofRequiredForBranchComplete(): void {
     isUserTurn: false,
     selectedOpeningId: "italian-white",
     selectedLineId: "italian-white",
+    selectedOpeningRuntimeAvailable: true,
+    runtimeAvailable: true,
+    selectedLineCompleteConfirmed: true,
     fen: "r1bq1rk1/bpp2ppp/p1np1n2/4p3/4P3/1BPP1N2/PP1N1PPP/R1BQR1K1 b - - 16 10",
     expectedMoveResolution: {
       source: "guided_branch_needs_continuation",

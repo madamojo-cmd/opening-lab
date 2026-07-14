@@ -13,7 +13,7 @@ import { notifyDailyRingRefresh } from "./dailyRingRefreshSignal";
 import { createDefaultDailyRingDay, applyDailyRingActivity, getDailyRingPercent, getDailyRingSummary, isDailyRingClosed, areAllDailyRingsClosed } from "./dailyRingProgress";
 import { applyAllRingsClosedDay, createDefaultStreakRecord, getStreakMilestoneBonuses, isConsecutiveLocalDateWrapper } from "../streaks/streakService";
 import { createXpEvent, getXpAwardForAllRingsClosed, getXpAwardForStreakMilestone } from "../xp/xpService";
-import type { DailyRingActivity, DailyRingCompletionFailure, DailyRingCompletionResult, DailyRingCompletionResultLike, DailyRingDayRecord, DailyRingSnapshot } from "./dailyRingTypes";
+import type { DailyRingActivity, DailyRingCompletionFailure, DailyRingCompletionResult, DailyRingCompletionResultLike, DailyRingDayRecord, DailyRingId, DailyRingSnapshot } from "./dailyRingTypes";
 import type { RepertoireProgress } from "../repertoire/repertoireTypes";
 import type { StreakProgressRecord } from "../streaks/streakTypes";
 
@@ -134,11 +134,20 @@ function syncDailyRingSnapshotLocally(dayRecord: DailyRingDayRecord, streakRecor
   upsertLocalDailyRetentionProgress(dailyProgress);
   upsertLocalStreakRecord(toAccountStreakRecord(streakRecord));
   setLocalAccountCurrentUserId(dayRecord.userId);
+  const summary = getDailyRingSummary(dayRecord);
+  const toSnapshotItem = (ringId: DailyRingId) => {
+    const item = summary.find((entry) => entry.ringId === ringId);
+    return { current: item?.progress ?? 0, target: item?.goal ?? 1, percent: item?.percent ?? 0, complete: item?.closed ?? false };
+  };
   return {
     userId: dayRecord.userId,
     localDate: dayRecord.localDate,
     dayRecord,
     streakRecord,
+    tempo: toSnapshotItem("daily_tempo"),
+    battery: toSnapshotItem("daily_battery"),
+    blundr: toSnapshotItem("daily_blundr"),
+    allComplete: dayRecord.allRingsClosed,
     updatedAt: dayRecord.updatedAt,
   };
 }
@@ -263,11 +272,25 @@ export function loadDailyRingSnapshot(input: {
   });
   const streakRecord = existingStreak ? toStreakProgressRecord(existingStreak) : createDefaultStreakRecord(userId);
   syncDailyRingSnapshotLocally(dayRecord, streakRecord, profile ?? undefined);
+  const summary = getDailyRingSummary(dayRecord);
+  const toSnapshotItem = (ringId: DailyRingId) => {
+    const item = summary.find((entry) => entry.ringId === ringId);
+    return {
+      current: item?.progress ?? 0,
+      target: item?.goal ?? 1,
+      percent: item?.percent ?? 0,
+      complete: item?.closed ?? false,
+    };
+  };
   return {
     userId,
     localDate,
     dayRecord,
     streakRecord,
+    tempo: toSnapshotItem("daily_tempo"),
+    battery: toSnapshotItem("daily_battery"),
+    blundr: toSnapshotItem("daily_blundr"),
+    allComplete: dayRecord.allRingsClosed,
     updatedAt: nowIso(),
   };
 }
@@ -428,6 +451,7 @@ export function buildDailyRingCompletionResult(args: {
     allRingsClosedThisAction: baseResult.allRingsClosedThisAction,
     activityAlreadyApplied: false,
     repertoirePointsAwarded: totalPointAwards,
+    rewardPointsAwarded: 0,
     xpAwarded: totalXpAwarded,
     activityEvent: baseResult.activityEvent,
     pointAwards,

@@ -130,6 +130,7 @@ function buildImbalanceFamilyCandidate(input: MiniGameGenerationInput, family: (
       buildQueenMoveCandidate(input, {
         family,
         motif: "material down with initiative",
+        piece: "Q",
         from: "d1",
         to: "h5",
         targetSquares: ["e8"],
@@ -257,7 +258,7 @@ export const imbalanceArenaGenerator: ProceduralMiniGameGenerator = {
   buildFallbackScenario(input: MiniGameGenerationInput): GeneratedMiniGameScenario | null {
     const candidate =
       pickValidImbalanceFamilyCandidate(input, IMBALANCE_FAMILIES) ??
-      pickValidImbalanceFamilyCandidate({ ...input, seed: `${input.seed}:fallback` }, [...IMBALANCE_FAMILIES].reverse() as typeof IMBALANCE_FAMILIES);
+      pickValidImbalanceFamilyCandidate({ ...input, seed: `${input.seed}:fallback` }, [...IMBALANCE_FAMILIES].reverse());
     return candidate ? buildGeneratedMiniGameScenarioContract(candidate, {
       dateKey: input.dateKey,
       now: new Date().toISOString(),

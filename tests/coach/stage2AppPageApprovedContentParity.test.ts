@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { resolveStage2CoachRenderState } from "../../lib/blundr/stage2Coaching";
 import { findApprovedPacket, packetPlayKeyAtTarget, packetPlayKeyBefore } from "./stage2ApprovedContentTestHelpers";
 
-function assertClientFallbackRender(packetSelector: (packet: Record<string, any>) => boolean): void {
+function assertApprovedRender(packetSelector: (packet: Record<string, any>) => boolean): void {
   const packet = findApprovedPacket(packetSelector);
   const renderState = resolveStage2CoachRenderState({
     openingId: packet.openingId,
@@ -34,18 +34,19 @@ function assertClientFallbackRender(packetSelector: (packet: Record<string, any>
     pipelinePassedSafety: true,
   });
 
-  assert.equal(renderState.stage2CoachingPacketResolution.kind, "safe_fallback");
-  if (renderState.stage2CoachingPacketResolution.kind !== "safe_fallback") return;
-  assert.equal(renderState.stage2CoachingPacketResolution.packet.sourceFile, "stage2://safe-fallback");
+  // Valid exact approved content is authoritative; fallback is only for the wrong-context case below.
+  assert.equal(renderState.stage2CoachingPacketResolution.kind, "approved_packet");
+  if (renderState.stage2CoachingPacketResolution.kind !== "approved_packet") return;
+  assert.notEqual(renderState.stage2CoachingPacketResolution.packet.sourceFile, "stage2://safe-fallback");
   assert.equal(renderState.stage2CoachingPacketResolution.packet.openingId, packet.openingId);
   assert.equal(renderState.stage2CoachingPacketResolution.packet.moveUci, packet.moveUci);
-  assert.equal(renderState.stage2CoachCopyEnrichment.applied, false);
+  assert.equal(renderState.stage2CoachCopyEnrichment.applied, true);
 }
 
 export function testStage2AppPageApprovedContentParity(): void {
-  assertClientFallbackRender((packet) => packet.openingId === "italian-white" && packet.moveUci === "f1c4" && packet.status === "approved");
-  assertClientFallbackRender((packet) => packet.openingId === "scotch-white" && packet.moveUci === "e1g1" && packet.status === "approved");
-  assertClientFallbackRender((packet) => packet.openingId === "italian-black" && packet.packetId === "italian-black.line-004.ply-10.e8g8");
+  assertApprovedRender((packet) => packet.openingId === "italian-white" && packet.moveUci === "f1c4" && packet.status === "approved");
+  assertApprovedRender((packet) => packet.openingId === "scotch-white" && packet.moveUci === "e1g1" && packet.status === "approved");
+  assertApprovedRender((packet) => packet.openingId === "italian-black" && packet.packetId === "italian-black.line-004.ply-10.e8g8");
 
   const wrongContext = resolveStage2CoachRenderState({
     openingId: "italian-white",

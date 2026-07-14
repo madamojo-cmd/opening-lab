@@ -656,9 +656,9 @@ export function testAgent7FullPromptCoverage(): void {
 
   // post bc4 visual: must render f1->c4 primary, no c4f7, no pressure, no f7 target
   const postVis = postSurfForShow.visual || {};
+  const hasF1C4 = postVis.lines?.some((l: any) => l && l.from === "f1" && l.to === "c4") ?? false;
   if (postVis.shouldRender) {
     const lines = postVis.lines || [];
-    const hasF1C4 = lines.some((l: any) => l && l.from === "f1" && l.to === "c4");
     const hasC4F7 = lines.some((l: any) => l && ((l.from === "c4" && l.to === "f7") || (l.from === "f7" && l.to === "c4")));
     const hasPressure = lines.some((l: any) => l && (l.kind === "pressure_line" || l.effectFamily === "pressure"));
     const hasF7 = (postVis.highlights || []).some((h: any) => h && h.square === "f7") || lines.some((l:any) => l && (l.to==="f7" || l.from==="f7"));

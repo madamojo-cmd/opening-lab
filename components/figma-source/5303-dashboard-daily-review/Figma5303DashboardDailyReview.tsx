@@ -14,7 +14,6 @@ import { loadRepertoireProgress } from "@/lib/blundr/repertoire/repertoireProgre
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
 import { NestedDailyRings } from "@/components/daily-rings/NestedDailyRings";
 import svgPaths from "./svg-lrkovulksy";
-
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
 const G = {
@@ -757,10 +756,10 @@ export default function Figma5303DashboardDailyReviewApp() {
       {/* Desktop: both frames side by side */}
       <div className="hidden xl:flex items-start gap-10">
         <PhoneFrame label="Home · Dashboard">
-          <HomeScreen onNav={setScreen} />
+          <Figma5303HomeScreen onNav={setScreen} />
         </PhoneFrame>
         <PhoneFrame label="Daily Blundr · Training">
-          <DailyTrainingScreen onNav={setScreen} />
+          <Figma5303DailyTrainingScreen onNav={setScreen} />
         </PhoneFrame>
       </div>
 
@@ -768,8 +767,8 @@ export default function Figma5303DashboardDailyReviewApp() {
       <div className="xl:hidden">
         <PhoneFrame label={screen === "home" ? "Home · Dashboard" : "Daily Blundr · Training"}>
           {screen === "home"
-            ? <HomeScreen onNav={setScreen} />
-            : <DailyTrainingScreen onNav={setScreen} />
+            ? <Figma5303HomeScreen onNav={setScreen} />
+            : <Figma5303DailyTrainingScreen onNav={setScreen} />
           }
         </PhoneFrame>
       </div>

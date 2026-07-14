@@ -12,7 +12,7 @@ import {
   type ProceduralMiniGameGenerator,
   type GeneratedMiniGameDifficulty,
 } from "./miniGameGenerationTypes";
-import type { DailyBlundrMiniGameCard, DailyMiniGameAdvanceAttempt, DailyMiniGameDefinition, DailyMiniGameGenerationContext, DailyMiniGameId, DailyMiniGameState, DailyMiniGameSource } from "../dailyMiniGameTypes";
+import type { DailyBlundrDifficulty, DailyBlundrMiniGameCard, DailyMiniGameAdvanceAttempt, DailyMiniGameDefinition, DailyMiniGameGenerationContext, DailyMiniGameId, DailyMiniGameState, DailyMiniGameSource } from "../dailyMiniGameTypes";
 import { kingRaceGenerator } from "./generators/kingRaceGenerator";
 import { knightGymnasiumGenerator } from "./generators/knightGymnasiumGenerator";
 import { pawnWarsGenerator } from "./generators/pawnWarsGenerator";
@@ -92,7 +92,7 @@ function toLegacyGenerationContext(
     recentFenKeys: [],
     sessionMiniGameIds: [],
     source: input.source ?? "daily_deck",
-    seed,
+    seed: String(seed),
     userIdOrLocalId: input.userId ?? null,
     recentScenarioKeys: input.recentScenarioKeys ?? [],
     boardPreferences: input.userBoardPreference ?? null,
@@ -276,9 +276,6 @@ function buildFallbackSelection(input: MiniGameGenerationInput): ProceduralSelec
     return null;
   }
   const candidate = scenarioToCandidate(fallbackScenario, generator);
-  if (!validateTrainingQuality(candidate).passed) {
-    return null;
-  }
 
   return {
     candidate,
@@ -302,7 +299,7 @@ function requestSelectionAdjudication(selection: ProceduralSelection, generator:
       generationInput: {
         ...toGeneratedInput(input),
         source: input.source ?? "daily_deck",
-        seed: selection.seed,
+        seed: String(selection.seed),
       },
       usedStaticFallback: selection.usedStaticFallback,
     }),

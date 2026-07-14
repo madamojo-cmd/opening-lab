@@ -43,7 +43,8 @@ export function testStage2FeatureConceptOpportunityTraceComplete(): void {
   assert.equal(trace.finalRenderedBody, trace.coachCardResult.finalRendered.body);
   assert.equal(trace.traceStatus, "partial");
   assert.equal(trace.missingReasons.includes("approved_content_disabled"), false);
-  assert.equal(trace.missingReasons.includes("approved_content_not_matched"), true);
+  // The exact approved packet now wins for this valid fixture; the old miss assertion predated PR-00 precedence.
+  assert.equal(trace.missingReasons.includes("approved_content_not_matched"), false);
   assert.equal(trace.missingReasons.includes("coachcard_fallback_used"), false);
 
   const partialBundle = buildApprovedFeatureTrace(packet, {

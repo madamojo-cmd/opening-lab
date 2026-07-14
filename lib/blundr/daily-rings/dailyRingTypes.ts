@@ -62,6 +62,10 @@ export type DailyRingSnapshot = {
   localDate: string;
   dayRecord: DailyRingDayRecord;
   streakRecord: StreakProgressRecord;
+  tempo: { current: number; target: number; percent: number; complete: boolean };
+  battery: { current: number; target: number; percent: number; complete: boolean };
+  blundr: { current: number; target: number; percent: number; complete: boolean };
+  allComplete: boolean;
   updatedAt: string;
 };
 

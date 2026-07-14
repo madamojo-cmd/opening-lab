@@ -16,7 +16,7 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-export function buildRewardTriggerEventId(context: RewardTriggerContext): string {
+export function buildRewardTriggerEventId(context: Omit<RewardTriggerContext, "triggerEventId">): string {
   const userId = normalizeText(context.userId) || "user";
   const localDate = normalizeText(context.localDate) || "date";
   switch (context.trigger) {

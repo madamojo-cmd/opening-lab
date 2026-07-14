@@ -2,6 +2,7 @@ import { Chess } from "chess.js";
 
 import { buildTrainerFrameResolution } from "../debug/buildTrainerFrameResolution";
 import { buildStage2RuntimeBookIndex } from "../runtimeBook/runtimeBookIndex";
+import { normalizeRuntimePlayKey } from "../runtime/uciNormalization";
 import { getStage2OpeningAvailability, getStage2OpeningAvailabilitySummary } from "../openings/openingAvailability";
 import { getStage2RuntimeTrainableRepertoire } from "../openings/runtimeTrainableRepertoires";
 
@@ -21,6 +22,8 @@ import {
   type Stage2ApprovedContentResolverRequest,
   type Stage2ApprovedContentResolverResult,
 } from "./stage2ApprovedContentTypes";
+
+export { STAGE2_APPROVED_CONTENT_CANDIDATE_PACKAGE_ID } from "./stage2ApprovedContentTypes";
 
 const DEFAULT_CANDIDATE_ZIP_PATH = `${process.cwd()}/docs/2026-06-17/${STAGE2_APPROVED_CONTENT_CANDIDATE_PACKAGE_ID}.zip`;
 
@@ -517,7 +520,8 @@ function validatePacketAgainstRuntime(
     sanMatches = false;
   }
 
-  const runtimeNode = runtimeIndex.nodeIndexByOpeningAndPlayKey.get(`${packet.openingId}::${packet.playKey}`) ?? null;
+  const runtimePlayKey = normalizeRuntimePlayKey(packet.playKey) ?? packet.playKey;
+  const runtimeNode = runtimeIndex.nodeIndexByOpeningAndPlayKey.get(`${packet.openingId}::${runtimePlayKey}`) ?? null;
   const runtimeNodeMatched = Boolean(runtimeNode);
   const exactRuntimeLineMatched = runtimeNodeMatched && playSequenceLegal;
   const runtimeMoveMatched = runtimeNodeMatched && moveLegal && sanMatches;

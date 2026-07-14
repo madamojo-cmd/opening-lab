@@ -70,7 +70,7 @@ export function DailyBlundrBoard({
       }),
     [boardPreferences, forcedOrientation, game, openingColor],
   );
-  const orientation = renderConfig.boardOrientation;
+  const orientation = renderConfig.boardOrientation === "black" ? "black" : "white";
 
   useEffect(() => {
     setSelectedSquare(null);

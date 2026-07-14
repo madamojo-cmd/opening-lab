@@ -1,6 +1,14 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { AuthClient } from "@supabase/auth-js";
 
-let browserClient: SupabaseClient | null = null;
+type BlundrSupabaseAuthClient = Pick<
+  InstanceType<typeof AuthClient>,
+  "getSession" | "getUser" | "signInWithPassword" | "signUp" | "signOut"
+>;
+
+export type BlundrSupabaseClient = Omit<SupabaseClient, "auth"> & { auth: BlundrSupabaseAuthClient };
+
+let browserClient: BlundrSupabaseClient | null = null;
 
 function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
@@ -20,7 +28,7 @@ function readBrowserSupabaseEnv(): { supabaseUrl: string | null; supabaseAnonKey
   return { supabaseUrl, supabaseAnonKey };
 }
 
-export function createBlundrSupabaseBrowserClient(): SupabaseClient | null {
+export function createBlundrSupabaseBrowserClient(): BlundrSupabaseClient | null {
   if (typeof window === "undefined") return null;
   const env = readBrowserSupabaseEnv();
   if (!env.supabaseUrl || !env.supabaseAnonKey) return null;
@@ -31,6 +39,6 @@ export function createBlundrSupabaseBrowserClient(): SupabaseClient | null {
       detectSessionInUrl: true,
       persistSession: true,
     },
-  });
+  }) as unknown as BlundrSupabaseClient;
   return browserClient;
 }

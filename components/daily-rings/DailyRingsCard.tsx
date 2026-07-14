@@ -113,6 +113,7 @@ export function DailyRingsCard({ repertoireProgress, refreshKey, completionResul
   const [snapshot, setSnapshot] = useState<DailyRingSnapshot>(() => buildLoadingDailyRingSnapshot());
   const trackedViewKeyRef = useRef<string | null>(null);
   const isPlaceholderSnapshot = snapshot.userId === BLUNDR_LOCAL_DEMO_USER_ID && snapshot.localDate === PLACEHOLDER_LOCAL_DATE && snapshot.updatedAt === PLACEHOLDER_ISO;
+  const successfulCompletion = completionResult?.ok === true ? completionResult : null;
 
   async function refreshSnapshot() {
     const userId = getLocalAccountCurrentUserId();
@@ -126,7 +127,7 @@ export function DailyRingsCard({ repertoireProgress, refreshKey, completionResul
 
   useEffect(() => {
     void refreshSnapshot();
-  }, [refreshKey, repertoireProgress.updatedAt, completionResult?.activityEvent?.id, completionResult?.activityAlreadyApplied, completionResult?.ok]);
+  }, [refreshKey, repertoireProgress.updatedAt, successfulCompletion?.activityEvent.id, successfulCompletion?.activityAlreadyApplied, completionResult?.ok]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -194,11 +195,11 @@ export function DailyRingsCard({ repertoireProgress, refreshKey, completionResul
 
       <div className="mt-4 grid gap-3">
         {completionResult ? <DailyRingCompletionBanner result={completionResult} /> : null}
-        {completionResult?.rewardGrants?.length ? (
+        {successfulCompletion?.rewardGrants?.length ? (
           <TempoCacheCard
-            state={completionResult.tempoCacheState ?? "applied"}
-            rewardGrants={completionResult.rewardGrants}
-            rewardHistory={completionResult.rewardHistory ?? null}
+            state={successfulCompletion.tempoCacheState ?? "applied"}
+            rewardGrants={successfulCompletion.rewardGrants}
+            rewardHistory={successfulCompletion.rewardHistory ?? null}
           />
         ) : null}
         <div className="rounded-[1.5rem] bg-[#f8f5ef] px-4 py-5 ring-1 ring-stone-100">

@@ -238,7 +238,7 @@ export const techniqueLabGenerator: ProceduralMiniGameGenerator = {
   buildFallbackScenario(input: MiniGameGenerationInput): GeneratedMiniGameScenario | null {
     const candidate =
       pickValidTechniqueFamilyCandidate(input, TECHNIQUE_FAMILIES) ??
-      pickValidTechniqueFamilyCandidate({ ...input, seed: `${input.seed}:fallback` }, [...TECHNIQUE_FAMILIES].reverse() as typeof TECHNIQUE_FAMILIES);
+      pickValidTechniqueFamilyCandidate({ ...input, seed: `${input.seed}:fallback` }, [...TECHNIQUE_FAMILIES].reverse());
     return candidate ? buildGeneratedMiniGameScenarioContract(candidate, {
       dateKey: input.dateKey,
       now: new Date().toISOString(),

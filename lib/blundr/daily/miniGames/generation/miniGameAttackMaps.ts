@@ -3,6 +3,8 @@ import { attackersTo, getAttackedSquares, getPieceAttacks, squareAttackedBy } fr
 import { parseFenBoard } from "@/lib/blundr/geometry/fenBoardParser";
 import { normalizeText } from "../miniGameUtils";
 
+export { getAttackedSquares } from "@/lib/blundr/geometry/attackMap";
+
 export function parseMiniGameBoard(fen: string): ParsedBoard {
   return parseFenBoard(normalizeText(fen));
 }
