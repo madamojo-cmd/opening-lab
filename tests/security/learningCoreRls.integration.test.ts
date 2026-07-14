@@ -228,3 +228,176 @@ test("Learning Core v2 RLS enforces anonymous, user A, user B, and service-role 
     await service.auth.admin.deleteUser(createdB.data.user.id);
   }
 });
+
+test("Game Data RLS isolates provider accounts and denies browser source-worker writes", async (t) => {
+  if (!configured) {
+    t.skip("requires the configured disposable Supabase project");
+    return;
+  }
+  const url = process.env.BLUNDR_RLS_TEST_URL!;
+  const anonKey = process.env.BLUNDR_RLS_TEST_ANON_KEY!;
+  const service = createClient(
+    url,
+    process.env.BLUNDR_RLS_TEST_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+  const emailA = process.env.BLUNDR_RLS_TEST_USER_A_EMAIL!;
+  const emailB = process.env.BLUNDR_RLS_TEST_USER_B_EMAIL!;
+  const existing = (await service.auth.admin.listUsers()).data.users;
+  await Promise.all(
+    existing
+      .filter((user) => user.email === emailA || user.email === emailB)
+      .map((user) => service.auth.admin.deleteUser(user.id)),
+  );
+  const createdA = await service.auth.admin.createUser({
+    email: emailA,
+    password: process.env.BLUNDR_RLS_TEST_USER_A_PASSWORD!,
+    email_confirm: true,
+  });
+  const createdB = await service.auth.admin.createUser({
+    email: emailB,
+    password: process.env.BLUNDR_RLS_TEST_USER_B_PASSWORD!,
+    email_confirm: true,
+  });
+  assert.equal(createdA.error, null);
+  assert.equal(createdB.error, null);
+  assert.ok(createdA.data.user && createdB.data.user);
+  const userA = createClient(url, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const userB = createClient(url, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  try {
+    assert.equal(
+      (
+        await userA.auth.signInWithPassword({
+          email: emailA,
+          password: process.env.BLUNDR_RLS_TEST_USER_A_PASSWORD!,
+        })
+      ).error,
+      null,
+    );
+    assert.equal(
+      (
+        await userB.auth.signInWithPassword({
+          email: emailB,
+          password: process.env.BLUNDR_RLS_TEST_USER_B_PASSWORD!,
+        })
+      ).error,
+      null,
+    );
+    const account = {
+      user_id: createdA.data.user.id,
+      provider: "lichess",
+      username: `rls-${Date.now()}`,
+      verification_state: "verified",
+    };
+    assert.equal(
+      (
+        await userA
+          .from("blundr_provider_accounts")
+          .insert({ ...account, user_id: createdB.data.user.id })
+      ).error,
+      null,
+    );
+    const own = await userA
+      .from("blundr_provider_accounts")
+      .select("user_id,provider")
+      .eq("provider", "lichess")
+      .maybeSingle();
+    assert.equal(own.data?.user_id, createdA.data.user.id);
+    assert.deepEqual(
+      (
+        await userB
+          .from("blundr_provider_accounts")
+          .select("user_id")
+          .eq("provider", "lichess")
+      ).data,
+      [],
+    );
+    assert.ok(
+      (
+        await userA.from("blundr_game_import_jobs").insert({
+          id: `rls-job-${Date.now()}`,
+          user_id: createdA.data.user.id,
+          provider: "lichess",
+          status: "queued",
+          cursor: {},
+          correlation_id: "rls",
+        })
+      ).error,
+    );
+    assert.ok(
+      (
+        await userA.from("blundr_external_games").insert({
+          user_id: createdA.data.user.id,
+          provider: "lichess",
+          fallback_fingerprint: `rls-${Date.now()}`,
+          username: "a",
+          white_player: "a",
+          black_player: "b",
+          played_at: new Date().toISOString(),
+          result: "1-0",
+          variant: "standard",
+          normalized_pgn: "1. d4 d5",
+          player_color: "white",
+          processing_version: "v1",
+          classifier_version: "v1",
+        })
+      ).error,
+    );
+    assert.ok(
+      (
+        await userA.from("blundr_game_opening_segments").insert({
+          user_id: createdA.data.user.id,
+          segment_id: "rls-segment",
+          game_fingerprint: "rls",
+          opening_id: "locked",
+          repertoire_side: "white",
+          first_matched_ply: 1,
+          last_matched_ply: 1,
+          runtime_version: "v1",
+          access_state: "active",
+        })
+      ).error,
+    );
+    assert.ok(
+      (
+        await userA.from("blundr_learning_findings").insert({
+          user_id: createdA.data.user.id,
+          finding_id: "rls",
+          finding_fingerprint: "rls",
+          segment_id: "rls",
+          game_fingerprint: "rls",
+          position_key: "rls",
+          opening_id: "locked",
+          repertoire_side: "white",
+          category: "opening_move",
+          confidence: 1,
+          severity: "high",
+          evidence: {},
+          explanation: "test",
+          status: "active",
+        })
+      ).error,
+    );
+    assert.equal(
+      (
+        await service
+          .from("blundr_provider_accounts")
+          .delete()
+          .eq("user_id", createdA.data.user.id)
+          .eq("provider", "lichess")
+      ).error,
+      null,
+    );
+  } finally {
+    await service
+      .from("blundr_provider_accounts")
+      .delete()
+      .eq("user_id", createdA.data.user.id);
+    await service.auth.admin.deleteUser(createdA.data.user.id);
+    await service.auth.admin.deleteUser(createdB.data.user.id);
+  }
+});

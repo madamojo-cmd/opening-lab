@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import test from "node:test";
 
 import { DAILY_MINI_GAME_REGISTRY } from "../miniGames/dailyMiniGameRegistry";
 import { generateMiniGameScenarioAsync } from "../miniGames/generation/generatedMiniGameRegistry";
@@ -113,7 +114,7 @@ function denseTacticPieces(): Array<{ square: string; piece: string }> {
   ];
 }
 
-void (async () => {
+test("daily minigame fast training quality gate", async () => {
   assert.equal(countPieces(buildFenFromPieces(denseTacticPieces() as never, "w")), 18);
   assert.equal(countPawns(buildFenFromPieces(denseTacticPieces() as never, "w")), 13);
   assert.equal(countSidePieces(buildFenFromPieces(denseTacticPieces() as never, "w"), "w"), 10);
@@ -397,4 +398,4 @@ void (async () => {
   }
 
   console.log("dailyMiniGameFastTrainingQualityGate.test.ts passed");
-})();
+});

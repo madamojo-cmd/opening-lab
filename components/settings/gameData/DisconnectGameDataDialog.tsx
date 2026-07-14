@@ -2,10 +2,12 @@ export function DisconnectGameDataDialog({
   open,
   onCancel,
   onConfirm,
+  deleteMode = false,
 }: {
   open: boolean;
   onCancel: () => void;
   onConfirm: () => void;
+  deleteMode?: boolean;
 }) {
   if (!open) return null;
   return (
@@ -17,11 +19,12 @@ export function DisconnectGameDataDialog({
     >
       <div className="w-full max-w-md rounded-3xl bg-stone-50 p-6 shadow-xl">
         <h2 id="disconnect-title" className="text-lg font-black">
-          Disconnect game data?
+          {deleteMode ? "Delete imported game data?" : "Disconnect game data?"}
         </h2>
         <p className="mt-2 text-sm text-stone-600">
-          This fixture represents deleting imported games. Your local training
-          history is not removed.
+          {deleteMode
+            ? "Imported games, findings, and derived insights will be removed. Your local training history is not removed."
+            : "Your connection will stop syncing. Imported data remains available until you choose delete."}
         </p>
         <div className="mt-5 flex justify-end gap-2">
           <button
@@ -36,7 +39,7 @@ export function DisconnectGameDataDialog({
             className="rounded-xl bg-red-700 px-4 py-2 text-sm font-black text-white"
             onClick={onConfirm}
           >
-            Disconnect
+            {deleteMode ? "Disconnect and delete" : "Disconnect"}
           </button>
         </div>
       </div>
