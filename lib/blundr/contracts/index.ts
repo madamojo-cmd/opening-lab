@@ -2,7 +2,8 @@
 
 export const BLUNDR_CONTRACT_VERSION = "2026-07-13.v1" as const;
 export const BLUNDR_CONTENT_VERSION = "stage2-approved-content-v1" as const;
-export const BLUNDR_RUNTIME_VERSION = "stage2-21-opening-stepdown-runtime-v1" as const;
+export const BLUNDR_RUNTIME_VERSION =
+  "stage2-21-opening-stepdown-runtime-v1" as const;
 export const BLUNDR_CLASSIFIER_VERSION = "weakness-classifier-v1" as const;
 
 export type EventId = string & { readonly __brand: "EventId" };
@@ -51,14 +52,22 @@ export function createPositionIdentity(input: IdentityInput): PositionIdentity {
     expectedMoveUci: text(input.expectedMoveUci) || null,
     repertoireSide: input.repertoireSide ?? "unknown",
     moveOrderKey: text(input.moveOrderKey) || null,
-    runtimePackageVersion: text(input.runtimePackageVersion) || BLUNDR_RUNTIME_VERSION,
+    runtimePackageVersion:
+      text(input.runtimePackageVersion) || BLUNDR_RUNTIME_VERSION,
   };
-  const masteryKey = [identity.canonicalFen, identity.openingId ?? "", identity.repertoireSide].join("|");
+  const masteryKey = [
+    identity.canonicalFen,
+    identity.openingId ?? "",
+    identity.repertoireSide,
+  ].join("|");
   identity.positionKey = `pos-${stableHash(masteryKey)}`;
   return identity;
 }
 
-export function createDeterministicIdentity(prefix: string, parts: readonly unknown[]): string {
+export function createDeterministicIdentity(
+  prefix: string,
+  parts: readonly unknown[],
+): string {
   return `${prefix}-${stableHash(parts.map((part) => text(part)).join("\u001f"))}`;
 }
 
@@ -118,10 +127,15 @@ export type LearningEventV2 = {
   source: EvidenceRecord["source"];
   contentVersion: string;
   classifierVersion: string;
+  migrationMarker: string | null;
   deletedAt: string | null;
 };
 
-export type OpeningAccessDecision = "active" | "gated_pending" | "revoked" | "unknown";
+export type OpeningAccessDecision =
+  | "active"
+  | "gated_pending"
+  | "revoked"
+  | "unknown";
 
 export type OpeningAccessSnapshot = {
   openingId: string;
@@ -132,8 +146,19 @@ export type OpeningAccessSnapshot = {
   expiresAt: string | null;
 };
 
-export type DailyActivityLifecycle = "eligibility" | "build" | "validate" | "advance" | "reveal";
-export type DailyReducerResult = "accepted" | "rejected" | "revealed" | "retry_recorded" | "already_committed" | "conflict";
+export type DailyActivityLifecycle =
+  | "eligibility"
+  | "build"
+  | "validate"
+  | "advance"
+  | "reveal";
+export type DailyReducerResult =
+  | "accepted"
+  | "rejected"
+  | "revealed"
+  | "retry_recorded"
+  | "already_committed"
+  | "conflict";
 
 export type DailyActivityDefinition = {
   activityId: string;
@@ -168,25 +193,88 @@ export type DailyPresentationModel = {
   prompt: string;
   positionFen: string;
   openingLabel: string | null;
-  feedback: null | { kind: "correct" | "incorrect" | "revealed"; message: string };
+  feedback: null | {
+    kind: "correct" | "incorrect" | "revealed";
+    message: string;
+  };
   state: "unanswered" | "committed" | "revealed" | "retry";
 };
 
 export type ProviderKind = "chesscom" | "lichess";
 export type ProviderErrorKind = "retryable" | "permanent" | "sanitized_unknown";
-export type ProviderAccount = { provider: ProviderKind; externalUserId: string; username: string; connectedAt: string };
-export type NormalizedExternalGame = { provider: ProviderKind; externalGameId: string; playedAt: string; moves: readonly string[]; deletedAt: string | null };
-export type ImportCursor = { provider: ProviderKind; cursor: string | null; updatedAt: string };
-export type ImportJob = { jobId: string; provider: ProviderKind; status: "queued" | "running" | "completed" | "failed"; cursor: string | null; error: ProviderErrorKind | null };
+export type ProviderAccount = {
+  provider: ProviderKind;
+  externalUserId: string;
+  username: string;
+  connectedAt: string;
+};
+export type NormalizedExternalGame = {
+  provider: ProviderKind;
+  externalGameId: string;
+  playedAt: string;
+  moves: readonly string[];
+  deletedAt: string | null;
+};
+export type ImportCursor = {
+  provider: ProviderKind;
+  cursor: string | null;
+  updatedAt: string;
+};
+export type ImportJob = {
+  jobId: string;
+  provider: ProviderKind;
+  status: "queued" | "running" | "completed" | "failed";
+  cursor: string | null;
+  error: ProviderErrorKind | null;
+};
 
-export type NodeMasteryReadModel = { positionKey: string; attempts: number; firstAttemptAt: string | null; firstAttemptResult: "correct" | "incorrect" | "revealed" | null; confidence: number; updatedAt: string };
-export type WeaknessProjection = { positionKey: string; category: LearningFindingCategory; score: number; confidence: number; explanation: string; recommendedDailyIntervention: LearningFinding["recommendedDailyIntervention"]; access: OpeningAccessDecision };
-export type WeaknessExplanation = Pick<WeaknessProjection, "positionKey" | "explanation" | "recommendedDailyIntervention">;
-export type RuntimeContentManifest = { packageId: string; version: string; checksum: string; generatedAt: string; acceptedCount: number; rejectedCount: number };
-export type RejectionReport = { source: string; rowNumber: number; reason: string };
-export type TelemetryEventName = "learning_event_recorded" | "daily_card_reserved" | "daily_attempt_committed" | "opening_access_denied";
+export type NodeMasteryReadModel = {
+  positionKey: string;
+  attempts: number;
+  firstAttemptAt: string | null;
+  firstAttemptResult: "correct" | "incorrect" | "revealed" | null;
+  confidence: number;
+  updatedAt: string;
+};
+export type WeaknessProjection = {
+  positionKey: string;
+  category: LearningFindingCategory;
+  score: number;
+  confidence: number;
+  explanation: string;
+  recommendedDailyIntervention: LearningFinding["recommendedDailyIntervention"];
+  access: OpeningAccessDecision;
+};
+export type WeaknessExplanation = Pick<
+  WeaknessProjection,
+  "positionKey" | "explanation" | "recommendedDailyIntervention"
+>;
+export type RuntimeContentManifest = {
+  packageId: string;
+  version: string;
+  checksum: string;
+  generatedAt: string;
+  acceptedCount: number;
+  rejectedCount: number;
+};
+export type RejectionReport = {
+  source: string;
+  rowNumber: number;
+  reason: string;
+};
+export type TelemetryEventName =
+  | "learning_event_recorded"
+  | "daily_card_reserved"
+  | "daily_attempt_committed"
+  | "opening_access_denied";
 
-export type FeatureFlagName = "learning_core_v2" | "weakness_engine" | "opening_access_v2" | "daily_core_v2" | "provider_ingestion" | "mixed_test";
+export type FeatureFlagName =
+  | "learning_core_v2"
+  | "weakness_engine"
+  | "opening_access_v2"
+  | "daily_core_v2"
+  | "provider_ingestion"
+  | "mixed_test";
 export const FEATURE_FLAGS: Readonly<Record<FeatureFlagName, boolean>> = {
   learning_core_v2: false,
   weakness_engine: false,
@@ -196,19 +284,35 @@ export const FEATURE_FLAGS: Readonly<Record<FeatureFlagName, boolean>> = {
   mixed_test: false,
 };
 
-export function isFailClosedAccess(snapshot: OpeningAccessSnapshot | null | undefined, now = Date.now()): boolean {
+export function isFailClosedAccess(
+  snapshot: OpeningAccessSnapshot | null | undefined,
+  now = Date.now(),
+): boolean {
   if (!snapshot || snapshot.decision !== "active") return true;
-  if (!snapshot.checkedAt || (snapshot.expiresAt && Date.parse(snapshot.expiresAt) <= now)) return true;
+  if (
+    !snapshot.checkedAt ||
+    (snapshot.expiresAt && Date.parse(snapshot.expiresAt) <= now)
+  )
+    return true;
   return false;
 }
 
-export function serializeContract<T extends { schemaVersion: string }>(value: T): string {
+export function serializeContract<T extends { schemaVersion: string }>(
+  value: T,
+): string {
   return JSON.stringify(value);
 }
 
-export function parseVersionedContract<T extends { schemaVersion: string }>(raw: string, expectedVersion = BLUNDR_CONTRACT_VERSION): T {
+export function parseVersionedContract<T extends { schemaVersion: string }>(
+  raw: string,
+  expectedVersion = BLUNDR_CONTRACT_VERSION,
+): T {
   const parsed: unknown = JSON.parse(raw);
-  if (!parsed || typeof parsed !== "object" || (parsed as { schemaVersion?: unknown }).schemaVersion !== expectedVersion) {
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    (parsed as { schemaVersion?: unknown }).schemaVersion !== expectedVersion
+  ) {
     throw new Error(`unsupported_contract_version:${expectedVersion}`);
   }
   return parsed as T;
@@ -217,7 +321,17 @@ export function parseVersionedContract<T extends { schemaVersion: string }>(raw:
 export function hasSolutionBearingFields(value: unknown): boolean {
   if (value === null || typeof value !== "object") return false;
   if (Array.isArray(value)) return value.some(hasSolutionBearingFields);
-  return Object.entries(value as Record<string, unknown>).some(([key, child]) =>
-    ["acceptedMoves", "correctCandidateIndex", "correctSquares", "expectedMoveUci", "expectedMoveSan", "solution", "targetAnswer", "correctSquareKeys"].includes(key) || hasSolutionBearingFields(child),
+  return Object.entries(value as Record<string, unknown>).some(
+    ([key, child]) =>
+      [
+        "acceptedMoves",
+        "correctCandidateIndex",
+        "correctSquares",
+        "expectedMoveUci",
+        "expectedMoveSan",
+        "solution",
+        "targetAnswer",
+        "correctSquareKeys",
+      ].includes(key) || hasSolutionBearingFields(child),
   );
 }
