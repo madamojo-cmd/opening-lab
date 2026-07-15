@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useState } from "react";
 import { ProviderConnectionCard } from "./ProviderConnectionCard";
 import { DisconnectGameDataDialog } from "./DisconnectGameDataDialog";
@@ -105,6 +106,12 @@ export function ConnectedGameDataPanel({
           Blundr reads completed public games and never requests your provider
           password.
         </p>
+        <Link
+          href="/privacy"
+          className="mt-2 inline-flex text-sm font-black text-green-700 underline underline-offset-4"
+        >
+          Read the privacy policy
+        </Link>
       </div>
       {provider && username ? (
         <p className="text-sm font-bold">

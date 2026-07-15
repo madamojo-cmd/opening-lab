@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export function DisconnectGameDataDialog({
   open,
   onCancel,
@@ -26,6 +28,12 @@ export function DisconnectGameDataDialog({
             ? "Imported games, findings, and derived insights will be removed. Your local training history is not removed."
             : "Your connection will stop syncing. Imported data remains available until you choose delete."}
         </p>
+        <Link
+          href="/privacy"
+          className="mt-3 inline-flex text-sm font-bold text-green-700 underline underline-offset-4"
+        >
+          Review data and deletion details
+        </Link>
         <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"

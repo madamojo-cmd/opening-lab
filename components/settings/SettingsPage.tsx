@@ -614,6 +614,9 @@ export function SettingsPage({ homeHref = "/", className }: SettingsPageProps) {
                 <p className="mt-3 text-sm leading-6 text-stone-600">
                   Delete account remains a support flow later. Tempo does not add billing or destructive cloud actions in this stage.
                 </p>
+                <Link href="/privacy" className="mt-3 inline-flex text-sm font-black text-green-700 underline underline-offset-4">
+                  Read the full Privacy Policy
+                </Link>
               </div>
             </div>
           </Section>
