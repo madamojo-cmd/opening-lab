@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { DailyBlundrBoard } from "@/components/daily/DailyBlundrBoard";
-import { buildMiniGameRunnerScenarioFromCard } from "@/components/review/MiniGamePracticeRunner";
+import { buildLegacyTestScenario } from "../miniGames/runner/legacyTestScenarioAdapter";
 import { resetLocalAccountState, setLocalAccountCurrentUserId } from "../../accounts/localAccountStorage";
 import { DAILY_MINI_GAME_REGISTRY } from "../miniGames/dailyMiniGameRegistry";
 import { buildMiniGameBoardFeedback } from "../miniGames/runner/miniGameBoardFeedbackAdapter";
@@ -26,7 +26,7 @@ for (const definition of DAILY_MINI_GAME_REGISTRY) {
   assert.equal(miniGame.currentFen, miniGame.startFen, `Expected ${definition.id} to load from the initial FEN`);
   assert.equal(miniGame.lastMoveUci ?? null, null, `Expected ${definition.id} to start without replayed moves`);
 
-  const scenario = buildMiniGameRunnerScenarioFromCard(bundle!.card);
+  const scenario = buildLegacyTestScenario(bundle!.card);
   assert.ok(scenario, `Expected a runner scenario for ${definition.id}`);
 
   const initialState = createInitialMiniGameRunnerState(scenario);

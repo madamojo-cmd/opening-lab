@@ -1,0 +1,52 @@
+{
+  "release": "blundr-mvp-step5-release-candidate",
+  "gitSha": "PENDING_STEP5_CHECKPOINT",
+  "buildIdentifier": "blundr-step5-rc",
+  "node": "v24.14.0",
+  "npm": "11.9.0",
+  "lockfileSha256": "091b0d0d50f905502fec2c129b2558ab02a2bb7537201f05496399cc7e8d3415",
+  "runtime": {
+    "packageId": "stage2-21-opening-stepdown-runtime-v1",
+    "nodesSha256": "81c095ba652d4ad9eb3d378c469ea0f0e2b030b571ad101ac7ba773ca7aecb01",
+    "movesSha256": "84e7aa4359a28371d7f3703990e77757189a8bc1b83bc1eca4cbb504dc5ebcef"
+  },
+  "migrations": {
+    "count": 7,
+    "versions": [
+      "20260703_001",
+      "20260704_001",
+      "20260705_001",
+      "20260706_001",
+      "20260713_001",
+      "20260714_001",
+      "20260715_001"
+    ],
+    "checksum": "defa7652f832df8060ac97d52bb487e69942ec7d59eadba60c65b5cc1dbf207a"
+  },
+  "featureFlags": {
+    "default": "off",
+    "serverControlled": true,
+    "globalEnablement": false
+  },
+  "verification": {
+    "unit": "545/545",
+    "component": "8/8",
+    "integration": "6/6",
+    "securityRls": "3/3 executable RLS; 4/4 security suite",
+    "e2e": "1/1",
+    "lintWarnings": 109,
+    "browserCoverage": ["Chromium", "Firefox", "WebKit", "Mobile Chromium"]
+  },
+  "privacy": {
+    "publicProviderHistoryOnly": true,
+    "providerPasswordsRequested": false,
+    "rawPgnInLogs": false,
+    "policyPublication": "STAGING_BLOCKER_UNPUBLISHED"
+  },
+  "knownStagingBlockers": [
+    "Disposable staging provider imports and production telemetry sink validation remain pending.",
+    "Privacy policy publication is not asserted by this repository."
+  ],
+  "previousCheckpoint": "checkpoint-v2.10.7q0-step4-repertoire-intelligence-deep-minigames",
+  "rollbackRunbook": "release/blundr-mvp-rollback-runbook.md"
+}

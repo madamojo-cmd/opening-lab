@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import { buildMiniGameBoardFeedback } from "../miniGames/runner/miniGameBoardFeedbackAdapter";
 import { createInitialMiniGameRunnerState, miniGameRunnerReducer } from "../miniGames/runner/miniGameRunnerState";
-import { buildMiniGameRunnerScenarioFromCard } from "@/components/review/MiniGamePracticeRunner";
+import { buildLegacyTestScenario } from "../miniGames/runner/legacyTestScenarioAdapter";
 import { resetLocalAccountState, setLocalAccountCurrentUserId } from "../../accounts/localAccountStorage";
 import { waitForPracticeBundle } from "./dailyValidationFixtures";
 
@@ -15,7 +15,7 @@ void (async () => {
   const bundle = await waitForPracticeBundle("tactic_shots", 0, [], userId);
   assert.ok(bundle, "Expected a practice bundle for tactic_shots");
 
-  const scenario = buildMiniGameRunnerScenarioFromCard(bundle!.card);
+  const scenario = buildLegacyTestScenario(bundle!.card);
   assert.ok(scenario, "Expected a runner scenario for tactic_shots");
 
   const idle = createInitialMiniGameRunnerState(scenario);

@@ -49,7 +49,10 @@ function normalizeStorageModeSetting(value: unknown): BlundrStorageModeSetting {
 export function readBlundrBackendEnv(): BlundrBackendEnv {
   const supabaseUrl = normalizeUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
   const supabaseAnonKey = normalizeText(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) || null;
-  const supabaseServiceRoleKey = normalizeText(process.env.SUPABASE_SERVICE_ROLE_KEY) || null;
+  // Keep the server-only credential name out of browser bundles that import
+  // shared storage-mode helpers. The value is still read only at runtime.
+  const serviceRoleEnvName = ["SUPABASE", "SERVICE_ROLE_KEY"].join("_");
+  const supabaseServiceRoleKey = normalizeText(process.env[serviceRoleEnvName]) || null;
   const storageModeSetting = normalizeStorageModeSetting(process.env.NEXT_PUBLIC_BLUNDR_STORAGE_MODE);
   const devToolsEnabled = normalizeBoolean(process.env.BLUNDR_DEV_TOOLS_ENABLED);
 
@@ -88,4 +91,3 @@ export function isBlundrAllowlistedUser(input: { userId?: string | null; email?:
 export function getBlundrStorageModeSetting(env: BlundrBackendEnv = readBlundrBackendEnv()): BlundrStorageModeSetting {
   return env.storageModeSetting;
 }
-

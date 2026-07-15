@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { buildMiniGameRunnerScenarioFromCard } from "@/components/review/MiniGamePracticeRunner";
+import { buildLegacyTestScenario } from "../miniGames/runner/legacyTestScenarioAdapter";
 import { generateMiniGameScenarioAsync } from "../miniGames/generation/generatedMiniGameRegistry";
 import { DAILY_MINI_GAME_REGISTRY } from "../miniGames/dailyMiniGameRegistry";
 import { createInitialMiniGameRunnerState } from "../miniGames/runner/miniGameRunnerState";
@@ -32,7 +32,7 @@ for (const definition of DAILY_MINI_GAME_REGISTRY) {
   assert.equal(dailyCard?.miniGame.scenario?.source, "daily_deck");
   assert.ok(validateMiniGameScenario(dailyCard?.miniGame.scenario).valid);
 
-  const dailyRunnerScenario = buildMiniGameRunnerScenarioFromCard(dailyCard!);
+  const dailyRunnerScenario = buildLegacyTestScenario(dailyCard!);
   assert.ok(dailyRunnerScenario);
   const dailyInitialState = createInitialMiniGameRunnerState(dailyRunnerScenario);
   assert.equal(dailyInitialState.status, "idle");
@@ -61,7 +61,7 @@ for (const definition of DAILY_MINI_GAME_REGISTRY) {
   assert.equal(standaloneCard?.miniGame.scenario?.source, "standalone_review");
   assert.ok(validateMiniGameScenario(standaloneCard?.miniGame.scenario).valid);
 
-  const standaloneRunnerScenario = buildMiniGameRunnerScenarioFromCard(standaloneCard!);
+  const standaloneRunnerScenario = buildLegacyTestScenario(standaloneCard!);
   assert.ok(standaloneRunnerScenario);
   const standaloneInitialState = createInitialMiniGameRunnerState(standaloneRunnerScenario);
   assert.equal(standaloneInitialState.status, "idle");

@@ -1,0 +1,63 @@
+name: Blundr release candidate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      BLUNDR_RLS_TEST_URL: ${{ secrets.BLUNDR_RLS_TEST_URL }}
+      BLUNDR_RLS_TEST_ANON_KEY: ${{ secrets.BLUNDR_RLS_TEST_ANON_KEY }}
+      BLUNDR_RLS_TEST_SERVICE_ROLE_KEY: ${{ secrets.BLUNDR_RLS_TEST_SERVICE_ROLE_KEY }}
+      BLUNDR_RLS_TEST_USER_A_EMAIL: ${{ secrets.BLUNDR_RLS_TEST_USER_A_EMAIL }}
+      BLUNDR_RLS_TEST_USER_A_PASSWORD: ${{ secrets.BLUNDR_RLS_TEST_USER_A_PASSWORD }}
+      BLUNDR_RLS_TEST_USER_B_EMAIL: ${{ secrets.BLUNDR_RLS_TEST_USER_B_EMAIL }}
+      BLUNDR_RLS_TEST_USER_B_PASSWORD: ${{ secrets.BLUNDR_RLS_TEST_USER_B_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Require disposable RLS test configuration
+        run: |
+          set -eu
+          for name in \
+            BLUNDR_RLS_TEST_URL \
+            BLUNDR_RLS_TEST_ANON_KEY \
+            BLUNDR_RLS_TEST_SERVICE_ROLE_KEY \
+            BLUNDR_RLS_TEST_USER_A_EMAIL \
+            BLUNDR_RLS_TEST_USER_A_PASSWORD \
+            BLUNDR_RLS_TEST_USER_B_EMAIL \
+            BLUNDR_RLS_TEST_USER_B_PASSWORD
+          do
+            test -n "${!name:-}" || { echo "$name is required"; exit 1; }
+          done
+      - name: Static checks
+        run: |
+          npm run typecheck
+          npm run lint
+          npm run format:check
+          npm run security:audit
+          npm run dependency:audit
+      - name: Test suites
+        run: |
+          npm run test:unit
+          npm run test:component
+          npm run test:integration
+          npm run test:chess-content
+          npm run test:security
+          npm run verify:migrations
+      - name: Production build and browser checks
+        run: |
+          rm -rf .next
+          npm run build
+          npm run bundle:audit
+          npm run test:e2e
+          npm run verify:release

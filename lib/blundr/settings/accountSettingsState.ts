@@ -1,5 +1,5 @@
 import { createDefaultBoardPreferences, readLocalBoardPreferences, type BlundrBoardPreferences } from "../board/boardPreferenceService";
-import { readBlundrBackendEnv, isBlundrDevToolsEnabled } from "../backend/backendEnv";
+import { isClientDevToolsEnabled } from "../backend/clientEnv";
 import { createBlundrSupabaseBrowserClient } from "../backend/supabaseBrowserClient";
 import type { BlundrAccountMode, CurrentBlundrUser, UserTrainingProfile } from "../accounts/accountTypes";
 import { getLocalAccountCurrentUserId, getLocalTrainingProfile, readLocalAccountBundle, setLocalAccountCurrentUserId } from "../accounts/localAccountStorage";
@@ -64,8 +64,6 @@ export function buildAccountSettingsSnapshot(input: {
   const profile = getLocalTrainingProfile(userId) ?? createDefaultTrainingProfile(userId);
   const boardPreferences = readLocalBoardPreferences(input.storage ?? null) ?? createDefaultBoardPreferences();
   const user = buildCurrentUser(session, userId);
-  const env = readBlundrBackendEnv();
-
   return {
     user,
     profile,
@@ -77,7 +75,7 @@ export function buildAccountSettingsSnapshot(input: {
     accountStatusLabel: session?.email ? `Signed in as ${session.email}` : "Local demo on this device",
     currentUserId: userId,
     dailyGoalSummary: `${profile.dailyTempoGoal} Tempo, ${profile.dailyBatteryGoal} Battery, ${profile.dailyBlundrGoal} Daily Blundr`,
-    devToolsEnabled: isBlundrDevToolsEnabled(env),
+    devToolsEnabled: isClientDevToolsEnabled(),
   };
 }
 

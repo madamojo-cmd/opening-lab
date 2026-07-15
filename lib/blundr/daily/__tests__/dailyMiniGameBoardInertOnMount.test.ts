@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { DailyBlundrBoard } from "@/components/daily/DailyBlundrBoard";
-import { buildMiniGameRunnerScenarioFromCard } from "@/components/review/MiniGamePracticeRunner";
+import { buildLegacyTestScenario } from "../miniGames/runner/legacyTestScenarioAdapter";
 import { resetLocalAccountState, setLocalAccountCurrentUserId } from "../../accounts/localAccountStorage";
 import { buildMiniGameBoardFeedback } from "../miniGames/runner/miniGameBoardFeedbackAdapter";
 import { createInitialMiniGameRunnerState } from "../miniGames/runner/miniGameRunnerState";
@@ -18,7 +18,7 @@ setLocalAccountCurrentUserId(userId);
 const bundle = await waitForPracticeBundle("king_race", 0, [], userId);
 assert.ok(bundle, "Expected a practice bundle for king_race");
 
-const scenario = buildMiniGameRunnerScenarioFromCard(bundle!.card);
+const scenario = buildLegacyTestScenario(bundle!.card);
 assert.ok(scenario, "Expected a runner scenario for king_race");
 const idleFeedback = buildMiniGameBoardFeedback(scenario!, createInitialMiniGameRunnerState(scenario));
 

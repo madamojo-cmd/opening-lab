@@ -274,10 +274,18 @@ export type TelemetryEventName =
 
 export type FeatureFlagName =
   | "learning_core_v2"
+  | "learning_core_v2_write"
+  | "learning_core_v2_read"
   | "weakness_engine"
+  | "weakness_engine_v2"
   | "opening_access_v2"
+  | "repertoire_opening_detail"
   | "daily_core_v2"
+  | "daily_production_store"
   | "provider_ingestion"
+  | "game_data_connections"
+  | "game_data_chess_com"
+  | "game_data_lichess"
   | "mixed_test"
   | "daily_candidate_choice"
   | "daily_plan_recall"
@@ -288,10 +296,18 @@ export type FeatureFlagName =
   | "daily_deep_minigames";
 export const FEATURE_FLAGS: Readonly<Record<FeatureFlagName, boolean>> = {
   learning_core_v2: false,
+  learning_core_v2_write: false,
+  learning_core_v2_read: false,
   weakness_engine: false,
+  weakness_engine_v2: false,
   opening_access_v2: false,
+  repertoire_opening_detail: false,
   daily_core_v2: false,
+  daily_production_store: false,
   provider_ingestion: false,
+  game_data_connections: false,
+  game_data_chess_com: false,
+  game_data_lichess: false,
   mixed_test: false,
   daily_candidate_choice: false,
   daily_plan_recall: false,

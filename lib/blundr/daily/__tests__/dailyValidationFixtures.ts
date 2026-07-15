@@ -3,12 +3,22 @@ import { Chess } from "chess.js";
 import { buildDailyBlundrDeck } from "../dailyBlundrDeckBuilder";
 import { DAILY_MINI_GAME_REGISTRY } from "../miniGames/dailyMiniGameRegistry";
 import { DAILY_TRAINING_TARGET_REGISTRY } from "../trainingTargets/dailyTrainingTargetRegistry";
-import type { DailyBlundrCard, DailyBlundrMasteryState } from "../dailyBlundrTypes";
-import type { DailyMiniGameGenerationContext, DailyBlundrMiniGameCard, DailyMiniGameId } from "../miniGames/dailyMiniGameTypes";
-import type { DailyTrainingTargetGenerationContext, DailyBlundrTrainingTargetCard } from "../trainingTargets/dailyTrainingTargetTypes";
+import type {
+  DailyBlundrCard,
+  DailyBlundrMasteryState,
+} from "../dailyBlundrTypes";
+import type {
+  DailyMiniGameGenerationContext,
+  DailyBlundrMiniGameCard,
+  DailyMiniGameId,
+} from "../miniGames/dailyMiniGameTypes";
+import type {
+  DailyTrainingTargetGenerationContext,
+  DailyBlundrTrainingTargetCard,
+} from "../trainingTargets/dailyTrainingTargetTypes";
 import { generateMiniGameScenarioAsync } from "../miniGames/generation/generatedMiniGameRegistry";
 import { getDailyBlundrDateKey } from "../dailyBlundrStorage";
-import { buildPracticeBundle } from "@/components/review/MiniGamePracticeRunner";
+import { buildLegacyPracticeBundle } from "../miniGames/runner/legacyTestScenarioAdapter";
 
 export const VALIDATION_DATE_KEY = "2026-07-02";
 export const VALIDATION_NOW = "2026-07-02T12:00:00.000Z";
@@ -21,7 +31,9 @@ export function makeEmptyMasteryState(): DailyBlundrMasteryState {
   };
 }
 
-export function makeMiniGameContext(overrides: Partial<DailyMiniGameGenerationContext> = {}): DailyMiniGameGenerationContext {
+export function makeMiniGameContext(
+  overrides: Partial<DailyMiniGameGenerationContext> = {},
+): DailyMiniGameGenerationContext {
   return {
     dateKey: VALIDATION_DATE_KEY,
     now: VALIDATION_NOW,
@@ -44,7 +56,9 @@ export function makeMiniGameContext(overrides: Partial<DailyMiniGameGenerationCo
   };
 }
 
-export function makeTrainingTargetContext(overrides: Partial<DailyTrainingTargetGenerationContext> = {}): DailyTrainingTargetGenerationContext {
+export function makeTrainingTargetContext(
+  overrides: Partial<DailyTrainingTargetGenerationContext> = {},
+): DailyTrainingTargetGenerationContext {
   return {
     dateKey: VALIDATION_DATE_KEY,
     now: VALIDATION_NOW,
@@ -101,7 +115,12 @@ export function makeValidRecallCard(): DailyBlundrCard {
     note: "Validation recall card",
     signals: ["recall", "validation"],
     masteryTargets: [
-      { conceptKey: "target:validation:development", domain: "daily_recall", label: "Development", difficultyHint: "beginner" },
+      {
+        conceptKey: "target:validation:development",
+        domain: "daily_recall",
+        label: "Development",
+        difficultyHint: "beginner",
+      },
     ],
     confidence: "medium",
     difficulty: "beginner",
@@ -127,14 +146,20 @@ export function makeValidRecallCard(): DailyBlundrCard {
 }
 
 export function makeValidMiniGameCards(): DailyBlundrMiniGameCard[] {
-  return DAILY_MINI_GAME_REGISTRY.map((definition) => definition.generate(makeMiniGameContext())!).filter((card): card is DailyBlundrMiniGameCard => Boolean(card));
+  return DAILY_MINI_GAME_REGISTRY.map(
+    (definition) => definition.generate(makeMiniGameContext())!,
+  ).filter((card): card is DailyBlundrMiniGameCard => Boolean(card));
 }
 
 export function makeValidTrainingTargetCards(): DailyBlundrTrainingTargetCard[] {
-  return DAILY_TRAINING_TARGET_REGISTRY.map((definition) => definition.generate(makeTrainingTargetContext())!).filter((card): card is DailyBlundrTrainingTargetCard => Boolean(card));
+  return DAILY_TRAINING_TARGET_REGISTRY.map(
+    (definition) => definition.generate(makeTrainingTargetContext())!,
+  ).filter((card): card is DailyBlundrTrainingTargetCard => Boolean(card));
 }
 
-export async function warmMiniGameCacheForContext(context: DailyMiniGameGenerationContext = makeMiniGameContext()): Promise<void> {
+export async function warmMiniGameCacheForContext(
+  context: DailyMiniGameGenerationContext = makeMiniGameContext(),
+): Promise<void> {
   const seed = context.seed ?? context.dateKey;
   await Promise.all(
     DAILY_MINI_GAME_REGISTRY.map((definition) =>
@@ -158,7 +183,9 @@ export async function warmPracticeBundleCache(
   recentScenarioKeys: readonly string[],
   userIdOrLocalId: string | null,
 ): Promise<void> {
-  const definition = DAILY_MINI_GAME_REGISTRY.find((entry) => entry.id === miniGameId);
+  const definition = DAILY_MINI_GAME_REGISTRY.find(
+    (entry) => entry.id === miniGameId,
+  );
   if (!definition) return;
   const dateKey = `${getDailyBlundrDateKey()}:${definition.id}:${nonce}`;
   await generateMiniGameScenarioAsync({
@@ -178,13 +205,25 @@ export async function waitForPracticeBundle(
   nonce: number,
   recentScenarioKeys: readonly string[],
   userIdOrLocalId: string | null,
-): Promise<ReturnType<typeof buildPracticeBundle>> {
-  const definition = DAILY_MINI_GAME_REGISTRY.find((entry) => entry.id === miniGameId);
+): Promise<ReturnType<typeof buildLegacyPracticeBundle>> {
+  const definition = DAILY_MINI_GAME_REGISTRY.find(
+    (entry) => entry.id === miniGameId,
+  );
   if (!definition) return null;
   for (let offset = 0; offset < 5; offset += 1) {
     const attemptNonce = nonce + offset;
-    await warmPracticeBundleCache(definition.id, attemptNonce, recentScenarioKeys, userIdOrLocalId);
-    const bundle = buildPracticeBundle(miniGameId, attemptNonce, recentScenarioKeys, userIdOrLocalId);
+    await warmPracticeBundleCache(
+      definition.id,
+      attemptNonce,
+      recentScenarioKeys,
+      userIdOrLocalId,
+    );
+    const bundle = buildLegacyPracticeBundle(
+      miniGameId,
+      attemptNonce,
+      recentScenarioKeys,
+      userIdOrLocalId,
+    );
     if (bundle) {
       return bundle;
     }

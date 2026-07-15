@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import { resetLocalAccountState, setLocalAccountCurrentUserId } from "../../accounts/localAccountStorage";
 import { DAILY_MINI_GAME_REGISTRY } from "../miniGames/dailyMiniGameRegistry";
-import { buildMiniGameRunnerScenarioFromCard } from "@/components/review/MiniGamePracticeRunner";
+import { buildLegacyTestScenario } from "../miniGames/runner/legacyTestScenarioAdapter";
 import { buildMiniGameBoardFeedback } from "../miniGames/runner/miniGameBoardFeedbackAdapter";
 import {
   canSubmitMove,
@@ -24,7 +24,7 @@ for (const definition of DAILY_MINI_GAME_REGISTRY) {
   assert.ok(bundle, `Expected a practice bundle for ${definition.id}`);
   assert.equal(bundle?.card.miniGame.scenario?.source, "standalone_review");
 
-  const scenario = buildMiniGameRunnerScenarioFromCard(bundle!.card);
+  const scenario = buildLegacyTestScenario(bundle!.card);
   assert.ok(scenario, `Expected a runner scenario for ${definition.id}`);
 
   const initial = createInitialMiniGameRunnerState(scenario);
