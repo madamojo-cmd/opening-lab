@@ -5,3 +5,4 @@ export * from "./planRecall";
 export * from "./samePositionDifferentRoute";
 export * from "./continuationChallenge";
 export * from "./punishTheMistake";
+export * from "./mixedTest";

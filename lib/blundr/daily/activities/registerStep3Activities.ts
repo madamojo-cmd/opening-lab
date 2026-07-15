@@ -7,6 +7,7 @@ import { planRecallActivityDefinition } from "./planRecall/planRecallRegistratio
 import { transpositionActivityDefinition } from "./samePositionDifferentRoute/transpositionActivityRegistration";
 import { continuationChallengeActivityDefinition } from "./continuationChallenge/continuationChallengeRegistration";
 import { punishmentActivityDefinition } from "./punishTheMistake/punishmentRegistration";
+import { mixedTestActivityDefinition } from "./mixedTest/mixedTestRegistration";
 import type { FeatureFlagName } from "@/lib/blundr/contracts";
 import { FEATURE_FLAGS } from "@/lib/blundr/contracts";
 const definitions = [
@@ -15,6 +16,7 @@ const definitions = [
   transpositionActivityDefinition,
   continuationChallengeActivityDefinition,
   punishmentActivityDefinition,
+  mixedTestActivityDefinition,
 ] as const;
 const flags: Record<string, FeatureFlagName> = {
   daily_candidate_choice: "daily_candidate_choice",
@@ -22,6 +24,7 @@ const flags: Record<string, FeatureFlagName> = {
   daily_same_position_different_route: "daily_same_position_different_route",
   daily_continuation_challenge: "daily_continuation_challenge",
   daily_punish_the_mistake: "daily_punish_the_mistake",
+  daily_mixed_test: "daily_mixed_test",
 };
 export function registerStep3Activities(
   enabled: Readonly<Record<string, boolean>> = {},
