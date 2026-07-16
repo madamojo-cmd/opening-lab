@@ -1,6 +1,6 @@
 {
   "release": "blundr-mvp-step5-release-candidate",
-  "gitSha": "f7f3e86346309ecdd49a58e57472199279bd4b78",
+  "gitSha": "d7b9d1733d6728bed677ff4939e0c532299d2c11",
   "buildIdentifier": "blundr-advanced-feature-wiring",
   "node": "v24.14.0",
   "npm": "11.9.0",
@@ -33,7 +33,8 @@
     "globalEnablement": false
   },
   "verification": {
-    "unit": "NOT_VERIFIED_IN_THIS_SESSION",
+    "unit": "547/547 serial unit tests passed; exhaustive generator gate passed separately",
+    "generatorDepth": "8/8 deterministic OS-process shards passed; 2 concurrent processes; one Stockfish WASM engine per process; all 2,000 seed targets covered exactly once",
     "component": "8/8",
     "integration": "6/6",
     "securityRls": "STAGING_APPLIED; 8/8 security tests passed",
@@ -41,10 +42,10 @@
     "staging": {
       "supabaseMigrations": "11/11 applied; local and remote versions match",
       "vercelProject": "blundr-staging",
-      "vercelDeploymentId": "dpl_Axne4bzVGoV1s9hBtzXuVwDNhWHN",
+      "vercelDeploymentId": "dpl_GdZTHV6QP47s1CmGw1XAyKe69P6d",
       "vercelPreviewUrl": "https://blundr-staging.vercel.app",
       "vercelReadyState": "READY",
-      "candidateSha": "f7f3e86346309ecdd49a58e57472199279bd4b78",
+      "candidateSha": "d7b9d1733d6728bed677ff4939e0c532299d2c11",
       "gitMetadata": "confirmed",
       "unauthenticatedRouteBoundary": "401 after staging SSO protection was disabled"
     },
@@ -63,8 +64,7 @@
     "policyPublication": "STAGING_BLOCKER_UNPUBLISHED"
   },
   "knownStagingBlockers": [
-    "Full unit suite did not complete in the managed workspace runner; focused Daily, activity, deep-game, component, and integration suites passed.",
-    "BLUNDR_STAGING_QA_EMAIL and BLUNDR_STAGING_QA_PASSWORD are missing.",
+    "BLUNDR_STAGING_QA_EMAIL and BLUNDR_STAGING_QA_PASSWORD are configured as repository Codespaces secrets but are not injected into this Codespace environment.",
     "Four-browser E2E and deployed staging validation remain pending.",
     "Disposable staging provider imports and production telemetry sink validation remain pending.",
     "Privacy policy publication is not asserted by this repository."
