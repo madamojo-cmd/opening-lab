@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   ArrowRight,
   ChevronRight,
@@ -42,6 +43,24 @@ export function ReviewHub({
   settingsHref = "/settings",
   className,
 }: ReviewHubProps) {
+  const [catalog, setCatalog] = useState<readonly string[] | null>(null);
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/blundr/capabilities", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload: { deepMiniGames?: string[] }) => {
+        if (active) setCatalog(payload.deepMiniGames ?? []);
+      })
+      .catch(() => {
+        if (active) setCatalog([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+  const productionGames = PRODUCTION_MINI_GAME_REGISTRY.filter(
+    (definition) => catalog === null || catalog.includes(definition.id),
+  );
   return (
     <section className={classNames("space-y-4", className)}>
       {!embedded ? (
@@ -108,7 +127,7 @@ export function ReviewHub({
       </section>
 
       <section className="grid gap-3 md:grid-cols-2">
-        {PRODUCTION_MINI_GAME_REGISTRY.map((definition) => {
+        {productionGames.map((definition) => {
           const resolved =
             getDailyMiniGameDefinition(definition.id) ?? definition;
           return (
@@ -175,6 +194,11 @@ export function ReviewHub({
             </Link>
           );
         })}
+        {catalog !== null && productionGames.length === 0 ? (
+          <div className="rounded-[1.75rem] border border-amber-200 bg-amber-50 p-5 text-sm leading-6 text-amber-950">
+            Deep minigames are not enabled for this staging environment yet.
+          </div>
+        ) : null}
       </section>
     </section>
   );
