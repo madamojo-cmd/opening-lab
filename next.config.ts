@@ -30,7 +30,7 @@ const nextConfig: NextConfig = {
     root: projectRoot,
   },
 };
-export default withSentryConfig(nextConfig, {
+const sentryBuildConfig = {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
   silent: !process.env.CI,
@@ -52,4 +52,12 @@ export default withSentryConfig(nextConfig, {
       removeDebugLogging: true,
     },
   },
-});
+};
+
+// Preview runtime telemetry is initialized by the Sentry runtime config files.
+// Avoid the build-time webpack plugin there: Vercel Preview has repeatedly
+// stalled after its client phase despite source-map upload being disabled.
+// Production continues to use the complete Sentry build integration.
+export default isPreviewDeployment
+  ? nextConfig
+  : withSentryConfig(nextConfig, sentryBuildConfig);
