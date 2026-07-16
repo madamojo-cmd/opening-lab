@@ -6,6 +6,11 @@ import type { ProductionDailySession } from "./productionDailyTypes";
 
 const localSessions = new Map<string, ProductionDailySession>();
 
+function requireProductionPersistence<T>(client: T | null): T | null {
+  if (client || process.env.NODE_ENV === "test") return client;
+  throw new Error("daily_persistence_unavailable");
+}
+
 function rowToSession(row: Record<string, unknown>): ProductionDailySession {
   return {
     sessionId: String(row.session_id),
@@ -27,7 +32,9 @@ export class ProductionDailyRepository {
     userId: string,
     dateKey: string,
   ): Promise<ProductionDailySession | null> {
-    const client = createBlundrSupabaseAdminClient();
+    const client = requireProductionPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
     if (!client) return localSessions.get(`${userId}:${dateKey}`) ?? null;
     const result = await client
       .from("blundr_daily_decks")
@@ -57,7 +64,9 @@ export class ProductionDailyRepository {
   }): Promise<{ created: boolean; session: ProductionDailySession }> {
     const existing = await this.getByDate(input.userId, input.dateKey);
     if (existing) return { created: false, session: existing };
-    const client = createBlundrSupabaseAdminClient();
+    const client = requireProductionPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
     const session: ProductionDailySession = {
       sessionId: input.sessionId,
       deckId: input.deckId,
@@ -105,7 +114,9 @@ export class ProductionDailyRepository {
     sessionId: string,
     userId: string,
   ): Promise<ProductionDailySession | null> {
-    const client = createBlundrSupabaseAdminClient();
+    const client = requireProductionPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
     if (!client)
       return (
         [...localSessions.values()].find(
@@ -132,7 +143,9 @@ export class ProductionDailyRepository {
     session: ProductionDailySession,
     expectedVersion: number,
   ): Promise<"updated" | "conflict"> {
-    const client = createBlundrSupabaseAdminClient();
+    const client = requireProductionPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
     if (!client) {
       const current = [...localSessions.values()].find(
         (item) =>
