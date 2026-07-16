@@ -20,7 +20,14 @@ async function collect(directory) {
   for (const entry of entries) {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) files.push(...(await collect(path)));
-    else if (/\.(test|spec)\.ts$/.test(entry.name)) files.push(path);
+    else if (/\.(test|spec)\.ts$/.test(entry.name)) {
+      if (
+        explicitRoots.length === 0 &&
+        entry.name === "dailyMiniGameGeneratorDepth.test.ts"
+      )
+        continue;
+      files.push(path);
+    }
   }
   return files;
 }
@@ -29,6 +36,12 @@ const files = (await Promise.all(testRoots.map(collect))).flat().sort();
 if (files.length === 0) {
   console.error("No unit test files were discovered.");
   process.exit(1);
+}
+
+if (explicitRoots.length === 0) {
+  console.log(
+    "Unit runner excludes the exhaustive dailyMiniGameGeneratorDepth gate; run npm run test:mini-game-depth.",
+  );
 }
 
 const child = spawn(
