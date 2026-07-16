@@ -1,11 +1,17 @@
 import { createBlundrSupabaseBrowserClient } from "../backend/supabaseBrowserClient";
-import type { OnboardingAuthResult, OnboardingAuthSession } from "./onboardingTypes";
+import type {
+  OnboardingAuthResult,
+  OnboardingAuthSession,
+} from "./onboardingTypes";
 
-type BrowserClient = NonNullable<ReturnType<typeof createBlundrSupabaseBrowserClient>>;
+type BrowserClient = NonNullable<
+  ReturnType<typeof createBlundrSupabaseBrowserClient>
+>;
 
 type ClientFactory = () => BrowserClient | null;
 
-const defaultClientFactory: ClientFactory = () => createBlundrSupabaseBrowserClient();
+const defaultClientFactory: ClientFactory = () =>
+  createBlundrSupabaseBrowserClient();
 
 let clientFactory: ClientFactory = defaultClientFactory;
 
@@ -29,12 +35,17 @@ function authUnavailableResult(): OnboardingAuthResult {
   };
 }
 
-function normalizeSuccessEmail(email: string | null | undefined, fallback: string): string {
+function normalizeSuccessEmail(
+  email: string | null | undefined,
+  fallback: string,
+): string {
   const normalized = normalizeText(email);
   return normalized || fallback;
 }
 
-export function setOnboardingAuthClientFactoryForTesting(factory: ClientFactory): void {
+export function setOnboardingAuthClientFactoryForTesting(
+  factory: ClientFactory,
+): void {
   clientFactory = factory;
 }
 
@@ -46,28 +57,44 @@ export function isOnboardingAuthAvailable(): boolean {
   return Boolean(getClient());
 }
 
-export function normalizeOnboardingAuthError(error: unknown): OnboardingAuthResult {
+export function normalizeOnboardingAuthError(
+  error: unknown,
+): OnboardingAuthResult {
   const message = normalizeText(
     typeof error === "string"
       ? error
-      : (error as { message?: unknown; error_description?: unknown; code?: unknown })?.message ??
+      : ((
+          error as {
+            message?: unknown;
+            error_description?: unknown;
+            code?: unknown;
+          }
+        )?.message ??
           (error as { error_description?: unknown })?.error_description ??
           (error as { code?: unknown })?.code ??
-          "Authentication failed. Please try again.",
+          "Authentication failed. Please try again."),
   );
   const lower = message.toLowerCase();
 
   if (lower.includes("not configured") || lower.includes("missing supabase")) {
     return authUnavailableResult();
   }
-  if (lower.includes("invalid login") || lower.includes("invalid credentials") || lower.includes("wrong password")) {
+  if (
+    lower.includes("invalid login") ||
+    lower.includes("invalid credentials") ||
+    lower.includes("wrong password")
+  ) {
     return {
       ok: false,
       code: "invalid_credentials",
       message: "Email or password is incorrect.",
     };
   }
-  if (lower.includes("confirm") || lower.includes("email not confirmed") || lower.includes("verification")) {
+  if (
+    lower.includes("confirm") ||
+    lower.includes("email not confirmed") ||
+    lower.includes("verification")
+  ) {
     return {
       ok: false,
       code: "email_confirmation_required",
@@ -81,7 +108,11 @@ export function normalizeOnboardingAuthError(error: unknown): OnboardingAuthResu
       message: "Too many attempts. Wait a moment and try again.",
     };
   }
-  if (lower.includes("network") || lower.includes("fetch") || lower.includes("failed to fetch")) {
+  if (
+    lower.includes("network") ||
+    lower.includes("fetch") ||
+    lower.includes("failed to fetch")
+  ) {
     return {
       ok: false,
       code: "network_error",
@@ -109,14 +140,43 @@ export async function getOnboardingAuthSession(): Promise<OnboardingAuthSession 
       userId: user.id,
       email: normalizeSuccessEmail(user.email, ""),
       accessToken: session.access_token,
-      expiresAt: typeof session.expires_at === "number" ? new Date(session.expires_at * 1000).toISOString() : null,
+      expiresAt:
+        typeof session.expires_at === "number"
+          ? new Date(session.expires_at * 1000).toISOString()
+          : null,
     };
   } catch {
     return null;
   }
 }
 
-export async function signInForOnboarding(email: string, password: string): Promise<OnboardingAuthResult> {
+export function subscribeToOnboardingAuth(
+  callback: (session: OnboardingAuthSession | null) => void,
+): () => void {
+  const client = getClient();
+  if (!client) return () => undefined;
+  const subscription = client.auth.onAuthStateChange((_event, session) => {
+    if (!session?.user) {
+      callback(null);
+      return;
+    }
+    callback({
+      userId: session.user.id,
+      email: normalizeSuccessEmail(session.user.email, ""),
+      accessToken: session.access_token,
+      expiresAt:
+        typeof session.expires_at === "number"
+          ? new Date(session.expires_at * 1000).toISOString()
+          : null,
+    });
+  });
+  return () => subscription.data.subscription.unsubscribe();
+}
+
+export async function signInForOnboarding(
+  email: string,
+  password: string,
+): Promise<OnboardingAuthResult> {
   const client = getClient();
   if (!client) return authUnavailableResult();
   const normalizedEmail = normalizeText(email).toLowerCase();
@@ -151,7 +211,10 @@ export async function signInForOnboarding(email: string, password: string): Prom
   }
 }
 
-export async function signUpForOnboarding(email: string, password: string): Promise<OnboardingAuthResult> {
+export async function signUpForOnboarding(
+  email: string,
+  password: string,
+): Promise<OnboardingAuthResult> {
   const client = getClient();
   if (!client) return authUnavailableResult();
   const normalizedEmail = normalizeText(email).toLowerCase();
@@ -182,10 +245,11 @@ export async function signUpForOnboarding(email: string, password: string): Prom
       userId: data.user.id,
       email: normalizeSuccessEmail(data.user.email, normalizedEmail),
       needsEmailConfirmation,
-      message: needsEmailConfirmation ? "Check your email to confirm your account, then sign in again." : undefined,
+      message: needsEmailConfirmation
+        ? "Check your email to confirm your account, then sign in again."
+        : undefined,
     };
   } catch (error) {
     return normalizeOnboardingAuthError(error);
   }
 }
-

@@ -3,10 +3,17 @@ import type { AuthClient } from "@supabase/auth-js";
 
 type BlundrSupabaseAuthClient = Pick<
   InstanceType<typeof AuthClient>,
-  "getSession" | "getUser" | "signInWithPassword" | "signUp" | "signOut"
+  | "getSession"
+  | "getUser"
+  | "signInWithPassword"
+  | "signUp"
+  | "signOut"
+  | "onAuthStateChange"
 >;
 
-export type BlundrSupabaseClient = Omit<SupabaseClient, "auth"> & { auth: BlundrSupabaseAuthClient };
+export type BlundrSupabaseClient = Omit<SupabaseClient, "auth"> & {
+  auth: BlundrSupabaseAuthClient;
+};
 
 let browserClient: BlundrSupabaseClient | null = null;
 
@@ -14,7 +21,10 @@ function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function readBrowserSupabaseEnv(): { supabaseUrl: string | null; supabaseAnonKey: string | null } {
+function readBrowserSupabaseEnv(): {
+  supabaseUrl: string | null;
+  supabaseAnonKey: string | null;
+} {
   const supabaseUrl = (() => {
     const text = normalizeText(process.env.NEXT_PUBLIC_SUPABASE_URL);
     if (!text) return null;
@@ -24,7 +34,8 @@ function readBrowserSupabaseEnv(): { supabaseUrl: string | null; supabaseAnonKey
       return null;
     }
   })();
-  const supabaseAnonKey = normalizeText(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) || null;
+  const supabaseAnonKey =
+    normalizeText(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) || null;
   return { supabaseUrl, supabaseAnonKey };
 }
 

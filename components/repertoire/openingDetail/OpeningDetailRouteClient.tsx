@@ -7,11 +7,21 @@ import {
 } from "@/lib/blundr/api/authenticatedApiClient";
 import type { MasteryMapReadModel } from "@/lib/blundr/masteryMap";
 import { OpeningDetailPage } from "./OpeningDetailPage";
+import { useOnboardingAuthSession } from "@/lib/blundr/onboarding/useOnboardingAuthSession";
 
 export function OpeningDetailRouteClient({ openingId }: { openingId: string }) {
   const [model, setModel] = useState<MasteryMapReadModel | null>(null);
   const [message, setMessage] = useState("Loading opening intelligence.");
+  const auth = useOnboardingAuthSession();
   useEffect(() => {
+    if (auth.status === "loading") {
+      setMessage("Checking your account session.");
+      return;
+    }
+    if (auth.status === "signed_out") {
+      setMessage("Sign in to view this opening's Mastery Map.");
+      return;
+    }
     let active = true;
     void authenticatedApiFetch<MasteryMapReadModel>(
       `/api/blundr/repertoire/openings/${encodeURIComponent(openingId)}/insights`,
@@ -34,7 +44,7 @@ export function OpeningDetailRouteClient({ openingId }: { openingId: string }) {
     return () => {
       active = false;
     };
-  }, [openingId]);
+  }, [auth.status, openingId]);
   if (model) return <OpeningDetailPage model={model} />;
   return (
     <main className="min-h-screen bg-[#f7f7f4] p-4 text-stone-900 sm:p-8">

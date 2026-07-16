@@ -10,6 +10,7 @@ import { BlundrStateCard } from "@/components/blundr/ui";
 import type { StandaloneMiniGamePublicState } from "@/lib/blundr/daily/miniGames/standalone/standaloneMiniGameTypes";
 import type { DailyBlundrBoardMoveAttempt } from "@/lib/blundr/daily/dailyBlundrPlayerTypes";
 import { authenticatedApiFetch } from "@/lib/blundr/api/authenticatedApiClient";
+import { useOnboardingAuthSession } from "@/lib/blundr/onboarding/useOnboardingAuthSession";
 
 type MiniGamePracticeRunnerProps = {
   miniGameId: string;
@@ -52,26 +53,66 @@ export function MiniGamePracticeRunner({
   homeHref = "/",
   reviewHref = "/review",
 }: MiniGamePracticeRunnerProps) {
+  const auth = useOnboardingAuthSession();
   const [instance, setInstance] =
     useState<StandaloneMiniGamePublicState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const next = await requestInstance(miniGameId);
-    if (!next)
+    try {
+      const next = await Promise.race([
+        requestInstance(miniGameId),
+        new Promise<null>((resolve) =>
+          window.setTimeout(() => resolve(null), 15_000),
+        ),
+      ]);
+      if (!next)
+        setError(
+          "The secure practice session could not be created. Try again or return to Review.",
+        );
+      setInstance(next);
+    } catch (requestError) {
+      setInstance(null);
       setError(
-        "This practice game is unavailable until a secure server session can be created.",
+        requestError instanceof Error && requestError.message
+          ? requestError.message
+          : "The secure practice session could not be created. Try again or return to Review.",
       );
-    setInstance(next);
-    setLoading(false);
+    } finally {
+      setLoading(false);
+      setRetrying(false);
+    }
   }, [miniGameId]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (auth.status === "authenticated") void load();
+  }, [auth.status, load]);
+
+  if (auth.status === "loading") {
+    return (
+      <BlundrStateCard
+        kind="loading"
+        eyebrow="Authentication"
+        title="Checking your account session."
+        copy="Blundr is confirming the secure session before reserving this game."
+      />
+    );
+  }
+  if (auth.status === "signed_out") {
+    return (
+      <BlundrStateCard
+        kind="empty"
+        eyebrow="Authentication required"
+        title="Sign in to practice."
+        copy="Secure practice sessions are available after you sign in."
+        cta={{ label: "Open Settings", href: "/settings" }}
+      />
+    );
+  }
 
   if (loading)
     return (
@@ -89,6 +130,13 @@ export function MiniGamePracticeRunner({
         eyebrow="Minigames"
         title="Practice game unavailable"
         copy={error ?? "No verified practice game is available."}
+        cta={{
+          label: retrying ? "Retrying…" : "Retry",
+          onClick: () => {
+            setRetrying(true);
+            void load();
+          },
+        }}
       />
     );
 

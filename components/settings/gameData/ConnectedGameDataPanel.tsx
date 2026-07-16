@@ -10,6 +10,7 @@ import { DisconnectGameDataDialog } from "./DisconnectGameDataDialog";
 import { ProviderConnectionCard } from "./ProviderConnectionCard";
 import { ProviderUsernameForm } from "./ProviderUsernameForm";
 import type { GameDataStatus } from "./ImportStatusSummary";
+import { useOnboardingAuthSession } from "@/lib/blundr/onboarding/useOnboardingAuthSession";
 
 type Provider = "chesscom" | "lichess";
 type ProviderState =
@@ -87,6 +88,7 @@ function LegacyConnectedGameDataPanel({
 }
 
 function LiveConnectedGameDataPanel() {
+  const auth = useOnboardingAuthSession();
   const [status, setStatus] = useState<StatusResponse>({
     accounts: [],
     jobs: [],
@@ -112,7 +114,9 @@ function LiveConnectedGameDataPanel() {
         error instanceof AuthenticatedApiError &&
         error.code === "authentication_required"
       )
-        setMessage("Sign in to connect public game data.");
+        setMessage(
+          "Your session expired. Refresh or sign in again to connect public game data.",
+        );
       else if (
         error instanceof AuthenticatedApiError &&
         error.code === "feature_disabled"
@@ -124,11 +128,12 @@ function LiveConnectedGameDataPanel() {
   }, []);
 
   useEffect(() => {
+    if (auth.status !== "authenticated") return;
     void refresh();
     const onFocus = () => void refresh();
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, [refresh]);
+  }, [auth.status, refresh]);
 
   useEffect(() => {
     if (
@@ -230,6 +235,22 @@ function LiveConnectedGameDataPanel() {
           Read the privacy policy
         </Link>
       </div>
+      {auth.status === "loading" ? (
+        <p
+          role="status"
+          className="rounded-xl bg-stone-100 p-3 text-sm text-stone-700"
+        >
+          Checking your account session…
+        </p>
+      ) : null}
+      {auth.status === "signed_out" ? (
+        <p
+          role="status"
+          className="rounded-xl bg-stone-100 p-3 text-sm text-stone-700"
+        >
+          Sign in to connect public game data.
+        </p>
+      ) : null}
       {message ? (
         <p
           role="status"
