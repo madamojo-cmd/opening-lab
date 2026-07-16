@@ -14,7 +14,7 @@ else if (!/^[0-9a-f]{7,40}$/.test(manifest.gitSha))
   errors.push("gitSha must be a hexadecimal commit SHA");
 if (manifest.lockfileSha256 !== lockfileSha)
   errors.push("lockfile checksum mismatch");
-if (manifest.migrations?.count !== 9) errors.push("migration count mismatch");
+if (manifest.migrations?.count !== 10) errors.push("migration count mismatch");
 if (
   manifest.featureFlags?.default !== "off" ||
   manifest.featureFlags?.globalEnablement !== false
