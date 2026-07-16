@@ -424,12 +424,31 @@ async function buildReservation(
     }
   }
 
-  const selected = cards
-    .sort(
-      (a, b) =>
-        b.priority - a.priority || a.stableKey.localeCompare(b.stableKey),
+  const orderedCards = cards.sort(
+    (a, b) => b.priority - a.priority || a.stableKey.localeCompare(b.stableKey),
+  );
+  const selected: typeof cards = [];
+  const selectedPositions = new Set<string>();
+  const selectedActivities = new Set<string>();
+  for (const card of orderedCards) {
+    if (
+      selectedActivities.has(card.publicCard.activityId) ||
+      selectedPositions.has(card.publicCard.positionKey)
     )
-    .slice(0, 5);
+      continue;
+    selected.push(card);
+    selectedActivities.add(card.publicCard.activityId);
+    selectedPositions.add(card.publicCard.positionKey);
+    if (selected.length >= 5) break;
+  }
+  if (selected.length < 5) {
+    for (const card of orderedCards) {
+      if (selectedPositions.has(card.publicCard.positionKey)) continue;
+      selected.push(card);
+      selectedPositions.add(card.publicCard.positionKey);
+      if (selected.length >= 5) break;
+    }
+  }
   const deck = buildDeterministicDailyDeck({
     userId: user.userId,
     dateKey,
