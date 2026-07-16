@@ -103,32 +103,28 @@ export async function appendLearningEventV2(input: {
     input.access,
   );
   if (mastery.changed)
-    await client
-      .from("blundr_node_mastery")
-      .upsert({
-        user_id: input.userId,
-        position_key: input.position.positionKey,
-        attempts: mastery.state.attempts,
-        first_attempt_at: mastery.state.firstAttemptAt,
-        first_attempt_result: mastery.state.firstAttemptResult,
-        confidence: mastery.state.confidence,
-        access_decision: mastery.state.access,
-        updated_at: input.now,
-      });
+    await client.from("blundr_node_mastery").upsert({
+      user_id: input.userId,
+      position_key: input.position.positionKey,
+      attempts: mastery.state.attempts,
+      first_attempt_at: mastery.state.firstAttemptAt,
+      first_attempt_result: mastery.state.firstAttemptResult,
+      confidence: mastery.state.confidence,
+      access_decision: mastery.state.access,
+      updated_at: input.now,
+    });
   if (!input.correct)
-    await client
-      .from("blundr_weakness_projection")
-      .upsert({
-        user_id: input.userId,
-        position_key: input.position.positionKey,
-        category: "opening_move",
-        score: 0.7,
-        confidence: 0.65,
-        explanation: input.explanation ?? "The approved move was missed.",
-        recommended_daily_intervention: "recall_move",
-        access_decision: input.access.decision,
-        source_event_ids: [eventId],
-        updated_at: input.now,
-      });
+    await client.from("blundr_weakness_projection").upsert({
+      user_id: input.userId,
+      position_key: input.position.positionKey,
+      category: "opening_move",
+      score: 0.7,
+      confidence: 0.65,
+      explanation: input.explanation ?? "The approved move was missed.",
+      recommended_daily_intervention: "recall_move",
+      access_decision: input.access.decision,
+      source_event_ids: [eventId],
+      updated_at: input.now,
+    });
   return { status: "inserted", eventId };
 }
