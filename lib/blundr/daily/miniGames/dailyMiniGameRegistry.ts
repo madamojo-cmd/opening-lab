@@ -49,6 +49,17 @@ function aliasDefinition(
 }
 
 export const DAILY_MINI_GAME_REGISTRY: DailyMiniGameDefinition[] = [
+  kingRaceDefinition,
+  knightGymnasiumDefinition,
+  pawnWarsDefinition,
+  tacticShotsDefinition,
+  keySquareConquestDefinition,
+  structureBuilderDefinition,
+  imbalanceArenaDefinition,
+  techniqueLabDefinition,
+];
+
+export const PRODUCTION_MINI_GAME_REGISTRY: DailyMiniGameDefinition[] = [
   aliasDefinition(
     tacticShotsDefinition,
     "tactic_shots_deep",
@@ -70,7 +81,7 @@ export const DAILY_MINI_GAME_REGISTRY: DailyMiniGameDefinition[] = [
 ];
 
 const DAILY_MINI_GAME_REGISTRY_MAP = new Map(
-  DAILY_MINI_GAME_REGISTRY.map(
+  [...DAILY_MINI_GAME_REGISTRY, ...PRODUCTION_MINI_GAME_REGISTRY].map(
     (definition) => [definition.id, definition] as const,
   ),
 );
