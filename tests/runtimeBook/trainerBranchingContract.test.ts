@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { validateTrainerBranchingContract } from "../../lib/blundr/trainingRuntime/trainerBranchingContract";
+import { createRuntimeEvidenceIndices } from "../../lib/blundr/trainingRuntime/runtimeEvidenceIndices";
 
 const root = "data/blundr/stage2-21-opening-stepdown-runtime-v1/runtime/";
 const read = (file: string) => readFileSync(root + file, "utf8").trim().split("\n").map(JSON.parse);
@@ -14,4 +15,16 @@ assert.equal(first.edges, 49211);
 assert.equal(first.terminalOpenings, 21);
 assert.deepEqual(first, shuffled);
 assert.deepEqual(first.issues, []);
+const indices = createRuntimeEvidenceIndices(nodes, candidates);
+for (const [parentKey, moves] of indices.trainer.childMovesByParent) {
+  const parent = indices.trainer.nodesByKey.get(parentKey)!;
+  for (const move of moves)
+    assert.ok(indices.trainer.nodesByKey.has(`${move.openingId}:${parent.playKey},${move.moveUci}`));
+}
+for (const [parentKey, moves] of indices.daily.candidatesByParent) {
+  const parent = indices.trainer.nodesByKey.get(parentKey);
+  if (parent?.ply === 12)
+    assert.equal(indices.trainer.childMovesByParent.get(parentKey)?.length ?? 0, 0);
+  assert.ok(moves.length > 0);
+}
 console.log("trainerBranchingContract.test.ts passed");
