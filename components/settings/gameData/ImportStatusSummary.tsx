@@ -1,6 +1,7 @@
 export type GameDataStatus =
   | "disconnected"
   | "verifying"
+  | "queued"
   | "connected"
   | "syncing"
   | "current"

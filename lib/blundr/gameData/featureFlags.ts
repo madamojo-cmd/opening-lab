@@ -1,11 +1,10 @@
+import { getServerFeatureFlags } from "@/lib/blundr/contracts/serverFeatureFlags";
+
 export function isGameDataEnabled(): boolean {
-  return ["1", "true", "yes", "on"].includes(
-    String(process.env.BLUNDR_GAME_DATA_ENABLED ?? "").toLowerCase(),
-  );
+  const flags = getServerFeatureFlags();
+  return flags.game_data_connections && flags.provider_ingestion;
 }
 
 export function isGameDataWorkerEnabled(): boolean {
-  return ["1", "true", "yes", "on"].includes(
-    String(process.env.BLUNDR_GAME_DATA_WORKER_ENABLED ?? "").toLowerCase(),
-  );
+  return getServerFeatureFlags().provider_ingestion;
 }

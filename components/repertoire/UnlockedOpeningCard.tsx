@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckCircle2, ChevronRight, PlayCircle } from "lucide-react";
+import Link from "next/link";
 import type { RepertoireOpeningCard } from "@/lib/blundr/repertoire/repertoireTypes";
 
 type UnlockedOpeningCardProps = {
@@ -21,7 +22,7 @@ export function UnlockedOpeningCard({ card, onTrain }: UnlockedOpeningCardProps)
             <CheckCircle2 size={12} />
             Unlocked
           </div>
-          <h3 className="mt-3 text-base font-black tracking-tight text-stone-950">{card.openingName}</h3>
+          <Link href={`/repertoire/${encodeURIComponent(card.openingId)}`} className="mt-3 block text-base font-black tracking-tight text-stone-950 underline-offset-4 hover:underline">{card.openingName}</Link>
           <div className="mt-1 text-sm font-semibold text-stone-600">{card.description ?? "Ready to train"}</div>
         </div>
         <div className="rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-stone-600">{card.side}</div>

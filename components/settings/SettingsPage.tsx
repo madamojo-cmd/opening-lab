@@ -30,6 +30,7 @@ import type { BlundrBoardPreferences } from "@/lib/blundr/board/boardThemeTypes"
 import type { OnboardingAuthMode, OnboardingAuthSession } from "@/lib/blundr/onboarding/onboardingTypes";
 import { signInForOnboarding, signUpForOnboarding } from "@/lib/blundr/onboarding/onboardingAuth";
 import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
+import { ConnectedGameDataPanel } from "./gameData/ConnectedGameDataPanel";
 
 type SettingsPageProps = {
   homeHref?: string;
@@ -415,6 +416,10 @@ export function SettingsPage({ homeHref = "/", className }: SettingsPageProps) {
             {authMessage ? <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm leading-6 text-green-900">{authMessage}</div> : null}
             {authError ? <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-900">{authError}</div> : null}
           </Section>
+
+          <section id="connected_game_data" className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
+            <ConnectedGameDataPanel />
+          </section>
 
           <Section id="subscription" title="Subscription" copy="Billing is intentionally not wired in this stage.">
             <div className="rounded-[1.5rem] border border-stone-200 bg-[#fbfcf7] p-4">

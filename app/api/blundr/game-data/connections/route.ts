@@ -6,6 +6,7 @@ import { ProviderAccountRepository } from "@/lib/blundr/gameData/providerAccount
 import { isGameDataEnabled } from "@/lib/blundr/gameData/featureFlags";
 import { normalizeProviderUsername } from "@/lib/blundr/gameData/gameFingerprint";
 import { requireGameDataUser } from "@/lib/blundr/gameData/gameDataService";
+import { getServerFeatureFlags } from "@/lib/blundr/contracts/serverFeatureFlags";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,12 @@ export async function POST(request: Request) {
     body?.provider === "chesscom" || body?.provider === "lichess"
       ? body.provider
       : null;
+  const flags = getServerFeatureFlags();
+  if (
+    (provider === "chesscom" && !flags.game_data_chess_com) ||
+    (provider === "lichess" && !flags.game_data_lichess)
+  )
+    return NextResponse.json({ error: "feature_disabled" }, { status: 503 });
   const username = normalizeProviderUsername(body?.username ?? "");
   if (!provider || !username || username.length > 80)
     return NextResponse.json({ error: "invalid_connection" }, { status: 400 });

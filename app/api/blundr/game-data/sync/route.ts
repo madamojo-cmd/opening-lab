@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ImportJobRepository } from "@/lib/blundr/gameData/importJobRepository";
 import { requireGameDataUser } from "@/lib/blundr/gameData/gameDataService";
 import { ProviderAccountRepository } from "@/lib/blundr/gameData/providerAccountRepository";
+import { getServerFeatureFlags } from "@/lib/blundr/contracts/serverFeatureFlags";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,12 @@ export async function POST(request: Request) {
       : null;
   if (!provider)
     return NextResponse.json({ error: "invalid_provider" }, { status: 400 });
+  const flags = getServerFeatureFlags();
+  if (
+    (provider === "chesscom" && !flags.game_data_chess_com) ||
+    (provider === "lichess" && !flags.game_data_lichess)
+  )
+    return NextResponse.json({ error: "feature_disabled" }, { status: 503 });
   const account = await new ProviderAccountRepository().get(
     user.userId,
     provider,

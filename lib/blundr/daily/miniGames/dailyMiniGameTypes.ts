@@ -1,9 +1,20 @@
-import type { DailyBlundrAttemptOutcome, DailyBlundrCard, DailyBlundrDifficulty, DailyBlundrMasteryState } from "../dailyBlundrTypes";
-export type { DailyBlundrCard, DailyBlundrDifficulty } from "../dailyBlundrTypes";
+import type {
+  DailyBlundrAttemptOutcome,
+  DailyBlundrCard,
+  DailyBlundrDifficulty,
+  DailyBlundrMasteryState,
+} from "../dailyBlundrTypes";
+export type {
+  DailyBlundrCard,
+  DailyBlundrDifficulty,
+} from "../dailyBlundrTypes";
 import type { BlundrBoardPreferences } from "@/lib/blundr/board/boardThemeTypes";
 import type { DailyValidationIssue } from "../validation/dailyValidationTypes";
 
 export type DailyMiniGameId =
+  | "tactic_shots_deep"
+  | "knight_gymnasium_deep"
+  | "king_pawn_lab"
   | "king_race"
   | "knight_gymnasium"
   | "pawn_wars"
@@ -119,7 +130,12 @@ export type DailyMiniGameScenario = {
   goalSquares?: string[];
   acceptedSquares?: string[];
   boardOrientationHint?: "white" | "black" | "auto";
-  candidateMoves?: Array<{ uci: string; san: string | null; label: string; correct: boolean }>;
+  candidateMoves?: Array<{
+    uci: string;
+    san: string | null;
+    label: string;
+    correct: boolean;
+  }>;
 };
 
 export type DailyMiniGameState = {
@@ -236,9 +252,14 @@ export type DailyMiniGameDefinition = {
   canAppearInDailyBlundr?: boolean;
   canAppearInStandalonePractice?: boolean;
   selectionPriority?: number;
-  generate: (ctx: DailyMiniGameGenerationContext) => DailyBlundrMiniGameCard | null;
+  generate: (
+    ctx: DailyMiniGameGenerationContext,
+  ) => DailyBlundrMiniGameCard | null;
   scoreAttempt: (args: DailyMiniGameScoreInput) => DailyMiniGameScoreResult;
-  advance?: (state: DailyMiniGameState, attempt: DailyMiniGameAdvanceAttempt) => DailyMiniGameAdvanceResult;
+  advance?: (
+    state: DailyMiniGameState,
+    attempt: DailyMiniGameAdvanceAttempt,
+  ) => DailyMiniGameAdvanceResult;
 };
 
 export type DailyMiniGameSelection = {

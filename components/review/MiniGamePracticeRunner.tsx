@@ -9,6 +9,7 @@ import { ProfileSettingsIcon } from "@/components/navigation/ProfileSettingsIcon
 import { BlundrStateCard } from "@/components/blundr/ui";
 import type { StandaloneMiniGamePublicState } from "@/lib/blundr/daily/miniGames/standalone/standaloneMiniGameTypes";
 import type { DailyBlundrBoardMoveAttempt } from "@/lib/blundr/daily/dailyBlundrPlayerTypes";
+import { authenticatedApiFetch } from "@/lib/blundr/api/authenticatedApiClient";
 
 type MiniGamePracticeRunnerProps = {
   miniGameId: string;
@@ -20,15 +21,12 @@ type MiniGamePracticeRunnerProps = {
 async function requestInstance(
   miniGameId: string,
 ): Promise<StandaloneMiniGamePublicState | null> {
-  const response = await fetch("/api/blundr/minigames/instances", {
+  const body = await authenticatedApiFetch<{
+    instance?: StandaloneMiniGamePublicState;
+  }>("/api/blundr/minigames/instances", {
     method: "POST",
-    headers: { "content-type": "application/json" },
     body: JSON.stringify({ miniGameId }),
   });
-  if (!response.ok) return null;
-  const body = (await response.json()) as {
-    instance?: StandaloneMiniGamePublicState;
-  };
   return body.instance ?? null;
 }
 
@@ -37,18 +35,15 @@ async function requestAction(
   action: "advance" | "reveal" | "retry" | "reset",
   payload: Record<string, string | null> = {},
 ) {
-  const response = await fetch(
+  const body = await authenticatedApiFetch<{
+    instance?: StandaloneMiniGamePublicState;
+  }>(
     `/api/blundr/minigames/instances/${encodeURIComponent(instanceId)}/${action}`,
     {
       method: "POST",
-      headers: { "content-type": "application/json" },
       body: JSON.stringify(payload),
     },
   );
-  if (!response.ok) return null;
-  const body = (await response.json()) as {
-    instance?: StandaloneMiniGamePublicState;
-  };
   return body.instance ?? null;
 }
 

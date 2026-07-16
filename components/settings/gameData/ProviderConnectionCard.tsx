@@ -1,8 +1,12 @@
 import type { GameDataStatus } from "./ImportStatusSummary";
 export function ProviderConnectionCard({ status }: { status: GameDataStatus }) {
-  const copy: Record<GameDataStatus, string> = {
+  const copy: Record<
+    GameDataStatus | "queued" | "deleting" | "deleted",
+    string
+  > = {
     disconnected: "No provider connected.",
     verifying: "Verifying the account fixture.",
+    queued: "Import is queued for the next worker run.",
     connected: "Account connected; import is ready.",
     syncing: "Import in progress.",
     current: "Game data is current.",
@@ -13,6 +17,8 @@ export function ProviderConnectionCard({ status }: { status: GameDataStatus }) {
     deletion_in_progress: "Deleting imported data.",
     deletion_success: "Imported data deleted.",
     deletion_failure: "Deletion needs another attempt.",
+    deleting: "Deleting imported data.",
+    deleted: "Imported data has been deleted.",
   };
   return (
     <div role="status" className="rounded-2xl bg-white p-4">
