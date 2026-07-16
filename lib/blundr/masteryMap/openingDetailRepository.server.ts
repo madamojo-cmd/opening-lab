@@ -167,7 +167,9 @@ export async function loadOpeningDetailReadModel(
     findings.error || mastery.error
       ? "error"
       : !Number.isFinite(lastSync)
-        ? "empty"
+        ? nodes.length
+          ? undefined
+          : "empty"
         : Date.now() - lastSync > 7 * 86_400_000
           ? "stale"
           : jobs.data?.[0]?.status === "partially_completed"

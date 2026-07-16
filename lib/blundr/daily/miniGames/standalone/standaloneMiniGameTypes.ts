@@ -2,6 +2,7 @@ import type {
   DailyMiniGameId,
   DailyMiniGameState,
 } from "../dailyMiniGameTypes";
+import type { DeepMiniGameScenario, DeepMiniGameState } from "../deep";
 
 export type StandaloneMiniGamePublicState = {
   instanceId: string;
@@ -34,8 +35,10 @@ export type StandaloneMiniGamePublicState = {
 export type StandaloneMiniGameServerRecord = {
   instanceId: string;
   userId: string;
+  kind?: "legacy" | "deep";
   card: unknown;
-  state: DailyMiniGameState;
+  state: DailyMiniGameState | DeepMiniGameState;
+  scenario?: DeepMiniGameScenario;
   firstAttempt: "correct" | "incorrect" | "reveal" | null;
   retryCount: number;
   expiresAt: string;

@@ -10,6 +10,7 @@ import type {
   DailyMiniGameAdvanceAttempt,
   DailyBlundrMiniGameCard,
 } from "@/lib/blundr/daily/miniGames/dailyMiniGameTypes";
+import { reduceDeepMiniGame } from "@/lib/blundr/daily/miniGames/deep";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,37 @@ export async function POST(
       { error: "activity_unsupported" },
       { status: 422 },
     );
+  if (record.kind === "deep" && record.scenario) {
+    const result = reduceDeepMiniGame(record.state as never, record.scenario, {
+      type: "move",
+      uci: String(body.uci),
+      now: new Date().toISOString(),
+    });
+    const next = {
+      ...record,
+      state: result.state,
+      firstAttempt:
+        record.firstAttempt ??
+        (result.state.firstAttempt === "correct"
+          ? "correct"
+          : result.state.firstAttempt === "incorrect"
+            ? "incorrect"
+            : null),
+    };
+    await repository.update(next);
+    return NextResponse.json({
+      instance: {
+        ...projectStandaloneMiniGame(next),
+        feedback: publicFeedback(next, false),
+      },
+      result: {
+        legal: result.kind !== "invalid",
+        completed: result.state.state === "completed",
+        won: result.state.firstAttempt === "correct",
+        reason: result.message,
+      },
+    });
+  }
   const attempt: DailyMiniGameAdvanceAttempt = {
     from: String(body.from),
     to: String(body.to),
@@ -49,7 +81,10 @@ export async function POST(
     san: body.san ? String(body.san) : null,
     legal: true,
   };
-  const result = definition.advance(record.state, attempt);
+  const result = definition.advance(
+    record.state as import("@/lib/blundr/daily/miniGames/dailyMiniGameTypes").DailyMiniGameState,
+    attempt,
+  );
   const next = {
     ...record,
     state: result.state,

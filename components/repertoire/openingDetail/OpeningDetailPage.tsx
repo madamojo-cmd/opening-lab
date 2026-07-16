@@ -25,7 +25,10 @@ export function OpeningDetailPage({ model }: { model: MasteryMapReadModel }) {
         {model.state === "ready" ? (
           <>
             <OpeningMasteryMap nodes={model.nodes} />
-            <WeakBranchCards branches={model.weakBranches} />
+            <WeakBranchCards
+              openingId={model.openingId}
+              branches={model.weakBranches}
+            />
             <OpeningGameIntelligence
               matchedGameCount={model.importedGameMatchCount}
               freshness={model.state}

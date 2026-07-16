@@ -4,6 +4,12 @@ import { getDailyMiniGameDefinition } from "@/lib/blundr/daily/miniGames/dailyMi
 import { StandaloneMiniGameRepository } from "@/lib/blundr/daily/miniGames/standalone/standaloneMiniGameRepository.server";
 import { projectStandaloneMiniGame } from "@/lib/blundr/daily/miniGames/standalone/standaloneMiniGameProjection";
 import type { DailyMiniGameId } from "@/lib/blundr/daily/miniGames/dailyMiniGameTypes";
+import { getDeepStandaloneScenario } from "@/lib/blundr/daily/miniGames/deep/deepStandaloneScenario";
+import {
+  createDeepMiniGameState,
+  isDeepMiniGameId,
+} from "@/lib/blundr/daily/miniGames/deep";
+import { getServerFeatureFlags } from "@/lib/blundr/contracts/serverFeatureFlags";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +23,33 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as {
     miniGameId?: string;
   } | null;
+  if (body?.miniGameId && isDeepMiniGameId(body.miniGameId)) {
+    if (!getServerFeatureFlags().daily_deep_minigames)
+      return NextResponse.json({ error: "feature_disabled" }, { status: 503 });
+    const scenario = getDeepStandaloneScenario(body.miniGameId);
+    if (!scenario)
+      return NextResponse.json(
+        { error: "verified_content_unavailable" },
+        { status: 422 },
+      );
+    const instanceId = `mgi_${crypto.randomUUID().replaceAll("-", "")}`;
+    const record = {
+      instanceId,
+      userId: user.userId,
+      kind: "deep" as const,
+      card: {
+        title: body.miniGameId,
+        summary: "Verified multi-step deep practice",
+      },
+      state: createDeepMiniGameState(scenario),
+      scenario,
+      firstAttempt: null,
+      retryCount: 0,
+      expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+    };
+    await new StandaloneMiniGameRepository().create(record);
+    return NextResponse.json({ instance: projectStandaloneMiniGame(record) });
+  }
   const definition = body?.miniGameId
     ? getDailyMiniGameDefinition(body.miniGameId as DailyMiniGameId)
     : null;

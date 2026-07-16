@@ -21,14 +21,17 @@ export class StandaloneMiniGameRepository {
     const result = await client.from("blundr_minigame_instances").insert({
       instance_id: record.instanceId,
       user_id: record.userId,
-      mini_game_id: (record.card as DailyBlundrMiniGameCard).miniGame
-        .miniGameId,
+      mini_game_id:
+        (record.card as DailyBlundrMiniGameCard).miniGame?.miniGameId ??
+        record.scenario?.miniGameId,
       source: "standalone_review",
       server_card: record.card,
       server_state: record.state,
       first_attempt: record.firstAttempt,
       retry_count: record.retryCount,
       expires_at: record.expiresAt,
+      kind: record.kind ?? "legacy",
+      server_scenario: record.scenario ?? null,
     });
     if (result.error) throw new Error("standalone_minigame_create_failed");
   }
@@ -58,6 +61,8 @@ export class StandaloneMiniGameRepository {
       firstAttempt: result.data.first_attempt,
       retryCount: result.data.retry_count,
       expiresAt: result.data.expires_at,
+      kind: result.data.kind ?? "legacy",
+      scenario: result.data.server_scenario ?? undefined,
     };
   }
 
@@ -74,6 +79,8 @@ export class StandaloneMiniGameRepository {
         server_state: record.state,
         first_attempt: record.firstAttempt,
         retry_count: record.retryCount,
+        kind: record.kind ?? "legacy",
+        server_scenario: record.scenario ?? null,
         updated_at: new Date().toISOString(),
       })
       .eq("instance_id", record.instanceId)

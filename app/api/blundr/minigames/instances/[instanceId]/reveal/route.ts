@@ -5,6 +5,7 @@ import {
   projectStandaloneMiniGame,
   publicFeedback,
 } from "@/lib/blundr/daily/miniGames/standalone/standaloneMiniGameProjection";
+import { reduceDeepMiniGame } from "@/lib/blundr/daily/miniGames/deep";
 
 export const dynamic = "force-dynamic";
 
@@ -23,11 +24,21 @@ export async function POST(
   const record = await repository.getOwned(instanceId, user.userId);
   if (!record)
     return NextResponse.json({ error: "instance_not_found" }, { status: 404 });
-  const next = {
-    ...record,
-    firstAttempt: record.firstAttempt ?? "reveal",
-    state: { ...record.state, completed: true, won: false },
-  } as const;
+  const next =
+    record.kind === "deep" && record.scenario
+      ? {
+          ...record,
+          state: reduceDeepMiniGame(record.state as never, record.scenario, {
+            type: "reveal",
+            now: new Date().toISOString(),
+          }).state,
+          firstAttempt: record.firstAttempt ?? "reveal",
+        }
+      : {
+          ...record,
+          firstAttempt: record.firstAttempt ?? "reveal",
+          state: { ...record.state, completed: true, won: false },
+        };
   await repository.update(next);
   return NextResponse.json({
     instance: {
