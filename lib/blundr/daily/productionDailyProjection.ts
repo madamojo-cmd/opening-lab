@@ -21,6 +21,9 @@ export function toPublicDailySession(
       prompt: step.prompt,
       side: step.side,
       options: step.options,
+      interaction: step.options?.length
+        ? ("choice" as const)
+        : ("move" as const),
     };
   });
   return {
