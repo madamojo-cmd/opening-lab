@@ -7,6 +7,8 @@ const isDeploymentBuild =
   process.env.VERCEL === "1" ||
   process.env.CI === "1" ||
   process.env.CI === "true";
+const isPreviewDeployment =
+  isDeploymentBuild && process.env.VERCEL_ENV === "preview";
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: projectRoot,
@@ -38,7 +40,12 @@ export default withSentryConfig(nextConfig, {
     // network-isolated developer build.
     disable: !process.env.SENTRY_AUTH_TOKEN || !isDeploymentBuild,
   },
-  widenClientFileUpload: true,
+  // Preview still uploads source maps, but widening the client upload makes
+  // Sentry process every client source map and has repeatedly left otherwise
+  // successful staging builds stuck after the Node and Edge uploads finish.
+  // Keep the full upload for production deployments while bounding staging
+  // processing to the normal client asset set.
+  widenClientFileUpload: !isPreviewDeployment,
   webpack: {
     treeshake: {
       removeDebugLogging: true,
