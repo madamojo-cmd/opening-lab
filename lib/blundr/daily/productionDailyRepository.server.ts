@@ -1,0 +1,187 @@
+import "server-only";
+
+import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
+import type { DailySessionState } from "./core/dailyActivityTypes";
+import type { ProductionDailySession } from "./productionDailyTypes";
+
+const localSessions = new Map<string, ProductionDailySession>();
+
+function rowToSession(row: Record<string, unknown>): ProductionDailySession {
+  return {
+    sessionId: String(row.session_id),
+    deckId: String(row.deck_id),
+    userId: String(row.user_id),
+    dateKey: String(row.local_date),
+    state: row.state as DailySessionState,
+    publicCards: (row.public_cards ??
+      []) as ProductionDailySession["publicCards"],
+    privateCards: (row.server_cards ??
+      []) as ProductionDailySession["privateCards"],
+    version: Number(row.state_version ?? 1),
+    completedAt: row.completed_at ? String(row.completed_at) : null,
+  };
+}
+
+export class ProductionDailyRepository {
+  async getByDate(
+    userId: string,
+    dateKey: string,
+  ): Promise<ProductionDailySession | null> {
+    const client = createBlundrSupabaseAdminClient();
+    if (!client) return localSessions.get(`${userId}:${dateKey}`) ?? null;
+    const result = await client
+      .from("blundr_daily_decks")
+      .select(
+        "deck_id,local_date,public_cards,server_cards,blundr_daily_sessions!inner(session_id,user_id,state,state_version,completed_at)",
+      )
+      .eq("user_id", userId)
+      .eq("local_date", dateKey)
+      .maybeSingle();
+    if (result.error || !result.data) return null;
+    const session = Array.isArray(result.data.blundr_daily_sessions)
+      ? result.data.blundr_daily_sessions[0]
+      : result.data.blundr_daily_sessions;
+    if (!session) return null;
+    return rowToSession({ ...result.data, ...session });
+  }
+
+  async reserve(input: {
+    userId: string;
+    dateKey: string;
+    deckId: string;
+    sessionId: string;
+    publicCards: unknown;
+    privateCards: unknown;
+    state: DailySessionState;
+    now: string;
+  }): Promise<{ created: boolean; session: ProductionDailySession }> {
+    const existing = await this.getByDate(input.userId, input.dateKey);
+    if (existing) return { created: false, session: existing };
+    const client = createBlundrSupabaseAdminClient();
+    const session: ProductionDailySession = {
+      sessionId: input.sessionId,
+      deckId: input.deckId,
+      userId: input.userId,
+      dateKey: input.dateKey,
+      state: input.state,
+      publicCards: input.publicCards as ProductionDailySession["publicCards"],
+      privateCards:
+        input.privateCards as ProductionDailySession["privateCards"],
+      version: 1,
+      completedAt: null,
+    };
+    if (!client) {
+      localSessions.set(`${input.userId}:${input.dateKey}`, session);
+      return { created: true, session };
+    }
+    const deck = await client.from("blundr_daily_decks").insert({
+      deck_id: input.deckId,
+      user_id: input.userId,
+      local_date: input.dateKey,
+      deck_fingerprint: input.deckId,
+      public_cards: input.publicCards,
+      server_cards: input.privateCards,
+      content_version: "daily-production-v1",
+      reserved_at: input.now,
+    });
+    if (deck.error && deck.error.code !== "23505")
+      throw new Error("daily_deck_persistence_unavailable");
+    const inserted = await client.from("blundr_daily_sessions").insert({
+      session_id: input.sessionId,
+      deck_id: input.deckId,
+      user_id: input.userId,
+      state: input.state,
+      state_version: 1,
+    });
+    if (inserted.error && inserted.error.code !== "23505")
+      throw new Error("daily_session_persistence_unavailable");
+    return {
+      created: false,
+      session: (await this.getByDate(input.userId, input.dateKey)) ?? session,
+    };
+  }
+
+  async getOwned(
+    sessionId: string,
+    userId: string,
+  ): Promise<ProductionDailySession | null> {
+    const client = createBlundrSupabaseAdminClient();
+    if (!client)
+      return (
+        [...localSessions.values()].find(
+          (session) =>
+            session.sessionId === sessionId && session.userId === userId,
+        ) ?? null
+      );
+    const result = await client
+      .from("blundr_daily_sessions")
+      .select(
+        "session_id,deck_id,user_id,state,state_version,completed_at,blundr_daily_decks!inner(local_date,public_cards,server_cards)",
+      )
+      .eq("session_id", sessionId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (result.error || !result.data) return null;
+    const deck = Array.isArray(result.data.blundr_daily_decks)
+      ? result.data.blundr_daily_decks[0]
+      : result.data.blundr_daily_decks;
+    return deck ? rowToSession({ ...result.data, ...deck }) : null;
+  }
+
+  async update(
+    session: ProductionDailySession,
+    expectedVersion: number,
+  ): Promise<"updated" | "conflict"> {
+    const client = createBlundrSupabaseAdminClient();
+    if (!client) {
+      const current = [...localSessions.values()].find(
+        (item) =>
+          item.sessionId === session.sessionId &&
+          item.userId === session.userId,
+      );
+      if (!current || current.version !== expectedVersion) return "conflict";
+      localSessions.set(`${session.userId}:${session.dateKey}`, session);
+      return "updated";
+    }
+    const result = await client
+      .from("blundr_daily_sessions")
+      .update({
+        state: session.state,
+        state_version: session.version,
+        completed_at: session.completedAt,
+      })
+      .eq("session_id", session.sessionId)
+      .eq("user_id", session.userId)
+      .eq("state_version", expectedVersion)
+      .select("session_id");
+    if (result.error) throw new Error("daily_session_persistence_unavailable");
+    return result.data?.length ? "updated" : "conflict";
+  }
+
+  async appendAttempt(input: {
+    attemptId: string;
+    sessionId: string;
+    userId: string;
+    cardFingerprint: string;
+    firstAttempt: boolean;
+    attemptKind: "answer" | "reveal" | "retry";
+    outcome: string;
+    answer?: unknown;
+  }): Promise<"inserted" | "duplicate"> {
+    const client = createBlundrSupabaseAdminClient();
+    if (!client) return "inserted";
+    const result = await client.from("blundr_daily_attempts").insert({
+      attempt_id: input.attemptId,
+      session_id: input.sessionId,
+      user_id: input.userId,
+      card_fingerprint: input.cardFingerprint,
+      first_attempt: input.firstAttempt,
+      attempt_kind: input.attemptKind,
+      outcome: input.outcome,
+      answer: input.answer ?? null,
+    });
+    if (!result.error) return "inserted";
+    if (result.error.code === "23505") return "duplicate";
+    throw new Error("daily_attempt_persistence_unavailable");
+  }
+}

@@ -28,10 +28,11 @@ create table if not exists public.blundr_daily_attempts (
   user_id uuid not null references auth.users(id) on delete cascade,
   card_fingerprint text not null,
   first_attempt boolean not null default true,
+  attempt_kind text not null default 'answer' check (attempt_kind in ('answer', 'reveal', 'retry')),
   outcome text not null check (outcome in ('correct', 'incorrect', 'revealed', 'skipped')),
   answer jsonb,
   created_at timestamptz not null default now(),
-  unique (user_id, session_id, card_fingerprint, first_attempt)
+  unique (attempt_id)
 );
 
 create table if not exists public.blundr_daily_priorities (

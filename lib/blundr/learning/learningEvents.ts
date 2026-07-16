@@ -35,7 +35,12 @@ export type LearningEvent = {
   correct?: boolean;
 
   moveQualityStatus?: string;
-  moveQualityUserStatus?: "idle" | "checking" | "verified" | "needs_review" | "not_verified";
+  moveQualityUserStatus?:
+    | "idle"
+    | "checking"
+    | "verified"
+    | "needs_review"
+    | "not_verified";
 
   timeToMoveMs?: number;
 
@@ -48,7 +53,9 @@ const LOCAL_LEARNING_EVENT_LIMIT = 500;
 const memoryStore: LearningEvent[] = [];
 
 function randomSegment(size = 8) {
-  return Math.random().toString(36).slice(2, 2 + size);
+  return Math.random()
+    .toString(36)
+    .slice(2, 2 + size);
 }
 
 function readLocalEvents(): LearningEvent[] {
@@ -66,7 +73,10 @@ function readLocalEvents(): LearningEvent[] {
 function writeLocalEvents(events: LearningEvent[]): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(LOCAL_KEY, JSON.stringify(events.slice(-LOCAL_LEARNING_EVENT_LIMIT)));
+    window.localStorage.setItem(
+      LOCAL_KEY,
+      JSON.stringify(events.slice(-LOCAL_LEARNING_EVENT_LIMIT)),
+    );
   } catch {
     // local storage is optional for this MVP foundation
   }
@@ -80,7 +90,9 @@ export function createLearningEventId(): string {
   return `learn-e-${Date.now().toString(36)}-${randomSegment(10)}`;
 }
 
-export function recordLearningEvent(event: Omit<LearningEvent, "id" | "createdAt">): LearningEvent {
+export function recordLearningEvent(
+  event: Omit<LearningEvent, "id" | "createdAt">,
+): LearningEvent {
   const full: LearningEvent = {
     ...event,
     id: createLearningEventId(),
@@ -92,8 +104,27 @@ export function recordLearningEvent(event: Omit<LearningEvent, "id" | "createdAt
     memoryStore.splice(0, memoryStore.length - LOCAL_LEARNING_EVENT_LIMIT);
   }
 
-  const merged = [...readLocalEvents(), full].slice(-LOCAL_LEARNING_EVENT_LIMIT);
+  const merged = [...readLocalEvents(), full].slice(
+    -LOCAL_LEARNING_EVENT_LIMIT,
+  );
   writeLocalEvents(merged);
+
+  if (typeof window !== "undefined") {
+    void import("../onboarding/onboardingAuth")
+      .then(({ getOnboardingAuthSession }) => getOnboardingAuthSession())
+      .then((session) => {
+        if (!session?.accessToken) return;
+        return import("../api/authenticatedApiClient")
+          .then(({ authenticatedApiFetch }) =>
+            authenticatedApiFetch("/api/blundr/learning/events", {
+              method: "POST",
+              body: JSON.stringify(full),
+            }),
+          )
+          .catch(() => undefined);
+      })
+      .catch(() => undefined);
+  }
 
   return full;
 }

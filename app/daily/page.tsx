@@ -1,6 +1,5 @@
-import { DailyBlundrScreen } from "@/components/daily/DailyBlundrScreen";
+import { ProductionDailyBlundrScreen } from "@/components/daily/ProductionDailyBlundrScreen";
 
 export default function DailyPage() {
-  return <DailyBlundrScreen />;
+  return <ProductionDailyBlundrScreen />;
 }
-
