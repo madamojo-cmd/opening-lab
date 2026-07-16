@@ -1,6 +1,6 @@
 {
   "release": "blundr-mvp-step5-release-candidate",
-  "gitSha": "816bac3",
+  "gitSha": "9a61af8",
   "buildIdentifier": "blundr-advanced-feature-wiring",
   "node": "v24.14.0",
   "npm": "11.9.0",
@@ -11,7 +11,7 @@
     "movesSha256": "84e7aa4359a28371d7f3703990e77757189a8bc1b83bc1eca4cbb504dc5ebcef"
   },
   "migrations": {
-    "count": 8,
+    "count": 9,
     "versions": [
       "20260703_001",
       "20260704_001",
@@ -20,9 +20,10 @@
       "20260713_001",
       "20260714_001",
       "20260715_001",
-      "20260716_001"
+      "20260716_001",
+      "20260717_001"
     ],
-    "checksum": "cfd06ee50ae77af7c31a59335d8b7fce9067a9bc3787f4d4458d5f78d750d3b6"
+    "checksum": "f6cbf36d633e590ea152adcdbfcaf3ddc48b25019d1a0dc1ac4cbb2bd53cedc2"
   },
   "featureFlags": {
     "default": "off",
