@@ -41,6 +41,14 @@ export type DailySessionState = {
   currentIndex: number;
   revealedCardIds: string[];
   firstAttemptIds: string[];
+  activityProgress?: Record<
+    string,
+    {
+      stepIndex: number;
+      firstAttemptRecorded: boolean;
+      status: "in_progress" | "completed" | "revealed";
+    }
+  >;
   status: "in_progress" | "completed";
 };
 export type DailyReducerOutput = {

@@ -15,7 +15,9 @@ import type { DailySessionState } from "./core/dailyActivityTypes";
 import { ProductionDailyRepository } from "./productionDailyRepository.server";
 import type {
   ProductionDailyPrivateCard,
+  ProductionDailyPrivateStep,
   ProductionDailyPublicCard,
+  ProductionDailyPublicStep,
   ProductionDailyPublicSession,
   ProductionDailySession,
 } from "./productionDailyTypes";
@@ -32,6 +34,7 @@ import { buildPunishmentActivity } from "./activities/punishTheMistake/punishmen
 import { buildTranspositionActivity } from "./activities/samePositionDifferentRoute/transpositionActivityBuilder";
 import { replayRoute } from "./activities/samePositionDifferentRoute/transpositionGroupBuilder";
 import { legalMoves } from "./activities/activityUtils";
+import { toPublicDailySession } from "./productionDailyProjection";
 
 function fenForSequence(sequence: string): string | null {
   try {
@@ -49,25 +52,23 @@ function fenForSequence(sequence: string): string | null {
   }
 }
 
-function toPublic(
-  session: ProductionDailySession,
-): ProductionDailyPublicSession {
-  const completedCardIds = session.state.attempts
-    .filter((attempt) => attempt.scored)
-    .map((attempt) => attempt.card.cardFingerprint);
-  return {
-    sessionId: session.sessionId,
-    deckId: session.deckId,
-    dateKey: session.dateKey,
-    publicCards: session.publicCards,
-    version: session.version,
-    completedAt: session.completedAt,
-    state: {
-      currentIndex: session.state.currentIndex,
-      completedCardIds,
-      revealedCardIds: session.state.revealedCardIds,
-    },
-  };
+function fenAfterMoves(
+  startFen: string,
+  moves: readonly string[],
+): string | null {
+  try {
+    const chess = new Chess(startFen);
+    for (const uci of moves) {
+      chess.move({
+        from: uci.slice(0, 2),
+        to: uci.slice(2, 4),
+        promotion: uci[4] as "q" | "r" | "b" | "n" | undefined,
+      });
+    }
+    return chess.fen();
+  } catch {
+    return null;
+  }
 }
 
 async function openingAccess(
@@ -183,6 +184,7 @@ async function buildReservation(
     explanation: string,
     options?: readonly { id: string; label: string }[],
     acceptedAnswers?: readonly string[],
+    privateSteps?: readonly ProductionDailyPrivateStep[],
   ) => {
     const fingerprint = createDeterministicIdentity(activityId, [
       user.userId,
@@ -204,6 +206,9 @@ async function buildReservation(
           : "This position comes from an unlocked, verified opening line.",
       interaction: options?.length ? "choice" : "move",
       options,
+      steps: privateSteps?.map(
+        ({ acceptedMoves: _moves, explanation: _explanation, ...step }) => step,
+      ),
     };
     cards.push({
       publicCard,
@@ -212,6 +217,7 @@ async function buildReservation(
         acceptedMoves,
         acceptedAnswers,
         explanation,
+        privateSteps,
       },
       priority: entry.priority,
       stableKey: fingerprint,
@@ -306,15 +312,68 @@ async function buildReservation(
         candidate.node.playKey === `${entry.node.playKey},${primary.moveUci}`,
     );
     const childMove = child?.moves[0];
-    if (child && childMove && featureFlags.daily_continuation_challenge) {
+    const secondEntry =
+      child && childMove
+        ? runtimeCandidates.find(
+            (candidate) =>
+              candidate.node.openingId === child.node.openingId &&
+              candidate.node.playKey ===
+                `${child.node.playKey},${childMove.moveUci}`,
+          )
+        : undefined;
+    const secondMove = secondEntry?.moves[0];
+    const secondReplyEntry =
+      secondEntry && secondMove
+        ? runtimeCandidates.find(
+            (candidate) =>
+              candidate.node.openingId === secondEntry.node.openingId &&
+              candidate.node.playKey ===
+                `${secondEntry.node.playKey},${secondMove.moveUci}`,
+          )
+        : undefined;
+    const secondReply = secondReplyEntry?.moves[0];
+    const secondStepFen =
+      childMove &&
+      fenAfterMoves(entry.fen, [primary.moveUci, childMove.moveUci]);
+    const privateSteps =
+      childMove && secondMove && secondStepFen
+        ? ([
+            {
+              stepIndex: 0,
+              positionFen: entry.fen,
+              prompt: "Play the verified continuation move.",
+              side: entry.side,
+              acceptedMoves: [primary.moveUci],
+              explanation:
+                "The move follows the verified opening continuation.",
+            },
+            {
+              stepIndex: 1,
+              positionFen: secondStepFen,
+              prompt: "Continue the line after the verified reply.",
+              side: entry.side,
+              acceptedMoves: [secondMove.moveUci],
+              explanation:
+                "The move completes the verified continuation sequence.",
+            },
+          ] satisfies readonly ProductionDailyPrivateStep[])
+        : undefined;
+    if (
+      child &&
+      childMove &&
+      secondMove &&
+      secondReply &&
+      privateSteps &&
+      featureFlags.daily_continuation_challenge
+    ) {
       const built = buildContinuationChallenge({
         openingId: entry.node.openingId,
         side: entry.side,
         positionKey: entry.position.positionKey,
         access: entry.snapshot,
         objective: "complete_development",
-        userMoves: [primary.moveUci],
-        opponentReplies: [childMove.moveUci],
+        userMoves: [primary.moveUci, secondMove.moveUci],
+        opponentReplies: [childMove.moveUci, secondReply.moveUci],
         sourceId: entry.node.nodeId,
         evidenceVerified: true,
       });
@@ -326,13 +385,18 @@ async function buildReservation(
           "Play the next verified move in the plan.",
           [primary.moveUci],
           built.solution.explanation,
+          undefined,
+          undefined,
+          privateSteps,
         );
     }
 
     if (
       child &&
       childMove &&
+      secondMove &&
       labels.length >= 2 &&
+      privateSteps &&
       featureFlags.daily_punish_the_mistake
     ) {
       const built = buildPunishmentActivity({
@@ -342,7 +406,7 @@ async function buildReservation(
         fen: entry.fen,
         mistakeMove: labels[1].moveUci,
         bestResponses: [primary.moveUci],
-        continuation: [childMove.moveUci],
+        continuation: [childMove.moveUci, secondMove.moveUci],
         sourceId: entry.node.nodeId,
         source: "continuation",
         access: entry.snapshot,
@@ -358,6 +422,9 @@ async function buildReservation(
           "Find the verified response to the deviation.",
           [primary.moveUci],
           built.solution.explanation,
+          undefined,
+          undefined,
+          privateSteps,
         );
     }
 
@@ -491,6 +558,7 @@ async function buildReservation(
     currentIndex: 0,
     revealedCardIds: [],
     firstAttemptIds: [],
+    activityProgress: {},
     status: "in_progress",
   };
   return {
@@ -533,6 +601,155 @@ export async function applyDailyAction(input: {
   );
   if (!privateCard) throw new Error("daily_card_not_found");
   const now = input.now ?? new Date().toISOString();
+  if (privateCard.privateSteps?.length) {
+    const progress =
+      input.user.userId &&
+      session.state.activityProgress?.[input.cardFingerprint];
+    const current = progress ?? {
+      stepIndex: 0,
+      firstAttemptRecorded: false,
+      status: "in_progress" as const,
+    };
+    const step = privateCard.privateSteps[current.stepIndex];
+    if (!step) throw new Error("daily_activity_step_not_found");
+    const answerCorrect = Boolean(
+      input.action === "answer" &&
+        input.answer &&
+        step.acceptedMoves.includes(input.answer),
+    );
+    const nextProgress =
+      input.action === "retry"
+        ? { ...current, stepIndex: 0, status: "in_progress" as const }
+        : input.action === "reveal"
+          ? { ...current, status: "revealed" as const }
+          : answerCorrect
+            ? current.stepIndex + 1 >= privateCard.privateSteps.length
+              ? {
+                  ...current,
+                  status: "completed" as const,
+                  firstAttemptRecorded: true,
+                }
+              : {
+                  ...current,
+                  stepIndex: current.stepIndex + 1,
+                  firstAttemptRecorded: true,
+                  status: "in_progress" as const,
+                }
+            : { ...current, firstAttemptRecorded: true };
+    const nextState = {
+      ...session.state,
+      activityProgress: {
+        ...(session.state.activityProgress ?? {}),
+        [input.cardFingerprint]: nextProgress,
+      },
+    };
+    const finalStep = nextProgress.status === "completed";
+    const completedState = finalStep
+      ? reduceDailySession(nextState, {
+          userId: input.user.userId,
+          cardFingerprint: input.cardFingerprint,
+          now,
+          outcome: "correct",
+          feedback: step.explanation,
+        }).state
+      : nextState;
+    const next = {
+      ...session,
+      state: completedState,
+      version: session.version + 1,
+      completedAt:
+        completedState.status === "completed"
+          ? (session.completedAt ?? now)
+          : session.completedAt,
+    };
+    if ((await repository.update(next, input.expectedVersion)) === "conflict")
+      throw new Error("daily_session_conflict");
+    const attemptId = createDeterministicIdentity("daily-step-attempt", [
+      input.sessionId,
+      input.cardFingerprint,
+      current.stepIndex,
+      input.action,
+      input.answer ?? "",
+    ]);
+    await repository.appendAttempt({
+      attemptId,
+      sessionId: input.sessionId,
+      userId: input.user.userId,
+      cardFingerprint: input.cardFingerprint,
+      firstAttempt: !current.firstAttemptRecorded && input.action !== "retry",
+      attemptKind: input.action,
+      outcome:
+        input.action === "reveal"
+          ? "revealed"
+          : input.action === "retry"
+            ? "skipped"
+            : answerCorrect
+              ? "correct"
+              : "incorrect",
+      answer: input.action === "answer" ? input.answer : undefined,
+    });
+    if (input.action !== "retry" || current.firstAttemptRecorded)
+      await appendLearningEventV2({
+        userId: input.user.userId,
+        sessionId: input.sessionId,
+        attemptId,
+        source: "daily",
+        taxonomy:
+          input.action === "reveal"
+            ? "daily_revealed"
+            : input.action === "retry"
+              ? "daily_retried"
+              : "daily_answered",
+        position: {
+          positionKey: privateCard.positionKey,
+          canonicalFen: step.positionFen,
+          openingId: privateCard.openingId,
+          expectedMoveUci: step.acceptedMoves[0] ?? null,
+          repertoireSide: privateCard.side,
+          moveOrderKey: null,
+          runtimePackageVersion: "stage2-21-opening-stepdown-runtime-v1",
+        },
+        correct: answerCorrect,
+        firstAttempt: !current.firstAttemptRecorded && input.action !== "retry",
+        now,
+        access: {
+          openingId: privateCard.openingId,
+          repertoireSide: privateCard.side,
+          decision: "active",
+          checkedAt: now,
+          authorityVersion: "repertoire-unlock-v1",
+          expiresAt: new Date(Date.parse(now) + 300000).toISOString(),
+        },
+        explanation: step.explanation,
+      });
+    return {
+      session: next,
+      presentation: {
+        state:
+          nextProgress.status === "completed"
+            ? "committed"
+            : nextProgress.status,
+        feedback: {
+          kind:
+            input.action === "reveal"
+              ? "revealed"
+              : answerCorrect
+                ? "correct"
+                : "incorrect",
+          message:
+            input.action === "reveal"
+              ? step.explanation
+              : answerCorrect
+                ? finalStep
+                  ? "Sequence complete."
+                  : "Correct. Continue the verified line."
+                : "That move does not match the verified continuation.",
+        },
+      },
+      result: finalStep ? "accepted" : "retry_recorded",
+      correct: answerCorrect,
+    };
+  }
   const firstAttemptAlreadyRecorded = session.state.attempts.some(
     (attempt) =>
       attempt.card.cardFingerprint === input.cardFingerprint && attempt.scored,
@@ -633,5 +850,5 @@ export async function applyDailyAction(input: {
 export function publicDailySession(
   session: ProductionDailySession,
 ): ProductionDailyPublicSession {
-  return toPublic(session);
+  return toPublicDailySession(session);
 }
