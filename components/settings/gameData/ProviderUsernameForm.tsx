@@ -1,8 +1,10 @@
 import { useState } from "react";
 export function ProviderUsernameForm({
   onSubmit,
+  submitLabel = "Verify account",
 }: {
   onSubmit: (provider: "chesscom" | "lichess", username: string) => void;
+  submitLabel?: string;
 }) {
   const [provider, setProvider] = useState<"chesscom" | "lichess">("lichess");
   const [username, setUsername] = useState("");
@@ -41,7 +43,7 @@ export function ProviderUsernameForm({
         className="rounded-xl bg-green-700 px-4 py-2 text-sm font-black text-white"
         type="submit"
       >
-        Verify account
+        {submitLabel}
       </button>
     </form>
   );

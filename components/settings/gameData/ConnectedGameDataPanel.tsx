@@ -9,6 +9,7 @@ import {
 import { DisconnectGameDataDialog } from "./DisconnectGameDataDialog";
 import { ProviderConnectionCard } from "./ProviderConnectionCard";
 import { ProviderUsernameForm } from "./ProviderUsernameForm";
+import type { GameDataStatus } from "./ImportStatusSummary";
 
 type Provider = "chesscom" | "lichess";
 type ProviderState =
@@ -66,7 +67,22 @@ function stateFor(
   return job?.status === "completed" ? "current" : "connected";
 }
 
-export function ConnectedGameDataPanel() {
+export function ConnectedGameDataPanel({
+  initialStatus,
+}: { initialStatus?: GameDataStatus } = {}) {
+  if (initialStatus)
+    return (
+      <section
+        aria-labelledby="connected-game-data-title"
+        className="space-y-4 rounded-3xl border border-stone-200 bg-stone-50 p-5 text-stone-900 shadow-sm"
+      >
+        <h2 id="connected-game-data-title" className="text-xl font-black">
+          Connected game data
+        </h2>
+        <ProviderConnectionCard status={initialStatus} />
+        <ProviderUsernameForm onSubmit={() => undefined} />
+      </section>
+    );
   const [status, setStatus] = useState<StatusResponse>({
     accounts: [],
     jobs: [],
@@ -234,7 +250,11 @@ export function ConnectedGameDataPanel() {
                   {state.replaceAll("_", " ")}
                 </span>
               </div>
-              <ProviderConnectionCard status={state as never} />
+              <ProviderConnectionCard
+                status={state as never}
+                showLabel={id === "chesscom"}
+                showCopy={id === "chesscom"}
+              />
               {account ? (
                 <p className="text-sm font-bold">
                   {account.username}
@@ -258,7 +278,12 @@ export function ConnectedGameDataPanel() {
               ) : null}
               {!account ? (
                 <ProviderUsernameForm
-                  onSubmit={(username) => void connect(id, username)}
+                  submitLabel={
+                    id === "chesscom" ? "Verify account" : "Connect Lichess"
+                  }
+                  onSubmit={(provider, username) =>
+                    void connect(provider, username)
+                  }
                 />
               ) : (
                 <div className="flex flex-wrap gap-2">

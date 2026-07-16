@@ -1,5 +1,13 @@
 import type { GameDataStatus } from "./ImportStatusSummary";
-export function ProviderConnectionCard({ status }: { status: GameDataStatus }) {
+export function ProviderConnectionCard({
+  status,
+  showLabel = true,
+  showCopy = true,
+}: {
+  status: GameDataStatus;
+  showLabel?: boolean;
+  showCopy?: boolean;
+}) {
   const copy: Record<
     GameDataStatus | "queued" | "deleting" | "deleted",
     string
@@ -23,12 +31,18 @@ export function ProviderConnectionCard({ status }: { status: GameDataStatus }) {
   return (
     <div role="status" className="rounded-2xl bg-white p-4">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-bold">Provider connection</span>
+        {showLabel ? (
+          <span className="text-sm font-bold">Provider connection</span>
+        ) : (
+          <span className="text-sm font-bold">Status</span>
+        )}
         <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black uppercase tracking-wide">
           {status.replaceAll("_", " ")}
         </span>
       </div>
-      <p className="mt-2 text-sm text-stone-600">{copy[status]}</p>
+      {showCopy ? (
+        <p className="mt-2 text-sm text-stone-600">{copy[status]}</p>
+      ) : null}
     </div>
   );
 }
