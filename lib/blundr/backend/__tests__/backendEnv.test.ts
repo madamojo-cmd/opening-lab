@@ -26,7 +26,7 @@ try {
   process.env.NODE_ENV = "production";
 
   const env = readBlundrBackendEnv();
-  assert.equal(env.supabaseUrl, "https://example.supabase.co/");
+  assert.equal(env.supabaseUrl, "https://example.supabase.co");
   assert.equal(env.supabaseAnonKey, "anon-key");
   assert.equal(env.supabaseServiceRoleKey, "service-key");
   assert.equal(env.devToolsEnabled, true);

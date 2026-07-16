@@ -32,7 +32,10 @@ function normalizeUrl(value: unknown): string | null {
   const text = normalizeText(value);
   if (!text) return null;
   try {
-    return new URL(text).toString();
+    // Supabase Auth's getUser endpoint is sensitive to a trailing slash in
+    // this client configuration. Keep the canonical project origin for both
+    // bearer validation and server-side repositories.
+    return new URL(text).origin;
   } catch {
     return null;
   }

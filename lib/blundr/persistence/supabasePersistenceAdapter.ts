@@ -515,7 +515,10 @@ function mapValidationSnapshotRowToModel(row: SupabaseValidationSnapshotRow | nu
 }
 
 function getClient(accessToken?: string | null): SupabaseClientType | null {
-  return createBlundrSupabaseServerClient({ accessToken }) as SupabaseClientType | null;
+  return createBlundrSupabaseServerClient({
+    accessToken,
+    forUserQueries: true,
+  }) as SupabaseClientType | null;
 }
 
 async function runClientOperation<T>(accessToken: string | null | undefined, operation: (client: SupabaseClientType) => Promise<PersistenceResult<T>>): Promise<PersistenceResult<T>> {
