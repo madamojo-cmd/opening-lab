@@ -36,6 +36,11 @@ import { replayRoute } from "./activities/samePositionDifferentRoute/transpositi
 import { legalMoves } from "./activities/activityUtils";
 import { toPublicDailySession } from "./productionDailyProjection";
 
+// Request-time Daily selection uses only verified runtime data. Bound the
+// amount of chess reconstruction per reservation so a large runtime package
+// cannot turn an empty or newly unlocked account into an unbounded request.
+const MAX_RUNTIME_CANDIDATES_PER_RESERVATION = 600;
+
 function fenForSequence(sequence: string): string | null {
   try {
     const chess = new Chess();
@@ -108,6 +113,14 @@ async function buildReservation(
   const runtime = await loadTrainingRuntimePackage();
   const access = await openingAccess(user);
   const featureFlags = getServerFeatureFlags();
+  const movesByOpeningPlayKey = new Map<string, typeof runtime.candidates>();
+  for (const move of runtime.candidates) {
+    const key = `${move.openingId}:${move.playKeyBefore}`;
+    movesByOpeningPlayKey.set(key, [
+      ...(movesByOpeningPlayKey.get(key) ?? []),
+      move,
+    ]);
+  }
   const weaknessScores = new Map<string, number>();
   const admin = createBlundrSupabaseAdminClient();
   if (admin) {
@@ -124,7 +137,24 @@ async function buildReservation(
       }
     }
   }
-  const runtimeCandidates = runtime.nodes
+  const eligibleNodes = runtime.nodes
+    .filter((node) => {
+      const availability = getStage2OpeningAvailability(node.openingId);
+      return Boolean(
+        availability &&
+          access.get({
+            userId: user.userId,
+            openingId: node.openingId,
+            repertoireSide: node.sideToMove,
+          }).decision === "active",
+      );
+    })
+    .sort((a, b) =>
+      a.openingId.localeCompare(b.openingId) ||
+      a.playKey.localeCompare(b.playKey),
+    )
+    .slice(0, MAX_RUNTIME_CANDIDATES_PER_RESERVATION);
+  const runtimeCandidates = eligibleNodes
     .map((node) => {
       const availability = getStage2OpeningAvailability(node.openingId);
       const side = node.sideToMove;
@@ -141,12 +171,10 @@ async function buildReservation(
         checkedAt: now,
         expiresAt: new Date(Date.parse(now) + 300000).toISOString(),
       } as const;
-      const moves = runtime.candidates
-        .filter(
-          (move) =>
-            move.openingId === node.openingId &&
-            move.playKeyBefore === node.playKey,
-        )
+      const moves = (movesByOpeningPlayKey.get(
+        `${node.openingId}:${node.playKey}`,
+      ) ?? [])
+        .slice()
         .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
       if (!availability || decision !== "active" || !fen || !moves.length)
         return null;
