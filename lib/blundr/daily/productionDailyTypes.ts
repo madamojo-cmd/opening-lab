@@ -11,6 +11,7 @@ export type ProductionDailyPublicStep = {
 
 export type ProductionDailyPrivateStep = ProductionDailyPublicStep & {
   acceptedMoves: readonly string[];
+  acceptedAnswers?: readonly string[];
   explanation: string;
 };
 

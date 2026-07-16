@@ -207,7 +207,12 @@ async function buildReservation(
       interaction: options?.length ? "choice" : "move",
       options,
       steps: privateSteps?.map(
-        ({ acceptedMoves: _moves, explanation: _explanation, ...step }) => step,
+        ({
+          acceptedMoves: _moves,
+          acceptedAnswers: _answers,
+          explanation: _explanation,
+          ...step
+        }) => step,
       ),
     };
     cards.push({
@@ -524,6 +529,7 @@ async function buildReservation(
               side: card.publicCard.side,
               options: card.publicCard.options,
               acceptedMoves: card.privateCard.acceptedMoves,
+              acceptedAnswers: card.privateCard.acceptedAnswers,
               explanation: card.privateCard.explanation,
             }) satisfies ProductionDailyPrivateStep,
         );
@@ -666,7 +672,7 @@ export async function applyDailyAction(input: {
     const answerCorrect = Boolean(
       input.action === "answer" &&
         input.answer &&
-        step.acceptedMoves.includes(input.answer),
+        (step.acceptedAnswers ?? step.acceptedMoves).includes(input.answer),
     );
     const nextProgress =
       input.action === "retry"
