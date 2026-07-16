@@ -1,6 +1,6 @@
 {
   "release": "blundr-mvp-step5-release-candidate",
-  "gitSha": "b4b03fb",
+  "gitSha": "0a57629",
   "buildIdentifier": "blundr-advanced-feature-wiring",
   "node": "v24.14.0",
   "npm": "11.9.0",
@@ -11,7 +11,7 @@
     "movesSha256": "84e7aa4359a28371d7f3703990e77757189a8bc1b83bc1eca4cbb504dc5ebcef"
   },
   "migrations": {
-    "count": 10,
+    "count": 11,
     "versions": [
       "20260703_001",
       "20260704_001",
@@ -22,9 +22,10 @@
       "20260715_001",
       "20260716_001",
       "20260717_001",
-      "20260718_001"
+      "20260718_001",
+      "20260719_001"
     ],
-    "checksum": "ab8baba4c1e540af7699701406dc224fcdb41d0e49291cb2b4d4b71cbc6e1735"
+    "checksum": "1e96b45e36703f5ed74adc7482d59680a08794a45b4417f6ad942af4a4192bb2"
   },
   "featureFlags": {
     "default": "off",
@@ -38,12 +39,13 @@
     "securityRls": "STAGING_APPLIED; 8/8 security tests passed",
     "e2e": "4/4 root smoke; authenticated matrix NOT_RUN",
     "staging": {
-      "supabaseMigrations": "10/10 applied; local and remote versions match",
+      "supabaseMigrations": "11/11 applied; local and remote versions match",
       "vercelProject": "blundr-staging",
-      "vercelDeploymentId": "dpl_5PDFabJYrrU2ChiQNoXC8DoepsdR",
-      "vercelPreviewUrl": "https://blundr-staging-opbidkm01-adamconnor00-gmailcoms-projects.vercel.app",
+      "vercelDeploymentId": "dpl_8faXfKhnz3XtJby8FnwJhUPdzeXy",
+      "vercelPreviewUrl": "https://blundr-staging-ewzfrdyrz-adamconnor00-gmailcoms-projects.vercel.app",
       "vercelReadyState": "READY",
-      "candidateSha": "b4b03fb"
+      "candidateSha": "0a57629",
+      "unauthenticatedRouteBoundary": "401 after staging SSO protection was disabled"
     },
     "lintWarnings": 109,
     "browserCoverage": [
