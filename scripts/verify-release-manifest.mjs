@@ -8,13 +8,13 @@ const lockfileSha = createHash("sha256")
   .update(readFileSync("package-lock.json"))
   .digest("hex");
 const errors = [];
-if (manifest.gitSha !== "PENDING_STEP5_CHECKPOINT")
-  errors.push(
-    "gitSha must remain an explicit checkpoint placeholder until commit",
-  );
+if (!manifest.gitSha || manifest.gitSha === "PENDING_STEP5_CHECKPOINT")
+  errors.push("gitSha must be the real deployable candidate SHA");
+else if (!/^[0-9a-f]{7,40}$/.test(manifest.gitSha))
+  errors.push("gitSha must be a hexadecimal commit SHA");
 if (manifest.lockfileSha256 !== lockfileSha)
   errors.push("lockfile checksum mismatch");
-if (manifest.migrations?.count !== 7) errors.push("migration count mismatch");
+if (manifest.migrations?.count !== 8) errors.push("migration count mismatch");
 if (
   manifest.featureFlags?.default !== "off" ||
   manifest.featureFlags?.globalEnablement !== false
