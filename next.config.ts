@@ -35,16 +35,17 @@ export default withSentryConfig(nextConfig, {
   project: process.env.SENTRY_PROJECT,
   silent: !process.env.CI,
   sourcemaps: {
-    // Keep staging/Vercel source-map upload enabled, but do not let local
-    // .env.local credentials trigger an external Sentry upload during a
-    // network-isolated developer build.
-    disable: !process.env.SENTRY_AUTH_TOKEN || !isDeploymentBuild,
+    // Preserve production source-map uploads, but keep Preview deployments
+    // bounded when the external Sentry processor is unavailable or slow.
+    // Runtime Sentry telemetry remains enabled in Preview; only the optional
+    // build-time upload is skipped there.
+    disable:
+      !process.env.SENTRY_AUTH_TOKEN ||
+      !isDeploymentBuild ||
+      isPreviewDeployment,
   },
-  // Preview still uploads source maps, but widening the client upload makes
-  // Sentry process every client source map and has repeatedly left otherwise
-  // successful staging builds stuck after the Node and Edge uploads finish.
-  // Keep the full upload for production deployments while bounding staging
-  // processing to the normal client asset set.
+  // Production retains the complete client upload. Preview skips source maps
+  // above, so do not expand its optional upload set.
   widenClientFileUpload: !isPreviewDeployment,
   webpack: {
     treeshake: {
