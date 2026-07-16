@@ -35,8 +35,16 @@
     "unit": "NOT_VERIFIED_IN_THIS_SESSION",
     "component": "8/8",
     "integration": "6/6",
-    "securityRls": "STAGING_SCHEMA_NOT_APPLIED; 6/8 security tests passed",
-    "e2e": "4/4 root smoke only; authenticated matrix NOT_RUN",
+    "securityRls": "STAGING_APPLIED; 8/8 security tests passed",
+    "e2e": "4/4 root smoke; authenticated matrix NOT_RUN",
+    "staging": {
+      "supabaseMigrations": "10/10 applied; local and remote versions match",
+      "vercelProject": "blundr-staging",
+      "vercelDeploymentId": "dpl_5PDFabJYrrU2ChiQNoXC8DoepsdR",
+      "vercelPreviewUrl": "https://blundr-staging-opbidkm01-adamconnor00-gmailcoms-projects.vercel.app",
+      "vercelReadyState": "READY",
+      "candidateSha": "b4b03fb"
+    },
     "lintWarnings": 109,
     "browserCoverage": [
       "Chromium root smoke",
@@ -53,8 +61,6 @@
   },
   "knownStagingBlockers": [
     "Full unit suite did not complete in the managed workspace runner; focused Daily, activity, deep-game, component, and integration suites passed.",
-    "RLS integration reached staging but the schema is not applied and the supplied database password was rejected.",
-    "Staging Preview currently has no Vercel environment variables configured.",
     "BLUNDR_STAGING_QA_EMAIL and BLUNDR_STAGING_QA_PASSWORD are missing.",
     "Four-browser E2E and deployed staging validation remain pending.",
     "Disposable staging provider imports and production telemetry sink validation remain pending.",
