@@ -491,6 +491,57 @@ async function buildReservation(
     }
   }
 
+  if (featureFlags.daily_mixed_test) {
+    const mixedSourceCards = cards
+      .filter(
+        (card) =>
+          card.publicCard.activityId !== "daily_move_recall" &&
+          card.publicCard.activityId !== "daily_mixed_test",
+      )
+      .sort(
+        (a, b) =>
+          b.priority - a.priority || a.stableKey.localeCompare(b.stableKey),
+      )
+      .filter(
+        (card, index, all) =>
+          all.findIndex(
+            (candidate) =>
+              candidate.publicCard.activityId === card.publicCard.activityId,
+          ) === index,
+      );
+    if (mixedSourceCards.length >= 3) {
+      const first = mixedSourceCards[0];
+      const baseEntry = runtimeCandidates.find(
+        (entry) => entry.position.positionKey === first.publicCard.positionKey,
+      );
+      if (baseEntry) {
+        const privateSteps = mixedSourceCards.slice(0, 5).map(
+          (card, stepIndex) =>
+            ({
+              stepIndex,
+              positionFen: card.publicCard.positionFen,
+              prompt: card.publicCard.prompt,
+              side: card.publicCard.side,
+              options: card.publicCard.options,
+              acceptedMoves: card.privateCard.acceptedMoves,
+              explanation: card.privateCard.explanation,
+            }) satisfies ProductionDailyPrivateStep,
+        );
+        addCard(
+          baseEntry,
+          "daily_mixed_test",
+          "Mixed Test",
+          "Complete the verified no-hint item block.",
+          privateSteps[0].acceptedMoves,
+          "This block combines independently verified Daily items.",
+          undefined,
+          undefined,
+          privateSteps,
+        );
+      }
+    }
+  }
+
   const orderedCards = cards.sort(
     (a, b) => b.priority - a.priority || a.stableKey.localeCompare(b.stableKey),
   );
