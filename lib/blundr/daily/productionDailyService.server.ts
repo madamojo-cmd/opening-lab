@@ -22,6 +22,7 @@ import type {
 import { appendLearningEventV2 } from "@/lib/blundr/learning/core/learningEventService.server";
 import { RepertoireOpeningAccessRepository } from "@/lib/blundr/openingAccess/openingAccessRepository";
 import { getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
+import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
 
 function fenForSequence(sequence: string): string | null {
   try {
@@ -96,6 +97,22 @@ async function buildReservation(
 ) {
   const runtime = await loadTrainingRuntimePackage();
   const access = await openingAccess(user);
+  const weaknessScores = new Map<string, number>();
+  const admin = createBlundrSupabaseAdminClient();
+  if (admin) {
+    const projectionResult = await admin
+      .from("blundr_weakness_projection")
+      .select("position_key,score,access_decision")
+      .eq("user_id", user.userId)
+      .eq("access_decision", "active");
+    if (!projectionResult.error) {
+      for (const projection of projectionResult.data ?? []) {
+        const score = Number(projection.score);
+        if (Number.isFinite(score) && score > 0)
+          weaknessScores.set(String(projection.position_key), score);
+      }
+    }
+  }
   const candidates = runtime.nodes
     .map((node) => {
       const availability = getStage2OpeningAvailability(node.openingId);
@@ -140,10 +157,20 @@ async function buildReservation(
         acceptedMoves: [candidate.moveUci],
         explanation: "This move keeps the approved opening plan on track.",
       };
-      return { publicCard, privateCard, priority: 1, stableKey: fingerprint };
+      return {
+        publicCard,
+        privateCard,
+        priority: weaknessScores.get(position.positionKey) ?? 0.1,
+        stableKey: fingerprint,
+      };
     })
     .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
-  const selected = candidates.slice(0, 5);
+  const selected = candidates
+    .sort(
+      (a, b) =>
+        b.priority - a.priority || a.stableKey.localeCompare(b.stableKey),
+    )
+    .slice(0, 5);
   const deck = buildDeterministicDailyDeck({
     userId: user.userId,
     dateKey,
