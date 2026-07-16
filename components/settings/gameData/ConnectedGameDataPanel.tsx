@@ -67,22 +67,26 @@ function stateFor(
   return job?.status === "completed" ? "current" : "connected";
 }
 
-export function ConnectedGameDataPanel({
+function LegacyConnectedGameDataPanel({
   initialStatus,
-}: { initialStatus?: GameDataStatus } = {}) {
-  if (initialStatus)
-    return (
-      <section
-        aria-labelledby="connected-game-data-title"
-        className="space-y-4 rounded-3xl border border-stone-200 bg-stone-50 p-5 text-stone-900 shadow-sm"
-      >
-        <h2 id="connected-game-data-title" className="text-xl font-black">
-          Connected game data
-        </h2>
-        <ProviderConnectionCard status={initialStatus} />
-        <ProviderUsernameForm onSubmit={() => undefined} />
-      </section>
-    );
+}: {
+  initialStatus: GameDataStatus;
+}) {
+  return (
+    <section
+      aria-labelledby="connected-game-data-title"
+      className="space-y-4 rounded-3xl border border-stone-200 bg-stone-50 p-5 text-stone-900 shadow-sm"
+    >
+      <h2 id="connected-game-data-title" className="text-xl font-black">
+        Connected game data
+      </h2>
+      <ProviderConnectionCard status={initialStatus} />
+      <ProviderUsernameForm onSubmit={() => undefined} />
+    </section>
+  );
+}
+
+function LiveConnectedGameDataPanel() {
   const [status, setStatus] = useState<StatusResponse>({
     accounts: [],
     jobs: [],
@@ -333,4 +337,12 @@ export function ConnectedGameDataPanel({
       ) : null}
     </section>
   );
+}
+
+export function ConnectedGameDataPanel({
+  initialStatus,
+}: { initialStatus?: GameDataStatus } = {}) {
+  if (initialStatus)
+    return <LegacyConnectedGameDataPanel initialStatus={initialStatus} />;
+  return <LiveConnectedGameDataPanel />;
 }
