@@ -3,6 +3,10 @@ import { withSentryConfig } from "@sentry/nextjs";
 import path from "path";
 
 const projectRoot = path.resolve(__dirname);
+const isDeploymentBuild =
+  process.env.VERCEL === "1" ||
+  process.env.CI === "1" ||
+  process.env.CI === "true";
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: projectRoot,
@@ -29,7 +33,10 @@ export default withSentryConfig(nextConfig, {
   project: process.env.SENTRY_PROJECT,
   silent: !process.env.CI,
   sourcemaps: {
-    disable: !process.env.SENTRY_AUTH_TOKEN,
+    // Keep staging/Vercel source-map upload enabled, but do not let local
+    // .env.local credentials trigger an external Sentry upload during a
+    // network-isolated developer build.
+    disable: !process.env.SENTRY_AUTH_TOKEN || !isDeploymentBuild,
   },
   widenClientFileUpload: true,
   webpack: {
