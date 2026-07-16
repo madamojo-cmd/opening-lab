@@ -32,11 +32,11 @@
     "globalEnablement": false
   },
   "verification": {
-    "unit": "545/545",
+    "unit": "NOT_VERIFIED_IN_THIS_SESSION",
     "component": "8/8",
     "integration": "6/6",
-    "securityRls": "3/3 executable RLS; 4/4 security suite",
-    "e2e": "1/1",
+    "securityRls": "RLS_BLOCKED_EAI_AGAIN; 4/5 security tests passed",
+    "e2e": "NOT_RUN",
     "lintWarnings": 109,
     "browserCoverage": ["Chromium", "Firefox", "WebKit", "Mobile Chromium"]
   },
@@ -47,6 +47,9 @@
     "policyPublication": "STAGING_BLOCKER_UNPUBLISHED"
   },
   "knownStagingBlockers": [
+    "Full unit suite did not complete in the managed workspace runner; focused Daily, activity, deep-game, component, and integration suites passed.",
+    "RLS integration requires reachable staging Supabase DNS and credentials.",
+    "Four-browser E2E and deployed staging validation remain pending.",
     "Disposable staging provider imports and production telemetry sink validation remain pending.",
     "Privacy policy publication is not asserted by this repository."
   ],
