@@ -41,6 +41,73 @@ import { toPublicDailySession } from "./productionDailyProjection";
 // cannot turn an empty or newly unlocked account into an unbounded request.
 const MAX_RUNTIME_CANDIDATES_PER_RESERVATION = 600;
 
+function stableDailyHash(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function selectBoundedRuntimeNodes<T extends {
+  openingId: string;
+  sideToMove: string;
+  playKey: string;
+}>(
+  nodes: readonly T[],
+  priorityOpenings: ReadonlySet<string>,
+  seed: string,
+): T[] {
+  const unique = new Map<string, T>();
+  for (const node of nodes) {
+    const key = `${node.openingId}:${node.playKey}`;
+    if (!unique.has(key)) unique.set(key, node);
+  }
+  const ranked = (items: readonly T[]) =>
+    [...items].sort((a, b) =>
+      stableDailyHash(`${seed}:${a.openingId}:${a.playKey}`) -
+        stableDailyHash(`${seed}:${b.openingId}:${b.playKey}`) ||
+      a.openingId.localeCompare(b.openingId) ||
+      a.playKey.localeCompare(b.playKey),
+    );
+  const selected: T[] = [];
+  const seen = new Set<string>();
+  const add = (node: T) => {
+    const key = `${node.openingId}:${node.playKey}`;
+    if (selected.length < MAX_RUNTIME_CANDIDATES_PER_RESERVATION && !seen.has(key)) {
+      seen.add(key);
+      selected.push(node);
+    }
+  };
+  for (const node of ranked(
+    [...unique.values()].filter((node) => priorityOpenings.has(node.openingId)),
+  )) add(node);
+  const buckets = new Map<string, T[]>();
+  for (const node of unique.values()) {
+    const key = `${node.openingId}:${node.sideToMove}`;
+    buckets.set(key, [...(buckets.get(key) ?? []), node]);
+  }
+  const queues = [...buckets.entries()]
+    .sort(([a], [b]) =>
+      stableDailyHash(`${seed}:bucket:${a}`) - stableDailyHash(`${seed}:bucket:${b}`) ||
+      a.localeCompare(b),
+    )
+    .map(([, bucket]) => ranked(bucket));
+  for (let index = 0; selected.length < MAX_RUNTIME_CANDIDATES_PER_RESERVATION; index += 1) {
+    let added = false;
+    for (const queue of queues) {
+      const node = queue[index];
+      if (!node) continue;
+      add(node);
+      added = true;
+      if (selected.length >= MAX_RUNTIME_CANDIDATES_PER_RESERVATION) break;
+    }
+    if (!added) break;
+  }
+  return selected;
+}
+
 function fenForSequence(sequence: string): string | null {
   try {
     const chess = new Chess();
@@ -122,13 +189,22 @@ async function buildReservation(
     ]);
   }
   const weaknessScores = new Map<string, number>();
+  const priorityOpenings = new Set<string>();
   const admin = createBlundrSupabaseAdminClient();
   if (admin) {
-    const projectionResult = await admin
+    const [projectionResult, priorityResult] = await Promise.all([
+      admin
       .from("blundr_weakness_projection")
       .select("position_key,score,access_decision")
       .eq("user_id", user.userId)
-      .eq("access_decision", "active");
+      .eq("access_decision", "active"),
+      admin
+        .from("blundr_daily_priorities")
+        .select("opening_id,status,requested_for")
+        .eq("user_id", user.userId)
+        .in("status", ["queued", "added_today"])
+        .lte("requested_for", dateKey),
+    ]);
     if (!projectionResult.error) {
       for (const projection of projectionResult.data ?? []) {
         const score = Number(projection.score);
@@ -136,6 +212,9 @@ async function buildReservation(
           weaknessScores.set(String(projection.position_key), score);
       }
     }
+    if (!priorityResult.error)
+      for (const priority of priorityResult.data ?? [])
+        priorityOpenings.add(String(priority.opening_id));
   }
   const eligibleNodes = runtime.nodes
     .filter((node) => {
@@ -149,12 +228,12 @@ async function buildReservation(
           }).decision === "active",
       );
     })
-    .sort((a, b) =>
-      a.openingId.localeCompare(b.openingId) ||
-      a.playKey.localeCompare(b.playKey),
-    )
-    .slice(0, MAX_RUNTIME_CANDIDATES_PER_RESERVATION);
-  const runtimeCandidates = eligibleNodes
+  const boundedNodes = selectBoundedRuntimeNodes(
+    eligibleNodes,
+    priorityOpenings,
+    `${user.userId}:${dateKey}`,
+  );
+  const runtimeCandidates = boundedNodes
     .map((node) => {
       const availability = getStage2OpeningAvailability(node.openingId);
       const side = node.sideToMove;
