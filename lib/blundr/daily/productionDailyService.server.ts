@@ -23,6 +23,15 @@ import { appendLearningEventV2 } from "@/lib/blundr/learning/core/learningEventS
 import { RepertoireOpeningAccessRepository } from "@/lib/blundr/openingAccess/openingAccessRepository";
 import { getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
 import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
+import { getServerFeatureFlags } from "@/lib/blundr/contracts/serverFeatureFlags";
+import { buildCandidateSet } from "./activities/candidateChoice/candidateSetBuilder";
+import { buildPlanRecall } from "./activities/planRecall/planQuestionBuilder";
+import { approvedPlanEvidence } from "./activities/planRecall/approvedPlanAdapter";
+import { buildContinuationChallenge } from "./activities/continuationChallenge/continuationChallengeBuilder";
+import { buildPunishmentActivity } from "./activities/punishTheMistake/punishmentBuilder";
+import { buildTranspositionActivity } from "./activities/samePositionDifferentRoute/transpositionActivityBuilder";
+import { replayRoute } from "./activities/samePositionDifferentRoute/transpositionGroupBuilder";
+import { legalMoves } from "./activities/activityUtils";
 
 function fenForSequence(sequence: string): string | null {
   try {
@@ -97,6 +106,7 @@ async function buildReservation(
 ) {
   const runtime = await loadTrainingRuntimePackage();
   const access = await openingAccess(user);
+  const featureFlags = getServerFeatureFlags();
   const weaknessScores = new Map<string, number>();
   const admin = createBlundrSupabaseAdminClient();
   if (admin) {
@@ -113,7 +123,7 @@ async function buildReservation(
       }
     }
   }
-  const candidates = runtime.nodes
+  const runtimeCandidates = runtime.nodes
     .map((node) => {
       const availability = getStage2OpeningAvailability(node.openingId);
       const side = node.sideToMove;
@@ -123,49 +133,298 @@ async function buildReservation(
         repertoireSide: side,
       }).decision;
       const fen = fenForSequence(node.playSequenceUci);
-      const candidate = runtime.candidates.find(
-        (move) =>
-          move.openingId === node.openingId &&
-          move.playKeyBefore === node.playKey,
-      );
-      if (!availability || decision !== "active" || !fen || !candidate)
+      const snapshot = {
+        openingId: node.openingId,
+        repertoireSide: side,
+        decision,
+        checkedAt: now,
+        expiresAt: new Date(Date.parse(now) + 300000).toISOString(),
+      } as const;
+      const moves = runtime.candidates
+        .filter(
+          (move) =>
+            move.openingId === node.openingId &&
+            move.playKeyBefore === node.playKey,
+        )
+        .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
+      if (!availability || decision !== "active" || !fen || !moves.length)
         return null;
       const position = createPositionIdentity({
         canonicalFen: fen,
         openingId: node.openingId,
-        expectedMoveUci: candidate.moveUci,
+        expectedMoveUci: moves[0].moveUci,
         repertoireSide: side,
       });
-      const fingerprint = createDeterministicIdentity("daily-move-recall", [
-        user.userId,
-        dateKey,
-        position.positionKey,
-      ]);
-      const publicCard: ProductionDailyPublicCard = {
-        cardFingerprint: fingerprint as CardFingerprint,
-        positionKey: position.positionKey,
-        activityId: "daily_move_recall",
-        title: "Opening recall",
-        prompt: "Play the approved move for this exact position.",
-        positionFen: fen,
-        openingId: node.openingId,
-        side,
-        why: "This position comes from an unlocked opening in your repertoire.",
-      };
-      const privateCard: ProductionDailyPrivateCard = {
-        ...publicCard,
-        acceptedMoves: [candidate.moveUci],
-        explanation: "This move keeps the approved opening plan on track.",
-      };
       return {
-        publicCard,
-        privateCard,
+        node,
+        fen,
+        side,
+        snapshot,
+        position,
+        moves,
         priority: weaknessScores.get(position.positionKey) ?? 0.1,
-        stableKey: fingerprint,
       };
     })
     .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
-  const selected = candidates
+
+  const cards: Array<{
+    publicCard: ProductionDailyPublicCard;
+    privateCard: ProductionDailyPrivateCard;
+    priority: number;
+    stableKey: string;
+  }> = [];
+  const advancedCount = new Map<string, number>();
+  const addCard = (
+    entry: (typeof runtimeCandidates)[number],
+    activityId: string,
+    title: string,
+    prompt: string,
+    acceptedMoves: readonly string[],
+    explanation: string,
+    options?: readonly { id: string; label: string }[],
+    acceptedAnswers?: readonly string[],
+  ) => {
+    const fingerprint = createDeterministicIdentity(activityId, [
+      user.userId,
+      dateKey,
+      entry.position.positionKey,
+    ]);
+    const publicCard: ProductionDailyPublicCard = {
+      cardFingerprint: fingerprint as CardFingerprint,
+      positionKey: entry.position.positionKey,
+      activityId,
+      title,
+      prompt,
+      positionFen: entry.fen,
+      openingId: entry.node.openingId,
+      side: entry.side,
+      why:
+        entry.priority > 0.1
+          ? "This position is prioritized from a verified weakness projection."
+          : "This position comes from an unlocked, verified opening line.",
+      interaction: options?.length ? "choice" : "move",
+      options,
+    };
+    cards.push({
+      publicCard,
+      privateCard: {
+        ...publicCard,
+        acceptedMoves,
+        acceptedAnswers,
+        explanation,
+      },
+      priority: entry.priority,
+      stableKey: fingerprint,
+    });
+    advancedCount.set(activityId, (advancedCount.get(activityId) ?? 0) + 1);
+  };
+
+  for (const entry of runtimeCandidates) {
+    const primary = entry.moves[0];
+    const legal = legalMoves(entry.fen);
+    const legalByUci = new Map(
+      Array.isArray(legal) ? legal.map((move) => [move.uci, move.san]) : [],
+    );
+    const labels = entry.moves
+      .slice(0, 3)
+      .filter((move) => legalByUci.has(move.moveUci));
+    if (!primary || !legalByUci.has(primary.moveUci)) continue;
+
+    if (featureFlags.daily_plan_recall && labels.length >= 2) {
+      const question = {
+        type: "next_plan" as const,
+        prompt: "Which move matches the verified plan for this position?",
+        choices: labels.map((move) => ({
+          id: move.moveUci,
+          label: legalByUci.get(move.moveUci) ?? move.moveUci,
+        })),
+        acceptedIds: [primary.moveUci],
+        validForFen: true,
+        evidence: approvedPlanEvidence({
+          sourceId: entry.node.nodeId,
+          type: "next_plan",
+          version: runtime.manifest.packageId,
+        }),
+        explanation:
+          "The selected move is the verified runtime repertoire choice.",
+      };
+      const built = buildPlanRecall({
+        openingId: entry.node.openingId,
+        side: entry.side,
+        positionKey: entry.position.positionKey,
+        positionFen: entry.fen,
+        access: entry.snapshot,
+        question,
+      });
+      if (built.ok)
+        addCard(
+          entry,
+          built.activityId,
+          "Plan recall",
+          question.prompt,
+          [primary.moveUci],
+          question.explanation,
+          question.choices,
+          question.acceptedIds,
+        );
+    }
+
+    if (featureFlags.daily_candidate_choice && labels.length >= 3) {
+      const built = buildCandidateSet({
+        userId: user.userId,
+        openingId: entry.node.openingId,
+        side: entry.side,
+        positionKey: entry.position.positionKey,
+        positionFen: entry.fen,
+        approvedMoves: [primary.moveUci],
+        mistakeMove: labels[1].moveUci,
+        alternativeMove: labels[2].moveUci,
+        access: entry.snapshot,
+        evidenceVersion: runtime.manifest.packageId,
+      });
+      if (built.ok) {
+        const options = built.solution.candidates.map((candidate) => ({
+          id: candidate.id,
+          label: candidate.label,
+        }));
+        addCard(
+          entry,
+          built.activityId,
+          "Candidate choice",
+          "Choose the move that best preserves the verified plan.",
+          [primary.moveUci],
+          "The selected move is the verified runtime repertoire choice.",
+          options,
+          built.solution.acceptedIds,
+        );
+      }
+    }
+
+    const child = runtimeCandidates.find(
+      (candidate) =>
+        candidate.node.openingId === entry.node.openingId &&
+        candidate.node.playKey === `${entry.node.playKey},${primary.moveUci}`,
+    );
+    const childMove = child?.moves[0];
+    if (child && childMove && featureFlags.daily_continuation_challenge) {
+      const built = buildContinuationChallenge({
+        openingId: entry.node.openingId,
+        side: entry.side,
+        positionKey: entry.position.positionKey,
+        access: entry.snapshot,
+        objective: "complete_development",
+        userMoves: [primary.moveUci],
+        opponentReplies: [childMove.moveUci],
+        sourceId: entry.node.nodeId,
+        evidenceVerified: true,
+      });
+      if (built.ok)
+        addCard(
+          entry,
+          built.activityId,
+          "Practical continuation",
+          "Play the next verified move in the plan.",
+          [primary.moveUci],
+          built.solution.explanation,
+        );
+    }
+
+    if (
+      child &&
+      childMove &&
+      labels.length >= 2 &&
+      featureFlags.daily_punish_the_mistake
+    ) {
+      const built = buildPunishmentActivity({
+        openingId: entry.node.openingId,
+        side: entry.side,
+        positionKey: entry.position.positionKey,
+        fen: entry.fen,
+        mistakeMove: labels[1].moveUci,
+        bestResponses: [primary.moveUci],
+        continuation: [childMove.moveUci],
+        sourceId: entry.node.nodeId,
+        source: "continuation",
+        access: entry.snapshot,
+        evidenceVerified: true,
+        explanation:
+          "The verified reply restores the opening plan after the deviation.",
+      });
+      if (built.ok)
+        addCard(
+          entry,
+          built.activityId,
+          "Punish the mistake",
+          "Find the verified response to the deviation.",
+          [primary.moveUci],
+          built.solution.explanation,
+        );
+    }
+
+    if (advancedCount.size === 0 || !featureFlags.daily_plan_recall)
+      addCard(
+        entry,
+        "daily_move_recall",
+        "Opening recall",
+        "Play the approved move for this exact position.",
+        [primary.moveUci],
+        "This move keeps the approved opening plan on track.",
+      );
+  }
+
+  if (featureFlags.daily_same_position_different_route) {
+    const routeGroups = new Map<string, (typeof runtimeCandidates)[number][]>();
+    for (const entry of runtimeCandidates) {
+      const finalFen = fenForSequence(entry.node.playSequenceUci);
+      if (!finalFen) continue;
+      const key = `${entry.node.openingId}:${finalFen.split(" ").slice(0, 4).join(" ")}`;
+      routeGroups.set(key, [...(routeGroups.get(key) ?? []), entry]);
+    }
+    for (const group of routeGroups.values()) {
+      if (group.length < 2) continue;
+      const standard = group[0];
+      const alternate = group.find(
+        (candidate) =>
+          candidate.node.playSequenceUci !== standard.node.playSequenceUci,
+      );
+      if (!alternate) continue;
+      const standardRoute = standard.node.playSequenceUci
+        .split(/[,\s]+/)
+        .filter(Boolean);
+      const alternateRoute = alternate.node.playSequenceUci
+        .split(/[,\s]+/)
+        .filter(Boolean);
+      const startFen = new Chess().fen();
+      if (
+        !replayRoute(startFen, standardRoute) ||
+        !replayRoute(startFen, alternateRoute)
+      )
+        continue;
+      const built = buildTranspositionActivity({
+        openingId: standard.node.openingId,
+        side: "white",
+        positionKey: standard.position.positionKey,
+        startFen,
+        standardRoute,
+        alternateRoute,
+        expectedMoves: [standard.moves[0].moveUci],
+        access: standard.snapshot,
+        sourceId: `${standard.node.nodeId}:${alternate.node.nodeId}`,
+      });
+      if (!built.ok) continue;
+      addCard(
+        standard,
+        built.activityId,
+        "Same position, different route",
+        "Play the verified move from this position.",
+        [standard.moves[0].moveUci],
+        "This card is backed by two verified legal routes reaching the same position.",
+      );
+      break;
+    }
+  }
+
+  const selected = cards
     .sort(
       (a, b) =>
         b.priority - a.priority || a.stableKey.localeCompare(b.stableKey),
@@ -261,7 +520,12 @@ export async function applyDailyAction(input: {
   );
   const correct =
     input.action === "answer" &&
-    Boolean(input.answer && privateCard.acceptedMoves.includes(input.answer));
+    Boolean(
+      input.answer &&
+        (privateCard.acceptedAnswers ?? privateCard.acceptedMoves).includes(
+          input.answer,
+        ),
+    );
   const outcome =
     input.action === "retry"
       ? "retry"

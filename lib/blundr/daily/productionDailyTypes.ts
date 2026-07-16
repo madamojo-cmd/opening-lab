@@ -11,10 +11,13 @@ export type ProductionDailyPublicCard = {
   openingId: string;
   side: "white" | "black";
   why: string;
+  interaction: "move" | "choice";
+  options?: readonly { id: string; label: string }[];
 };
 
 export type ProductionDailyPrivateCard = ProductionDailyPublicCard & {
   acceptedMoves: readonly string[];
+  acceptedAnswers?: readonly string[];
   explanation: string;
 };
 

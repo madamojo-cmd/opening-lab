@@ -199,20 +199,39 @@ export function ProductionDailyBlundrScreen() {
               </p>
               <p className="mt-2 text-xs text-stone-400">{currentCard.why}</p>
             </div>
-            <DailyBlundrBoard
-              fen={currentCard.positionFen}
-              disabled={
-                presentation?.state === "revealed" ||
-                presentation?.state === "committed"
-              }
-              onSquareClick={() => undefined}
-              onMoveAttempt={(attempt) => void handleMove(attempt)}
-              openingColor={currentCard.side}
-              forcedOrientation={currentCard.side}
-              boardVisuals={null}
-              squareStyles={{}}
-              animationClassName={null}
-            />
+            {currentCard.interaction === "choice" && currentCard.options ? (
+              <div className="grid gap-2">
+                {currentCard.options.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    disabled={
+                      presentation?.state === "revealed" ||
+                      presentation?.state === "committed"
+                    }
+                    onClick={() => void action("attempt", option.id)}
+                    className="min-h-12 rounded-2xl bg-white px-4 py-3 text-left text-sm font-black text-stone-900 disabled:opacity-60"
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <DailyBlundrBoard
+                fen={currentCard.positionFen}
+                disabled={
+                  presentation?.state === "revealed" ||
+                  presentation?.state === "committed"
+                }
+                onSquareClick={() => undefined}
+                onMoveAttempt={(attempt) => void handleMove(attempt)}
+                openingColor={currentCard.side}
+                forcedOrientation={currentCard.side}
+                boardVisuals={null}
+                squareStyles={{}}
+                animationClassName={null}
+              />
+            )}
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
