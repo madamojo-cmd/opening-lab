@@ -1,6 +1,6 @@
 {
   "release": "blundr-mvp-step5-release-candidate",
-  "gitSha": "0a57629",
+  "gitSha": "f7f3e86346309ecdd49a58e57472199279bd4b78",
   "buildIdentifier": "blundr-advanced-feature-wiring",
   "node": "v24.14.0",
   "npm": "11.9.0",
@@ -41,10 +41,11 @@
     "staging": {
       "supabaseMigrations": "11/11 applied; local and remote versions match",
       "vercelProject": "blundr-staging",
-      "vercelDeploymentId": "dpl_8faXfKhnz3XtJby8FnwJhUPdzeXy",
-      "vercelPreviewUrl": "https://blundr-staging-ewzfrdyrz-adamconnor00-gmailcoms-projects.vercel.app",
+      "vercelDeploymentId": "dpl_Axne4bzVGoV1s9hBtzXuVwDNhWHN",
+      "vercelPreviewUrl": "https://blundr-staging.vercel.app",
       "vercelReadyState": "READY",
-      "candidateSha": "0a57629",
+      "candidateSha": "f7f3e86346309ecdd49a58e57472199279bd4b78",
+      "gitMetadata": "confirmed",
       "unauthenticatedRouteBoundary": "401 after staging SSO protection was disabled"
     },
     "lintWarnings": 109,
