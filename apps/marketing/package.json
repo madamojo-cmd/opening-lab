@@ -1,0 +1,23 @@
+{
+  "name": "@blundr/marketing",
+  "private": true,
+  "version": "1.1.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "node --import tsx tests/marketing.test.ts"
+  },
+  "dependencies": {
+    "next": "16.2.6",
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  },
+  "devDependencies": {
+    "@types/node": "25.9.1",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "tsx": "4.22.4",
+    "typescript": "5.8.3"
+  }
+}

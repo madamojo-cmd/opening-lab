@@ -1,0 +1,4 @@
+import { Cta, PageIntro, Placeholder } from "./MarketingShell";
+import { SITE_URL } from "../lib/site";
+
+export function ContentPage({ path, title, intro, source, sections }: { path: string; title: string; intro: string; source: string; sections: { heading: string; body: React.ReactNode }[] }) { const crumbs = { "@context":"https://schema.org", "@type":"BreadcrumbList", itemListElement:[{ "@type":"ListItem", position:1, name:"Home", item:SITE_URL }, { "@type":"ListItem", position:2, name:title, item:`${SITE_URL}${path}` }] }; return <><script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(crumbs).replace(/</g,"\\u003c")}}/><PageIntro title={title}>{intro}</PageIntro>{sections.map((section)=><section className="section" key={section.heading}><h2>{section.heading}</h2>{section.body}</section>)}<section className="section"><Placeholder label={`${title} media`}/><p><Cta source={source}/></p></section></>; }

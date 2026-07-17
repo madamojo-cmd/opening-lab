@@ -1,0 +1,2 @@
+import { ContentPage } from "./ContentPage";
+export function LegalPage({ path, title, intro, sections }: { path: string; title: string; intro: string; sections: { heading: string; body: React.ReactNode }[] }) { return <ContentPage path={path} source="direct" title={title} intro={intro} sections={[{heading:"Plain-language summary",body:<p>This page explains the current public policy in clear language. It is marked for counsel review before public payment launch.</p>},...sections,{heading:"Last updated",body:<p>July 17, 2026 · Counsel review marker: pending.</p>}]}/>; }
