@@ -3,13 +3,22 @@ export const SUPPORT_EMAIL = "support@blundr.io";
 
 const allowedSources = new Set(["homepage", "features", "how-it-works", "pricing", "daily-blundr", "minigames", "affiliate", "direct"]);
 
+function isApprovedAppHost(hostname: string): boolean {
+  return (
+    hostname === "app.blundr.io" ||
+    hostname === "blundr-staging.vercel.app" ||
+    hostname === "staging.blundr.io" ||
+    /^blundr-staging-[a-z0-9-]+\.vercel\.app$/i.test(hostname)
+  );
+}
+
 export function appBaseUrl(): URL {
   const raw = process.env.PUBLIC_APP_BASE_URL ?? "http://localhost:3000";
   let url: URL;
   try { url = new URL(raw); } catch { throw new Error("PUBLIC_APP_BASE_URL must be an absolute URL"); }
   const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
   if (url.protocol !== "https:" && !local) throw new Error("PUBLIC_APP_BASE_URL must use HTTPS outside local development");
-  if (!local && !new Set(["app.blundr.io", "blundr-staging.vercel.app", "staging.blundr.io"]).has(url.hostname)) throw new Error("PUBLIC_APP_BASE_URL is not an approved Blundr app origin");
+  if (!local && !isApprovedAppHost(url.hostname)) throw new Error("PUBLIC_APP_BASE_URL is not an approved Blundr app origin");
   if (url.username || url.password || url.search || url.hash) throw new Error("PUBLIC_APP_BASE_URL must be an origin without credentials or query parameters");
   return new URL(url.origin);
 }

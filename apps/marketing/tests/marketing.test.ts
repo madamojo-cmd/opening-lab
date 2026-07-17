@@ -3,6 +3,13 @@ import { appBaseUrl, appCta, pageMetadata, safeSource, seo } from "../lib/site";
 
 process.env.PUBLIC_APP_BASE_URL = "https://app.blundr.io";
 assert.equal(appBaseUrl().origin, "https://app.blundr.io");
+process.env.PUBLIC_APP_BASE_URL = "https://blundr-staging-qsmvfjmtn-adamconnor00-gmailcoms-projects.vercel.app";
+assert.equal(
+  appBaseUrl().origin,
+  "https://blundr-staging-qsmvfjmtn-adamconnor00-gmailcoms-projects.vercel.app",
+);
+process.env.PUBLIC_APP_BASE_URL = "https://unrelated-preview.vercel.app";
+assert.throws(() => appBaseUrl(), /approved Blundr app origin/);
 process.env.PUBLIC_APP_BASE_URL = "https://unapproved.example";
 assert.throws(() => appBaseUrl(), /approved Blundr app origin/);
 process.env.PUBLIC_APP_BASE_URL = "https://app.blundr.io";
