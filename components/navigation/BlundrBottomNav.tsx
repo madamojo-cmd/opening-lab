@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BarChart3, BookOpen, CheckCircle2, Home, Target } from "lucide-react";
 import { classNames } from "@/components/blundr/ui";
+import { useAppShellNavigation } from "@/components/architecture/AppShell";
 
 type NavItem = {
   id: "home" | "train" | "review" | "progress" | "repertoire";
@@ -35,7 +36,10 @@ function getActiveTab(pathname: string | null): NavItem["id"] {
 
 export function BlundrBottomNav({ className, activeTab: activeTabOverride }: { className?: string; activeTab?: NavItem["id"] }) {
   const pathname = usePathname();
+  const shellNavigationActive = useAppShellNavigation();
   const activeTab = activeTabOverride ?? getActiveTab(pathname);
+
+  if (shellNavigationActive) return null;
 
   return (
     <nav

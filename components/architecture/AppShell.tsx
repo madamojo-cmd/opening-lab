@@ -9,6 +9,7 @@ import {
   Target,
 } from "lucide-react";
 import type { ComponentType, ReactNode, SVGProps } from "react";
+import { createContext, useContext } from "react";
 import styles from "./AppShell.module.css";
 
 export type AppShellNavKey =
@@ -61,6 +62,9 @@ export type AppShellProps = {
   className?: string;
 };
 
+const AppShellContext = createContext(false);
+export function useAppShellNavigation(): boolean { return useContext(AppShellContext); }
+
 function joinClasses(...classes: Array<string | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
@@ -70,19 +74,19 @@ export function AppShell({
   task,
   context,
   activeNav = "home",
-  title = "Blundr",
+  title,
   eyebrow,
   className,
 }: AppShellProps) {
   return (
-    <div className={joinClasses(styles.shell, className)}>
+    <AppShellContext.Provider value={true}><div className={joinClasses(styles.shell, className)}>
       <header className={styles.header}>
         <Link className={styles.wordmark} href="/" aria-label="Blundr home">
           Blundr
         </Link>
         <div className={styles.headerCopy}>
           {eyebrow ? <p className={styles.eyebrow}>{eyebrow}</p> : null}
-          <h1 className={styles.title}>{title}</h1>
+          {title ? <h1 className={styles.title}>{title}</h1> : null}
         </div>
       </header>
 
@@ -130,6 +134,6 @@ export function AppShell({
       <footer className={styles.footer}>
         <span>Blundr</span>
       </footer>
-    </div>
+    </div></AppShellContext.Provider>
   );
 }
