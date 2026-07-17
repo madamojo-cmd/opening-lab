@@ -35,6 +35,7 @@ import { buildTranspositionActivity } from "./activities/samePositionDifferentRo
 import { replayRoute } from "./activities/samePositionDifferentRoute/transpositionGroupBuilder";
 import { legalMoves } from "./activities/activityUtils";
 import { toPublicDailySession } from "./productionDailyProjection";
+import { readDueReviewKeys } from "./productionReviewRepository.server";
 
 // Request-time Daily selection uses only verified runtime data. Bound the
 // amount of chess reconstruction per reservation so a large runtime package
@@ -57,6 +58,7 @@ function selectBoundedRuntimeNodes<T extends {
 }>(
   nodes: readonly T[],
   priorityOpenings: ReadonlySet<string>,
+  priorityPositions: ReadonlySet<string>,
   seed: string,
 ): T[] {
   const unique = new Map<string, T>();
@@ -81,7 +83,10 @@ function selectBoundedRuntimeNodes<T extends {
     }
   };
   for (const node of ranked(
-    [...unique.values()].filter((node) => priorityOpenings.has(node.openingId)),
+    [...unique.values()].filter((node) =>
+      priorityPositions.has(`${node.openingId}:${node.playKey}`) ||
+      priorityOpenings.has(node.openingId),
+    ),
   )) add(node);
   const buckets = new Map<string, T[]>();
   for (const node of unique.values()) {
@@ -190,6 +195,9 @@ async function buildReservation(
   }
   const weaknessScores = new Map<string, number>();
   const priorityOpenings = new Set<string>();
+  const priorityPositions = new Set<string>();
+  for (const review of await readDueReviewKeys(user.userId, now))
+    priorityPositions.add(`${review.openingId}:${review.playKey}`);
   const admin = createBlundrSupabaseAdminClient();
   if (admin) {
     const [projectionResult, priorityResult] = await Promise.all([
@@ -231,6 +239,7 @@ async function buildReservation(
   const boundedNodes = selectBoundedRuntimeNodes(
     eligibleNodes,
     priorityOpenings,
+    priorityPositions,
     `${user.userId}:${dateKey}`,
   );
   const runtimeCandidates = boundedNodes
