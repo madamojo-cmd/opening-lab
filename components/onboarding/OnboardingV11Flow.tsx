@@ -149,7 +149,9 @@ export function OnboardingV11Flow({ requestedStep }: { requestedStep?: string })
 }
 
 function valueForStep(state: OnboardingV11State, step: OnboardingV11Step): unknown {
-  if (step === "level") return state.ratingBandId;
+  // The profile's database default is not a user decision. While the durable
+  // resume step is `level`, require an explicit choice before continuing.
+  if (step === "level") return state.step === "level" ? undefined : state.ratingBandId;
   if (step === "priorities") return state.priorities;
   if (step === "pace") return state.pace ?? "standard";
   if (step === "starter-pack") return state.starterPackId;
