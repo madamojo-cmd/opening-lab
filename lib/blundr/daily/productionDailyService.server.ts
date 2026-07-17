@@ -204,7 +204,7 @@ async function buildReservation(
     const [projectionResult, priorityResult] = await Promise.all([
       admin
       .from("blundr_weakness_projection")
-      .select("position_key,score,access_decision")
+      .select("position_key,opening_id,play_key,score,confidence,updated_at,access_decision")
       .eq("user_id", user.userId)
       .eq("access_decision", "active"),
       admin
@@ -219,6 +219,8 @@ async function buildReservation(
         const score = Number(projection.score);
         if (Number.isFinite(score) && score > 0)
           weaknessScores.set(String(projection.position_key), score);
+        if (projection.opening_id && projection.play_key)
+          priorityPositions.add(`${projection.opening_id}:${projection.play_key}`);
       }
     }
     if (!priorityResult.error)
@@ -272,6 +274,7 @@ async function buildReservation(
         openingId: node.openingId,
         expectedMoveUci: moves[0].moveUci,
         repertoireSide: side,
+        moveOrderKey: node.playKey,
       });
       return {
         node,

@@ -106,6 +106,8 @@ export async function appendLearningEventV2(input: {
     await client.from("blundr_node_mastery").upsert({
       user_id: input.userId,
       position_key: input.position.positionKey,
+      opening_id: input.position.openingId,
+      play_key: input.position.moveOrderKey,
       attempts: mastery.state.attempts,
       first_attempt_at: mastery.state.firstAttemptAt,
       first_attempt_result: mastery.state.firstAttemptResult,
