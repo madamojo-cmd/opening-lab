@@ -36,6 +36,7 @@ import { replayRoute } from "./activities/samePositionDifferentRoute/transpositi
 import { legalMoves } from "./activities/activityUtils";
 import { toPublicDailySession } from "./productionDailyProjection";
 import { readDueReviewKeys } from "./productionReviewRepository.server";
+import { upsertReviewState } from "./productionReviewRepository.server";
 
 // Request-time Daily selection uses only verified runtime data. Bound the
 // amount of chess reconstruction per reservation so a large runtime package
@@ -315,6 +316,7 @@ async function buildReservation(
       prompt,
       positionFen: entry.fen,
       openingId: entry.node.openingId,
+      playKey: entry.node.playKey,
       side: entry.side,
       why:
         entry.priority > 0.1
@@ -894,6 +896,16 @@ export async function applyDailyAction(input: {
           expiresAt: new Date(Date.parse(now) + 300000).toISOString(),
         },
         explanation: step.explanation,
+      });
+    if (input.action !== "retry")
+      await upsertReviewState({
+        userId: input.user.userId,
+        openingId: privateCard.openingId,
+        playKey: privateCard.playKey,
+        dueAt: new Date(Date.parse(now) + (answerCorrect ? 86400000 : 300000)).toISOString(),
+        attemptId,
+        outcome: answerCorrect ? "correct" : input.action === "reveal" ? "revealed" : "incorrect",
+        srsState: { intervalDays: answerCorrect ? 1 : 0 },
       });
     return {
       session: next,

@@ -23,6 +23,7 @@ export type ProductionDailyPublicCard = {
   prompt: string;
   positionFen: string;
   openingId: string;
+  playKey: string;
   side: "white" | "black";
   why: string;
   interaction: "move" | "choice";
