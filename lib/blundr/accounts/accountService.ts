@@ -1,4 +1,4 @@
-import { createDefaultDailyRetentionProgress, createDefaultRewardHistory, createDefaultStreakRecord, createDefaultTrainingProfile } from "./accountDefaults";
+import { createDefaultDailyRetentionProgress, createDefaultRewardHistory, createDefaultStreakRecord, createDefaultTrainingProfile, createDefaultUserRepertoire } from "./accountDefaults";
 import type {
   CurrentBlundrUser,
   DailyRetentionProgress,
@@ -14,7 +14,6 @@ import type { PersistenceResult } from "../persistence/persistenceTypes";
 import { getCurrentBlundrUser } from "./accountSession";
 import { readDailyRetentionProgress, readRewardHistory, readStreakRecord, readTrainingProfile, readUserRepertoire, saveDailyRetentionProgress, saveRewardHistory, saveStreakRecord, saveTrainingProfile, saveUserRepertoire } from "./accountRepository";
 import { syncLocalDemoStateToAccount as syncDailyStateToAccount } from "./accountSync";
-import { buildInitialRepertoireFromStarterPack } from "../onboarding/starterPacks";
 
 export type AccountServiceContext = {
   user?: CurrentBlundrUser | null;
@@ -74,11 +73,9 @@ export async function getOrCreateTrainingProfile(userId: string, context: Accoun
 
 export async function getOrCreateUserRepertoire(userId: string, context: AccountServiceContext = {}): Promise<PersistenceResult<UserRepertoire>> {
   const now = context.now ?? nowIso();
-  const fallback = buildInitialRepertoireFromStarterPack({
-    userId,
-    starterPackId: "classical_attacker",
-    now,
-  });
+  // Do not grant a starter pack merely because an account is authenticated.
+  // The confirmed onboarding service performs the idempotent initialization.
+  const fallback = createDefaultUserRepertoire(userId, now);
   return createOrUpdate(readUserRepertoire(userId, context), saveUserRepertoire, fallback, context);
 }
 

@@ -5,9 +5,7 @@ import {
   requireGameDataUser,
 } from "@/lib/blundr/gameData/gameDataService";
 import { getServerFeatureFlags } from "@/lib/blundr/contracts/serverFeatureFlags";
-import {
-  getStage2OpeningAvailability,
-} from "@/lib/blundr/openings/openingAvailability";
+import { getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
 import { getOpeningSide } from "@/lib/blundr/repertoire/repertoireOpeningPool";
 
 export const dynamic = "force-dynamic";

@@ -20,6 +20,7 @@ import { RealGameDataCard } from "@/components/onboarding/RealGameDataCard";
 import { StageComparisonCard } from "@/components/onboarding/StageComparisonCard";
 import { StarterPackSelector } from "@/components/onboarding/StarterPackSelector";
 import { WelcomeOnboardingScreen } from "@/components/onboarding/WelcomeOnboardingScreen";
+import { OnboardingV11Flow } from "@/components/onboarding/OnboardingV11Flow";
 import { ONBOARDING_COPY } from "@/lib/blundr/onboarding/onboardingCopy";
 import { getOnboardingAuthSession, isOnboardingAuthAvailable, signInForOnboarding, signUpForOnboarding } from "@/lib/blundr/onboarding/onboardingAuth";
 import { getDefaultDailyGoalPreset, getDailyGoalPresetById } from "@/lib/blundr/onboarding/dailyGoalPresets";
@@ -29,6 +30,7 @@ import { getRatingBandById, getRatingBandLabel, getRatingBandTrainingDescription
 import { getStarterPackById, getStarterPackOpeningIds, getDefaultStarterPack } from "@/lib/blundr/onboarding/starterPacks";
 import { getOnboardingStepIndex } from "@/lib/blundr/onboarding/onboardingSteps";
 import type { BlundrOnboardingState } from "@/lib/blundr/onboarding/onboardingTypes";
+import { isOnboardingV11Enabled } from "@/lib/blundr/onboarding/onboardingV11Flag";
 
 type BootstrapSnapshot = {
   userId: string;
@@ -231,7 +233,7 @@ function buildFinalSummary(state: BlundrOnboardingState): ReactNode {
   );
 }
 
-export default function OnboardingPage() {
+function LegacyOnboardingPage() {
   const router = useRouter();
   const startedRef = useRef(false);
   const [hydrated, setHydrated] = useState(false);
@@ -812,4 +814,8 @@ export default function OnboardingPage() {
       </div>
     </OnboardingShell>
   );
+}
+
+export default function OnboardingPage() {
+  return isOnboardingV11Enabled() ? <OnboardingV11Flow /> : <LegacyOnboardingPage />;
 }

@@ -39,6 +39,7 @@ export async function getCurrentBlundrUser(input: CurrentBlundrUserResolutionInp
       isAdmin: Boolean(input.userOverride.isAdmin),
       accessToken: input.userOverride.accessToken ?? null,
       provider: input.userOverride.provider ?? null,
+      age13Confirmed: Boolean(input.userOverride.age13Confirmed),
     };
   }
 
@@ -69,6 +70,7 @@ export async function getCurrentBlundrUser(input: CurrentBlundrUserResolutionInp
       isAdmin,
       accessToken,
       provider: user.app_metadata?.provider ?? null,
+      age13Confirmed: user.user_metadata?.age_13_confirmed === true,
     };
   } catch {
     return null;

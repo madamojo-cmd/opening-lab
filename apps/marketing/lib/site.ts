@@ -42,5 +42,6 @@ export const seo = {
 
 export function pageMetadata(path: keyof typeof seo, noindex = false) {
   const [title, description] = seo[path];
-  return { title, description, alternates: { canonical: `${SITE_URL}${path === "/" ? "/" : path}` }, robots: noindex || process.env.VERCEL_ENV === "preview" ? { index: false, follow: true } : { index: true, follow: true }, openGraph: { title, description, url: `${SITE_URL}${path}`, siteName: "Blundr", type: "website" }, twitter: { card: "summary", title, description } };
+  const preview = process.env.VERCEL_ENV === "preview" || process.env.VERCEL_ENV === "development";
+  return { title, description, alternates: { canonical: `${SITE_URL}${path === "/" ? "/" : path}` }, robots: noindex || preview ? { index: false, follow: false } : { index: true, follow: true }, openGraph: { title, description, url: `${SITE_URL}${path}`, siteName: "Blundr", type: "website" }, twitter: { card: "summary", title, description } };
 }

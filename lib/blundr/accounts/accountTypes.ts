@@ -196,6 +196,8 @@ export type CurrentBlundrUser = {
   isAdmin: boolean;
   accessToken?: string | null;
   provider?: string | null;
+  /** Server-validated sign-up metadata, never returned as a public profile. */
+  age13Confirmed?: boolean;
 };
 
 export type UserAccountBootstrap = {

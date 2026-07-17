@@ -32,7 +32,7 @@ export type AppShellNavItem = {
 export const APP_SHELL_NAV_ITEMS: readonly AppShellNavItem[] = [
   { key: "home", label: "Home", href: "/", icon: Home },
   { key: "train", label: "Train", href: "/train", icon: Target },
-  { key: "daily", label: "Daily", href: "/daily-blundr", icon: CalendarDays },
+  { key: "daily", label: "Daily", href: "/daily", icon: CalendarDays },
   { key: "review", label: "Review", href: "/review", icon: ListChecks },
   {
     key: "repertoire",
