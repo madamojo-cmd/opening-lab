@@ -26,6 +26,8 @@ export async function projectImportedFinding(
     {
       user_id: userId,
       position_key: finding.position.positionKey,
+      opening_id: finding.position.openingId,
+      play_key: finding.position.moveOrderKey,
       category: finding.category,
       score: finding.confidence,
       confidence: finding.confidence,
