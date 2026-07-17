@@ -17,7 +17,12 @@ export function OnboardingRouteGate({ children }: { children: ReactNode }) {
   const [checked, setChecked] = useState(false);
   const exempt = EXEMPT_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
   useEffect(() => {
-    if (!isOnboardingV11Enabled() || exempt || auth.status !== "authenticated") { setChecked(true); return; }
+    if (!isOnboardingV11Enabled() || exempt) { setChecked(true); return; }
+    if (auth.status === "signed_out") {
+      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+      return;
+    }
+    if (auth.status !== "authenticated") return;
     let active = true;
     void authenticatedApiFetch<{ ok: true; data: OnboardingV11State }>("/api/blundr/onboarding/v11", { cache: "no-store" })
       .then((response) => {
