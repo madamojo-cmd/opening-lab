@@ -36,8 +36,10 @@ export function OpeningDetailRouteClient({ openingId }: { openingId: string }) {
           error instanceof AuthenticatedApiError &&
             error.code === "authentication_required"
             ? "Sign in to view this opening's Mastery Map."
-            : error instanceof AuthenticatedApiError && error.status === 404
-              ? "This opening is locked or unavailable."
+            : error instanceof AuthenticatedApiError && error.status === 403
+              ? "Unlock this opening in your Repertoire to view its Mastery Map."
+              : error instanceof AuthenticatedApiError && error.status === 404
+                ? "This opening is not available."
               : "Opening intelligence is temporarily unavailable.",
         );
       });

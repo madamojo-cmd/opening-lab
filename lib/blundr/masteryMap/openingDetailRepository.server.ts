@@ -9,6 +9,7 @@ import {
   getOpeningDisplayName,
   getOpeningSide,
 } from "@/lib/blundr/repertoire/repertoireOpeningPool";
+import { getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
 import { buildMasteryMapReadModel } from "./masteryMapReadModel";
 import {
   joinOpeningTreeToMastery,
@@ -21,7 +22,8 @@ type DetailRequest = { request?: Request | null; openingId: string };
 export async function loadOpeningDetailReadModel(
   input: DetailRequest,
 ): Promise<MasteryMapReadModel | null> {
-  const openingId = input.openingId.trim();
+  const availability = getStage2OpeningAvailability(input.openingId.trim());
+  const openingId = availability?.openingId ?? input.openingId.trim();
   if (!openingId) return null;
   const user = await getCurrentBlundrUser({
     request: input.request,

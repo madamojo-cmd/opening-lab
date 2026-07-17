@@ -1,4 +1,5 @@
 import { buildInitialRepertoireFromStarterPack, getDefaultStarterPack, getStarterPackById } from "../onboarding/starterPacks";
+import { resolveStage2CanonicalOpeningId } from "../openings/openingIdentity";
 import { getEligibleRepertoireOpeningIds, buildLockedOpeningIds, getOpeningDisplayName, getOpeningSide } from "./repertoireOpeningPool";
 import { createRepertoirePointEvent, getPointAwardForSource } from "./repertoirePoints";
 import { createRepertoireUnlockEventId, normalizeRepertoireUnlockEvent, sortRepertoireUnlockEvents, getRepertoireUnlockSpendTotal, getRepertoirePointEventTotal, sortRepertoirePointEvents } from "./repertoireEvents";
@@ -87,7 +88,14 @@ export function createDefaultRepertoireProgress(args: {
 
 export function isOpeningUnlocked(progress: RepertoireProgress, openingId: string): boolean {
   const normalized = normalizeText(openingId);
-  return progress.unlockedOpeningIds.includes(normalized) || progress.unlockEvents.some((event) => event.openingId === normalized) || isStarterPackOpening(progress, normalized);
+  const canonical = resolveStage2CanonicalOpeningId(normalized) ?? normalized;
+  const canonicalize = (value: string) =>
+    resolveStage2CanonicalOpeningId(value) ?? normalizeText(value);
+  return (
+    progress.unlockedOpeningIds.some((value) => canonicalize(value) === canonical) ||
+    progress.unlockEvents.some((event) => canonicalize(event.openingId) === canonical) ||
+    isStarterPackOpening(progress, canonical)
+  );
 }
 
 export function earnRepertoirePoints(progress: RepertoireProgress, event: RepertoirePointEvent): RepertoireProgress {

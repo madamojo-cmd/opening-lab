@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createDefaultRepertoireProgress } from "@/lib/blundr/repertoire/repertoireUnlockService";
+import {
+  createDefaultRepertoireProgress,
+  isOpeningUnlocked,
+} from "@/lib/blundr/repertoire/repertoireUnlockService";
 import { evaluateOpeningAccess } from "../openingAccessPolicy";
 import { reprocessEligibleOnUnlock } from "../reprocessOnUnlock";
 test("opening access fails closed for unknown, wrong-side, and locked openings", () => {
@@ -60,5 +63,24 @@ test("opening access scopes unlock reprocessing by side", () => {
   assert.equal(
     reprocessEligibleOnUnlock([event], "italian-white", "black", access).length,
     0,
+  );
+});
+
+test("opening access accepts canonical runtime identity for persisted aliases", () => {
+  const repertoire = createDefaultRepertoireProgress({
+    userId: "user-a",
+    starterPackId: "solid_builder",
+  });
+  repertoire.unlockedOpeningIds = ["qg-white"];
+
+  assert.equal(isOpeningUnlocked(repertoire, "queens-gambit-white"), true);
+  assert.equal(
+    evaluateOpeningAccess({
+      userId: "user-a",
+      openingId: "qg-white",
+      repertoireSide: "white",
+      repertoire,
+    }).decision,
+    "active",
   );
 });
