@@ -1,0 +1,20 @@
+# Template only: do not place in .github/workflows or activate without owner approval.
+name: Blundr marketing Production (prebuilt)
+on:
+  workflow_dispatch:
+jobs:
+  deploy-production:
+    environment: marketing-production # protected GitHub Environment with manual approval
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/marketing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24.14.0, cache: npm, cache-dependency-path: apps/marketing/package-lock.json }
+      - run: npm ci --ignore-scripts
+      - run: npx --yes vercel@56.3.1 pull --yes --environment=production
+      - run: npx --yes vercel@56.3.1 build --prod
+      - run: test -f .vercel/output/config.json
+      - run: npx --yes vercel@56.3.1 deploy --prebuilt --prod

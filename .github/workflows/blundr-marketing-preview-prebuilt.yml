@@ -1,0 +1,75 @@
+name: Blundr marketing Preview (prebuilt)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/final-app-architecture-onboarding]
+    paths:
+      - "apps/marketing/**"
+      - ".github/workflows/blundr-marketing-preview-prebuilt.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/marketing
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.BLUNDR_MARKETING_VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+          cache-dependency-path: apps/marketing/package-lock.json
+      - name: Require isolated marketing deployment secrets
+        run: |
+          set -eu
+          for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            test -n "${!name:-}" || { echo "$name is required"; exit 1; }
+          done
+      - name: Install marketing dependencies
+        run: npm ci --ignore-scripts
+      - name: Verify package-local marketing build
+        env:
+          PUBLIC_APP_BASE_URL: https://blundr-staging.vercel.app
+        run: |
+          npm test
+          npm run build
+      - name: Pull Preview configuration and generate Build Output API artifacts
+        run: |
+          set -eu
+          npx --yes vercel@56.3.1 pull --yes --environment=preview --token="$VERCEL_TOKEN"
+          npx --yes vercel@56.3.1 build --token="$VERCEL_TOKEN"
+          test -f .vercel/output/config.json
+          test -d .vercel/output/static -o -d .vercel/output/functions
+          test ! -e "$GITHUB_WORKSPACE/.vercel/output/config.json"
+      - name: Deploy prebuilt Preview
+        id: deploy
+        run: |
+          set -eu
+          url="$(npx --yes vercel@56.3.1 deploy --prebuilt --archive=tgz --token="$VERCEL_TOKEN")"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Record immutable deployment traceability
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -eu
+          deployment_id="$(curl -fsS -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com/v13/deployments/${DEPLOYMENT_URL#https://}" | node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>console.log(JSON.parse(s).id))')"
+          {
+            echo "## Blundr marketing Preview"
+            echo "- Git SHA: $GITHUB_SHA"
+            echo "- Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "- Vercel CLI: $(npx --yes vercel@56.3.1 --version)"
+            echo "- Deployment ID: $deployment_id"
+            echo "- Preview URL: $DEPLOYMENT_URL"
+            echo "- Build Output API: .vercel/output/config.json verified"
+            echo "- Git metadata on prebuilt deployments is platform-dependent; this workflow run and SHA are the source-to-deployment record."
+          } >> "$GITHUB_STEP_SUMMARY"
