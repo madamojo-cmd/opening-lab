@@ -9,6 +9,9 @@ const isDeploymentBuild =
   process.env.CI === "true";
 const isPreviewDeployment =
   isDeploymentBuild && process.env.VERCEL_ENV === "preview";
+const hasRuntimeSentryDsn = Boolean(
+  process.env.NEXT_PUBLIC_SENTRY_DSN || process.env.SENTRY_DSN,
+);
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: projectRoot,
@@ -19,7 +22,24 @@ const nextConfig: NextConfig = {
     // build repeatable without allowing a multi-gigabyte cache to turn a
     // valid build into an ENOSPC failure. This does not disable source maps,
     // Sentry processing, or TypeScript checking.
-    if (!dev) config.cache = false;
+    // Keep caches out of the workspace filesystem (the original ENOSPC
+    // failure), but retain webpack's bounded in-process cache so a production
+    // compile does not repeatedly transform the same large client graph.
+    if (!dev) config.cache = { type: "memory" };
+    // Local release verification normally has no telemetry credentials. Do
+    // not compile Sentry's full client/server graph when telemetry is already
+    // disabled. Deployment builds (including Preview) and any configured
+    // local telemetry build retain the real SDK unchanged.
+    if (!dev && !isDeploymentBuild && !hasRuntimeSentryDsn) {
+      config.resolve ??= {};
+      config.resolve.alias = {
+        ...(config.resolve.alias ?? {}),
+        "@sentry/nextjs": path.resolve(
+          projectRoot,
+          "lib/blundr/telemetry/noopSentry.ts",
+        ),
+      };
+    }
     return config;
   },
   experimental: {
