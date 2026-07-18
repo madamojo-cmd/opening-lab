@@ -47,6 +47,8 @@ perf-*/
 *.diagnostic.json
 *.jsonl
 *.zip
+!docs/2026-06-17/stage2-approved-content-candidates-5openings-50lines-v1.zip
+!docs/2026-06-17/stage2-approved-content-candidates-batch2-5openings-v1.zip
 REVIEW_*.txt
 REVIEW_*.patch
 

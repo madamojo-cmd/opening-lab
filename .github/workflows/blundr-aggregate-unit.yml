@@ -33,6 +33,8 @@ jobs:
             data/blundr/stage2-approved-content-approved-batches2to4-16openings-v1
           test -f data/blundr/stage2-approved-content-approved-5openings-v1/approved-packets.jsonl
           test -f data/blundr/stage2-approved-content-approved-batches2to4-16openings-v1/approved-packets.jsonl
+      - name: Verify immutable approved Stage 2 source packages
+        run: node scripts/verify-stage2-approved-source-packages.mjs
       - uses: actions/setup-node@v4
         with:
           node-version: 24.14.0

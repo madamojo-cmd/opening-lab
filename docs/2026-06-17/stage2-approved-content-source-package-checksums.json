@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Immutable approved Stage 2 candidate packages required by server-reader and promotion regression tests.",
+  "packages": [
+    {
+      "path": "docs/2026-06-17/stage2-approved-content-candidates-5openings-50lines-v1.zip",
+      "bytes": 131490,
+      "sha256": "31c7cf23e7f27769c6cc146ca9d68a6a0eb15eccfc3efa221aca1b6e7cb116c2",
+      "packageId": "stage2-approved-content-candidates-5openings-50lines-v1",
+      "purpose": "Five-opening approved-content candidate source used by Stage 2 package server-reader, promotion, and app-validation tests.",
+      "dependentTests": [
+        "tests/coach/stage2ApprovedContentPackageServerReader.test.ts",
+        "tests/coach/stage2ApprovedPacketPromotion.test.ts",
+        "tests/coach/stage2CandidatePacketAppValidation.test.ts",
+        "tests/coach/stage2CandidatePacketLoad.test.ts"
+      ]
+    },
+    {
+      "path": "docs/2026-06-17/stage2-approved-content-candidates-batch2-5openings-v1.zip",
+      "bytes": 143290,
+      "sha256": "f55b6e178b88783d0ca0cad4bd0e517eb7ae29640288236320188923652463b7",
+      "packageId": "stage2-approved-content-candidates-batch2-5openings-v1",
+      "purpose": "Batch 2 approved-content candidate source used by Stage 2 multi-package promotion and app-validation tests.",
+      "dependentTests": [
+        "tests/coach/stage2ApprovedBatches2To4Promotion.test.ts",
+        "tests/coach/stage2CandidateBatches2To4AppValidation.test.ts",
+        "tests/coach/stage2CandidateMultiPackageLoad.test.ts"
+      ]
+    }
+  ]
+}
