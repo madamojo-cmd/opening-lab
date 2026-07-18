@@ -247,10 +247,12 @@ export async function saveOnboardingV11Step(
     if (!isMode(input.value)) throw new Error("invalid_training_mode");
     update.preferred_training_mode = input.value;
   }
-  if (input.ageConfirmed === true)
-    update.age_confirmed_at = existing.ageConfirmed
-      ? (existing.startedAt ?? now)
-      : now;
+  // The server-confirmed age acknowledgement is durable evidence. Repeated
+  // submissions must be idempotent and must never replace it with another
+  // onboarding timestamp.
+  if (input.ageConfirmed === true && !existing.ageConfirmed) {
+    update.age_confirmed_at = now;
+  }
   const { data, error } = await client
     .from("blundr_user_profiles")
     .update(update)
