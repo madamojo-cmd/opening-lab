@@ -3,7 +3,8 @@ name: Blundr marketing Preview (prebuilt)
 on:
   workflow_dispatch:
   push:
-    branches: [feat/final-app-architecture-onboarding]
+    branches:
+      - feat/final-app-architecture-onboarding
     paths:
       - "apps/marketing/**"
       - ".github/workflows/blundr-marketing-preview-prebuilt.yml"
