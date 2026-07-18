@@ -1,0 +1,66 @@
+name: Blundr aggregate unit validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/final-app-architecture-onboarding
+    paths:
+      - "scripts/run-node-tests.mjs"
+      - ".github/workflows/blundr-aggregate-unit.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blundr-aggregate-unit-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  aggregate-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+      - name: Install exact lockfile dependencies
+        run: npm ci
+      - name: Run authoritative aggregate unit command
+        id: aggregate
+        shell: bash
+        run: |
+          set -uo pipefail
+          log="$RUNNER_TEMP/blundr-aggregate-unit.log"
+          started="$(date +%s)"
+          set +e
+          npm run test:unit 2>&1 | tee "$log"
+          status="${PIPESTATUS[0]}"
+          set -e
+          ended="$(date +%s)"
+          duration="$((ended - started))"
+          count="$(grep -c '^✔ ' "$log" || true)"
+          {
+            echo "## Aggregate unit validation"
+            echo "- Git SHA: $GITHUB_SHA"
+            echo "- Command: \`npm run test:unit\`"
+            echo "- Passed test files reported: $count"
+            echo "- Exit code: $status"
+            echo "- Duration seconds: $duration"
+            echo "- Complete log artifact: blundr-aggregate-unit-$GITHUB_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
+          cp "$log" "$GITHUB_WORKSPACE/blundr-aggregate-unit.log"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "duration=$duration" >> "$GITHUB_OUTPUT"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          exit "$status"
+      - name: Upload aggregate unit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blundr-aggregate-unit-${{ github.sha }}
+          path: blundr-aggregate-unit.log
+          if-no-files-found: warn
+          retention-days: 30
