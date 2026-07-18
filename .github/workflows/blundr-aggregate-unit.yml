@@ -25,6 +25,14 @@ jobs:
         with:
           fetch-depth: 0
           lfs: true
+      - name: Materialize tracked Stage 2 test assets
+        run: |
+          set -eu
+          git checkout --force "$GITHUB_SHA" -- \
+            data/blundr/stage2-approved-content-approved-5openings-v1 \
+            data/blundr/stage2-approved-content-approved-batches2to4-16openings-v1
+          test -f data/blundr/stage2-approved-content-approved-5openings-v1/approved-packets.jsonl
+          test -f data/blundr/stage2-approved-content-approved-batches2to4-16openings-v1/approved-packets.jsonl
       - uses: actions/setup-node@v4
         with:
           node-version: 24.14.0
