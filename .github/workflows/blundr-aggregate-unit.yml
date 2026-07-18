@@ -22,12 +22,17 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
       - uses: actions/setup-node@v4
         with:
           node-version: 24.14.0
           cache: npm
       - name: Install exact lockfile dependencies
         run: npm ci
+      - name: Run architecture visual contract
+        run: npx vitest run tests/architecture/appShell.visual.test.ts
       - name: Run authoritative aggregate unit command
         id: aggregate
         shell: bash

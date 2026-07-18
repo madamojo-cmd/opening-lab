@@ -37,7 +37,12 @@ function stableShard(path) {
 async function collect(directory) {
   if (
     explicitRoots.length === 0 &&
-    ["tests/integration", "tests/security", "tests/e2e"].some(
+    [
+      "tests/architecture",
+      "tests/integration",
+      "tests/security",
+      "tests/e2e",
+    ].some(
       (prefix) => directory === prefix || directory.startsWith(`${prefix}/`),
     )
   ) {
