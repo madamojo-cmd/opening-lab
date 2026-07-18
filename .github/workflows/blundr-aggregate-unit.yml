@@ -56,12 +56,16 @@ jobs:
           set -e
           ended="$(date +%s)"
           duration="$((ended - started))"
-          count="$(grep -c '^✔ ' "$log" || true)"
+          total="$(sed -nE 's/^ℹ tests ([0-9]+)$/\1/p' "$log" | tail -n 1)"
+          passed="$(sed -nE 's/^ℹ pass ([0-9]+)$/\1/p' "$log" | tail -n 1)"
+          failed="$(sed -nE 's/^ℹ fail ([0-9]+)$/\1/p' "$log" | tail -n 1)"
           {
             echo "## Aggregate unit validation"
             echo "- Git SHA: $GITHUB_SHA"
             echo "- Command: \`npm run test:unit\`"
-            echo "- Passed test files reported: $count"
+            echo "- Individual tests: ${total:-unknown}"
+            echo "- Passed: ${passed:-unknown}"
+            echo "- Failed: ${failed:-unknown}"
             echo "- Exit code: $status"
             echo "- Duration seconds: $duration"
             echo "- Complete log artifact: blundr-aggregate-unit-$GITHUB_SHA"
@@ -69,7 +73,9 @@ jobs:
           cp "$log" "$GITHUB_WORKSPACE/blundr-aggregate-unit.log"
           echo "status=$status" >> "$GITHUB_OUTPUT"
           echo "duration=$duration" >> "$GITHUB_OUTPUT"
-          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "total=$total" >> "$GITHUB_OUTPUT"
+          echo "passed=$passed" >> "$GITHUB_OUTPUT"
+          echo "failed=$failed" >> "$GITHUB_OUTPUT"
           exit "$status"
       - name: Upload aggregate unit evidence
         if: always()
