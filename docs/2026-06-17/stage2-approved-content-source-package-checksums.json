@@ -26,6 +26,31 @@
         "tests/coach/stage2CandidateBatches2To4AppValidation.test.ts",
         "tests/coach/stage2CandidateMultiPackageLoad.test.ts"
       ]
+    },
+    {
+      "path": "docs/2026-06-17/stage2-approved-content-candidates-batch3-5openings-v1.zip",
+      "bytes": 125831,
+      "sha256": "69434e05070f9eb7c47837aee912773ef765ba478f499e201f629f9be0e56d87",
+      "packageId": "stage2-approved-content-candidates-batch3-5openings-v1",
+      "purpose": "Batch 3 approved-content candidate source used by Stage 2 multi-package promotion and app-validation tests.",
+      "dependentTests": [
+        "tests/coach/stage2ApprovedBatches2To4Promotion.test.ts",
+        "tests/coach/stage2CandidateBatches2To4AppValidation.test.ts",
+        "tests/coach/stage2CandidateMultiPackageLoad.test.ts"
+      ]
+    },
+    {
+      "path": "docs/2026-06-17/stage2-approved-content-candidates-batch4-6openings-v1-castling-normalized.zip",
+      "bytes": 132994,
+      "sha256": "ed374093eaea9f52e5111e1facbcc1765b8382f0ad58d5e6d4a11ac25a1b9471",
+      "packageId": "stage2-approved-content-candidates-batch4-6openings-v1-castling-normalized",
+      "purpose": "Castling-normalized Batch 4 approved-content candidate source used by Stage 2 multi-package promotion and app-validation tests.",
+      "dependentTests": [
+        "tests/coach/stage2ApprovedBatches2To4Promotion.test.ts",
+        "tests/coach/stage2CandidateBatches2To4AppValidation.test.ts",
+        "tests/coach/stage2CandidateMultiPackageLoad.test.ts",
+        "tests/coach/stage2ApprovedCastlingNormalization.test.ts"
+      ]
     }
   ]
 }
