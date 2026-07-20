@@ -20,6 +20,7 @@ assert.deepEqual(
 );
 
 const progress = createDefaultDailyRetentionProgress("user-1", "2026-07-03", undefined, now);
+assert.equal("id" in mapDailyRetentionRow(progress), false);
 assert.deepEqual(
   JSON.parse(JSON.stringify(mapDailyRetentionRowToModel(mapDailyRetentionRow(progress)))),
   JSON.parse(JSON.stringify(progress)),
@@ -35,6 +36,7 @@ assert.deepEqual(
   JSON.parse(JSON.stringify(mapOpeningUnlockProgressRowToModel(mapOpeningUnlockProgressRow(openingUnlockProgress)))),
   JSON.parse(JSON.stringify(openingUnlockProgress)),
 );
+assert.equal("id" in mapOpeningUnlockProgressRow(openingUnlockProgress), false);
 assert.equal(mapOpeningUnlockEventRow(openingUnlockEvent).opening_id, "open-1");
 assert.deepEqual(
   JSON.parse(JSON.stringify(mapStreakRecordRowToModel(mapStreakRecordRow(streak)))),

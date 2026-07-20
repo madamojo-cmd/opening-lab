@@ -63,7 +63,7 @@ type SupabaseRepertoireUnlockEventRow = {
 };
 
 type SupabaseDailyRetentionProgressRow = {
-  id: string;
+  id?: string;
   user_id: string;
   local_date: string;
   daily_tempo_goal: number;
@@ -89,7 +89,7 @@ type SupabaseDailyRetentionProgressRow = {
 };
 
 type SupabaseOpeningUnlockProgressRow = {
-  id: string;
+  id?: string;
   user_id: string;
   opening_id: string;
   points_earned: number;
@@ -293,7 +293,6 @@ function mapRepertoireUnlockEventRowToModel(row: SupabaseRepertoireUnlockEventRo
 
 function mapDailyRetentionRow(progress: DailyRetentionProgress): SupabaseDailyRetentionProgressRow {
   return {
-    id: `${progress.userId}:${progress.localDate}`,
     user_id: progress.userId,
     local_date: progress.localDate,
     daily_tempo_goal: Math.max(1, Number(progress.rings.dailyTempo.goal) || 1),
@@ -364,7 +363,6 @@ function mapDailyRetentionRowToModel(row: SupabaseDailyRetentionProgressRow | nu
 
 function mapOpeningUnlockProgressRow(progress: OpeningUnlockProgress): SupabaseOpeningUnlockProgressRow {
   return {
-    id: `${progress.userId}:${progress.openingId}`,
     user_id: progress.userId,
     opening_id: progress.openingId,
     points_earned: Math.max(0, Number(progress.pointsEarned) || 0),
