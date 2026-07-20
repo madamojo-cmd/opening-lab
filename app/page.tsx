@@ -151,7 +151,7 @@ import { shouldShowOnboarding } from "@/lib/blundr/onboarding/onboardingRouting"
 import { loadRepertoireProgress } from "@/lib/blundr/repertoire/repertoireProgressService";
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
 import { completeDailyRingActivity } from "@/lib/blundr/daily-rings/dailyRingService";
-import { isTempoCompletionEligible } from "@/lib/blundr/daily-rings/trainingCompletionEligibility";
+import { isBatteryCompletionEligible, isTempoCompletionEligible } from "@/lib/blundr/daily-rings/trainingCompletionEligibility";
 import type { DailyRingCompletionResultLike } from "@/lib/blundr/daily-rings/dailyRingTypes";
 import type { BlundrBoardPreferences } from "@/lib/blundr/board/boardThemeTypes";
 
@@ -5053,8 +5053,9 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     return()=>{cancelled=true};
   },[activeTab,bookComplete,branchCompleteEligibleNow,stage2TerminalProof.proven,trainingMode,selectedRepertoireId,runtimeTrainingSessionId,fen,repertoireProgress,onboardingProfile]);
   useEffect(()=>{
-    if(activeTab!=="train"||trainingMode!=="continuation"||!branchCompleteEligibleNow||!stage2TerminalProof.proven)return;
-    const completionKey=`${selectedRepertoireId}:${continuationSessionId??"continuation"}:${normalizeFen(fen)}:continuation_completed`;
+    const continuationMoveCompleted=isBatteryCompletionEligible({trainingMode,userEnteredContinuation:userExplicitlyEnteredContinuation,moveUci:lastContinuationUserMoveRating?.moveUci,legal:Boolean(lastContinuationUserMoveRating?.legal),stale:Boolean(lastContinuationUserMoveRating?.stale)});
+    if(activeTab!=="train"||!continuationMoveCompleted||!lastContinuationUserMoveRating)return;
+    const completionKey=`${selectedRepertoireId}:${continuationSessionId??"continuation"}:${lastContinuationUserMoveRating.evaluatedFenBeforeMove}:${lastContinuationUserMoveRating.moveUci}:continuation_completed`;
     if(continuationAwardKeyRef.current===completionKey)return;
     continuationAwardKeyRef.current=completionKey;
     let cancelled=false;
@@ -5088,7 +5089,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       });
     });
     return()=>{cancelled=true};
-  },[activeTab,trainingMode,branchCompleteEligibleNow,stage2TerminalProof.proven,selectedRepertoireId,continuationSessionId,fen,repertoireProgress,onboardingProfile]);
+  },[activeTab,trainingMode,userExplicitlyEnteredContinuation,lastContinuationUserMoveRating,selectedRepertoireId,continuationSessionId,repertoireProgress,onboardingProfile]);
   useEffect(()=>{
     if(activeTab!=="train"||trainingMode!=="restricted"||!isUserTurn||bookComplete||game.isGameOver())return;
     if(expectedMoveResolution.source==="guided_branch_needs_continuation"){
