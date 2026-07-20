@@ -34,7 +34,7 @@ async function readBody(request: NextRequest): Promise<Record<string, unknown>> 
 }
 
 export async function POST(request: NextRequest) {
-  const user = await getCurrentBlundrUser({ request, allowLocalFallback: true });
+  const user = await getCurrentBlundrUser({ request, allowLocalFallback: false });
   if (!user) {
     return NextResponse.json(
       {

@@ -44,6 +44,33 @@ export async function getCurrentBlundrUser(input: CurrentBlundrUserResolutionInp
   }
 
   const env = readBlundrBackendEnv();
+  const accessToken = parseBearerToken(input.request);
+  // A supplied bearer credential is authoritative. Validate it before
+  // considering local-demo fallback so authenticated writes cannot silently
+  // land in ephemeral server memory.
+  if (accessToken) {
+    const client = createBlundrSupabaseServerClient({ accessToken });
+    if (!client) return null;
+    try {
+      const { data, error } = await client.auth.getUser(accessToken);
+      if (error || !data?.user) return null;
+      const user = data.user;
+      const isAdmin = isBlundrAllowlistedUser({ userId: user.id, email: user.email }, env);
+      return {
+        userId: user.id,
+        email: user.email ?? null,
+        mode: isAdmin && env.devToolsEnabled ? "developer_admin" : "authenticated",
+        isAuthenticated: true,
+        isAdmin,
+        accessToken,
+        provider: user.app_metadata?.provider ?? null,
+        age13Confirmed: user.user_metadata?.age_13_confirmed === true,
+      };
+    } catch {
+      return null;
+    }
+  }
+
   const mode = resolveBlundrAccountMode({ env, allowLocalFallback: input.allowLocalFallback ?? true });
   if (mode === "local_demo") {
     const userId = getCurrentBlundrUserIdFallback();
@@ -53,28 +80,7 @@ export async function getCurrentBlundrUser(input: CurrentBlundrUserResolutionInp
     };
   }
 
-  const accessToken = parseBearerToken(input.request);
-  if (!accessToken) return null;
-  const client = createBlundrSupabaseServerClient({ accessToken });
-  if (!client) return null;
-  try {
-    const { data, error } = await client.auth.getUser(accessToken);
-    if (error || !data?.user) return null;
-    const user = data.user;
-    const isAdmin = isBlundrAllowlistedUser({ userId: user.id, email: user.email }, env);
-    return {
-      userId: user.id,
-      email: user.email ?? null,
-      mode: isAdmin && env.devToolsEnabled ? "developer_admin" : "authenticated",
-      isAuthenticated: true,
-      isAdmin,
-      accessToken,
-      provider: user.app_metadata?.provider ?? null,
-      age13Confirmed: user.user_metadata?.age_13_confirmed === true,
-    };
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 export function isCurrentBlundrUserLocalDemo(user: CurrentBlundrUser | null | undefined): boolean {
