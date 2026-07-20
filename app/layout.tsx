@@ -1,12 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import { BLUNDR_BRAND_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
 import { OnboardingRouteGate } from "@/components/auth/OnboardingRouteGate";
+import { AuthenticatedAccountHydrationGate } from "@/components/auth/AuthenticatedAccountHydrationGate";
 import { ResponsiveAppShellGate } from "@/components/architecture/ResponsiveAppShellGate";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Blundr",
-  description: "Controlled chess opening training with a GPT-powered intelligent board.",
+  description:
+    "Controlled chess opening training with a GPT-powered intelligent board.",
   manifest: "/manifest.json",
   icons: {
     icon: [
@@ -18,12 +20,29 @@ export const metadata: Metadata = {
   },
 };
 
-export const viewport: Viewport = { themeColor: "#166534", width: "device-width", initialScale: 1, maximumScale: 1 };
+export const viewport: Viewport = {
+  themeColor: "#166534",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+};
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
-      <body><ResponsiveAppShellGate><OnboardingRouteGate>{children}</OnboardingRouteGate></ResponsiveAppShellGate></body>
+      <body>
+        <ResponsiveAppShellGate>
+          <OnboardingRouteGate>
+            <AuthenticatedAccountHydrationGate>
+              {children}
+            </AuthenticatedAccountHydrationGate>
+          </OnboardingRouteGate>
+        </ResponsiveAppShellGate>
+      </body>
     </html>
   );
 }

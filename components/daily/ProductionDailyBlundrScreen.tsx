@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Home, RefreshCw, Settings, Sparkles } from "lucide-react";
 import {
   authenticatedApiFetch,
@@ -14,6 +14,13 @@ import type {
   ProductionDailyPublicCard,
   ProductionDailyPublicSession,
 } from "@/lib/blundr/daily/productionDailyTypes";
+import { recordBlundrTaskCompleted } from "@/lib/blundr/daily-rings/dailyRingGameplayEvents";
+import {
+  getLocalAccountCurrentUserId,
+  getLocalTrainingProfile,
+} from "@/lib/blundr/accounts/localAccountStorage";
+import { loadRepertoireProgress } from "@/lib/blundr/repertoire/repertoireProgressService";
+import { resolveProductionDailyCompletion } from "@/lib/blundr/daily/productionDailyCompletion";
 
 type DailyResponse = {
   dateKey: string;
@@ -23,6 +30,7 @@ type DailyResponse = {
 };
 
 export function ProductionDailyBlundrScreen() {
+  const completionRequests = useRef(new Set<string>());
   const [session, setSession] = useState<ProductionDailyPublicSession | null>(
     null,
   );
@@ -35,6 +43,8 @@ export function ProductionDailyBlundrScreen() {
     message: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [completionSyncFailed, setCompletionSyncFailed] = useState(false);
+  const [completionSyncAttempt, setCompletionSyncAttempt] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -70,6 +80,49 @@ export function ProductionDailyBlundrScreen() {
       ) ?? null
     );
   }, [session]);
+
+  useEffect(() => {
+    if (currentCard) return;
+    const completion = resolveProductionDailyCompletion(session);
+    if (!completion) return;
+
+    const userId = getLocalAccountCurrentUserId();
+    if (!userId) return;
+    const completionId = completion.completionId;
+    if (completionRequests.current.has(completionId)) return;
+    completionRequests.current.add(completionId);
+
+    void recordBlundrTaskCompleted({
+      userId,
+      dateKey: completion.dateKey,
+      deckId: completion.deckId,
+      reviewSessionId: completion.reviewSessionId,
+      taskId: completion.taskId,
+      completionId,
+      repertoireProgress: loadRepertoireProgress({ userId }),
+      profile: getLocalTrainingProfile(userId) ?? undefined,
+      now: completion.completedAt,
+    })
+      .then((result) => {
+        if (!result.ok) {
+          completionRequests.current.delete(completionId);
+          setCompletionSyncFailed(true);
+          setError(
+            "Daily completed, but its progress could not be saved. Retry to sync it.",
+          );
+          return;
+        }
+        setCompletionSyncFailed(false);
+        setError(null);
+      })
+      .catch(() => {
+        completionRequests.current.delete(completionId);
+        setCompletionSyncFailed(true);
+        setError(
+          "Daily completed, but its progress could not be saved. Retry to sync it.",
+        );
+      });
+  }, [completionSyncAttempt, currentCard, session]);
 
   async function action(kind: "attempt" | "reveal" | "retry", answer?: string) {
     if (!session || !currentCard) return;
@@ -163,12 +216,25 @@ export function ProductionDailyBlundrScreen() {
             >
               {error}
             </p>
-            <Link
-              href="/settings"
-              className="mt-4 inline-flex rounded-2xl bg-stone-950 px-4 py-3 text-sm font-black text-white"
-            >
-              Open Settings
-            </Link>
+            {completionSyncFailed ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setCompletionSyncAttempt((value) => value + 1);
+                }}
+                className="mt-4 inline-flex rounded-2xl bg-stone-950 px-4 py-3 text-sm font-black text-white"
+              >
+                Retry progress sync
+              </button>
+            ) : (
+              <Link
+                href="/settings"
+                className="mt-4 inline-flex rounded-2xl bg-stone-950 px-4 py-3 text-sm font-black text-white"
+              >
+                Open Settings
+              </Link>
+            )}
           </section>
         ) : null}
         {!error && !session ? (

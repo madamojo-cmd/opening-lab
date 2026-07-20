@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getAccountPersistenceAdapter } from "@/lib/blundr/accounts/accountRepository";
 import { getCurrentBlundrUser } from "@/lib/blundr/accounts/accountSession";
-import type { DailyRetentionProgress, StreakRecord } from "@/lib/blundr/accounts/accountTypes";
+import type {
+  DailyRetentionProgress,
+  StreakRecord,
+} from "@/lib/blundr/accounts/accountTypes";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +13,9 @@ function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function isDailyRetentionProgress(value: unknown): value is DailyRetentionProgress {
+function isDailyRetentionProgress(
+  value: unknown,
+): value is DailyRetentionProgress {
   return Boolean(
     value &&
       typeof value === "object" &&
@@ -21,20 +26,32 @@ function isDailyRetentionProgress(value: unknown): value is DailyRetentionProgre
 }
 
 function isStreakRecord(value: unknown): value is StreakRecord {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value) && typeof (value as StreakRecord).userId === "string");
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      typeof (value as StreakRecord).userId === "string",
+  );
 }
 
-async function readBody(request: NextRequest): Promise<Record<string, unknown>> {
+async function readBody(
+  request: NextRequest,
+): Promise<Record<string, unknown>> {
   try {
     const body = await request.json();
-    return body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+    return body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
+      : {};
   } catch {
     return {};
   }
 }
 
 export async function POST(request: NextRequest) {
-  const user = await getCurrentBlundrUser({ request, allowLocalFallback: false });
+  const user = await getCurrentBlundrUser({
+    request,
+    allowLocalFallback: false,
+  });
   if (!user) {
     return NextResponse.json(
       {
@@ -49,8 +66,12 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await readBody(request);
-  const dayRecord = isDailyRetentionProgress(body.dayRecord) ? body.dayRecord : null;
-  const streakRecord = isStreakRecord(body.streakRecord) ? body.streakRecord : null;
+  const dayRecord = isDailyRetentionProgress(body.dayRecord)
+    ? body.dayRecord
+    : null;
+  const streakRecord = isStreakRecord(body.streakRecord)
+    ? body.streakRecord
+    : null;
   if (!dayRecord || !streakRecord) {
     return NextResponse.json(
       {
@@ -64,7 +85,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (normalizeText(dayRecord.userId) && normalizeText(dayRecord.userId) !== user.userId) {
+  if (
+    normalizeText(dayRecord.userId) &&
+    normalizeText(dayRecord.userId) !== user.userId
+  ) {
     return NextResponse.json(
       {
         ok: false,
@@ -77,7 +101,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (normalizeText(streakRecord.userId) && normalizeText(streakRecord.userId) !== user.userId) {
+  if (
+    normalizeText(streakRecord.userId) &&
+    normalizeText(streakRecord.userId) !== user.userId
+  ) {
     return NextResponse.json(
       {
         ok: false,
@@ -94,7 +121,7 @@ export async function POST(request: NextRequest) {
     user,
     accessToken: user.accessToken ?? null,
     mode: user.mode,
-    allowLocalFallback: true,
+    allowLocalFallback: false,
   });
 
   const progressSave = await adapter.upsertDailyRetentionProgress({

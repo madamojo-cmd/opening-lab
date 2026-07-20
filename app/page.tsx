@@ -143,8 +143,8 @@ import { analyzeBlundrPosition } from "@/lib/blundr/brain/analyzeBlundrPosition"
 import { appendDebugEvent } from "@/lib/blundr/debug/trainerDebugEventLog";
 import { isBlundrDebugEnabled } from "@/lib/blundr/debug/trainerDebugGuards";
 import type { DebugEvent, TrainerDebugSnapshot } from "@/lib/blundr/debug/trainerDebugTypes";
-import type { UserAccountBootstrap, UserTrainingProfile } from "@/lib/blundr/accounts/accountTypes";
-import { getLocalAccountCurrentUserId, getLocalTrainingProfile, setLocalAccountCurrentUserId, upsertLocalDailyRetentionProgress, upsertLocalRewardHistory, upsertLocalStreakRecord, upsertLocalTrainingProfile, upsertLocalUserRepertoire } from "@/lib/blundr/accounts/localAccountStorage";
+import type { UserTrainingProfile } from "@/lib/blundr/accounts/accountTypes";
+import { getLocalAccountCurrentUserId, getLocalTrainingProfile } from "@/lib/blundr/accounts/localAccountStorage";
 import { BLUNDR_BOARD_PREFERENCES_CHANGED_EVENT } from "@/lib/blundr/board/boardPreferenceEvents";
 import { readLocalBoardPreferences, writeLocalBoardPreferences } from "@/lib/blundr/board/boardPreferenceService";
 import { shouldShowOnboarding } from "@/lib/blundr/onboarding/onboardingRouting";
@@ -154,7 +154,6 @@ import { completeDailyRingActivity } from "@/lib/blundr/daily-rings/dailyRingSer
 import { isBatteryCompletionEligible, isTempoCompletionEligible } from "@/lib/blundr/daily-rings/trainingCompletionEligibility";
 import type { DailyRingCompletionResultLike } from "@/lib/blundr/daily-rings/dailyRingTypes";
 import type { BlundrBoardPreferences } from "@/lib/blundr/board/boardThemeTypes";
-import { useOnboardingAuthSession } from "@/lib/blundr/onboarding/useOnboardingAuthSession";
 
 const BlundrDiagnosticsPanel = dynamic(
   () => import("@/components/debug/BlundrDiagnosticsPanel").then((mod) => mod.BlundrDiagnosticsPanel),
@@ -1290,7 +1289,6 @@ async function runBrowserStockfish(fen:string,skill:number,movetime=750,multiPv=
 }
 
 function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTab?: Tab; initialOpeningId?: string | null }){
-  const auth = useOnboardingAuthSession();
   const router = useRouter();
   const initialFen=useMemo(()=>new Chess().fen(),[]);
   const [trainingSessionId] = useState(()=>createLearningSessionId());
@@ -1304,7 +1302,6 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
   },[initialOpeningId,runtimeOpeningSelection.selectedOpeningId]);
   const [activeTab,setActiveTab]=useState<Tab>(initialTab);
   const [onboardingProfile,setOnboardingProfile]=useState<UserTrainingProfile | null>(null);
-  const [accountHydrated,setAccountHydrated]=useState(false);
   const [repertoireProgress,setRepertoireProgress]=useState<RepertoireProgress>(()=>loadRepertoireProgress({userId:getLocalAccountCurrentUserId()}));
   const [latestCompletionResult,setLatestCompletionResult]=useState<DailyRingCompletionResultLike | null>(null);
   const [customRepertoires,setCustomRepertoires]=useState<Repertoire[]>([]);
@@ -4465,38 +4462,6 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     setRepertoireProgress(loadRepertoireProgress({userId:currentUserId}));
   },[]);
   useEffect(()=>{
-    if(auth.status==="signed_out"){
-      setAccountHydrated(true);
-      return;
-    }
-    if(auth.status!=="authenticated"||!auth.session?.accessToken){
-      setAccountHydrated(false);
-      return;
-    }
-    setAccountHydrated(false);
-    let active=true;
-    void fetch("/api/blundr/account/bootstrap",{
-      method:"POST",
-      headers:{authorization:`Bearer ${auth.session.accessToken}`},
-      cache:"no-store",
-    }).then(async(response)=>{
-      const payload=await response.json().catch(()=>null) as {ok?:boolean;data?:UserAccountBootstrap}|null;
-      if(!active||!response.ok||!payload?.ok||!payload.data)return;
-      const snapshot=payload.data;
-      setLocalAccountCurrentUserId(snapshot.user.userId);
-      upsertLocalTrainingProfile(snapshot.profile);
-      upsertLocalUserRepertoire(snapshot.repertoire);
-      upsertLocalStreakRecord(snapshot.streakRecord);
-      upsertLocalRewardHistory(snapshot.rewardHistory);
-      upsertLocalDailyRetentionProgress(snapshot.dailyRetentionProgress);
-      setOnboardingProfile(snapshot.profile);
-      setRepertoireProgress(loadRepertoireProgress({userId:snapshot.user.userId}));
-      setAccountHydrated(true);
-      window.dispatchEvent(new Event(BLUNDR_DAILY_RING_REFRESH_EVENT));
-    }).catch(()=>undefined);
-    return()=>{active=false};
-  },[auth.status,auth.session?.accessToken]);
-  useEffect(()=>{
     if(typeof window==="undefined")return;
     const loaded=loadCoachUtteranceMemory(window.localStorage);
     const meta=readCoachUtteranceMemoryMeta(window.localStorage);
@@ -7297,9 +7262,6 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
         }}
       />
     );
-  }
-  if (!accountHydrated) {
-    return <main className="blundr-page-bg min-h-screen px-4 py-8 text-stone-950"><div className="mx-auto max-w-md rounded-3xl border border-stone-200 bg-white p-6 shadow-sm"><div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">Blundr</div><h1 className="mt-2 text-xl font-black">Loading your training progress</h1><p className="mt-2 text-sm text-stone-600">Confirming your repertoire, rings, and account state.</p></div></main>;
   }
   if (activeTab === "review") {
     return <ReviewHub />;
