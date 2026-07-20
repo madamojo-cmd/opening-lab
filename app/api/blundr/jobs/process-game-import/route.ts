@@ -6,6 +6,7 @@ import { processGameImportBatch } from "@/lib/blundr/gameData/jobs/processGameIm
 import { loadTrainingRuntimePackage } from "@/lib/blundr/trainingRuntime/trainingRuntimeLoader";
 import { loadOpeningAccess } from "@/lib/blundr/gameData/gameDataService";
 import { isGameDataWorkerEnabled } from "@/lib/blundr/gameData/featureFlags";
+import { buildSuccessfulProviderSyncAccount } from "@/lib/blundr/gameData/providerAccountSync";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,9 @@ async function processJobs(request: Request) {
       access: (userId, openingId, side) =>
         access.get({ userId, openingId, repertoireSide: side }),
     });
+    await accounts.upsert(
+      buildSuccessfulProviderSyncAccount(account, new Date().toISOString()),
+    );
     results.push({
       jobId: leased.id,
       status: result.status,

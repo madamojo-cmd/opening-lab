@@ -6,6 +6,8 @@ import {
 } from "@/lib/blundr/gameData/gameDataService";
 import { appendLearningEventV2 } from "@/lib/blundr/learning/core/learningEventService.server";
 import { getOpeningSide } from "@/lib/blundr/repertoire/repertoireOpeningPool";
+import { resolveVerifiedRuntimeLearningPosition } from "@/lib/blundr/learning/core/runtimeLearningPosition.server";
+import { resolveLearningEventAttemptId } from "@/lib/blundr/learning/core/learningEventRequest";
 
 export const dynamic = "force-dynamic";
 
@@ -18,15 +20,18 @@ export async function POST(request: Request) {
     );
   const body = (await request.json().catch(() => null)) as {
     eventId?: string;
+    id?: string;
     sessionId?: string;
     type?: string;
     createdAt?: string;
     fen?: string;
     openingId?: string;
+    moveOrderKey?: string;
     expectedMoveUci?: string;
     playedMoveUci?: string;
   } | null;
-  if (!body?.eventId || !body.sessionId || !body.fen || !body.type)
+  const eventId = resolveLearningEventAttemptId(body);
+  if (!eventId || !body?.sessionId || !body.fen || !body.type)
     return NextResponse.json(
       { error: "invalid_learning_event" },
       { status: 400 },
@@ -39,19 +44,31 @@ export async function POST(request: Request) {
         : body.type === "cue_revealed"
           ? "cue_revealed"
           : "move_attempted";
-  const position = createPositionIdentity({
-    canonicalFen: body.fen,
-    openingId: body.openingId ?? null,
-    expectedMoveUci: body.expectedMoveUci ?? null,
-    repertoireSide: "unknown",
-  });
   try {
+    const verified = await resolveVerifiedRuntimeLearningPosition({
+      openingId: body.openingId ?? null,
+      moveOrderKey: body.moveOrderKey ?? null,
+      canonicalFen: body.fen,
+      expectedMoveUci: body.expectedMoveUci ?? null,
+    });
+    if (!verified)
+      return NextResponse.json(
+        { error: "runtime_position_unverified" },
+        { status: 422 },
+      );
     const side =
-      getOpeningSide(body.openingId ?? "") === "black" ? "black" : "white";
+      getOpeningSide(verified.openingId) === "black" ? "black" : "white";
+    const position = createPositionIdentity({
+      canonicalFen: verified.canonicalFen,
+      openingId: verified.openingId,
+      expectedMoveUci: verified.expectedMoveUci,
+      repertoireSide: side,
+      moveOrderKey: verified.moveOrderKey,
+    });
     const access = await loadOpeningAccess(user);
     const snapshot = access.get({
       userId: user.userId,
-      openingId: body.openingId ?? "unknown",
+      openingId: verified.openingId,
       repertoireSide: side,
     });
     if (snapshot.decision !== "active")
@@ -59,7 +76,7 @@ export async function POST(request: Request) {
     const result = await appendLearningEventV2({
       userId: user.userId,
       sessionId: body.sessionId,
-      attemptId: body.eventId,
+      attemptId: eventId,
       source: "train",
       taxonomy,
       position: { ...position, repertoireSide: side },

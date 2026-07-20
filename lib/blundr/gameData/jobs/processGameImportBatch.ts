@@ -17,6 +17,7 @@ import type {
 import type { TrainingRuntimePackage } from "@/lib/blundr/trainingRuntime/trainingRuntimeLoader";
 import type { ProviderRequestBounds } from "../gameDataTypes";
 import type { RawProviderGame } from "../gameNormalizer";
+import { createRuntimeEvidenceIndices } from "@/lib/blundr/trainingRuntime/runtimeEvidenceIndices";
 import type {
   ProviderAccountRecord,
   GameImportJob,
@@ -57,6 +58,10 @@ export async function processGameImportBatch(
   const games = deps.games ?? new ExternalGameRepository();
   const now = deps.now ?? (() => new Date());
   const maxGames = Math.min(Math.max(deps.maxGames ?? 25, 1), 100);
+  const runtimeIndices = createRuntimeEvidenceIndices(
+    deps.runtime.nodes,
+    deps.runtime.candidates,
+  );
   await jobs.update(job.id, { status: "running" });
   let counts: ImportMetrics = job.counts;
   const acceptedGames = [] as ReturnType<typeof normalizeProviderGame>[];
@@ -111,7 +116,7 @@ export async function processGameImportBatch(
         game,
         segment,
         plies: replay.plies,
-        nodes: deps.runtime.nodes,
+        trainer: runtimeIndices.trainer,
         access,
       });
       for (const finding of findings) {

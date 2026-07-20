@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ChessComClient } from "../providers/chessCom";
+import { adaptChessComGame } from "../providers/chessCom/chessComGameAdapter";
 import { boundedArchiveMonths } from "../providers/chessCom";
 import { chessComRetryDecision } from "../providers/chessCom";
 import { parseLichessNdjson } from "../providers/lichess";
@@ -12,9 +13,49 @@ import { extractDeterministicFindings } from "../findingExtractor";
 import { dedupeFindings } from "../findingDedupe";
 import { normalizeProviderUsername } from "../gameFingerprint";
 import { InMemoryImportJobRepository } from "../inMemoryImportJobRepository";
-import type { RuntimeOpeningNode } from "@/lib/blundr/trainingRuntime/trainingRuntimeSchema";
+import { buildImportedFindingLearningEventInput } from "../importedFindingProjection";
+import { buildSuccessfulProviderSyncAccount } from "../providerAccountSync";
+import type {
+  RuntimeCandidateMove,
+  RuntimeOpeningNode,
+} from "@/lib/blundr/trainingRuntime/trainingRuntimeSchema";
+import { createRuntimeEvidenceIndices } from "@/lib/blundr/trainingRuntime/runtimeEvidenceIndices";
 
 const pgn = `[Event "fixture"]\n[White "alice"]\n[Black "bob"]\n[Result "1-0"]\n\n1. d4 d5 2. c4 e6`;
+const divergentPgn = `[Event "fixture"]\n[White "alice"]\n[Black "bob"]\n[Result "1-0"]\n\n1. d4 d5 2. f3 e6`;
+
+function trainerFixture(openingId = "london-white") {
+  const nodes: RuntimeOpeningNode[] = [
+    {
+      nodeId: "parent",
+      openingId,
+      playKey: "d2d4,d7d5",
+      playSequenceUci: "d2d4,d7d5",
+      ply: 2,
+      sideToMove: "white",
+    },
+    {
+      nodeId: "child",
+      openingId,
+      playKey: "d2d4,d7d5,c2c4",
+      playSequenceUci: "d2d4,d7d5,c2c4",
+      ply: 3,
+      sideToMove: "black",
+    },
+  ];
+  const candidates: RuntimeCandidateMove[] = [
+    {
+      openingId,
+      playKeyBefore: "d2d4,d7d5",
+      moveUci: "c2c4",
+      rank: 1,
+    },
+  ];
+  return {
+    nodes,
+    trainer: createRuntimeEvidenceIndices(nodes, candidates).trainer,
+  };
+}
 
 test("PGN replay records exact pre-move FEN and player color", () => {
   const replay = replayPgn(pgn, "white");
@@ -29,10 +70,69 @@ test("PGN replay records exact pre-move FEN and player color", () => {
   assert.equal(replay.plies[1].isPlayerMove, false);
 });
 
-test("golden provider fixture normalizes, matches, and produces one deterministic finding", () => {
+test("golden provider fixture matches a node-backed position and produces one deterministic finding", () => {
   const game = normalizeProviderGame({
     provider: "lichess",
     externalId: "abc",
+    username: "Alice",
+    white: "alice",
+    black: "bob",
+    playedAt: "2026-07-14T00:00:00Z",
+    result: "1-0",
+    timeControl: "rapid",
+    rated: true,
+    variant: "standard",
+    pgn: divergentPgn,
+    moves: ["d2d4", "d7d5", "f2f3", "e7e6"],
+  });
+  assert.ok(game);
+  if (!game) return;
+  const replay = replayPgn(game.pgn, game.playerColor);
+  assert.equal(replay.ok, true);
+  if (!replay.ok) return;
+  const runtime = trainerFixture();
+  const access = {
+    openingId: "london-white",
+    repertoireSide: "white" as const,
+    decision: "active" as const,
+    checkedAt: new Date().toISOString(),
+    authorityVersion: "test",
+    expiresAt: null,
+  };
+  const segments = matchOpeningSegments({
+    game,
+    plies: replay.plies,
+    nodes: runtime.nodes,
+    access: () => access,
+  });
+  assert.equal(segments.length, 1);
+  const findings = extractDeterministicFindings({
+    userId: "user-a",
+    game,
+    segment: segments[0],
+    plies: replay.plies,
+    trainer: runtime.trainer,
+    access,
+  });
+  assert.equal(dedupeFindings([...findings, ...findings]).length, 1);
+  assert.equal(findings[0].status, "active");
+  assert.equal(findings[0].position.expectedMoveUci, "c2c4");
+  assert.equal(findings[0].position.moveOrderKey, "d2d4,d7d5");
+  const projection = buildImportedFindingLearningEventInput(
+    "user-a",
+    findings[0],
+  );
+  assert.equal(projection?.source, "imported_game");
+  assert.equal(projection?.taxonomy, "move_incorrect");
+  assert.equal(projection?.position.openingId, "london-white");
+  assert.equal(projection?.position.moveOrderKey, "d2d4,d7d5");
+  assert.equal(projection?.correct, false);
+});
+
+test("approved and candidate-only moves do not create false imported findings", () => {
+  const game = normalizeProviderGame({
+    provider: "lichess",
+    externalId: "correct",
     username: "Alice",
     white: "alice",
     black: "bob",
@@ -49,14 +149,7 @@ test("golden provider fixture normalizes, matches, and produces one deterministi
   const replay = replayPgn(game.pgn, game.playerColor);
   assert.equal(replay.ok, true);
   if (!replay.ok) return;
-  const node: RuntimeOpeningNode = {
-    nodeId: "node-1",
-    openingId: "london-white",
-    playKey: replay.plies[0].fenBefore.split(" ").slice(0, 4).join(" "),
-    playSequenceUci: "e2e4",
-    ply: 0,
-    sideToMove: "white",
-  };
+  const runtime = trainerFixture();
   const access = {
     openingId: "london-white",
     repertoireSide: "white" as const,
@@ -65,24 +158,75 @@ test("golden provider fixture normalizes, matches, and produces one deterministi
     authorityVersion: "test",
     expiresAt: null,
   };
-  const segments = matchOpeningSegments({
+  const segment = matchOpeningSegments({
     game,
     plies: replay.plies,
-    nodes: [node],
+    nodes: runtime.nodes,
     access: () => access,
+  })[0];
+  assert.deepEqual(
+    extractDeterministicFindings({
+      userId: "user-a",
+      game,
+      segment,
+      plies: replay.plies,
+      trainer: runtime.trainer,
+      access,
+    }),
+    [],
+  );
+
+  const candidateOnly = createRuntimeEvidenceIndices(runtime.nodes, [
+    {
+      openingId: "london-white",
+      playKeyBefore: "d2d4,d7d5",
+      moveUci: "f2f3",
+      rank: 2,
+    },
+  ]).trainer;
+  assert.equal(
+    candidateOnly.childMovesByParent.get("london-white:d2d4,d7d5")?.length ?? 0,
+    0,
+  );
+  const candidateOnlyGame = normalizeProviderGame({
+    provider: "lichess",
+    externalId: "candidate-only",
+    username: "Alice",
+    white: "alice",
+    black: "bob",
+    playedAt: "2026-07-14T00:00:00Z",
+    result: "1-0",
+    timeControl: "rapid",
+    rated: true,
+    variant: "standard",
+    pgn: divergentPgn,
+    moves: ["d2d4", "d7d5", "f2f3", "e7e6"],
   });
-  assert.equal(segments.length, 1);
-  const findings = extractDeterministicFindings({
-    userId: "user-a",
-    game,
-    segment: segments[0],
-    plies: replay.plies,
-    nodes: [node],
-    access,
-  });
-  assert.equal(dedupeFindings([...findings, ...findings]).length, 1);
-  assert.equal(findings[0].status, "active");
-  assert.equal(findings[0].position.expectedMoveUci, "e2e4");
+  assert.ok(candidateOnlyGame);
+  if (!candidateOnlyGame) return;
+  const candidateReplay = replayPgn(
+    candidateOnlyGame.pgn,
+    candidateOnlyGame.playerColor,
+  );
+  assert.equal(candidateReplay.ok, true);
+  if (!candidateReplay.ok) return;
+  const candidateSegment = matchOpeningSegments({
+    game: candidateOnlyGame,
+    plies: candidateReplay.plies,
+    nodes: runtime.nodes,
+    access: () => access,
+  })[0];
+  assert.deepEqual(
+    extractDeterministicFindings({
+      userId: "user-a",
+      game: candidateOnlyGame,
+      segment: candidateSegment,
+      plies: candidateReplay.plies,
+      trainer: candidateOnly,
+      access,
+    }),
+    [],
+  );
 });
 
 test("locked matching segment stays gated and cannot become an active finding", () => {
@@ -95,22 +239,15 @@ test("locked matching segment stays gated and cannot become an active finding", 
     playedAt: "2026-07-14T00:00:00Z",
     result: "1-0",
     variant: "standard",
-    pgn,
-    moves: ["d2d4"],
+    pgn: divergentPgn,
+    moves: ["d2d4", "d7d5", "f2f3", "e7e6"],
   });
   assert.ok(game);
   if (!game) return;
   const replay = replayPgn(game.pgn, game.playerColor);
   assert.equal(replay.ok, true);
   if (!replay.ok) return;
-  const node: RuntimeOpeningNode = {
-    nodeId: "node-1",
-    openingId: "locked-opening",
-    playKey: replay.plies[0].fenBefore.split(" ").slice(0, 4).join(" "),
-    playSequenceUci: "e2e4",
-    ply: 0,
-    sideToMove: "white",
-  };
+  const runtime = trainerFixture("locked-opening");
   const access = {
     openingId: "locked-opening",
     repertoireSide: "white" as const,
@@ -122,7 +259,7 @@ test("locked matching segment stays gated and cannot become an active finding", 
   const segment = matchOpeningSegments({
     game,
     plies: replay.plies,
-    nodes: [node],
+    nodes: runtime.nodes,
     access: () => access,
   })[0];
   const findings = extractDeterministicFindings({
@@ -130,7 +267,7 @@ test("locked matching segment stays gated and cannot become an active finding", 
     game,
     segment,
     plies: replay.plies,
-    nodes: [node],
+    trainer: runtime.trainer,
     access,
   });
   assert.equal(segment.accessState, "gated_pending");
@@ -151,6 +288,29 @@ test("Chess.com client sends conditional headers and handles 304", async () => {
   const headers = calls[0].headers as Record<string, string>;
   assert.equal(headers["If-None-Match"], "etag-1");
   assert.equal(headers["If-Modified-Since"], "yesterday");
+});
+
+test("Chess.com adapter accepts the public API nested player shape", () => {
+  const game = adaptChessComGame(
+    {
+      uuid: "game-1",
+      white: { username: "Alice", result: "win", rating: 1500 },
+      black: { username: "Bob", result: "checkmated", rating: 1490 },
+      rules: "chess",
+      time_control: "600",
+      end_time: 1_784_000_000,
+      rated: true,
+      pgn,
+    },
+    "alice",
+  );
+  assert.ok(game);
+  assert.equal(game.white, "Alice");
+  assert.equal(game.black, "Bob");
+  assert.equal(game.result, "1-0");
+  assert.equal(game.variant, "standard");
+  assert.deepEqual(game.moves, ["d2d4", "d7d5", "c2c4", "e7e6"]);
+  assert.ok(normalizeProviderGame(game));
 });
 
 test("Lichess parser accepts CRLF and records split across chunks", async () => {
@@ -240,4 +400,27 @@ test("in-memory import jobs deduplicate concurrent sync requests and lease takeo
       new Date("2026-01-01T00:02:00Z"),
     ),
   );
+});
+
+test("a completed provider worker records a truthful successful sync timestamp", () => {
+  const synced = buildSuccessfulProviderSyncAccount(
+    {
+      id: "account-1",
+      userId: "user-1",
+      provider: "chesscom",
+      username: "alice",
+      externalPlayerId: null,
+      verificationState: "retryable_error",
+      connectedAt: "2026-07-01T00:00:00.000Z",
+      lastSuccessfulSyncAt: null,
+      nextEligibleSyncAt: null,
+      sanitizedErrorCode: "provider_unavailable",
+      createdAt: "2026-07-01T00:00:00.000Z",
+      updatedAt: "2026-07-01T00:00:00.000Z",
+    },
+    "2026-07-20T12:00:00.000Z",
+  );
+  assert.equal(synced.verificationState, "verified");
+  assert.equal(synced.lastSuccessfulSyncAt, "2026-07-20T12:00:00.000Z");
+  assert.equal(synced.sanitizedErrorCode, null);
 });

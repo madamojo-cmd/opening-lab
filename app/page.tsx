@@ -4195,6 +4195,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       fen,
       openingId:canonicalSelectedRepertoireId,
       openingName:repertoire.name,
+      moveOrderKey:trainingMode==="restricted"?(runtimePlayKeyBeforeForFrame??undefined):undefined,
       trainerView,
       trainingMode,
       moveQualityStatus:moveQuality?.status,

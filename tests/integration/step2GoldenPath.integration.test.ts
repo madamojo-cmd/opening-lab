@@ -4,11 +4,15 @@ import { replayPgn } from "@/lib/blundr/gameData/pgnReplay";
 import { matchOpeningSegments } from "@/lib/blundr/gameData/openingSegmentMatcher";
 import { extractDeterministicFindings } from "@/lib/blundr/gameData/findingExtractor";
 import { dedupeFindings } from "@/lib/blundr/gameData/findingDedupe";
-import type { RuntimeOpeningNode } from "@/lib/blundr/trainingRuntime/trainingRuntimeSchema";
+import type {
+  RuntimeCandidateMove,
+  RuntimeOpeningNode,
+} from "@/lib/blundr/trainingRuntime/trainingRuntimeSchema";
+import { createRuntimeEvidenceIndices } from "@/lib/blundr/trainingRuntime/runtimeEvidenceIndices";
 
 describe("Step 2 trusted end-to-end fixture loop", () => {
   it("keeps duplicate games/findings singular and gates locked openings", () => {
-    const pgn = `[White "alice"]\n[Black "bob"]\n[Result "1-0"]\n\n1. d4 d5`;
+    const pgn = `[White "alice"]\n[Black "bob"]\n[Result "1-0"]\n\n1. d4 d5 2. f3 e6`;
     const game = normalizeProviderGame({
       provider: "lichess",
       externalId: "g1",
@@ -19,22 +23,40 @@ describe("Step 2 trusted end-to-end fixture loop", () => {
       result: "1-0",
       variant: "standard",
       pgn,
-      moves: ["d2d4", "d7d5"],
+      moves: ["d2d4", "d7d5", "f2f3", "e7e6"],
     });
     expect(game).not.toBeNull();
     const replay = replayPgn(pgn, "white");
     expect(replay.ok).toBe(true);
     if (!game || !replay.ok) return;
-    const node: RuntimeOpeningNode = {
-      nodeId: "n",
-      openingId: "italian-white",
-      playKey: replay.plies[0].fenBefore.split(" ").slice(0, 4).join(" "),
-      playSequenceUci: "e2e4",
-      ply: 0,
-      sideToMove: "white",
-    };
+    const nodes: RuntimeOpeningNode[] = [
+      {
+        nodeId: "parent",
+        openingId: "london-white",
+        playKey: "d2d4,d7d5",
+        playSequenceUci: "d2d4,d7d5",
+        ply: 2,
+        sideToMove: "white",
+      },
+      {
+        nodeId: "child",
+        openingId: "london-white",
+        playKey: "d2d4,d7d5,c2c4",
+        playSequenceUci: "d2d4,d7d5,c2c4",
+        ply: 3,
+        sideToMove: "black",
+      },
+    ];
+    const candidates: RuntimeCandidateMove[] = [
+      {
+        openingId: "london-white",
+        playKeyBefore: "d2d4,d7d5",
+        moveUci: "c2c4",
+        rank: 1,
+      },
+    ];
     const gated = {
-      openingId: "italian-white",
+      openingId: "london-white",
       repertoireSide: "white" as const,
       decision: "gated_pending" as const,
       checkedAt: new Date().toISOString(),
@@ -44,7 +66,7 @@ describe("Step 2 trusted end-to-end fixture loop", () => {
     const segment = matchOpeningSegments({
       game,
       plies: replay.plies,
-      nodes: [node],
+      nodes,
       access: () => gated,
     })[0];
     const findings = extractDeterministicFindings({
@@ -52,7 +74,7 @@ describe("Step 2 trusted end-to-end fixture loop", () => {
       game,
       segment,
       plies: replay.plies,
-      nodes: [node],
+      trainer: createRuntimeEvidenceIndices(nodes, candidates).trainer,
       access: gated,
     });
     expect(segment.accessState).toBe("gated_pending");

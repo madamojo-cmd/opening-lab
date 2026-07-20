@@ -22,6 +22,7 @@ export type LearningEvent = {
   fen?: string;
   openingId?: string;
   openingName?: string;
+  moveOrderKey?: string;
   patternId?: string;
   concept?: string;
 
@@ -90,6 +91,14 @@ export function createLearningEventId(): string {
   return `learn-e-${Date.now().toString(36)}-${randomSegment(10)}`;
 }
 
+export function buildRemoteLearningEventPayload(
+  event: LearningEvent,
+): LearningEvent & {
+  eventId: string;
+} {
+  return { ...event, eventId: event.id };
+}
+
 export function recordLearningEvent(
   event: Omit<LearningEvent, "id" | "createdAt">,
 ): LearningEvent {
@@ -118,7 +127,7 @@ export function recordLearningEvent(
           .then(({ authenticatedApiFetch }) =>
             authenticatedApiFetch("/api/blundr/learning/events", {
               method: "POST",
-              body: JSON.stringify(full),
+              body: JSON.stringify(buildRemoteLearningEventPayload(full)),
             }),
           )
           .catch(() => undefined);

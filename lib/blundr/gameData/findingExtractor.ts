@@ -9,17 +9,16 @@ import type {
   ProviderGameRecord,
   ReplayedPly,
 } from "./gameDataTypes";
-import type { RuntimeOpeningNode } from "@/lib/blundr/trainingRuntime/trainingRuntimeSchema";
+import type { TrainerTreeIndex } from "@/lib/blundr/trainingRuntime/runtimeEvidenceIndices";
 
 export function extractDeterministicFindings(input: {
   userId: string;
   game: ProviderGameRecord;
   segment: OpeningSegmentRecord;
   plies: readonly ReplayedPly[];
-  nodes: readonly RuntimeOpeningNode[];
+  trainer: TrainerTreeIndex;
   access: OpeningAccessSnapshot;
 }): ExtractedFinding[] {
-  const nodeByFen = new Map(input.nodes.map((node) => [node.playKey, node]));
   const findings: ExtractedFinding[] = [];
   for (const ply of input.plies) {
     if (!ply.isPlayerMove || ply.ply < input.segment.firstMatchedPly) continue;
@@ -27,23 +26,24 @@ export function extractDeterministicFindings(input: {
       .slice(0, Math.max(0, ply.ply - 1))
       .map((entry) => entry.moveUci)
       .join(",");
-    const node =
-      nodeByFen.get(playKey) ??
-      nodeByFen.get(ply.fenBefore.split(" ").slice(0, 4).join(" ")) ??
-      nodeByFen.get(ply.fenBefore);
-    if (!node || node.openingId !== input.segment.openingId) continue;
-    const expectedMove = node.playSequenceUci
-      .split(/[\s,]+/)
-      .filter(Boolean)
-      .at(-1);
-    const isExpected = expectedMove === ply.moveUci;
-    if (isExpected) continue;
+    const runtimeKey = `${input.segment.openingId}:${playKey}`;
+    const node = input.trainer.nodesByKey.get(runtimeKey);
+    if (!node) continue;
+    const approvedMoves =
+      input.trainer.childMovesByParent.get(runtimeKey) ?? [];
+    // A finding is only verifiable when the current position and at least one
+    // next move are backed by stored Trainer nodes. Candidate-only evidence
+    // must never manufacture path progression or imported-game weaknesses.
+    if (approvedMoves.length === 0) continue;
+    if (approvedMoves.some((candidate) => candidate.moveUci === ply.moveUci))
+      continue;
+    const expectedMove = approvedMoves[0]?.moveUci ?? null;
     const position = createPositionIdentity({
       canonicalFen: ply.fenBefore,
       openingId: input.segment.openingId,
-      expectedMoveUci: expectedMove ?? null,
+      expectedMoveUci: expectedMove,
       repertoireSide: input.game.playerColor,
-      moveOrderKey: node.playSequenceUci,
+      moveOrderKey: node.playKey,
       runtimePackageVersion: input.game.processingVersion,
     });
     const fingerprint = findingFingerprint({

@@ -62,13 +62,14 @@ export async function appendLearningEventV2(input: {
   const inserted = await client.from("blundr_learning_events").insert(event);
   if (inserted.error && inserted.error.code !== "23505")
     throw new Error("learning_event_persistence_unavailable");
-  if (inserted.error?.code === "23505") return { status: "duplicate", eventId };
+  const status = inserted.error?.code === "23505" ? "duplicate" : "inserted";
   const previous = await client
     .from("blundr_node_mastery")
     .select("*")
     .eq("user_id", input.userId)
     .eq("position_key", input.position.positionKey)
     .maybeSingle();
+  if (previous.error) throw new Error("node_mastery_read_unavailable");
   const mastery = reduceNodeMastery(
     previous.data
       ? {
@@ -102,31 +103,50 @@ export async function appendLearningEventV2(input: {
     },
     input.access,
   );
-  if (mastery.changed)
-    await client.from("blundr_node_mastery").upsert({
-      user_id: input.userId,
-      position_key: input.position.positionKey,
-      opening_id: input.position.openingId,
-      play_key: input.position.moveOrderKey,
-      attempts: mastery.state.attempts,
-      first_attempt_at: mastery.state.firstAttemptAt,
-      first_attempt_result: mastery.state.firstAttemptResult,
-      confidence: mastery.state.confidence,
-      access_decision: mastery.state.access,
-      updated_at: input.now,
-    });
-  if (!input.correct)
-    await client.from("blundr_weakness_projection").upsert({
-      user_id: input.userId,
-      position_key: input.position.positionKey,
-      category: "opening_move",
-      score: 0.7,
-      confidence: 0.65,
-      explanation: input.explanation ?? "The approved move was missed.",
-      recommended_daily_intervention: "recall_move",
-      access_decision: input.access.decision,
-      source_event_ids: [eventId],
-      updated_at: input.now,
-    });
-  return { status: "inserted", eventId };
+  // A duplicate immutable event has already contributed to an existing
+  // mastery row. If a prior projection attempt stopped after the event insert,
+  // the missing row is repaired without advancing an existing row twice.
+  if (mastery.changed && (status === "inserted" || !previous.data)) {
+    const savedMastery = await client.from("blundr_node_mastery").upsert(
+      {
+        user_id: input.userId,
+        position_key: input.position.positionKey,
+        opening_id: input.position.openingId,
+        play_key: input.position.moveOrderKey,
+        attempts: mastery.state.attempts,
+        first_attempt_at: mastery.state.firstAttemptAt,
+        first_attempt_result: mastery.state.firstAttemptResult,
+        confidence: mastery.state.confidence,
+        access_decision: mastery.state.access,
+        updated_at: input.now,
+      },
+      { onConflict: "user_id,position_key" },
+    );
+    if (savedMastery.error)
+      throw new Error("node_mastery_persistence_unavailable");
+  }
+  if (!input.correct) {
+    const savedWeakness = await client
+      .from("blundr_weakness_projection")
+      .upsert(
+        {
+          user_id: input.userId,
+          position_key: input.position.positionKey,
+          opening_id: input.position.openingId,
+          play_key: input.position.moveOrderKey,
+          category: "opening_move",
+          score: 0.7,
+          confidence: 0.65,
+          explanation: input.explanation ?? "The approved move was missed.",
+          recommended_daily_intervention: "recall_move",
+          access_decision: input.access.decision,
+          source_event_ids: [eventId],
+          updated_at: input.now,
+        },
+        { onConflict: "user_id,position_key,category" },
+      );
+    if (savedWeakness.error)
+      throw new Error("weakness_projection_persistence_unavailable");
+  }
+  return { status, eventId };
 }

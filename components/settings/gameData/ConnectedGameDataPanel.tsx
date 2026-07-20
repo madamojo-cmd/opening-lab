@@ -176,6 +176,9 @@ function LiveConnectedGameDataPanel() {
         method: "POST",
         body: JSON.stringify({ provider }),
       });
+      setMessage(
+        `${provider === "chesscom" ? "Chess.com" : "Lichess"} sync queued. Status will update here as games are processed.`,
+      );
       await refresh();
     } catch (error) {
       setMessage(

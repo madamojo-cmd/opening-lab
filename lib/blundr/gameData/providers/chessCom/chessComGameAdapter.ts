@@ -1,14 +1,28 @@
 import type { RawProviderGame } from "../../gameNormalizer";
 import { replayPgn } from "../../pgnReplay";
 
+function pgnHeader(pgn: string, name: string): string {
+  const match = pgn.match(new RegExp(`^\\[${name}\\s+"([^"]*)"\\]$`, "im"));
+  return match?.[1]?.trim() ?? "";
+}
+
+function playerName(value: unknown, fallback: string): string {
+  if (typeof value === "string") return value.trim();
+  if (value && typeof value === "object") {
+    const username = (value as { username?: unknown }).username;
+    if (typeof username === "string") return username.trim();
+  }
+  return fallback;
+}
+
 export function adaptChessComGame(
   input: Record<string, unknown>,
   username: string,
 ): RawProviderGame | null {
   const pgn = typeof input.pgn === "string" ? input.pgn : "";
-  const white = String(input.white?.toString() ?? "").trim();
-  const black = String(input.black?.toString() ?? "").trim();
-  const result = String(input.result ?? "*");
+  const white = playerName(input.white, pgnHeader(pgn, "White"));
+  const black = playerName(input.black, pgnHeader(pgn, "Black"));
+  const result = String(input.result ?? pgnHeader(pgn, "Result") ?? "*");
   if (!pgn || !white || !black) return null;
   const playerColor =
     white.toLowerCase() === username.trim().toLowerCase() ? "white" : "black";
@@ -35,7 +49,10 @@ export function adaptChessComGame(
     timeControl:
       typeof input.time_control === "string" ? input.time_control : null,
     rated: typeof input.rated === "boolean" ? input.rated : null,
-    variant: typeof input.rules === "string" ? input.rules : "standard",
+    variant:
+      typeof input.rules === "string" && input.rules.toLowerCase() !== "chess"
+        ? input.rules
+        : "standard",
     pgn,
     moves,
   };
