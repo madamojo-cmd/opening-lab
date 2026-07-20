@@ -6,6 +6,10 @@ on:
     branches:
       - feat/final-app-architecture-onboarding
     paths:
+      - "app/**"
+      - "components/**"
+      - "lib/**"
+      - "tests/**"
       - "scripts/run-node-tests.mjs"
       - "lib/blundr/stage2Coaching/stage2ApprovedContentInventory.generated.ts"
       - "tests/coach/stage2ApprovedContentAvailabilityMatchesBundles.test.ts"
