@@ -151,6 +151,7 @@ import { shouldShowOnboarding } from "@/lib/blundr/onboarding/onboardingRouting"
 import { loadRepertoireProgress } from "@/lib/blundr/repertoire/repertoireProgressService";
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
 import { completeDailyRingActivity } from "@/lib/blundr/daily-rings/dailyRingService";
+import { isTempoCompletionEligible } from "@/lib/blundr/daily-rings/trainingCompletionEligibility";
 import type { DailyRingCompletionResultLike } from "@/lib/blundr/daily-rings/dailyRingTypes";
 import type { BlundrBoardPreferences } from "@/lib/blundr/board/boardThemeTypes";
 
@@ -5014,7 +5015,8 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
   },[activeTab,shouldValidateTrainingMove,moveQualityPending,moveQuality?.status]);
   useEffect(()=>{if(activeTab==="train"&&trainingMode==="restricted"&&isUserTurn&&expectedMoveResolution.shouldTransitionToContinuation&&guidedCoveragePolicy.guidedCompleteAllowed&&!bookComplete&&!game.isGameOver()){setBookComplete(true);setFeedback("Guided line complete. Continue from here against the bot, or restart the opening.");setBrain(p=>({...p,book:"complete",source:guidedCoveragePolicy.guidedCoverageState,gpt:p.gpt}))}},[activeTab,trainingMode,isUserTurn,expectedMoveResolution.shouldTransitionToContinuation,guidedCoveragePolicy.guidedCompleteAllowed,guidedCoveragePolicy.guidedCoverageState,bookComplete,fen]);
   useEffect(()=>{
-    if(activeTab!=="train"||trainingMode!=="restricted"||!bookComplete)return;
+    const restrictedLineCompleted=isTempoCompletionEligible({trainingMode,bookComplete,branchCompleteEligible:branchCompleteEligibleNow,terminalProof:stage2TerminalProof.proven});
+    if(activeTab!=="train"||!restrictedLineCompleted)return;
     const completionKey=`${selectedRepertoireId}:${runtimeTrainingSessionId}:${normalizeFen(fen)}:opening_run_completed`;
     if(openingRunAwardKeyRef.current===completionKey)return;
     openingRunAwardKeyRef.current=completionKey;
@@ -5049,7 +5051,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       });
     });
     return()=>{cancelled=true};
-  },[activeTab,bookComplete,trainingMode,selectedRepertoireId,runtimeTrainingSessionId,fen,repertoireProgress,onboardingProfile]);
+  },[activeTab,bookComplete,branchCompleteEligibleNow,stage2TerminalProof.proven,trainingMode,selectedRepertoireId,runtimeTrainingSessionId,fen,repertoireProgress,onboardingProfile]);
   useEffect(()=>{
     if(activeTab!=="train"||trainingMode!=="continuation"||!branchCompleteEligibleNow||!stage2TerminalProof.proven)return;
     const completionKey=`${selectedRepertoireId}:${continuationSessionId??"continuation"}:${normalizeFen(fen)}:continuation_completed`;

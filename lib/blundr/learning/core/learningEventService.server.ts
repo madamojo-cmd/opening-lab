@@ -8,6 +8,7 @@ import {
   type PositionIdentity,
 } from "@/lib/blundr/contracts";
 import { reduceNodeMastery } from "./nodeMasteryReducer";
+import { shouldCreateWeaknessProjection } from "./weaknessProjectionPolicy";
 
 export async function appendLearningEventV2(input: {
   userId: string;
@@ -125,7 +126,8 @@ export async function appendLearningEventV2(input: {
     if (savedMastery.error)
       throw new Error("node_mastery_persistence_unavailable");
   }
-  if (!input.correct) {
+  const createsWeakness = shouldCreateWeaknessProjection(input);
+  if (createsWeakness) {
     const savedWeakness = await client
       .from("blundr_weakness_projection")
       .upsert(

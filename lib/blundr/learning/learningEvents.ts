@@ -99,6 +99,16 @@ export function buildRemoteLearningEventPayload(
   return { ...event, eventId: event.id };
 }
 
+export function shouldPersistRemoteLearningEvent(
+  event: Pick<LearningEvent, "type">,
+): boolean {
+  return (
+    event.type === "move_correct" ||
+    event.type === "move_incorrect" ||
+    event.type === "cue_revealed"
+  );
+}
+
 export function recordLearningEvent(
   event: Omit<LearningEvent, "id" | "createdAt">,
 ): LearningEvent {
@@ -118,7 +128,7 @@ export function recordLearningEvent(
   );
   writeLocalEvents(merged);
 
-  if (typeof window !== "undefined") {
+  if (typeof window !== "undefined" && shouldPersistRemoteLearningEvent(full)) {
     void import("../onboarding/onboardingAuth")
       .then(({ getOnboardingAuthSession }) => getOnboardingAuthSession())
       .then((session) => {
