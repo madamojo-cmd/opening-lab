@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 
 import { bootstrapBlundrAccount, getOrCreateTrainingProfile, initializeAccountDefaults } from "../accountService";
-import { readLocalAccountBundle, resetLocalAccountState } from "../localAccountStorage";
+import { readLocalAccountBundle, resetLocalAccountState, upsertLocalUserRepertoire } from "../localAccountStorage";
 
 const keys = [
   "NEXT_PUBLIC_SUPABASE_URL",
@@ -30,6 +30,33 @@ void (async () => {
     const defaults = await initializeAccountDefaults("user-2", { mode: "local_demo", allowLocalFallback: true });
     assert.equal(defaults.ok, true);
     assert.equal(defaults.ok ? defaults.data.user.userId : "", "user-2");
+
+    const durableRepertoire = defaults.ok
+      ? {
+          ...defaults.data.repertoire,
+          selectedStarterPackId: "classical_foundations" as const,
+          unlockedOpeningIds: ["italian-white"],
+          lockedOpeningIds: ["sicilian-white"],
+          openingUnlockPoints: 7,
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        }
+      : null;
+    assert.ok(durableRepertoire);
+    upsertLocalUserRepertoire(durableRepertoire);
+    const repeatedBootstrap = await initializeAccountDefaults("user-2", {
+      mode: "local_demo",
+      allowLocalFallback: true,
+      now: "2026-07-20T00:00:00.000Z",
+    });
+    assert.equal(repeatedBootstrap.ok, true);
+    assert.deepEqual(
+      repeatedBootstrap.ok ? repeatedBootstrap.data.repertoire.unlockedOpeningIds : [],
+      ["italian-white"],
+    );
+    assert.equal(
+      repeatedBootstrap.ok ? repeatedBootstrap.data.repertoire.openingUnlockPoints : 0,
+      7,
+    );
 
     const profile = await getOrCreateTrainingProfile("user-2", { mode: "local_demo", allowLocalFallback: true });
     assert.equal(profile.ok, true);

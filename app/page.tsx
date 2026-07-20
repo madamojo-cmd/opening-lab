@@ -1304,6 +1304,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
   },[initialOpeningId,runtimeOpeningSelection.selectedOpeningId]);
   const [activeTab,setActiveTab]=useState<Tab>(initialTab);
   const [onboardingProfile,setOnboardingProfile]=useState<UserTrainingProfile | null>(null);
+  const [accountHydrated,setAccountHydrated]=useState(false);
   const [repertoireProgress,setRepertoireProgress]=useState<RepertoireProgress>(()=>loadRepertoireProgress({userId:getLocalAccountCurrentUserId()}));
   const [latestCompletionResult,setLatestCompletionResult]=useState<DailyRingCompletionResultLike | null>(null);
   const [customRepertoires,setCustomRepertoires]=useState<Repertoire[]>([]);
@@ -4464,7 +4465,15 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     setRepertoireProgress(loadRepertoireProgress({userId:currentUserId}));
   },[]);
   useEffect(()=>{
-    if(auth.status!=="authenticated"||!auth.session?.accessToken)return;
+    if(auth.status==="signed_out"){
+      setAccountHydrated(true);
+      return;
+    }
+    if(auth.status!=="authenticated"||!auth.session?.accessToken){
+      setAccountHydrated(false);
+      return;
+    }
+    setAccountHydrated(false);
     let active=true;
     void fetch("/api/blundr/account/bootstrap",{
       method:"POST",
@@ -4482,6 +4491,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       upsertLocalDailyRetentionProgress(snapshot.dailyRetentionProgress);
       setOnboardingProfile(snapshot.profile);
       setRepertoireProgress(loadRepertoireProgress({userId:snapshot.user.userId}));
+      setAccountHydrated(true);
       window.dispatchEvent(new Event(BLUNDR_DAILY_RING_REFRESH_EVENT));
     }).catch(()=>undefined);
     return()=>{active=false};
@@ -7287,6 +7297,9 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
         }}
       />
     );
+  }
+  if (!accountHydrated) {
+    return <main className="blundr-page-bg min-h-screen px-4 py-8 text-stone-950"><div className="mx-auto max-w-md rounded-3xl border border-stone-200 bg-white p-6 shadow-sm"><div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">Blundr</div><h1 className="mt-2 text-xl font-black">Loading your training progress</h1><p className="mt-2 text-sm text-stone-600">Confirming your repertoire, rings, and account state.</p></div></main>;
   }
   if (activeTab === "review") {
     return <ReviewHub />;

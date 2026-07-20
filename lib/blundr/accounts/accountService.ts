@@ -35,12 +35,10 @@ function localDateKey(date = new Date()): string {
 }
 
 function chooseExisting<T extends { updatedAt: string }>(current: T, existing: T | null): T {
-  if (!existing) return current;
-  const currentUpdated = Date.parse(current.updatedAt || "");
-  const existingUpdated = Date.parse(existing.updatedAt || "");
-  if (!Number.isFinite(existingUpdated)) return current;
-  if (!Number.isFinite(currentUpdated)) return existing;
-  return existingUpdated > currentUpdated ? existing : current;
+  // `current` is a newly-created default whose timestamp is necessarily newer
+  // than durable account state. Bootstrap must never let that timestamp erase
+  // onboarding choices, repertoire access, or accumulated progress.
+  return existing ?? current;
 }
 
 function getPersistenceError(result: PersistenceResult<unknown>) {
