@@ -152,7 +152,7 @@ import { loadRepertoireProgress } from "@/lib/blundr/repertoire/repertoireProgre
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
 import { completeDailyRingActivity } from "@/lib/blundr/daily-rings/dailyRingService";
 import { isBatteryCompletionEligible, isTempoCompletionEligible } from "@/lib/blundr/daily-rings/trainingCompletionEligibility";
-import { resolveSelectedRuntimeLineOpponentReply } from "@/lib/blundr/runtime/selectedRuntimeLineReply";
+import { resolvePlyFromFen, resolveSelectedRuntimeLineOpponentReply } from "@/lib/blundr/runtime/selectedRuntimeLineReply";
 import type { DailyRingCompletionResultLike } from "@/lib/blundr/daily-rings/dailyRingTypes";
 import type { BlundrBoardPreferences } from "@/lib/blundr/board/boardThemeTypes";
 
@@ -5423,11 +5423,12 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     let continuationPolicyDecision:ReturnType<typeof selectContinuedPlayMove>|null=null;
     if(mode==="restricted"){
       const initialRestrictedOpponentMoveUci=request.initialRestrictedOpponentMoveUci?.trim().toLowerCase()??null;
+      const currentRestrictedLegalMoveUcis=(current.moves({verbose:true}) as Array<{from:string;to:string;promotion?:string}>).map((move)=>`${move.from}${move.to}${move.promotion??""}`.toLowerCase());
       const selectedRuntimeLineOpponentReplyUci=resolveSelectedRuntimeLineOpponentReply({
         trainingMode:mode,
         selectedPlaySequenceUci:selectedRuntimeLinePlaySequenceUci,
-        currentPly:moveHistory.length,
-        legalMoveUcis:continuationLegalMoveUcis,
+        currentPly:resolvePlyFromFen(current.fen())??moveHistory.length,
+        legalMoveUcis:currentRestrictedLegalMoveUcis,
       });
       if(initialRestrictedOpponentMoveUci){
         const applied=applyUci(current.fen(),initialRestrictedOpponentMoveUci);
