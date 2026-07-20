@@ -152,6 +152,7 @@ import { loadRepertoireProgress } from "@/lib/blundr/repertoire/repertoireProgre
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
 import { completeDailyRingActivity } from "@/lib/blundr/daily-rings/dailyRingService";
 import { isBatteryCompletionEligible, isTempoCompletionEligible } from "@/lib/blundr/daily-rings/trainingCompletionEligibility";
+import { resolveSelectedRuntimeLineOpponentReply } from "@/lib/blundr/runtime/selectedRuntimeLineReply";
 import type { DailyRingCompletionResultLike } from "@/lib/blundr/daily-rings/dailyRingTypes";
 import type { BlundrBoardPreferences } from "@/lib/blundr/board/boardThemeTypes";
 
@@ -5422,6 +5423,12 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     let continuationPolicyDecision:ReturnType<typeof selectContinuedPlayMove>|null=null;
     if(mode==="restricted"){
       const initialRestrictedOpponentMoveUci=request.initialRestrictedOpponentMoveUci?.trim().toLowerCase()??null;
+      const selectedRuntimeLineOpponentReplyUci=resolveSelectedRuntimeLineOpponentReply({
+        trainingMode:mode,
+        selectedPlaySequenceUci:selectedRuntimeLinePlaySequenceUci,
+        currentPly:moveHistory.length,
+        legalMoveUcis:continuationLegalMoveUcis,
+      });
       if(initialRestrictedOpponentMoveUci){
         const applied=applyUci(current.fen(),initialRestrictedOpponentMoveUci);
         if(!applied||applied.color!==opponentColor){
@@ -5440,6 +5447,37 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
           fallbackUsed:false,
           opponentVariationApplied:true,
           opponentVariationReason:"selected_runtime_line_initial_reply",
+          selectedOpponentBranchKey:`${positionKey}::${applied.uci}`,
+          candidateOpponentBranches:[{
+            branchKey:`${positionKey}::${applied.uci}`,
+            uci:applied.uci,
+            san:applied.san,
+            baseWeight:1,
+            adjustedWeight:1,
+            source:"selected_runtime_line",
+            safetyStatus:"runtime_line",
+            selectionScore:1,
+          }],
+          blockedThirdRepeatBranches:[],
+        };
+      }else if(selectedRuntimeLineOpponentReplyUci){
+        const applied=applyUci(current.fen(),selectedRuntimeLineOpponentReplyUci);
+        if(!applied||applied.color!==opponentColor){
+          clearPendingOpponentReplyRequest({clearStaleIssue:true});
+          pushRuntimeCriticalIssue("restricted_opponent_reply_missing_runtime_authority");
+          setTrainerPhase("error");
+          setFeedback("The selected runtime line reply could not be applied in the current position.");
+          setBrain(p=>({...p,book:"complete",source:"selected_runtime_line_reply_apply_failed",lichess:"ready"}));
+          return;
+        }
+        clearPendingOpponentReplyRequest({clearStaleIssue:true});
+        chosen={san:applied.san,uci:applied.uci,fen:applied.fen};
+        source="Selected runtime line reply";
+        variationDebug={
+          ...variationDebug,
+          fallbackUsed:false,
+          opponentVariationApplied:true,
+          opponentVariationReason:"selected_runtime_line_reply",
           selectedOpponentBranchKey:`${positionKey}::${applied.uci}`,
           candidateOpponentBranches:[{
             branchKey:`${positionKey}::${applied.uci}`,
