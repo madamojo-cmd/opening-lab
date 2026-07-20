@@ -4,7 +4,7 @@ import { ImportJobRepository } from "@/lib/blundr/gameData/importJobRepository";
 import { ProviderAccountRepository } from "@/lib/blundr/gameData/providerAccountRepository";
 import { processGameImportBatch } from "@/lib/blundr/gameData/jobs/processGameImportBatch";
 import { loadTrainingRuntimePackage } from "@/lib/blundr/trainingRuntime/trainingRuntimeLoader";
-import { loadOpeningAccess } from "@/lib/blundr/gameData/gameDataService";
+import { loadOpeningAccessForWorker } from "@/lib/blundr/gameData/gameDataService";
 import { isGameDataWorkerEnabled } from "@/lib/blundr/gameData/featureFlags";
 import { buildSuccessfulProviderSyncAccount } from "@/lib/blundr/gameData/providerAccountSync";
 
@@ -39,15 +39,7 @@ async function processJobs(request: Request) {
       });
       continue;
     }
-    const access = await loadOpeningAccess({
-      userId: leased.userId,
-      isAuthenticated: true,
-      mode: "authenticated",
-      isAdmin: false,
-      accessToken: null,
-      email: null,
-      provider: null,
-    });
+    const access = await loadOpeningAccessForWorker(leased.userId);
     const result = await processGameImportBatch(leased, account, {
       runtime,
       jobs,

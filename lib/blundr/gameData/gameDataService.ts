@@ -5,6 +5,30 @@ import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAd
 import { RepertoireOpeningAccessRepository } from "@/lib/blundr/openingAccess/openingAccessRepository";
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
 import type { CurrentBlundrUser } from "@/lib/blundr/accounts/accountTypes";
+import type { UserRepertoire } from "@/lib/blundr/accounts/accountTypes";
+import { BLUNDR_PERSISTENCE_TABLES } from "@/lib/blundr/persistence/persistenceKeys";
+
+function toOpeningAccessRepertoire(
+  stored: UserRepertoire | null,
+): RepertoireProgress | null {
+  return stored
+    ? {
+        userId: stored.userId,
+        selectedStarterPackId:
+          stored.selectedStarterPackId ?? "classical_attacker",
+        unlockedOpeningIds: stored.unlockedOpeningIds,
+        lockedOpeningIds: stored.lockedOpeningIds,
+        availablePoints: stored.openingUnlockPoints,
+        lifetimePoints: stored.openingUnlockPoints,
+        spentPoints: 0,
+        nextUnlockCost: 0,
+        nextUnlockProgressPct: 0,
+        pointEvents: [],
+        unlockEvents: [],
+        updatedAt: stored.updatedAt,
+      }
+    : null;
+}
 
 export async function requireGameDataUser(
   request: Request,
@@ -22,24 +46,43 @@ export async function loadOpeningAccess(user: CurrentBlundrUser) {
     allowLocalFallback: false,
   });
   const stored = repertoireResult.ok ? repertoireResult.data : null;
-  const repertoire: RepertoireProgress | null = stored
+  const repertoire = toOpeningAccessRepertoire(stored);
+  return new RepertoireOpeningAccessRepository(() => repertoire);
+}
+
+export async function loadOpeningAccessForWorker(userId: string) {
+  const client = createBlundrSupabaseAdminClient();
+  if (!client) throw new Error("provider_worker_persistence_unavailable");
+  const result = await client
+    .from(BLUNDR_PERSISTENCE_TABLES.userRepertoires)
+    .select(
+      "user_id,selected_starter_pack_id,unlocked_opening_ids,locked_opening_ids,opening_unlock_points,updated_at",
+    )
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (result.error) throw new Error("provider_worker_repertoire_read_failed");
+  const row = result.data;
+  const stored: UserRepertoire | null = row
     ? {
-        userId: stored.userId,
+        userId: String(row.user_id),
         selectedStarterPackId:
-          stored.selectedStarterPackId ?? "classical_attacker",
-        unlockedOpeningIds: stored.unlockedOpeningIds,
-        lockedOpeningIds: stored.lockedOpeningIds,
-        availablePoints: stored.openingUnlockPoints,
-        lifetimePoints: stored.openingUnlockPoints,
-        spentPoints: 0,
-        nextUnlockCost: 0,
-        nextUnlockProgressPct: 0,
-        pointEvents: [],
-        unlockEvents: [],
-        updatedAt: stored.updatedAt,
+          row.selected_starter_pack_id as UserRepertoire["selectedStarterPackId"],
+        unlockedOpeningIds: Array.isArray(row.unlocked_opening_ids)
+          ? row.unlocked_opening_ids.map(String)
+          : [],
+        lockedOpeningIds: Array.isArray(row.locked_opening_ids)
+          ? row.locked_opening_ids.map(String)
+          : [],
+        openingUnlockPoints: Math.max(
+          0,
+          Number(row.opening_unlock_points ?? 0),
+        ),
+        updatedAt: String(row.updated_at),
       }
     : null;
-  return new RepertoireOpeningAccessRepository(() => repertoire);
+  return new RepertoireOpeningAccessRepository(() =>
+    toOpeningAccessRepertoire(stored),
+  );
 }
 
 export async function readGameDataStatus(userId: string) {
