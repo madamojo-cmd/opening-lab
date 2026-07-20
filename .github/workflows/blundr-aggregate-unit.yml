@@ -7,6 +7,10 @@ on:
       - feat/final-app-architecture-onboarding
     paths:
       - "scripts/run-node-tests.mjs"
+      - "lib/blundr/stage2Coaching/stage2ApprovedContentInventory.generated.ts"
+      - "tests/coach/stage2ApprovedContentAvailabilityMatchesBundles.test.ts"
+      - "docs/2026-06-17/stage2-approved-content-source-package-checksums.json"
+      - "docs/2026-06-17/stage2-approved-content-candidates-*.zip"
       - ".github/workflows/blundr-aggregate-unit.yml"
 
 permissions:

@@ -1,6 +1,6 @@
 import type { Stage2ApprovedContentInventoryEntry } from "./stage2ApprovedContentInventory.types";
 
-export const STAGE2_APPROVED_CONTENT_INVENTORY: Stage2ApprovedContentInventoryEntry[] = [
+const GENERATED_STAGE2_APPROVED_CONTENT_INVENTORY: Stage2ApprovedContentInventoryEntry[] = [
   {
     "openingId": "caro-kann-black",
     "lineId": "caro-kann-black-line-001",
@@ -296,6 +296,20 @@ export const STAGE2_APPROVED_CONTENT_INVENTORY: Stage2ApprovedContentInventoryEn
     "visualRecipeAvailable": true
   }
 ];
+
+const APPROVED_CONTENT_SOURCE_ROOT = "data/blundr/";
+
+export const STAGE2_APPROVED_CONTENT_INVENTORY: Stage2ApprovedContentInventoryEntry[] =
+  GENERATED_STAGE2_APPROVED_CONTENT_INVENTORY.map((entry) => {
+    const sourceRootIndex = entry.sourceFile.lastIndexOf(APPROVED_CONTENT_SOURCE_ROOT);
+    return {
+      ...entry,
+      sourceFile:
+        sourceRootIndex >= 0
+          ? entry.sourceFile.slice(sourceRootIndex)
+          : entry.sourceFile,
+    };
+  });
 
 export function getStage2ApprovedContentInventoryEntry(openingId: string): Stage2ApprovedContentInventoryEntry | null {
   return STAGE2_APPROVED_CONTENT_INVENTORY.find((entry) => entry.openingId === openingId) ?? null;

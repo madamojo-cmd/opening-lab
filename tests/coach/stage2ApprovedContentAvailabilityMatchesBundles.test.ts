@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import path from "node:path";
-
 import {
   STAGE2_APPROVED_CONTENT_INVENTORY,
   getStage2ApprovedContentInventorySummary,
@@ -20,8 +18,8 @@ export function testStage2ApprovedContentAvailabilityMatchesBundles(): void {
   const openings = new Set<string>();
   const sourceFiles = new Set<string>();
   const expectedSourceFiles = new Set([
-    path.join(process.cwd(), "data/blundr/stage2-approved-content-approved-5openings-v1/approved-packets.jsonl"),
-    path.join(process.cwd(), "data/blundr/stage2-approved-content-approved-batches2to4-16openings-v1/approved-packets.jsonl"),
+    "data/blundr/stage2-approved-content-approved-5openings-v1/approved-packets.jsonl",
+    "data/blundr/stage2-approved-content-approved-batches2to4-16openings-v1/approved-packets.jsonl",
   ]);
   for (const entry of STAGE2_APPROVED_CONTENT_INVENTORY) {
     assert.equal(entry.approvedContentAvailable, true, `approved_content_should_exist:${entry.openingId}`);
@@ -33,6 +31,11 @@ export function testStage2ApprovedContentAvailabilityMatchesBundles(): void {
     assert.equal(Boolean(entry.reasonNotApproved), false, `no_rejection_reason:${entry.openingId}`);
     openings.add(entry.openingId);
     sourceFiles.add(entry.sourceFile);
+    assert.equal(
+      entry.sourceFile.startsWith("/"),
+      false,
+      `source_file_must_be_repository_relative:${entry.openingId}`,
+    );
   }
 
   assert.equal(openings.size, 21, "opening_ids_must_remain_unique");
