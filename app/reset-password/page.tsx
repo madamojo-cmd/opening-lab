@@ -1,2 +1,7 @@
-import Link from "next/link";
-export default function ResetPasswordPage() { return <main className="min-h-screen bg-stone-50 p-6"><section className="mx-auto max-w-md rounded-3xl bg-white p-6 shadow-sm"><h1 className="text-2xl font-black">Reset your password</h1><p className="mt-3 text-stone-700">Use the password-reset link from your email to return here. If it expired, request a fresh link from support or sign in again.</p><Link className="mt-6 inline-flex min-h-11 items-center rounded-xl bg-green-800 px-4 font-bold text-white" href="/login">Return to login</Link></section></main>; }
+import { ResetPasswordForm } from "@/components/auth/ResetPasswordForm";
+
+export const dynamic = "force-dynamic";
+
+export default function ResetPasswordPage() {
+  return <ResetPasswordForm />;
+}

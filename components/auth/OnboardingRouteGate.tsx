@@ -11,6 +11,7 @@ import type { OnboardingV11State } from "@/lib/blundr/onboarding/onboardingV11Co
 const EXEMPT_PREFIXES = [
   "/signup",
   "/login",
+  "/forgot-password",
   "/auth",
   "/confirm",
   "/reset-password",

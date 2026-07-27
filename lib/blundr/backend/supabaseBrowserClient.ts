@@ -8,6 +8,8 @@ type BlundrSupabaseAuthClient = Pick<
   | "signInWithPassword"
   | "signUp"
   | "signOut"
+  | "resetPasswordForEmail"
+  | "updateUser"
   | "onAuthStateChange"
 >;
 

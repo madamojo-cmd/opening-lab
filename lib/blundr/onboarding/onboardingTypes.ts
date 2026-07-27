@@ -1,4 +1,9 @@
-import type { RatingBandId, StarterPackId, UserRepertoire, UserTrainingProfile } from "../accounts/accountTypes";
+import type {
+  RatingBandId,
+  StarterPackId,
+  UserRepertoire,
+  UserTrainingProfile,
+} from "../accounts/accountTypes";
 
 export type OnboardingStepId =
   | "welcome"
@@ -56,6 +61,43 @@ export type OnboardingAuthResult =
   | {
       ok: false;
       code: string;
+      message: string;
+    };
+
+export type OnboardingPasswordResetRequestResult =
+  | {
+      ok: true;
+      code: "reset_email_sent";
+      message: string;
+    }
+  | {
+      ok: false;
+      code:
+        | "invalid_email"
+        | "rate_limited"
+        | "auth_unavailable"
+        | "network_error"
+        | "recovery_session_invalid"
+        | "reset_request_failed";
+      message: string;
+    };
+
+export type OnboardingPasswordResetCompletionResult =
+  | {
+      ok: true;
+      code: "password_updated";
+      message: string;
+    }
+  | {
+      ok: false;
+      code:
+        | "missing_password"
+        | "invalid_password"
+        | "auth_unavailable"
+        | "network_error"
+        | "no_recovery_session"
+        | "recovery_session_invalid"
+        | "password_update_failed";
       message: string;
     };
 

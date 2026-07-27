@@ -1,13 +1,58 @@
 import assert from "node:assert/strict";
 
-import { getOnboardingAuthSession, isOnboardingAuthAvailable, normalizeOnboardingAuthError, resetOnboardingAuthClientFactoryForTesting, setOnboardingAuthClientFactoryForTesting, signInForOnboarding, signUpForOnboarding } from "../onboardingAuth";
+import {
+  completePasswordResetForOnboarding,
+  getOnboardingAuthSession,
+  isOnboardingAuthAvailable,
+  normalizeOnboardingAuthError,
+  requestPasswordResetForOnboarding,
+  resetOnboardingAuthClientFactoryForTesting,
+  setOnboardingAuthClientFactoryForTesting,
+  signInForOnboarding,
+  signUpForOnboarding,
+} from "../onboardingAuth";
 
 type FakeAuthClient = {
   auth: {
-    getSession: () => Promise<{ data: { session: { access_token: string; expires_at: number; user: { id: string; email: string | null } } | null } }>;
-    getUser: () => Promise<{ data: { user: { id: string; email: string | null } | null } }>;
-    signInWithPassword: (args: { email: string; password: string }) => Promise<{ data: { user: { id: string; email: string | null } | null }; error: null }>;
-    signUp: (args: { email: string; password: string }) => Promise<{ data: { user: { id: string; email: string | null } | null; session: null | { access_token: string } }; error: null }>;
+    getSession: () => Promise<{
+      data: {
+        session: {
+          access_token: string;
+          expires_at: number;
+          user: { id: string; email: string | null };
+        } | null;
+      };
+    }>;
+    getUser: () => Promise<{
+      data: { user: { id: string; email: string | null } | null };
+    }>;
+    signInWithPassword: (args: {
+      email: string;
+      password: string;
+    }) => Promise<{
+      data: { user: { id: string; email: string | null } | null };
+      error: null;
+    }>;
+    signUp: (args: {
+      email: string;
+      password: string;
+    }) => Promise<{
+      data: {
+        user: { id: string; email: string | null } | null;
+        session: null | { access_token: string };
+      };
+      error: null;
+    }>;
+    resetPasswordForEmail: (
+      email: string,
+      options: { redirectTo: string },
+    ) => Promise<{ error: null }>;
+    updateUser: (args: {
+      password: string;
+    }) => Promise<{
+      data: { user: { id: string; email: string | null } | null };
+      error: null;
+    }>;
   };
 };
 
@@ -31,7 +76,22 @@ const fakeClient: FakeAuthClient = {
       return { data: { user: { id: "user-1", email } }, error: null };
     },
     async signUp({ email }) {
-      return { data: { user: { id: "user-2", email }, session: null }, error: null };
+      return {
+        data: { user: { id: "user-2", email }, session: null },
+        error: null,
+      };
+    },
+    async resetPasswordForEmail(email, options) {
+      assert.equal(email, "adam@example.com");
+      assert.equal(options.redirectTo, "https://example.com/auth/callback");
+      return { error: null };
+    },
+    async updateUser({ password }) {
+      assert.equal(password, "secret-reset");
+      return {
+        data: { user: { id: "user-1", email: "adam@example.com" } },
+        error: null,
+      };
     },
   },
 };
@@ -59,8 +119,30 @@ void (async () => {
       assert.equal(signUp.needsEmailConfirmation, true);
     }
 
-    assert.equal(normalizeOnboardingAuthError("Invalid login credentials").code, "invalid_credentials");
-    assert.equal(normalizeOnboardingAuthError("Supabase auth is not configured").code, "auth_unavailable");
+    const resetRequest = await requestPasswordResetForOnboarding(
+      "adam@example.com",
+      "https://example.com/auth/callback",
+    );
+    assert.equal(resetRequest.ok, true);
+    if (resetRequest.ok) {
+      assert.equal(resetRequest.code, "reset_email_sent");
+    }
+
+    const resetComplete =
+      await completePasswordResetForOnboarding("secret-reset");
+    assert.equal(resetComplete.ok, true);
+    if (resetComplete.ok) {
+      assert.equal(resetComplete.code, "password_updated");
+    }
+
+    assert.equal(
+      normalizeOnboardingAuthError("Invalid login credentials").code,
+      "invalid_credentials",
+    );
+    assert.equal(
+      normalizeOnboardingAuthError("Supabase auth is not configured").code,
+      "auth_unavailable",
+    );
   } finally {
     resetOnboardingAuthClientFactoryForTesting();
   }

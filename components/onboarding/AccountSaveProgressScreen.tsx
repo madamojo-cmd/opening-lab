@@ -1,13 +1,20 @@
 "use client";
 
 import { LockKeyhole, Mail, Sparkles } from "lucide-react";
-import { BLUNDR_EMPTY_STATE_ASSETS, BLUNDR_TEMPO_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
-import type { OnboardingAccountChoice, OnboardingAuthMode } from "@/lib/blundr/onboarding/onboardingTypes";
+import {
+  BLUNDR_EMPTY_STATE_ASSETS,
+  BLUNDR_TEMPO_ASSETS,
+} from "@/lib/blundr/assets/blundrAssetManifest";
+import type {
+  OnboardingAccountChoice,
+  OnboardingAuthMode,
+} from "@/lib/blundr/onboarding/onboardingTypes";
 import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 import { OnboardingButtonRow } from "./OnboardingButtonRow";
 import { OnboardingFeatureRow } from "./OnboardingFeatureRow";
 import { OnboardingShell } from "./OnboardingShell";
 import { ONBOARDING_COPY } from "@/lib/blundr/onboarding/onboardingCopy";
+import { PasswordField } from "@/components/auth/PasswordField";
 
 type AccountSaveProgressScreenProps = {
   stepIndex: number;
@@ -60,12 +67,40 @@ export function AccountSaveProgressScreen({
       stepIndex={stepIndex}
       stepCount={stepCount}
       onBack={onBack}
-      footer={<OnboardingButtonRow primaryLabel="Continue in local demo" onPrimary={onContinueLocalDemo} primaryDisabled={busy} primaryTone="dark" secondaryLabel={accountChoice === "account" ? "Keep account mode" : undefined} onSecondary={accountChoice === "account" ? () => onSelectAccountChoice("account") : undefined} secondaryDisabled={busy} />}
+      footer={
+        <OnboardingButtonRow
+          primaryLabel="Continue in local demo"
+          onPrimary={onContinueLocalDemo}
+          primaryDisabled={busy}
+          primaryTone="dark"
+          secondaryLabel={
+            accountChoice === "account" ? "Keep account mode" : undefined
+          }
+          onSecondary={
+            accountChoice === "account"
+              ? () => onSelectAccountChoice("account")
+              : undefined
+          }
+          secondaryDisabled={busy}
+        />
+      }
     >
       <div className="grid gap-3">
-        <OnboardingFeatureRow label="Save your repertoire" description="Keep your starter pack, opening progress, and review loop across sessions." icon={<Sparkles size={16} />} />
-        <OnboardingFeatureRow label="Email/password sign in" description="Use Supabase Auth for a minimal authenticated flow during development." icon={<LockKeyhole size={16} />} />
-        <OnboardingFeatureRow label="Local demo fallback" description="Continue without credentials if auth is unavailable or you want to stay local." icon={<Mail size={16} />} />
+        <OnboardingFeatureRow
+          label="Save your repertoire"
+          description="Keep your starter pack, opening progress, and review loop across sessions."
+          icon={<Sparkles size={16} />}
+        />
+        <OnboardingFeatureRow
+          label="Email/password sign in"
+          description="Use Supabase Auth for a minimal authenticated flow during development."
+          icon={<LockKeyhole size={16} />}
+        />
+        <OnboardingFeatureRow
+          label="Local demo fallback"
+          description="Continue without credentials if auth is unavailable or you want to stay local."
+          icon={<Mail size={16} />}
+        />
       </div>
 
       <div className="rounded-[1.75rem] border border-stone-200 bg-stone-50 p-4">
@@ -75,7 +110,10 @@ export function AccountSaveProgressScreen({
             { id: "sign_in", label: "Sign in with email/password" },
             { id: "sign_up", label: "Create account with email/password" },
           ].map((option) => {
-            const active = option.id === "local_demo" ? accountChoice === "local_demo" : accountChoice === "account" && authMode === option.id;
+            const active =
+              option.id === "local_demo"
+                ? accountChoice === "local_demo"
+                : accountChoice === "account" && authMode === option.id;
             return (
               <button
                 key={option.id}
@@ -86,10 +124,14 @@ export function AccountSaveProgressScreen({
                     return;
                   }
                   onSelectAccountChoice("account");
-                  onSelectAuthMode(option.id === "sign_in" ? "sign_in" : "sign_up");
+                  onSelectAuthMode(
+                    option.id === "sign_in" ? "sign_in" : "sign_up",
+                  );
                 }}
                 className={`rounded-2xl border px-4 py-3 text-left text-sm font-black shadow-sm ${
-                  active ? "border-green-300 bg-green-50 text-stone-950" : "border-stone-200 bg-white text-stone-700"
+                  active
+                    ? "border-green-300 bg-green-50 text-stone-950"
+                    : "border-stone-200 bg-white text-stone-700"
                 }`}
               >
                 {option.label}
@@ -129,22 +171,25 @@ export function AccountSaveProgressScreen({
                     className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-medium text-stone-950 shadow-sm outline-none ring-0 placeholder:text-stone-400 focus:border-green-300"
                   />
                 </label>
-                <label className="grid gap-2 text-sm font-bold text-stone-700">
-                  Password
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(event) => onPasswordChange(event.target.value)}
-                    placeholder="Choose a password"
-                    className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-medium text-stone-950 shadow-sm outline-none ring-0 placeholder:text-stone-400 focus:border-green-300"
-                  />
-                </label>
+                <PasswordField
+                  label="Password"
+                  value={password}
+                  onChange={onPasswordChange}
+                  placeholder="Choose a password"
+                  autoComplete={
+                    authMode === "sign_up" ? "new-password" : "current-password"
+                  }
+                  minLength={8}
+                  required
+                />
               </div>
 
               <button
                 type="button"
                 onClick={onSubmitAuth}
-                disabled={busy || !authAvailable || !email.trim() || !password.trim()}
+                disabled={
+                  busy || !authAvailable || !email.trim() || !password.trim()
+                }
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-stone-950 px-4 py-3 text-sm font-black text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {submitLabel}
@@ -160,15 +205,22 @@ export function AccountSaveProgressScreen({
                       className="mx-auto sm:mx-0 sm:shrink-0"
                     />
                     <div>
-                      <div className="text-xs font-black uppercase tracking-[0.18em] text-amber-800">Supabase unavailable</div>
-                      <p className="mt-2">Continue in local demo to keep going without auth credentials.</p>
+                      <div className="text-xs font-black uppercase tracking-[0.18em] text-amber-800">
+                        Supabase unavailable
+                      </div>
+                      <p className="mt-2">
+                        Continue in local demo to keep going without auth
+                        credentials.
+                      </p>
                     </div>
                   </div>
                 </div>
               ) : null}
 
               {authMessage ? (
-                <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm leading-6 text-green-900">{authMessage}</div>
+                <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm leading-6 text-green-900">
+                  {authMessage}
+                </div>
               ) : null}
 
               {needsEmailConfirmation ? (
@@ -176,7 +228,6 @@ export function AccountSaveProgressScreen({
                   Check your email to confirm your account, then sign in again.
                 </div>
               ) : null}
-
             </>
           ) : (
             <div className="rounded-2xl border border-stone-200 bg-white p-4 text-sm leading-6 text-stone-600">
@@ -188,9 +239,12 @@ export function AccountSaveProgressScreen({
                   className="mx-auto sm:mx-0 sm:shrink-0"
                 />
                 <div>
-                  <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">Local demo</div>
+                  <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
+                    Local demo
+                  </div>
                   <p className="mt-2">
-                    Continue in local demo to save progress on this device without Supabase credentials.
+                    Continue in local demo to save progress on this device
+                    without Supabase credentials.
                   </p>
                   <p className="mt-2 text-xs font-semibold text-stone-500">
                     Tempo keeps your setup moving even when auth is unavailable.
@@ -212,7 +266,9 @@ export function AccountSaveProgressScreen({
               className="mx-auto sm:mx-0 sm:shrink-0"
             />
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-black uppercase tracking-[0.18em] text-red-700">Auth failed</div>
+              <div className="text-xs font-black uppercase tracking-[0.18em] text-red-700">
+                Auth failed
+              </div>
               <p className="mt-2 text-sm leading-6 text-red-900">{authError}</p>
             </div>
           </div>

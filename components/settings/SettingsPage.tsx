@@ -51,6 +51,7 @@ import {
   signInForOnboarding,
   signUpForOnboarding,
 } from "@/lib/blundr/onboarding/onboardingAuth";
+import { PasswordField } from "@/components/auth/PasswordField";
 import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 import { ConnectedGameDataPanel } from "./gameData/ConnectedGameDataPanel";
 import {
@@ -564,16 +565,19 @@ export function SettingsPage({ homeHref = "/", className }: SettingsPageProps) {
                           className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-medium text-stone-950 shadow-sm outline-none focus:border-green-300"
                         />
                       </label>
-                      <label className="grid gap-2 text-sm font-bold text-stone-700">
-                        Password
-                        <input
-                          type="password"
-                          value={password}
-                          onChange={(event) => setPassword(event.target.value)}
-                          placeholder="Choose a password"
-                          className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-medium text-stone-950 shadow-sm outline-none focus:border-green-300"
-                        />
-                      </label>
+                      <PasswordField
+                        label="Password"
+                        value={password}
+                        onChange={setPassword}
+                        placeholder="Choose a password"
+                        autoComplete={
+                          authMode === "sign_up"
+                            ? "new-password"
+                            : "current-password"
+                        }
+                        minLength={8}
+                        required
+                      />
                       <button
                         type="button"
                         onClick={handleSubmitAuth}

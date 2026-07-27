@@ -11,6 +11,7 @@ import { useOnboardingAuthSession } from "@/lib/blundr/onboarding/useOnboardingA
 const EXEMPT_PREFIXES = [
   "/signup",
   "/login",
+  "/forgot-password",
   "/auth",
   "/confirm",
   "/reset-password",
