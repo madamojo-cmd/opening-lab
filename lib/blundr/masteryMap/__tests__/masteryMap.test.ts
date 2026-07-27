@@ -17,6 +17,7 @@ test("Mastery Map status precedence is deterministic", () => {
 });
 
 test("runtime tree joins canonical mastery and preserves route badges", () => {
+  const now = Date.parse("2026-07-20T00:00:00Z");
   const nodes = joinOpeningTreeToMastery({
     openingId: "italian-white",
     runtimeNodes: [
@@ -48,6 +49,7 @@ test("runtime tree joins canonical mastery and preserves route badges", () => {
         alternateRoute: true,
       },
     ],
+    now,
   });
   assert.equal(nodes[0].status, "mastered");
   assert.equal(nodes[0].alternateRoute, true);

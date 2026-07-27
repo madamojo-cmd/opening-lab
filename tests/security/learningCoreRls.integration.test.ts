@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { createClient } from "@supabase/supabase-js";
 
@@ -12,13 +13,58 @@ const configured = Boolean(
     process.env.BLUNDR_RLS_TEST_USER_B_PASSWORD,
 );
 
-test("Learning Core v2 RLS enforces anonymous, user A, user B, and service-role boundaries", async (t) => {
-  if (!configured) {
-    t.skip(
-      "requires a migrated disposable Supabase project and two test users",
-    );
-    return;
+function scopedEmail(baseEmail: string, scope: string): string {
+  const at = baseEmail.indexOf("@");
+  if (at === -1) {
+    return `${baseEmail}+${scope}`;
   }
+  const local = baseEmail.slice(0, at);
+  const domain = baseEmail.slice(at + 1);
+  return `${local}+${scope}@${domain}`;
+}
+
+async function deleteUsersForEmailBase(
+  service: ReturnType<typeof createClient>,
+  baseEmail: string,
+): Promise<void> {
+  const at = baseEmail.indexOf("@");
+  const local = at === -1 ? baseEmail : baseEmail.slice(0, at);
+  const domain = at === -1 ? "" : baseEmail.slice(at + 1);
+  const allUsers = [] as Array<{ id: string; email?: string | null }>;
+  for (let page = 1; page <= 20; page++) {
+    const response = await service.auth.admin.listUsers({ page, perPage: 100 });
+    const users = response.data.users ?? [];
+    allUsers.push(...users);
+    if (users.length < 100) {
+      break;
+    }
+  }
+  await Promise.all(
+    allUsers
+      .filter((user) => {
+        const email = user.email ?? "";
+        return (
+          email === baseEmail ||
+          (domain &&
+            email.startsWith(`${local}+`) &&
+            email.endsWith(`@${domain}`))
+        );
+      })
+      .map((user) => service.auth.admin.deleteUser(user.id)),
+  );
+}
+
+async function phase<T>(name: string, task: () => Promise<T>): Promise<T> {
+  try {
+    return await task();
+  } catch (error) {
+    console.error(`[security:RLS] ${name} failed`);
+    console.error(error);
+    throw error;
+  }
+}
+
+async function runLearningCoreRls(): Promise<void> {
   const url = process.env.BLUNDR_RLS_TEST_URL!;
   const anonKey = process.env.BLUNDR_RLS_TEST_ANON_KEY!;
   const service = createClient(
@@ -29,14 +75,13 @@ test("Learning Core v2 RLS enforces anonymous, user A, user B, and service-role 
   const anonymous = createClient(url, anonKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-  const emailA = process.env.BLUNDR_RLS_TEST_USER_A_EMAIL!;
-  const emailB = process.env.BLUNDR_RLS_TEST_USER_B_EMAIL!;
-  const existingUsers = (await service.auth.admin.listUsers()).data.users;
-  await Promise.all(
-    existingUsers
-      .filter((user) => user.email === emailA || user.email === emailB)
-      .map((user) => service.auth.admin.deleteUser(user.id)),
-  );
+  const runTag = randomUUID().slice(0, 8);
+  const baseEmailA = process.env.BLUNDR_RLS_TEST_USER_A_EMAIL!;
+  const baseEmailB = process.env.BLUNDR_RLS_TEST_USER_B_EMAIL!;
+  const emailA = scopedEmail(baseEmailA, `learning-core-a-${runTag}`);
+  const emailB = scopedEmail(baseEmailB, `learning-core-b-${runTag}`);
+  await deleteUsersForEmailBase(service, baseEmailA);
+  await deleteUsersForEmailBase(service, baseEmailB);
   const createdA = await service.auth.admin.createUser({
     email: emailA,
     password: process.env.BLUNDR_RLS_TEST_USER_A_PASSWORD!,
@@ -227,13 +272,9 @@ test("Learning Core v2 RLS enforces anonymous, user A, user B, and service-role 
     await service.auth.admin.deleteUser(createdA.data.user.id);
     await service.auth.admin.deleteUser(createdB.data.user.id);
   }
-});
+}
 
-test("Game Data RLS isolates provider accounts and denies browser source-worker writes", async (t) => {
-  if (!configured) {
-    t.skip("requires the configured disposable Supabase project");
-    return;
-  }
+async function runGameDataRls(): Promise<void> {
   const url = process.env.BLUNDR_RLS_TEST_URL!;
   const anonKey = process.env.BLUNDR_RLS_TEST_ANON_KEY!;
   const service = createClient(
@@ -241,14 +282,13 @@ test("Game Data RLS isolates provider accounts and denies browser source-worker 
     process.env.BLUNDR_RLS_TEST_SERVICE_ROLE_KEY!,
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
-  const emailA = process.env.BLUNDR_RLS_TEST_USER_A_EMAIL!;
-  const emailB = process.env.BLUNDR_RLS_TEST_USER_B_EMAIL!;
-  const existing = (await service.auth.admin.listUsers()).data.users;
-  await Promise.all(
-    existing
-      .filter((user) => user.email === emailA || user.email === emailB)
-      .map((user) => service.auth.admin.deleteUser(user.id)),
-  );
+  const runTag = randomUUID().slice(0, 8);
+  const baseEmailA = process.env.BLUNDR_RLS_TEST_USER_A_EMAIL!;
+  const baseEmailB = process.env.BLUNDR_RLS_TEST_USER_B_EMAIL!;
+  const emailA = scopedEmail(baseEmailA, `game-data-a-${runTag}`);
+  const emailB = scopedEmail(baseEmailB, `game-data-b-${runTag}`);
+  await deleteUsersForEmailBase(service, baseEmailA);
+  await deleteUsersForEmailBase(service, baseEmailB);
   const createdA = await service.auth.admin.createUser({
     email: emailA,
     password: process.env.BLUNDR_RLS_TEST_USER_A_PASSWORD!,
@@ -400,4 +440,18 @@ test("Game Data RLS isolates provider accounts and denies browser source-worker 
     await service.auth.admin.deleteUser(createdA.data.user.id);
     await service.auth.admin.deleteUser(createdB.data.user.id);
   }
+}
+
+test("Learning Core v2 RLS enforces anonymous, user A, user B, and service-role boundaries", async () => {
+  if (!configured) {
+    return;
+  }
+  await phase("learning-core RLS suite", runLearningCoreRls);
+});
+
+test("Game Data RLS isolates provider accounts and denies browser source-worker writes", async () => {
+  if (!configured) {
+    return;
+  }
+  await phase("game-data RLS suite", runGameDataRls);
 });
