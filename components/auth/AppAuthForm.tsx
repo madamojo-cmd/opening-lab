@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { signInForOnboarding } from "@/lib/blundr/onboarding/onboardingAuth";
+import { resolveAppAuthNextTarget } from "@/lib/blundr/routing/appRouteSafety";
 
 export function AppAuthForm({ mode }: { mode: "login" | "signup" }) {
   const router = useRouter();
@@ -14,7 +15,7 @@ export function AppAuthForm({ mode }: { mode: "login" | "signup" }) {
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const next = params.get("next")?.startsWith("/") ? params.get("next")! : "/onboarding/welcome";
+  const next = resolveAppAuthNextTarget(mode, params.get("next"));
   const source = params.get("source") ?? "direct";
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setBusy(true); setMessage(null);

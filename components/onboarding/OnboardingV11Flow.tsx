@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import { authenticatedApiFetch, AuthenticatedApiError } from "@/lib/blundr/api/authenticatedApiClient";
 import { getAllStarterPacks } from "@/lib/blundr/onboarding/starterPacks";
 import { useOnboardingAuthSession } from "@/lib/blundr/onboarding/useOnboardingAuthSession";
+import { getCompletedOnboardingRedirectDestination } from "@/lib/blundr/onboarding/onboardingRouting";
 import {
   ONBOARDING_V11_STEPS,
   getOnboardingV11PaceGoals,
@@ -85,6 +86,11 @@ export function OnboardingV11Flow({ requestedStep }: { requestedStep?: string })
     if (auth.status === "authenticated") void load();
   }, [auth.status]);
 
+  useEffect(() => {
+    if (auth.status !== "authenticated" || !state?.completed) return;
+    router.replace(getCompletedOnboardingRedirectDestination());
+  }, [auth.status, router, state?.completed]);
+
   const save = async (step: OnboardingV11Step, value?: unknown) => {
     setBusy(true);
     setError(null);
@@ -138,6 +144,7 @@ export function OnboardingV11Flow({ requestedStep }: { requestedStep?: string })
 
   if (auth.status === "loading") return <OnboardingFrame title="Checking your session"><p role="status">Loading your account.</p></OnboardingFrame>;
   if (auth.status === "signed_out") return <OnboardingFrame title="Sign in to continue"><p>Your setup belongs to your Blundr account.</p><Link className="mt-6 inline-flex min-h-11 items-center rounded-xl bg-green-800 px-4 font-bold text-white" href={`/login?next=${encodeURIComponent(`/onboarding/${requested ?? "welcome"}`)}`}>Log in</Link></OnboardingFrame>;
+  if (auth.status === "authenticated" && state?.completed) return <OnboardingFrame title="Redirecting to training"><p role="status">Your setup is complete. Taking you back to Blundr.</p></OnboardingFrame>;
   return <OnboardingFrame title={titleForStep(activeStep)} progress={activeStep === "welcome" ? undefined : `${stepIndex + 1} of ${ONBOARDING_V11_STEPS.length}`}>
     {content}
     {error ? <p role="alert" className="mt-4 text-sm font-semibold text-red-700">{error}</p> : null}

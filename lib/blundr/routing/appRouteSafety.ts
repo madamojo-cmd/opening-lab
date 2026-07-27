@@ -10,3 +10,13 @@ export function normalizeAppNext(value: unknown, fallback = "/onboarding/welcome
   if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\") || /[\r\n]/.test(path)) return fallback;
   return path;
 }
+
+export function resolveAppAuthNextTarget(
+  mode: "login" | "signup",
+  value: unknown,
+): string {
+  return normalizeAppNext(
+    value,
+    mode === "signup" ? "/onboarding/welcome" : "/",
+  );
+}

@@ -21,3 +21,6 @@ export function getPostOnboardingDestination(profile: Pick<UserTrainingProfile, 
   return target ? `/#${target}` : "/";
 }
 
+export function getCompletedOnboardingRedirectDestination(): string {
+  return "/";
+}

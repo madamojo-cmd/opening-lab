@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import type { UserRepertoire, UserTrainingProfile } from "../../accounts/accountTypes";
 import { buildInitialRepertoireFromStarterPack } from "../starterPacks";
-import { getFirstStarterPackTrainingTarget, getPostOnboardingDestination, shouldShowOnboarding } from "../onboardingRouting";
+import { getCompletedOnboardingRedirectDestination, getFirstStarterPackTrainingTarget, getPostOnboardingDestination, shouldShowOnboarding } from "../onboardingRouting";
 
 const incompleteProfile = { onboardingCompleted: false } as Pick<UserTrainingProfile, "onboardingCompleted">;
 const completeProfile = { onboardingCompleted: true } as Pick<UserTrainingProfile, "onboardingCompleted">;
@@ -18,5 +18,6 @@ assert.equal(getFirstStarterPackTrainingTarget(repertoire), "italian-white");
 assert.equal(getPostOnboardingDestination(incompleteProfile, repertoire), "/onboarding");
 assert.equal(getPostOnboardingDestination(completeProfile, repertoire), "/#italian-white");
 assert.equal(getPostOnboardingDestination(completeProfile, { unlockedOpeningIds: [] } as Pick<UserRepertoire, "unlockedOpeningIds">), "/");
+assert.equal(getCompletedOnboardingRedirectDestination(), "/");
 
 console.log("onboardingRouting.test.ts passed");
