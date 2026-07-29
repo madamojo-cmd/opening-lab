@@ -11,6 +11,10 @@ on:
       - "lib/**"
       - "tests/**"
       - "scripts/run-node-tests.mjs"
+      - "scripts/validate-blundr-system-registry.mjs"
+      - "scripts/validate-deep-minigame-catalog.mjs"
+      - "docs/product/**"
+      - "AGENTS.md"
       - "lib/blundr/stage2Coaching/stage2ApprovedContentInventory.generated.ts"
       - "tests/coach/stage2ApprovedContentAvailabilityMatchesBundles.test.ts"
       - "docs/2026-06-17/stage2-approved-content-source-package-checksums.json"
@@ -49,6 +53,10 @@ jobs:
           cache: npm
       - name: Install exact lockfile dependencies
         run: npm ci
+      - name: Validate system registry and deep minigame catalog
+        run: |
+          npm run verify:registry
+          npm run verify:deep-minigame-catalog
       - name: Run architecture visual contract
         run: npx vitest run tests/architecture/appShell.visual.test.ts
       - name: Run authoritative aggregate unit command

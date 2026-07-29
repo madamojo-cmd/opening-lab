@@ -26,15 +26,16 @@ export async function POST(request: Request) {
   if (body?.miniGameId && isDeepMiniGameId(body.miniGameId)) {
     if (!getServerFeatureFlags().daily_deep_minigames)
       return NextResponse.json({ error: "feature_disabled" }, { status: 503 });
-    const scenario = getDeepStandaloneScenario(body.miniGameId);
+    const instanceId = `mgi_${crypto.randomUUID().replaceAll("-", "")}`;
+    const scenario = getDeepStandaloneScenario(body.miniGameId, instanceId);
     if (!scenario)
       return NextResponse.json(
         { error: "verified_content_unavailable" },
         { status: 422 },
       );
-    const instanceId = `mgi_${crypto.randomUUID().replaceAll("-", "")}`;
     const record = {
       instanceId,
+      revision: 0,
       userId: user.userId,
       kind: "deep" as const,
       card: {
@@ -87,6 +88,7 @@ export async function POST(request: Request) {
   const instanceId = `mgi_${crypto.randomUUID().replaceAll("-", "")}`;
   const record = {
     instanceId,
+    revision: 0,
     userId: user.userId,
     card,
     state: card.miniGame,

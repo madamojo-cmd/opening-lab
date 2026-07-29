@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 const root = join(process.cwd(), ".next", "static");
 const forbidden =
-  /service_role|SUPABASE_SERVICE_ROLE_KEY|OPENAI_API_KEY|BLUNDR_RLS_TEST_|private[_-]?key|BEGIN (?:RSA |EC )?PRIVATE KEY/i;
+  /service_role|SUPABASE_SERVICE_ROLE_KEY|OPENAI_API_KEY|BLUNDR_RLS_TEST_|private[_-]?key|BEGIN (?:RSA |EC )?PRIVATE KEY|blundr-engine-certified-deep-minigames|checksumSha256|sourceRecordId/i;
 const files = [];
 function walk(directory) {
   if (!existsSync(directory)) return;

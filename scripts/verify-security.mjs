@@ -16,7 +16,7 @@ const clientFiles = tracked.filter(
     /^\s*["']use client["']/m.test(readFileSync(file, "utf8")),
 );
 const restrictedClient =
-  /service_role|SUPABASE_SERVICE_ROLE_KEY|OPENAI_API_KEY|BLUNDR_RLS_TEST_|acceptedMoves|solutionRoute|opponentReplyMap|tablebaseProof|validatorOnly/i;
+  /service_role|SUPABASE_SERVICE_ROLE_KEY|OPENAI_API_KEY|BLUNDR_RLS_TEST_|acceptedMoves|solutionRoute|opponentReplyMap|tablebaseProof|validatorOnly|engineCertifiedCatalog|checksumSha256|evaluationCp/i;
 const rawDatasetImport =
   /(?:opening-nodes|candidate-moves).*\.(?:csv|jsonl)|(?:\.\/|@\/)[^\n]*(?:opening-nodes|candidate-moves)/i;
 const violations = [];

@@ -6,6 +6,7 @@ import type { DeepMiniGameScenario, DeepMiniGameState } from "../deep";
 
 export type StandaloneMiniGamePublicState = {
   instanceId: string;
+  revision: number;
   miniGameId: DailyMiniGameId;
   source: "standalone_review";
   board: {
@@ -34,6 +35,7 @@ export type StandaloneMiniGamePublicState = {
 
 export type StandaloneMiniGameServerRecord = {
   instanceId: string;
+  revision: number;
   userId: string;
   kind?: "legacy" | "deep";
   card: unknown;

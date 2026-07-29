@@ -34,7 +34,7 @@ async function requestInstance(
 async function requestAction(
   instanceId: string,
   action: "advance" | "reveal" | "retry" | "reset",
-  payload: Record<string, string | null> = {},
+  payload: Record<string, string | number | null>,
 ) {
   const body = await authenticatedApiFetch<{
     instance?: StandaloneMiniGamePublicState;
@@ -59,6 +59,7 @@ export function MiniGamePracticeRunner({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -141,26 +142,45 @@ export function MiniGamePracticeRunner({
     );
 
   async function handleReveal() {
-    const next = await requestAction(instance!.instanceId, "reveal");
-    if (next) setInstance(next);
+    await runAction("reveal");
   }
   async function handleRetry() {
-    const next = await requestAction(instance!.instanceId, "retry");
-    if (next) setInstance(next);
+    await runAction("retry");
   }
   async function handleReset() {
-    const next = await requestAction(instance!.instanceId, "reset");
-    if (next) setInstance(next);
+    await runAction("reset");
+  }
+  async function runAction(
+    action: "advance" | "reveal" | "retry" | "reset",
+    payload: Record<string, string | number | null> = {},
+  ) {
+    if (!instance || submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const next = await requestAction(instance.instanceId, action, {
+        ...payload,
+        revision: instance.revision,
+      });
+      if (next) setInstance(next);
+      else setError("The server could not update this practice session.");
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error && requestError.message
+          ? requestError.message
+          : "The server could not update this practice session.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
   async function handleMoveAttempt(attempt: DailyBlundrBoardMoveAttempt) {
-    const next = await requestAction(instance!.instanceId, "advance", {
+    await runAction("advance", {
       from: attempt.from,
       to: attempt.to,
       uci: attempt.uci,
       san: attempt.san,
     });
-    if (next) setInstance(next);
-    else setError("The server could not validate that move.");
   }
 
   return (
@@ -200,6 +220,7 @@ export function MiniGamePracticeRunner({
           <DailyBlundrBoard
             fen={instance.board.fen}
             disabled={
+              submitting ||
               instance.status === "completed" ||
               instance.status === "revealed" ||
               instance.status === "expired"
@@ -229,6 +250,7 @@ export function MiniGamePracticeRunner({
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <button
             type="button"
+            disabled={submitting}
             onClick={() => {
               void handleReveal();
             }}
@@ -238,6 +260,7 @@ export function MiniGamePracticeRunner({
           </button>
           <button
             type="button"
+            disabled={submitting}
             onClick={() => {
               void handleRetry();
             }}
@@ -247,6 +270,7 @@ export function MiniGamePracticeRunner({
           </button>
           <button
             type="button"
+            disabled={submitting}
             onClick={() => {
               void handleReset();
             }}

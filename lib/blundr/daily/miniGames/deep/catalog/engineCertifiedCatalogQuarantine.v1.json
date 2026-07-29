@@ -1,0 +1,448 @@
+{
+  "catalogVersion": "1.0.0",
+  "policy": "Retain the final supplied record for each repeated FEN within the same family; quarantine earlier variants to prevent the same board from grading conflicting engine lines.",
+  "count": 63,
+  "records": [
+    {
+      "family": "pawn",
+      "id": "pawn-001",
+      "fen": "6k1/ppp2ppp/4p3/3pP3/3P4/2P5/PP3PPP/2K5 w - - 0 1",
+      "retainedId": "pawn-121",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-006",
+      "fen": "8/pk3ppp/2p1p3/3p4/2PP4/8/PP3PPP/6K1 w - - 0 1",
+      "retainedId": "pawn-087",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-007",
+      "fen": "8/pk3ppp/2p1p3/8/3P4/8/PK3PPP/8 w - - 0 1",
+      "retainedId": "pawn-208",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-008",
+      "fen": "8/pk3ppp/2p1p3/8/2PP4/8/PP3PPP/6K1 w - - 0 1",
+      "retainedId": "pawn-027",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-012",
+      "fen": "4k3/pp3ppp/4p3/2pp4/2PP4/4P3/PP3PPP/4K3 w - - 0 1",
+      "retainedId": "pawn-184",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-013",
+      "fen": "5k2/ppp2ppp/3p4/3Pp3/2P1P3/8/PP3PPP/6K1 w - - 0 1",
+      "retainedId": "pawn-232",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-014",
+      "fen": "4k3/pp3ppp/2p1p3/3p4/2PP4/8/PP3PPP/2K5 w - - 0 1",
+      "retainedId": "pawn-059",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-016",
+      "fen": "4k3/pp2pppp/3p4/8/2P1P3/8/PK3PPP/8 w - - 0 1",
+      "retainedId": "pawn-054",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-017",
+      "fen": "4k3/pp3ppp/3pp3/8/2PP4/1P6/P4PPP/4K3 b - - 0 1",
+      "retainedId": "pawn-093",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-018",
+      "fen": "6k1/pp3ppp/4p3/2pp4/2PP4/4P3/PP3PPP/2K5 b - - 0 1",
+      "retainedId": "pawn-182",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-019",
+      "fen": "8/pkp2ppp/4p3/3pP3/3P4/2P5/PP3PPP/2K5 b - - 0 1",
+      "retainedId": "pawn-157",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-020",
+      "fen": "6k1/pp3ppp/2p1p3/3p4/2PP4/8/PP3PPP/2K5 w - - 0 1",
+      "retainedId": "pawn-159",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-022",
+      "fen": "2k5/pp3ppp/3pp3/8/2PP4/1P6/P4PPP/2K5 b - - 0 1",
+      "retainedId": "pawn-223",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-026",
+      "fen": "8/pk2pppp/3p4/8/2P1P3/8/PP3PPP/6K1 w - - 0 1",
+      "retainedId": "pawn-065",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-029",
+      "fen": "2k5/pp3ppp/4p3/2pp4/2PP4/4P3/PP3PPP/6K1 w - - 0 1",
+      "retainedId": "pawn-240",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-030",
+      "fen": "8/pk3ppp/2p1p3/8/2PP4/8/PP3PPP/6K1 b - - 0 1",
+      "retainedId": "pawn-221",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-031",
+      "fen": "6k1/pp2pppp/3p4/8/2P1P3/8/PP3PPP/5K2 b - - 0 1",
+      "retainedId": "pawn-210",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-033",
+      "fen": "8/pk3ppp/4p3/2pp4/2PP4/4P3/PP3PPP/2K5 b - - 0 1",
+      "retainedId": "pawn-237",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-034",
+      "fen": "6k1/ppp2ppp/4p3/3pP3/3P4/2P5/PP3PPP/5K2 w - - 0 1",
+      "retainedId": "pawn-235",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-035",
+      "fen": "6k1/pp2pppp/3p4/8/2P1P3/8/PP3PPP/5K2 b - - 0 1",
+      "retainedId": "pawn-210",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-036",
+      "fen": "6k1/pp3ppp/2p1p3/8/3P4/8/PP3PPP/4K3 w - - 0 1",
+      "retainedId": "pawn-097",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-037",
+      "fen": "8/pk2pppp/3p4/8/2P1P3/8/PP3PPP/6K1 w - - 0 1",
+      "retainedId": "pawn-065",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-038",
+      "fen": "2k5/pp3ppp/3pp3/8/2PP4/1P6/P4PPP/2K5 b - - 0 1",
+      "retainedId": "pawn-223",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-039",
+      "fen": "5k2/pp3ppp/2p1p3/3p4/2PP4/8/PP3PPP/4K3 b - - 0 1",
+      "retainedId": "pawn-207",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-040",
+      "fen": "4k3/pp3ppp/2p1p3/8/3P4/8/PP3PPP/4K3 w - - 0 1",
+      "retainedId": "pawn-228",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-041",
+      "fen": "8/pk3ppp/2p1p3/8/2PP4/8/PK3PPP/8 w - - 0 1",
+      "retainedId": "pawn-075",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-042",
+      "fen": "6k1/pp2pppp/3p4/8/2P1P3/8/PK3PPP/8 w - - 0 1",
+      "retainedId": "pawn-099",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-043",
+      "fen": "2k5/pp3ppp/3pp3/8/2PP4/1P6/P4PPP/5K2 w - - 0 1",
+      "retainedId": "pawn-203",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-045",
+      "fen": "6k1/ppp2ppp/3p4/3Pp3/2P1P3/8/PK3PPP/8 w - - 0 1",
+      "retainedId": "pawn-174",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-049",
+      "fen": "4k3/ppp2ppp/4p3/3pP3/3P4/2P5/PP3PPP/2K5 b - - 0 1",
+      "retainedId": "pawn-163",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-051",
+      "fen": "5k2/pp3ppp/2p1p3/3p4/2PP4/8/PP3PPP/6K1 w - - 0 1",
+      "retainedId": "pawn-084",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-055",
+      "fen": "6k1/pp3ppp/3pp3/8/2PP4/1P6/P4PPP/2K5 w - - 0 1",
+      "retainedId": "pawn-090",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-056",
+      "fen": "4k3/pp3ppp/4p3/2pp4/2PP4/4P3/PP3PPP/5K2 w - - 0 1",
+      "retainedId": "pawn-225",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-060",
+      "fen": "2k5/pp3ppp/3pp3/8/2PP4/1P6/PK3PPP/8 w - - 0 1",
+      "retainedId": "pawn-196",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-061",
+      "fen": "5k2/pp3ppp/4p3/2pp4/2PP4/4P3/PP3PPP/6K1 w - - 0 1",
+      "retainedId": "pawn-212",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-062",
+      "fen": "8/pkp2ppp/3p4/3Pp3/2P1P3/8/PP3PPP/4K3 b - - 0 1",
+      "retainedId": "pawn-079",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-063",
+      "fen": "8/pk3ppp/2p1p3/8/3P4/8/PK3PPP/8 b - - 0 1",
+      "retainedId": "pawn-213",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-073",
+      "fen": "4k3/ppp2ppp/4p3/3pP3/3P4/2P5/PP3PPP/2K5 b - - 0 1",
+      "retainedId": "pawn-163",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-077",
+      "fen": "5k2/pp3ppp/4p3/2pp4/2PP4/4P3/PK3PPP/8 b - - 0 1",
+      "retainedId": "pawn-168",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-082",
+      "fen": "8/pk3ppp/3pp3/8/2PP4/1P6/P4PPP/6K1 b - - 0 1",
+      "retainedId": "pawn-198",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-083",
+      "fen": "2k5/pp3ppp/4p3/2pp4/2PP4/4P3/PP3PPP/4K3 w - - 0 1",
+      "retainedId": "pawn-123",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-095",
+      "fen": "2k5/pp3ppp/2p1p3/3p4/2PP4/8/PP3PPP/6K1 w - - 0 1",
+      "retainedId": "pawn-137",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-098",
+      "fen": "4k3/pp3ppp/2p1p3/8/2PP4/8/PK3PPP/8 w - - 0 1",
+      "retainedId": "pawn-167",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-101",
+      "fen": "6k1/pp3ppp/2p1p3/3p4/2PP4/8/PK3PPP/8 b - - 0 1",
+      "retainedId": "pawn-185",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-103",
+      "fen": "2k5/pp3ppp/2p1p3/8/3P4/8/PP3PPP/5K2 b - - 0 1",
+      "retainedId": "pawn-155",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-106",
+      "fen": "5k2/ppp2ppp/3p4/3Pp3/2P1P3/8/PP3PPP/6K1 w - - 0 1",
+      "retainedId": "pawn-232",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-107",
+      "fen": "2k5/pp3ppp/2p1p3/3p4/2PP4/8/PP3PPP/6K1 w - - 0 1",
+      "retainedId": "pawn-137",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-108",
+      "fen": "2k5/pp3ppp/3pp3/8/2PP4/1P6/P4PPP/5K2 w - - 0 1",
+      "retainedId": "pawn-203",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-110",
+      "fen": "8/pkp2ppp/4p3/3pP3/3P4/2P5/PP3PPP/6K1 b - - 0 1",
+      "retainedId": "pawn-135",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-112",
+      "fen": "8/pk3ppp/4p3/2pp4/2PP4/4P3/PP3PPP/4K3 w - - 0 1",
+      "retainedId": "pawn-162",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-116",
+      "fen": "4k3/pp3ppp/2p1p3/3p4/2PP4/8/PK3PPP/8 w - - 0 1",
+      "retainedId": "pawn-144",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-119",
+      "fen": "2k5/pp3ppp/2p1p3/8/2PP4/8/PP3PPP/6K1 w - - 0 1",
+      "retainedId": "pawn-161",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-120",
+      "fen": "5k2/pp3ppp/4p3/2pp4/2PP4/4P3/PP3PPP/6K1 w - - 0 1",
+      "retainedId": "pawn-212",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-122",
+      "fen": "8/pkp2ppp/3p4/3Pp3/2P1P3/8/PP3PPP/5K2 w - - 0 1",
+      "retainedId": "pawn-158",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-125",
+      "fen": "5k2/pp3ppp/2p1p3/8/3P4/8/PP3PPP/5K2 b - - 0 1",
+      "retainedId": "pawn-204",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-138",
+      "fen": "4k3/pp3ppp/4p3/2pp4/2PP4/4P3/PP3PPP/4K3 w - - 0 1",
+      "retainedId": "pawn-184",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-141",
+      "fen": "5k2/pp3ppp/2p1p3/3p4/2PP4/8/PP3PPP/4K3 b - - 0 1",
+      "retainedId": "pawn-207",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-142",
+      "fen": "6k1/pp3ppp/2p1p3/8/3P4/8/PP3PPP/2K5 w - - 0 1",
+      "retainedId": "pawn-145",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-154",
+      "fen": "5k2/pp3ppp/3pp3/8/2PP4/1P6/P4PPP/4K3 b - - 0 1",
+      "retainedId": "pawn-211",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-165",
+      "fen": "4k3/ppp2ppp/3p4/3Pp3/2P1P3/8/PK3PPP/8 w - - 0 1",
+      "retainedId": "pawn-170",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-176",
+      "fen": "6k1/pp3ppp/2p1p3/8/2PP4/8/PP3PPP/2K5 w - - 0 1",
+      "retainedId": "pawn-194",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-186",
+      "fen": "4k3/pp3ppp/2p1p3/8/3P4/8/PK3PPP/8 w - - 0 1",
+      "retainedId": "pawn-216",
+      "reason": "duplicate_start_position_within_family"
+    },
+    {
+      "family": "pawn",
+      "id": "pawn-231",
+      "fen": "8/pk3ppp/4p3/2pp4/2PP4/4P3/PP3PPP/2K5 b - - 0 1",
+      "retainedId": "pawn-237",
+      "reason": "duplicate_start_position_within_family"
+    }
+  ]
+}

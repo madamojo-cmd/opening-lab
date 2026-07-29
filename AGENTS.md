@@ -1,52 +1,113 @@
-# AI Agent Instructions for opening-lab
+# Blundr agent operating contract
 
-This repository is a Next.js + TypeScript project centered on a chess coaching/training app called Blundr.
-Use this file as the first reference for build commands, architecture, and important conventions before making changes.
+This repository—not a chat transcript—is the permanent source of truth for
+Blundr. Every engineer or AI agent must follow this contract before changing
+code, data, migrations, flags, integrations, or user-facing behavior.
 
-## Build / run / test
+## Required orientation
 
-- Install dependencies: `npm install --registry=https://registry.npmjs.org/`
-- Copy browser-safe Stockfish assets: `npm run postinstall` (or `npm run copy-stockfish`)
-- Local development: `npm run dev`
-- Production build: `npm run build`
-- Production start: `npm run start`
-- Coach-quality test: `npm run test:coach-quality`
-- Trainer debug test: `npm run test:trainer-debug`
-- Multi-move QA test: `npm run test:multi-move-qa`
+Read these files before editing:
 
-## High-level architecture
+1. `docs/product/BLUNDR_SYSTEM_REGISTRY.md`
+2. `docs/product/blundr-system-registry.json`
+3. `docs/product/BLUNDR_CHANGE_PROTOCOL.md`
+4. The registry entries and tests for every affected feature ID
 
-- `app/` contains the Next.js app-router UI and server API endpoints.
-  - `app/page.tsx` is the main UI page.
-  - `app/layout.tsx` defines the app shell.
-  - `app/api/brain/`, `app/api/blundr-visual-model/`, and `app/api/explorer/` are server routes for runtime coaching, visual model data, and exploration.
-  - `app/globals.css` contains global styling.
+Use the registry to locate the authoritative implementation. Do not create a
+second reward system, progression store, opening-data loader, opponent path, or
+minigame runner because the existing path is unfamiliar.
 
-- `lib/blundr/` contains the core chess coaching logic, analysis features, and debug utilities.
-  - `lib/blundr/coach*` and `lib/blundr/coaching/` implement coach behavior and reasoning.
-  - `lib/blundr/debug/` contains local QA and trainer debug helpers.
-  - `lib/blundr/engine/`, `lib/blundr/explanation/`, `lib/blundr/visual/`, and related folders hold key chess analysis, visual selection, and explanation logic.
+## Mandatory change protocol
 
-- `public/stockfish/` holds the browser-safe Stockfish worker files copied by `scripts/copy-stockfish.js`.
-- `scripts/copy-stockfish.js` is essential for installing and running the browser Stockfish engine.
+Before implementation:
 
-## Important conventions
+- Name every affected registry feature ID.
+- Trace the current UI → state → API → service → persistence/RLS path.
+- Identify contracts, flags, migrations, data packages, fallbacks, and tests
+  that could be affected.
+- Preserve unrelated worktree changes.
 
-- This project is designed to use the `stockfish` npm package and browser-safe Stockfish assets only.
-  - Do not introduce heavyweight Stockfish binaries to `public/stockfish`.
-  - Verify that `find public/stockfish -size +50M -print` prints nothing after copying assets.
+In the same coherent change:
 
-- Environment variables referenced in `README.md`:
-  - `OPENAI_API_KEY`
-  - `OPENAI_COACH_MODEL` (recommended: `gpt-4o-mini`)
-  - `LICHESS_TOKEN`
+- Make the smallest complete repair.
+- Add regression coverage for the user promise and failure modes.
+- Update affected registry entries and architectural decisions.
+- Add forward-only migrations for schema changes.
+- Declare every new environment variable and feature flag.
+- Remove an old path only after all readers, writers, tests, and operations
+  documents have moved to the replacement.
 
-- The app does not require `STOCKFISH_ENDPOINT`.
-- The current release is focused on truthfulness and reliability over added visual clutter.
-- The `README.md` is the primary project documentation and should be linked instead of duplicated.
+Before handoff:
 
-## What to change here
+- Run the real scripts from `package.json`; do not guess command names.
+- Run registry, data, migration, security, type, test, and build gates that
+  apply to the change.
+- Record the exact passing Git SHA and exact-SHA staging evidence.
+- Keep an entry `partial` or `blocked` when deployed proof is missing.
 
-- Add guidance for new, project-specific conventions that are not documented in `README.md`.
-- Avoid duplicating release notes, QA checklists, or existing design commentary.
-- Preserve the top-level architecture and tooling summary so new AI agents can onboard quickly.
+## Non-negotiable product boundaries
+
+- Guided opening replies come from the versioned opening runtime. They are not
+  Maia.
+- Anything labeled Maia must originate from the approved server-side Maia
+  adapter and record model/rating/fallback provenance. Stockfish, opening-book,
+  random, fixture, or cached generic moves may never be silently labeled Maia.
+- Rewards, rings, seen lines, weaknesses, and account progress require the
+  hydrated authenticated user identity and idempotent durable writes.
+- Protected Preview, staging, and Production routes must not fall back to
+  local-demo or in-memory persistence.
+- Minigame solutions, accepted moves, engine evidence, credentials, and
+  service-role data remain server-owned until an explicit reveal permits the
+  relevant answer.
+- Opening JSONL runtime data and smaller CSV reference exports are not
+  interchangeable. Follow the opening-data manifest and validators.
+
+## Build and verification commands
+
+Inspect `package.json` first. The main gates are:
+
+```text
+npm run typecheck
+npm run lint
+npm run format:check
+npm run verify:registry
+npm run verify:deep-minigame-catalog
+npm run security:audit
+npm run verify:migrations
+npm run test:unit
+npm run test:component
+npm run test:integration
+npm run test:security
+npm run build
+npm run bundle:audit
+git diff --check
+```
+
+`npm run verify:registry:release` is intentionally stricter. It must remain red
+until every release-critical entry has exact-SHA staging evidence. A green local
+build does not authorize changing a registry entry to `verified`.
+
+## Deprecation rules
+
+- Mark the replacement and removal conditions in the registry before
+  deprecating a path.
+- Prefer additive migrations: add, backfill, switch readers, switch writers,
+  verify, then remove in a later release.
+- Never silently change a public response, completion key, reward amount,
+  canonical identifier, dataset authority, or fallback.
+- Do not delete historical migrations or rewrite an applied migration.
+
+## Current project structure
+
+- `app/`: Next.js routes and server endpoints.
+- `components/`: user-facing React surfaces.
+- `lib/blundr/`: product contracts, chess logic, services, and persistence.
+- `supabase/migrations/`: forward-only database history.
+- `scripts/`: deterministic validators and release checks.
+- `docs/product/`: product contracts and registry.
+- `docs/architecture/`: system and data-flow decisions.
+- `docs/operations/`: environment, staging, and release procedures.
+
+Stockfish browser assets must remain browser-safe and are copied through the
+existing `scripts/copy-stockfish.js` flow. Do not add heavyweight binaries to
+`public/stockfish`.

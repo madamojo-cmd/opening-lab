@@ -32,6 +32,32 @@ export function validateDeepMiniGameScenario(
       "missing_approved_content",
       "Deep scenarios require multiple user decisions.",
     );
+  if (
+    scenario.solution.opponentReplies.length >
+    scenario.solution.userMoves.length
+  )
+    return rejection(
+      "missing_approved_content",
+      "Deep scenarios contain too many opponent replies.",
+    );
+  if (scenario.generatorVersion === "prepared-engine-catalog-v1") {
+    const evidence = scenario.evidence;
+    if (
+      !evidence ||
+      evidence.catalogId !== "blundr-engine-certified-deep-minigames" ||
+      evidence.catalogVersion !== "1.0.0" ||
+      evidence.engine !== "Stockfish 18 Lite" ||
+      evidence.depth !== 8 ||
+      evidence.multiPv < 1 ||
+      evidence.legalMoveCount < 1 ||
+      evidence.pieceCount < 2 ||
+      !/^[a-f0-9]{64}$/.test(evidence.checksumSha256)
+    )
+      return rejection(
+        "missing_approved_content",
+        "Engine-certified scenario evidence is incomplete.",
+      );
+  }
   let fen = scenario.startFen;
   const reachedTargets = new Set<string>();
   for (let index = 0; index < scenario.solution.userMoves.length; index += 1) {

@@ -12,6 +12,7 @@ export function projectStandaloneMiniGame(
     const state = record.state as DeepMiniGameState;
     return {
       instanceId: record.instanceId,
+      revision: record.revision,
       miniGameId: record.scenario.miniGameId,
       source: "standalone_review",
       board: {
@@ -61,6 +62,7 @@ export function projectStandaloneMiniGame(
             : "ready";
   return {
     instanceId: record.instanceId,
+    revision: record.revision,
     miniGameId: game.miniGameId,
     source: "standalone_review",
     board: {

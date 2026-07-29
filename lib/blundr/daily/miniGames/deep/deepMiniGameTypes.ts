@@ -19,6 +19,23 @@ export type DeepMiniGameSolution = {
   terminalResult?: "win" | "draw" | "hold";
   requiredTargets?: readonly string[];
 };
+export type DeepMiniGameEvidence = {
+  catalogId: string;
+  catalogVersion: string;
+  sourceRecordId: string;
+  family: "tactic" | "knight" | "pawn";
+  engine: "Stockfish 18 Lite";
+  depth: number;
+  evaluationCp: number | null;
+  mate: number | null;
+  bestMoveGapCp: number;
+  multiPv: number;
+  legalMoveCount: number;
+  pieceCount: number;
+  theme: string;
+  architecture: string;
+  checksumSha256: string;
+};
 export type DeepMiniGameScenario = {
   id: string;
   miniGameId: DeepMiniGameId;
@@ -29,6 +46,7 @@ export type DeepMiniGameScenario = {
   generatorVersion: string;
   validatorVersion: string;
   evidenceVersion: string;
+  evidence?: DeepMiniGameEvidence;
 };
 export type DeepMiniGameState = ActivityAttemptState & {
   currentFen: string;

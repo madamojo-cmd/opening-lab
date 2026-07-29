@@ -11,6 +11,7 @@ import type {
   DailyBlundrMiniGameCard,
 } from "@/lib/blundr/daily/miniGames/dailyMiniGameTypes";
 import { reduceDeepMiniGame } from "@/lib/blundr/daily/miniGames/deep";
+import { STANDALONE_MINIGAME_REVISION_CONFLICT } from "@/lib/blundr/daily/miniGames/standalone/standaloneMiniGameRepository.server";
 
 export const dynamic = "force-dynamic";
 
@@ -31,17 +32,18 @@ export async function POST(
     return NextResponse.json({ error: "instance_not_found" }, { status: 404 });
   if (record.expiresAt <= new Date().toISOString())
     return NextResponse.json({ error: "instance_expired" }, { status: 410 });
-  const body = (await request
-    .json()
-    .catch(() => null)) as Partial<DailyMiniGameAdvanceAttempt> | null;
+  const body = (await request.json().catch(() => null)) as
+    | (Partial<DailyMiniGameAdvanceAttempt> & { revision?: number })
+    | null;
   if (!body?.uci || !body.from || !body.to)
     return NextResponse.json({ error: "invalid_move" }, { status: 400 });
-  const card = record.card as DailyBlundrMiniGameCard;
-  const definition = getDailyMiniGameDefinition(card.miniGame.miniGameId);
-  if (!definition?.advance)
+  const revision = body.revision;
+  if (typeof revision !== "number" || !Number.isInteger(revision))
+    return NextResponse.json({ error: "revision_required" }, { status: 400 });
+  if (revision !== record.revision)
     return NextResponse.json(
-      { error: "activity_unsupported" },
-      { status: 422 },
+      { error: "stale_instance_state", revision: record.revision },
+      { status: 409 },
     );
   if (record.kind === "deep" && record.scenario) {
     const result = reduceDeepMiniGame(record.state as never, record.scenario, {
@@ -60,11 +62,24 @@ export async function POST(
             ? "incorrect"
             : null),
     };
-    await repository.update(next);
+    let saved;
+    try {
+      saved = await repository.update(next, revision);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message === STANDALONE_MINIGAME_REVISION_CONFLICT
+      )
+        return NextResponse.json(
+          { error: "stale_instance_state" },
+          { status: 409 },
+        );
+      throw error;
+    }
     return NextResponse.json({
       instance: {
-        ...projectStandaloneMiniGame(next),
-        feedback: publicFeedback(next, false),
+        ...projectStandaloneMiniGame(saved),
+        feedback: publicFeedback(saved, false),
       },
       result: {
         legal: result.kind !== "invalid",
@@ -74,6 +89,13 @@ export async function POST(
       },
     });
   }
+  const card = record.card as DailyBlundrMiniGameCard;
+  const definition = getDailyMiniGameDefinition(card.miniGame.miniGameId);
+  if (!definition?.advance)
+    return NextResponse.json(
+      { error: "activity_unsupported" },
+      { status: 422 },
+    );
   const attempt: DailyMiniGameAdvanceAttempt = {
     from: String(body.from),
     to: String(body.to),
@@ -92,11 +114,24 @@ export async function POST(
       record.firstAttempt ??
       (result.completed ? (result.won ? "correct" : "incorrect") : null),
   } as const;
-  await repository.update(next);
+  let saved;
+  try {
+    saved = await repository.update(next, revision);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === STANDALONE_MINIGAME_REVISION_CONFLICT
+    )
+      return NextResponse.json(
+        { error: "stale_instance_state" },
+        { status: 409 },
+      );
+    throw error;
+  }
   return NextResponse.json({
     instance: {
-      ...projectStandaloneMiniGame(next),
-      feedback: publicFeedback(next, false),
+      ...projectStandaloneMiniGame(saved),
+      feedback: publicFeedback(saved, false),
     },
     result: {
       legal: result.legal,

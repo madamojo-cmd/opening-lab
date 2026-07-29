@@ -41,6 +41,8 @@ jobs:
           done
       - name: Static checks
         run: |
+          npm run verify:registry
+          npm run verify:deep-minigame-catalog
           npm run typecheck
           npm run lint
           npm run format:check
@@ -61,3 +63,6 @@ jobs:
           npm run bundle:audit
           npm run test:e2e
           npm run verify:release
+      - name: Strict registry release gate
+        if: github.ref == 'refs/heads/main'
+        run: npm run verify:registry:release

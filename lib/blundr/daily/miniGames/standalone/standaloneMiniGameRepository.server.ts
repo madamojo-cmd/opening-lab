@@ -7,6 +7,8 @@ import type {
 import type { StandaloneMiniGameServerRecord } from "./standaloneMiniGameTypes";
 
 const localRecords = new Map<string, StandaloneMiniGameServerRecord>();
+export const STANDALONE_MINIGAME_REVISION_CONFLICT =
+  "standalone_minigame_revision_conflict";
 
 export class StandaloneMiniGameRepository {
   async create(record: StandaloneMiniGameServerRecord): Promise<void> {
@@ -32,6 +34,7 @@ export class StandaloneMiniGameRepository {
       expires_at: record.expiresAt,
       kind: record.kind ?? "legacy",
       server_scenario: record.scenario ?? null,
+      revision: record.revision,
     });
     if (result.error) throw new Error("standalone_minigame_create_failed");
   }
@@ -56,6 +59,7 @@ export class StandaloneMiniGameRepository {
     return {
       instanceId: result.data.instance_id,
       userId: result.data.user_id,
+      revision: Number(result.data.revision ?? 0),
       card: result.data.server_card,
       state: result.data.server_state as DailyMiniGameState,
       firstAttempt: result.data.first_attempt,
@@ -66,13 +70,22 @@ export class StandaloneMiniGameRepository {
     };
   }
 
-  async update(record: StandaloneMiniGameServerRecord): Promise<void> {
+  async update(
+    record: StandaloneMiniGameServerRecord,
+    expectedRevision: number,
+  ): Promise<StandaloneMiniGameServerRecord> {
     const client = createBlundrSupabaseAdminClient();
     if (!client) {
-      if (process.env.NODE_ENV === "test")
-        localRecords.set(record.instanceId, record);
-      return;
+      if (process.env.NODE_ENV !== "test")
+        throw new Error("standalone_minigame_persistence_unavailable");
+      const current = localRecords.get(record.instanceId);
+      if (!current || current.revision !== expectedRevision)
+        throw new Error(STANDALONE_MINIGAME_REVISION_CONFLICT);
+      const saved = { ...record, revision: expectedRevision + 1 };
+      localRecords.set(record.instanceId, saved);
+      return saved;
     }
+    const nextRevision = expectedRevision + 1;
     const result = await client
       .from("blundr_minigame_instances")
       .update({
@@ -81,10 +94,16 @@ export class StandaloneMiniGameRepository {
         retry_count: record.retryCount,
         kind: record.kind ?? "legacy",
         server_scenario: record.scenario ?? null,
+        revision: nextRevision,
         updated_at: new Date().toISOString(),
       })
       .eq("instance_id", record.instanceId)
-      .eq("user_id", record.userId);
+      .eq("user_id", record.userId)
+      .eq("revision", expectedRevision)
+      .select("revision")
+      .maybeSingle();
     if (result.error) throw new Error("standalone_minigame_update_failed");
+    if (!result.data) throw new Error(STANDALONE_MINIGAME_REVISION_CONFLICT);
+    return { ...record, revision: nextRevision };
   }
 }
