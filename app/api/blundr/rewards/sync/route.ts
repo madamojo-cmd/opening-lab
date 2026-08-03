@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAccountPersistenceAdapter } from "@/lib/blundr/accounts/accountRepository";
 import { getCurrentBlundrUser } from "@/lib/blundr/accounts/accountSession";
 import type { RewardRoll, UserRewardHistory } from "@/lib/blundr/accounts/accountTypes";
+import { dedupeRewardRollsById } from "@/lib/blundr/rewards/rewardRollPersistence";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ function isRewardHistory(value: unknown): value is UserRewardHistory {
 }
 
 function isRewardRoll(value: unknown): value is RewardRoll {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value) && typeof (value as RewardRoll).userId === "string" && typeof (value as RewardRoll).trigger === "string");
+  return Boolean(value && typeof value === "object" && !Array.isArray(value) && typeof (value as RewardRoll).id === "string" && typeof (value as RewardRoll).userId === "string" && typeof (value as RewardRoll).trigger === "string");
 }
 
 async function readBody(request: NextRequest): Promise<Record<string, unknown>> {
@@ -28,7 +29,7 @@ async function readBody(request: NextRequest): Promise<Record<string, unknown>> 
 }
 
 export async function POST(request: NextRequest) {
-  const user = await getCurrentBlundrUser({ request, allowLocalFallback: true });
+  const user = await getCurrentBlundrUser({ request, allowLocalFallback: false });
   if (!user) {
     return NextResponse.json(
       {
@@ -44,7 +45,9 @@ export async function POST(request: NextRequest) {
 
   const body = await readBody(request);
   const rewardHistory = isRewardHistory(body.rewardHistory) ? body.rewardHistory : null;
-  const rewardRolls = Array.isArray(body.rewardRolls) ? body.rewardRolls.filter(isRewardRoll) : [];
+  const rewardRolls = dedupeRewardRollsById(
+    Array.isArray(body.rewardRolls) ? body.rewardRolls.filter(isRewardRoll) : [],
+  );
 
   if (rewardHistory && normalizeText(rewardHistory.userId) && normalizeText(rewardHistory.userId) !== user.userId) {
     return NextResponse.json(
@@ -59,13 +62,31 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (
+    rewardRolls.some(
+      (roll) => normalizeText(roll.userId) !== user.userId,
+    )
+  ) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: {
+          code: "user_mismatch",
+          message: "Reward rolls belong to a different user.",
+        },
+      },
+      { status: 400 },
+    );
+  }
+
   const adapter = getAccountPersistenceAdapter({
     user,
     accessToken: user.accessToken ?? null,
     mode: user.mode,
-    allowLocalFallback: true,
+    allowLocalFallback: false,
   });
 
+  let savedRewardHistory: UserRewardHistory | null = null;
   if (rewardHistory) {
     const historySave = await adapter.upsertRewardHistory({
       ...rewardHistory,
@@ -74,9 +95,10 @@ export async function POST(request: NextRequest) {
     if (!historySave.ok) {
       return NextResponse.json(historySave, { status: 500 });
     }
+    savedRewardHistory = historySave.data;
   }
 
-  let savedCount = 0;
+  const savedRewardRolls: RewardRoll[] = [];
   for (const roll of rewardRolls) {
     const saveResult = await adapter.appendRewardRoll({
       ...roll,
@@ -85,14 +107,15 @@ export async function POST(request: NextRequest) {
     if (!saveResult.ok) {
       return NextResponse.json(saveResult, { status: 500 });
     }
-    savedCount += 1;
+    savedRewardRolls.push(saveResult.data);
   }
 
   return NextResponse.json({
     ok: true,
     data: {
-      rewardHistory: rewardHistory ? { ...rewardHistory, userId: user.userId } : null,
-      rewardRollCount: savedCount,
+      rewardHistory: savedRewardHistory,
+      rewardRolls: savedRewardRolls,
+      rewardRollCount: savedRewardRolls.length,
     },
   });
 }

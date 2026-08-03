@@ -39,6 +39,7 @@ test("protected reward sync routes prohibit local fallback", () => {
   for (const path of [
     "app/api/blundr/repertoire/sync/route.ts",
     "app/api/blundr/daily-rings/sync/route.ts",
+    "app/api/blundr/rewards/sync/route.ts",
   ]) {
     const source = readFileSync(resolve(process.cwd(), path), "utf8");
     assert.match(source, /allowLocalFallback:\s*false/);

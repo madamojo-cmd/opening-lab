@@ -6,6 +6,7 @@ import {
   getEarliestIncompleteOnboardingV11Step,
   getOnboardingV11PaceGoals,
 } from "../onboardingV11Contract";
+import { shouldInitializeOnboardingV11StarterRepertoire } from "../onboardingV11";
 
 test("v1.1 onboarding resumes the durable next screen rather than inferring completion from defaults", () => {
   const state = {
@@ -39,6 +40,24 @@ test("v1.1 onboarding maps only accepted pace contracts", () => {
     battery: 5,
     daily: 1,
   });
+});
+
+test("v1.1 onboarding completion never reinitializes a saved repertoire", () => {
+  assert.equal(
+    shouldInitializeOnboardingV11StarterRepertoire({
+      step: "ready",
+      completed: true,
+      ratingBandId: "1200-1600",
+      priorities: ["remember_openings"],
+      pace: "standard",
+      starterPackId: "classical_attacker",
+      trainingMode: "assisted",
+      ageConfirmed: true,
+      startedAt: "2026-08-03T00:00:00.000Z",
+      completedAt: "2026-08-03T00:05:00.000Z",
+    }),
+    false,
+  );
 });
 
 test("v1.1 onboarding verifies starter openings through the product access policy", () => {

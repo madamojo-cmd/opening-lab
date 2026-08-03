@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import { persistAuthenticatedAccountSnapshot } from "@/lib/blundr/accounts/authenticatedAccountHydration";
 import type { UserAccountBootstrap } from "@/lib/blundr/accounts/accountTypes";
@@ -28,6 +28,7 @@ export function AuthenticatedAccountHydrationGate({
   children: ReactNode;
 }) {
   const pathname = usePathname() ?? "/";
+  const router = useRouter();
   const auth = useOnboardingAuthSession();
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -90,7 +91,22 @@ export function AuthenticatedAccountHydrationGate({
     exempt,
   ]);
 
+  useEffect(() => {
+    if (!exempt && auth.status === "signed_out") {
+      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+    }
+  }, [auth.status, exempt, pathname, router]);
+
   if (exempt) return <>{children}</>;
+  if (auth.status === "signed_out") {
+    return (
+      <main className="min-h-screen bg-stone-50 p-6">
+        <p className="text-sm text-stone-700" role="status">
+          Redirecting to sign in.
+        </p>
+      </main>
+    );
+  }
   if (state === "ready" && auth.status === "authenticated")
     return <>{children}</>;
   if (state === "error") {

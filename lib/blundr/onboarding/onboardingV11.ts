@@ -134,6 +134,12 @@ export function normalizeOnboardingV11ProfileRow(
   };
 }
 
+export function shouldInitializeOnboardingV11StarterRepertoire(
+  state: OnboardingV11State,
+): boolean {
+  return !state.completed;
+}
+
 function nextStep(step: OnboardingV11Step): OnboardingV11Step {
   const index = ONBOARDING_V11_STEPS.indexOf(step);
   return (
@@ -267,6 +273,7 @@ export async function completeOnboardingV11(
   user: CurrentBlundrUser,
 ): Promise<OnboardingV11State> {
   const state = await readOnboardingV11State(user);
+  if (!shouldInitializeOnboardingV11StarterRepertoire(state)) return state;
   const earliest = getEarliestIncompleteOnboardingV11Step(state);
   if (earliest !== "plan" && earliest !== "ready")
     throw new Error(`onboarding_incomplete:${earliest}`);
