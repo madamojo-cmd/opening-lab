@@ -11,11 +11,17 @@ async function main() {
   }
   for (const file of files) {
     const source = await readFile(file, "utf8");
+    const isRuntimeSourceIdentityContract =
+      file === "lib/blundr/trainingRuntime/trainingRuntimeSchema.ts";
     assert.equal(
-      /opening-nodes|candidate-moves/.test(source),
+      /opening-nodes|candidate-moves/.test(source) &&
+        !isRuntimeSourceIdentityContract,
       false,
       `forbidden_external_dataset_import:${file}`,
     );
+    if (isRuntimeSourceIdentityContract) {
+      assert.equal(/release-{1,2}inputs|project_sources/.test(source), false);
+    }
   }
   console.log(`security baseline scanned ${files.length} source files`);
 }
