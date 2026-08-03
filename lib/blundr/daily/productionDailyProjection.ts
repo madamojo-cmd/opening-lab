@@ -31,6 +31,7 @@ export function toPublicDailySession(
     deckId: session.deckId,
     dateKey: session.dateKey,
     publicCards,
+    reservationIdentity: session.reservationIdentity,
     version: session.version,
     completedAt: session.completedAt,
     state: {

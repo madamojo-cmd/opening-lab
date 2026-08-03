@@ -13,7 +13,6 @@ import { extractDeterministicFindings } from "../findingExtractor";
 import { dedupeFindings } from "../findingDedupe";
 import { normalizeProviderUsername } from "../gameFingerprint";
 import { InMemoryImportJobRepository } from "../inMemoryImportJobRepository";
-import { ImportJobRepository } from "../importJobRepository";
 import { buildImportedFindingLearningEventInput } from "../importedFindingProjection";
 import { buildSuccessfulProviderSyncAccount } from "../providerAccountSync";
 import type {
@@ -404,7 +403,7 @@ test("in-memory import jobs deduplicate concurrent sync requests and lease takeo
 });
 
 test("provider import jobs recover stranded work and retain cumulative attempts", async () => {
-  const repository = new ImportJobRepository();
+  const repository = new InMemoryImportJobRepository();
   const cursor = {
     provider: "lichess" as const,
     cursor: null,

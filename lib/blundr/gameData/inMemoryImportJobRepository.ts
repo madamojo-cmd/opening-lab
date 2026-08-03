@@ -3,6 +3,42 @@ import type { GameImportJob, ImportCursor } from "./gameDataTypes";
 export class InMemoryImportJobRepository {
   private readonly jobs = new Map<string, GameImportJob>();
 
+  nextPending(limit = 5): GameImportJob[] {
+    return [...this.jobs.values()]
+      .filter(
+        (job) =>
+          job.status === "queued" ||
+          (job.status === "retryable_error" && job.attemptCount < 5),
+      )
+      .slice(0, limit);
+  }
+
+  recoverStranded(now = new Date()): void {
+    for (const [jobId, job] of this.jobs) {
+      if (
+        (job.status === "leased" || job.status === "running") &&
+        job.leaseExpiresAt &&
+        Date.parse(job.leaseExpiresAt) <= now.valueOf()
+      ) {
+        this.jobs.set(jobId, {
+          ...job,
+          status: "queued",
+          leaseOwner: null,
+          leaseExpiresAt: null,
+          updatedAt: now.toISOString(),
+        });
+      }
+    }
+  }
+
+  update(jobId: string, patch: Partial<GameImportJob>): GameImportJob {
+    const job = this.jobs.get(jobId);
+    if (!job) throw new Error(`import_job_not_found:${jobId}`);
+    const next = { ...job, ...patch };
+    this.jobs.set(jobId, next);
+    return next;
+  }
+
   enqueue(input: {
     userId: string;
     provider: GameImportJob["provider"];

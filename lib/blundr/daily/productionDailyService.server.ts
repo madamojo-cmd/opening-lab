@@ -696,7 +696,7 @@ async function buildReservation(
   const selected: typeof cards = [];
   const selectedPositions = new Set<string>();
   const selectedActivities = new Set<string>();
-  const boardRecall = ordered.find(
+  const boardRecall = orderedCards.find(
     (card) => card.publicCard.activityId === "daily_move_recall",
   );
   if (boardRecall) {
