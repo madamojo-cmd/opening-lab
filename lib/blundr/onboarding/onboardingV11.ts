@@ -19,6 +19,7 @@ import {
   ONBOARDING_V11_PRIORITIES,
   ONBOARDING_V11_STEPS,
   getEarliestIncompleteOnboardingV11Step,
+  shouldInitializeOnboardingV11StarterRepertoire,
   type OnboardingPriority,
   type OnboardingV11Pace,
   type OnboardingV11State,
@@ -132,12 +133,6 @@ export function normalizeOnboardingV11ProfileRow(
     startedAt: text(row?.onboarding_started_at) || null,
     completedAt: text(row?.onboarding_completed_at) || null,
   };
-}
-
-export function shouldInitializeOnboardingV11StarterRepertoire(
-  state: OnboardingV11State,
-): boolean {
-  return !state.completed;
 }
 
 function nextStep(step: OnboardingV11Step): OnboardingV11Step {

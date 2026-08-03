@@ -9,3 +9,4 @@ export const ONBOARDING_V11_PRIORITIES: readonly OnboardingPriority[] = ["rememb
 export const ONBOARDING_V11_PACE_GOALS: Record<OnboardingV11Pace, { tempo: number; battery: number; daily: number }> = { light: { tempo: 5, battery: 1, daily: 1 }, standard: { tempo: 10, battery: 3, daily: 1 }, focused: { tempo: 20, battery: 5, daily: 1 } };
 export function getOnboardingV11PaceGoals(pace: OnboardingV11Pace) { return ONBOARDING_V11_PACE_GOALS[pace]; }
 export function getEarliestIncompleteOnboardingV11Step(state: OnboardingV11State): OnboardingV11Step { return state.completed ? "ready" : state.step; }
+export function shouldInitializeOnboardingV11StarterRepertoire(state: OnboardingV11State): boolean { return !state.completed; }

@@ -5,8 +5,8 @@ import { hasVerifiedStarterOpeningAccess } from "../starterOpeningAccess";
 import {
   getEarliestIncompleteOnboardingV11Step,
   getOnboardingV11PaceGoals,
+  shouldInitializeOnboardingV11StarterRepertoire,
 } from "../onboardingV11Contract";
-import { shouldInitializeOnboardingV11StarterRepertoire } from "../onboardingV11";
 
 test("v1.1 onboarding resumes the durable next screen rather than inferring completion from defaults", () => {
   const state = {
