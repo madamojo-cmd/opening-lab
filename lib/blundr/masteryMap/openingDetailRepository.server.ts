@@ -80,7 +80,7 @@ export async function loadOpeningDetailReadModel(
       importedGameMatchCount: 0,
     });
   }
-  const [findings, mastery, segments, jobs] = await Promise.all([
+  const [findings, mastery, weaknesses, segments, jobs] = await Promise.all([
     client
       .from("blundr_learning_findings")
       .select(
@@ -92,9 +92,18 @@ export async function loadOpeningDetailReadModel(
     client
       .from("blundr_node_mastery")
       .select(
-        "position_key,attempts,first_attempt_result,confidence,updated_at",
+        "position_key,opening_id,play_key,attempts,first_attempt_result,confidence,updated_at",
       )
       .eq("user_id", user.userId)
+      .eq("opening_id", openingId)
+      .eq("access_decision", "active"),
+    client
+      .from("blundr_weakness_projection")
+      .select(
+        "position_key,opening_id,play_key,category,score,confidence,explanation,recommended_daily_intervention,access_decision",
+      )
+      .eq("user_id", user.userId)
+      .eq("opening_id", openingId)
       .eq("access_decision", "active"),
     client
       .from("blundr_game_opening_segments")
@@ -131,24 +140,26 @@ export async function loadOpeningDetailReadModel(
       ),
     }),
   );
-  const weaknessRows = findingRows.map((row) => ({
+  const weaknessRows = (weaknesses.data ?? []).map((row) => ({
     positionKey: String(row.position_key),
+    openingId: String(row.opening_id),
+    playKey: String(row.play_key),
     category: String(row.category) as never,
-    score: Number(row.confidence ?? 0),
+    score: Number(row.score ?? 0),
     confidence: Number(row.confidence ?? 0),
     explanation: String(row.explanation ?? ""),
-    recommendedDailyIntervention: Array.isArray(row.recommended_activity_types)
-      ? (String(
-          row.recommended_activity_types[0] ?? "review_position",
-        ) as never)
-      : ("review_position" as never),
-    access: "active" as const,
+    recommendedDailyIntervention: String(
+      row.recommended_daily_intervention ?? "review_position",
+    ) as never,
+    access: String(row.access_decision) as "active",
   }));
   const nodes = joinOpeningTreeToMastery({
     openingId,
     runtimeNodes: runtime.nodes,
     mastery: (mastery.data ?? []).map((row) => ({
       positionKey: String(row.position_key),
+      openingId: String(row.opening_id),
+      playKey: String(row.play_key),
       attempts: Number(row.attempts ?? 0),
       firstAttemptAt: null,
       firstAttemptResult: row.first_attempt_result as
@@ -166,7 +177,7 @@ export async function loadOpeningDetailReadModel(
     ? Date.parse(String(jobs.data[0].updated_at))
     : NaN;
   const state =
-    findings.error || mastery.error
+    findings.error || mastery.error || weaknesses.error
       ? "error"
       : !Number.isFinite(lastSync)
         ? nodes.length

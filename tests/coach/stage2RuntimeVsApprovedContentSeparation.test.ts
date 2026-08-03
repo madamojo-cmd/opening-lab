@@ -47,7 +47,7 @@ export function testStage2RuntimeVsApprovedContentSeparation(): void {
   } as any);
 
   assert.equal((snapshot as any).runtime.runtimeDataSource, "local_crawled_package");
-  assert.equal((snapshot as any).runtime.runtimePackageId, "stage2-21-opening-stepdown-runtime-v1");
+  assert.equal((snapshot as any).runtime.runtimePackageId, "blundr-opening-runtime-3.99.v1");
   assert.equal((snapshot as any).runtime.openingCount, 21);
   assert.equal((snapshot as any).runtime.visibleOpeningCount, 21);
   assert.equal((snapshot as any).runtime.runtimeAvailableCount, 21);

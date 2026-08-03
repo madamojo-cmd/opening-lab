@@ -46,6 +46,9 @@ perf-*/
 *.diagnostics.json
 *.diagnostic.json
 *.jsonl
+!data/blundr/training-runtime/
+!data/blundr/training-runtime/blundr-opening-runtime-3.99.v1/
+!data/blundr/training-runtime/blundr-opening-runtime-3.99.v1/*.jsonl
 *.zip
 !docs/2026-06-17/stage2-approved-content-candidates-5openings-50lines-v1.zip
 !docs/2026-06-17/stage2-approved-content-candidates-batch2-5openings-v1.zip

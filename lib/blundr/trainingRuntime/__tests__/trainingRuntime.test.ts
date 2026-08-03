@@ -4,6 +4,7 @@ import { buildCandidateIndex } from "../buildCandidateIndex";
 import { buildTranspositionGroups } from "../buildTranspositionGroups";
 import { validateCandidateMoves } from "../validateCandidateMoves";
 import { validateOpeningNodes } from "../validateOpeningNodes";
+import { appendRuntimeMove } from "../runtimePlayKey";
 const nodes = [
   {
     nodeId: "a",
@@ -46,4 +47,47 @@ test("runtime indexes are deterministic and transpositions require distinct rout
     ["d2d4", "g1f3"],
   );
   assert.equal(buildTranspositionGroups(nodes).length, 0);
+});
+
+test("authoritative JSONL aliases preserve canonical startpos and ply translation", () => {
+  const sourceNodes = validateOpeningNodes([
+    {
+      nodeId: "root",
+      openingId: "test",
+      learnerPerspective: "white",
+      playKey: "startpos",
+      playSequenceUci: "",
+      ply: 0,
+      sideToMove: "white",
+      profileId: "profile",
+    },
+  ]);
+  assert.equal(sourceNodes.rejected.length, 0);
+  assert.equal(sourceNodes.accepted[0].playKey, "startpos");
+  assert.equal(sourceNodes.accepted[0].playSequenceUci, "");
+  const sourceCandidates = validateCandidateMoves(
+    [
+      {
+        nodeId: "root",
+        openingId: "test",
+        playKey: "startpos",
+        uci: "e2e4",
+        san: "e4",
+        ply: 0,
+        sideToMove: "white",
+        profileId: "profile",
+        source: "lichess",
+        totalGames: 1_000,
+        playPct: 0.5,
+        learnerToMove: true,
+        isBookCandidate: true,
+      },
+    ],
+    sourceNodes.accepted,
+  );
+  assert.equal(sourceCandidates.rejected.length, 0);
+  assert.equal(sourceCandidates.accepted[0].playKeyBefore, "startpos");
+  assert.equal(sourceCandidates.accepted[0].moveUci, "e2e4");
+  assert.equal(appendRuntimeMove("startpos", "e2e4"), "e2e4");
+  assert.equal(Number(sourceCandidates.accepted[0].ply) + 1, 1);
 });

@@ -22,11 +22,14 @@ describe("Step 4 intelligence journeys", () => {
           playSequenceUci: "e2e4",
           ply: 1,
           sideToMove: "black",
+          positionKey: "position-hash",
         },
       ],
       mastery: [
         {
-          positionKey: "e2e4",
+          positionKey: "position-hash",
+          openingId: "italian-white",
+          playKey: "e2e4",
           attempts: 2,
           firstAttemptAt: null,
           firstAttemptResult: "incorrect",
@@ -36,7 +39,9 @@ describe("Step 4 intelligence journeys", () => {
       ],
       weaknesses: [
         {
-          positionKey: "e2e4",
+          positionKey: "position-hash",
+          openingId: "italian-white",
+          playKey: "e2e4",
           category: "opening_move",
           score: 0.9,
           confidence: 0.8,
@@ -47,7 +52,7 @@ describe("Step 4 intelligence journeys", () => {
       ],
       evidence: [
         {
-          positionKey: "e2e4",
+          positionKey: "position-hash",
           evidenceCount: 3,
           importedGameEvidenceCount: 2,
           alternateRoute: false,

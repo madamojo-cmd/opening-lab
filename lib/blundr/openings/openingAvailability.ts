@@ -3,6 +3,7 @@ import {
   getStage2ApprovedContentInventorySummary,
 } from "../stage2Coaching/stage2ApprovedContentInventory.generated";
 import { resolveStage2CanonicalOpeningId, STAGE2_RUNTIME_OPENING_IDS } from "./openingIdentity";
+import { TRAINING_RUNTIME_PACKAGE_ID, TRAINING_RUNTIME_PACKAGE_ROOT } from "../trainingRuntime/trainingRuntimeSchema";
 export { STAGE2_RUNTIME_OPENING_IDS } from "./openingIdentity";
 
 export type OpeningContentStatus = "none" | "fallback_only" | "sample" | "approved_partial" | "approved";
@@ -47,8 +48,8 @@ export type OpeningAvailabilitySummary = {
   liveLichessCalled: false;
 };
 
-export const STAGE2_RUNTIME_PACKAGE_ID = "stage2-21-opening-stepdown-runtime-v1" as const;
-export const STAGE2_RUNTIME_PACKAGE_ROOT = `data/blundr/${STAGE2_RUNTIME_PACKAGE_ID}` as const;
+export const STAGE2_RUNTIME_PACKAGE_ID = TRAINING_RUNTIME_PACKAGE_ID;
+export const STAGE2_RUNTIME_PACKAGE_ROOT = TRAINING_RUNTIME_PACKAGE_ROOT;
 
 const OPENING_LABELS: Record<string, { displayName: string; learnerPerspective: "white" | "black" }> = {
   "caro-kann-black": { displayName: "Caro-Kann Defense", learnerPerspective: "black" },
@@ -75,27 +76,27 @@ const OPENING_LABELS: Record<string, { displayName: string; learnerPerspective: 
 };
 
 const OPENING_RUNTIME_COUNTS: Record<string, { runtimeNodeCount: number; runtimeCandidateMoveCount: number }> = {
-  "caro-kann-black": { runtimeNodeCount: 613, runtimeCandidateMoveCount: 1493 },
-  "colle-white": { runtimeNodeCount: 11083, runtimeCandidateMoveCount: 26899 },
-  "english-white": { runtimeNodeCount: 10324, runtimeCandidateMoveCount: 23154 },
-  "french-black": { runtimeNodeCount: 577, runtimeCandidateMoveCount: 1326 },
-  "italian-black": { runtimeNodeCount: 322, runtimeCandidateMoveCount: 874 },
-  "italian-white": { runtimeNodeCount: 322, runtimeCandidateMoveCount: 874 },
-  "kings-indian-black": { runtimeNodeCount: 175, runtimeCandidateMoveCount: 421 },
-  "london-white": { runtimeNodeCount: 11083, runtimeCandidateMoveCount: 26899 },
-  "nimzo-indian-black": { runtimeNodeCount: 116, runtimeCandidateMoveCount: 300 },
-  "petroff-black": { runtimeNodeCount: 668, runtimeCandidateMoveCount: 1740 },
-  "pirc-black": { runtimeNodeCount: 326, runtimeCandidateMoveCount: 757 },
-  "qgd-black": { runtimeNodeCount: 441, runtimeCandidateMoveCount: 1027 },
-  "queens-gambit-white": { runtimeNodeCount: 2532, runtimeCandidateMoveCount: 5996 },
-  "queens-indian-black": { runtimeNodeCount: 90, runtimeCandidateMoveCount: 180 },
-  "reti-white": { runtimeNodeCount: 1676, runtimeCandidateMoveCount: 3420 },
-  "ruy-lopez-white": { runtimeNodeCount: 315, runtimeCandidateMoveCount: 739 },
-  "scandinavian-black": { runtimeNodeCount: 2959, runtimeCandidateMoveCount: 6693 },
-  "scotch-white": { runtimeNodeCount: 101, runtimeCandidateMoveCount: 248 },
-  "sicilian-black": { runtimeNodeCount: 3282, runtimeCandidateMoveCount: 7972 },
-  "slav-black": { runtimeNodeCount: 679, runtimeCandidateMoveCount: 1705 },
-  "vienna-white": { runtimeNodeCount: 1548, runtimeCandidateMoveCount: 3791 },
+  "caro-kann-black": { runtimeNodeCount: 101, runtimeCandidateMoveCount: 100 },
+  "colle-white": { runtimeNodeCount: 1059, runtimeCandidateMoveCount: 1058 },
+  "english-white": { runtimeNodeCount: 75, runtimeCandidateMoveCount: 74 },
+  "french-black": { runtimeNodeCount: 130, runtimeCandidateMoveCount: 129 },
+  "italian-black": { runtimeNodeCount: 1013, runtimeCandidateMoveCount: 1012 },
+  "italian-white": { runtimeNodeCount: 1161, runtimeCandidateMoveCount: 1160 },
+  "kings-indian-black": { runtimeNodeCount: 150, runtimeCandidateMoveCount: 149 },
+  "london-white": { runtimeNodeCount: 1412, runtimeCandidateMoveCount: 1411 },
+  "nimzo-indian-black": { runtimeNodeCount: 227, runtimeCandidateMoveCount: 226 },
+  "petroff-black": { runtimeNodeCount: 126, runtimeCandidateMoveCount: 125 },
+  "pirc-black": { runtimeNodeCount: 145, runtimeCandidateMoveCount: 144 },
+  "qgd-black": { runtimeNodeCount: 156, runtimeCandidateMoveCount: 155 },
+  "queens-gambit-white": { runtimeNodeCount: 139, runtimeCandidateMoveCount: 138 },
+  "queens-indian-black": { runtimeNodeCount: 200, runtimeCandidateMoveCount: 199 },
+  "reti-white": { runtimeNodeCount: 165, runtimeCandidateMoveCount: 164 },
+  "ruy-lopez-white": { runtimeNodeCount: 755, runtimeCandidateMoveCount: 754 },
+  "scandinavian-black": { runtimeNodeCount: 79, runtimeCandidateMoveCount: 78 },
+  "scotch-white": { runtimeNodeCount: 136, runtimeCandidateMoveCount: 135 },
+  "sicilian-black": { runtimeNodeCount: 94, runtimeCandidateMoveCount: 93 },
+  "slav-black": { runtimeNodeCount: 154, runtimeCandidateMoveCount: 153 },
+  "vienna-white": { runtimeNodeCount: 117, runtimeCandidateMoveCount: 116 },
 };
 
 export const STAGE2_OPENING_AVAILABILITY_MATRIX: OpeningAvailability[] = STAGE2_RUNTIME_OPENING_IDS.map((openingId) => {

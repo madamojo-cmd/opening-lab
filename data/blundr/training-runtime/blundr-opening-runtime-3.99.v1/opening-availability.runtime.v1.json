@@ -1,0 +1,111 @@
+{
+  "schemaVersion": "3.99.v1",
+  "packageId": "blundr-opening-runtime-3.99.v1",
+  "openings": [
+    {
+      "openingId": "caro-kann-black",
+      "available": true,
+      "reason": "runtime_verified"
+    },
+    {
+      "openingId": "colle-white",
+      "available": true,
+      "reason": "runtime_verified"
+    },
+    {
+      "openingId": "english-white",
+      "available": true,
+      "reason": "runtime_verified"
+    },
+    {
+      "openingId": "french-black",
+      "available": true,
+      "reason": "runtime_verified"
+    },
+    {
+      "openingId": "italian-black",
+      "available": true,
+      "reason": "runtime_verified"
+    },
+    {
+      "openingId": "italian-white",
+      "available": true,
+      "reason": "runtime_verified"
+    },
+    {
+      "openingId": "kings-indian-black",
+      "available": true,
+      "reason": "runtime_verified"
+    },
+    {
+      "openingId": "london-white",
+      "available": true,
+      "reason": "runtime_verified"
+    },
+    {
+      "openingId": "nimzo-indian-black",
+      "available": true,
+      "reason": "runtime_verified"
+    },
+    {
+      "openingId": "petroff-black",
+      "available": true,
+      "reason": "runtime_verified"
+    },
+    {
+      "openingId": "pirc-black",
+      "available": true,
+      "reason": "runtime_verified"
+    },
+    {
+      "openingId": "qgd-black",
+      "available": true,
+      "reason": "runtime_verified"
+    },
+    {
+      "openingId": "queens-gambit-white",
+      "available": true,
+      "reason": "runtime_verified"
+    },
+    {
+      "openingId": "queens-indian-black",
+      "available": true,
+      "reason": "runtime_verified"
+    },
+    {
+      "openingId": "reti-white",
+      "available": true,
+      "reason": "runtime_verified"
+    },
+    {
+      "openingId": "ruy-lopez-white",
+      "available": true,
+      "reason": "runtime_verified"
+    },
+    {
+      "openingId": "scandinavian-black",
+      "available": true,
+      "reason": "runtime_verified"
+    },
+    {
+      "openingId": "scotch-white",
+      "available": true,
+      "reason": "runtime_verified"
+    },
+    {
+      "openingId": "sicilian-black",
+      "available": true,
+      "reason": "runtime_verified"
+    },
+    {
+      "openingId": "slav-black",
+      "available": true,
+      "reason": "runtime_verified"
+    },
+    {
+      "openingId": "vienna-white",
+      "available": true,
+      "reason": "runtime_verified"
+    }
+  ]
+}

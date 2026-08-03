@@ -88,7 +88,7 @@ import { buildContinuationCandidateVisual } from "@/lib/blundr/visual/continuati
 import { buildOpeningTree } from "@/lib/blundr/openings/openingTree";
 import { resolveExpectedMoveForFrame } from "@/lib/blundr/openings/expectedMoveResolver";
 import { buildOpeningResolverDebug } from "@/lib/blundr/openings/openingResolverDebug";
-import { STAGE2_OPENING_AVAILABILITY_MATRIX, getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
+import { STAGE2_OPENING_AVAILABILITY_MATRIX, STAGE2_RUNTIME_PACKAGE_ID, getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
 import {
   buildRuntimeOpeningIdentityLines,
   getStage2RuntimeOpeningIndexEntries,
@@ -7030,7 +7030,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       continuationResolvedTargetSource==="stockfish_top_move"?"stockfish":"none"
     ):null,
     runtimeDataSource:"local_crawled_package",
-    runtimePackageId:"stage2-21-opening-stepdown-runtime-v1",
+    runtimePackageId:STAGE2_RUNTIME_PACKAGE_ID,
     openingCount:STAGE2_OPENING_AVAILABILITY_MATRIX.length,
     visibleOpeningCount:STAGE2_OPENING_AVAILABILITY_MATRIX.filter((opening)=>opening.userVisible).length,
     selectedOpeningRuntimeAvailable:selectedOpeningAvailability?.runtimeAvailable ?? null,

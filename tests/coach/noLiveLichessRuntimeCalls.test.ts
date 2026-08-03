@@ -13,7 +13,7 @@ export function testNoLiveLichessRuntimeCalls(): void {
   assert.equal(source.includes("/api/explorer"), false, "loadExplorer_must_not_fetch_api_explorer");
   assert.equal(source.includes("explorer.lichess.org"), false, "loadExplorer_must_not_call_liv_lichess");
   assert.equal(source.includes("local_crawled_package"), true, "loadExplorer_must_use_local_crawled_package");
-  assert.equal(source.includes("runtimePackageId:\"stage2-21-opening-stepdown-runtime-v1\""), true, "runtime_package_id_debug_missing");
+  assert.equal(source.includes("runtimePackageId:STAGE2_RUNTIME_PACKAGE_ID"), true, "runtime_package_id_debug_missing");
 
   const summary = getStage2OpeningAvailabilitySummary();
   assert.equal(summary.runtimeDataSource, "local_crawled_package");

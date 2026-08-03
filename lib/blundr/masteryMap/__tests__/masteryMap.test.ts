@@ -28,11 +28,14 @@ test("runtime tree joins canonical mastery and preserves route badges", () => {
         playSequenceUci: "e2e4",
         ply: 1,
         sideToMove: "black",
+        positionKey: "runtime-position-hash",
       },
     ],
     mastery: [
       {
-        positionKey: "e2e4",
+        positionKey: "persisted-position-hash",
+        openingId: "italian-white",
+        playKey: "e2e4",
         attempts: 2,
         firstAttemptAt: null,
         firstAttemptResult: "correct",
@@ -43,7 +46,7 @@ test("runtime tree joins canonical mastery and preserves route badges", () => {
     weaknesses: [],
     evidence: [
       {
-        positionKey: "e2e4",
+        positionKey: "persisted-position-hash",
         evidenceCount: 2,
         importedGameEvidenceCount: 1,
         alternateRoute: true,
@@ -52,6 +55,7 @@ test("runtime tree joins canonical mastery and preserves route badges", () => {
     now,
   });
   assert.equal(nodes[0].status, "mastered");
+  assert.equal(nodes[0].positionKey, "persisted-position-hash");
   assert.equal(nodes[0].alternateRoute, true);
   assert.equal(
     buildMasteryMapReadModel({
@@ -63,4 +67,34 @@ test("runtime tree joins canonical mastery and preserves route badges", () => {
     }).masteredPositions,
     1,
   );
+});
+
+test("Mastery Map does not substitute a hashed position key for runtime coordinates", () => {
+  const nodes = joinOpeningTreeToMastery({
+    openingId: "italian-white",
+    runtimeNodes: [
+      {
+        nodeId: "n1",
+        openingId: "italian-white",
+        playKey: "e2e4",
+        playSequenceUci: "e2e4",
+        ply: 1,
+        sideToMove: "black",
+        positionKey: "pos-same",
+      },
+    ],
+    mastery: [
+      {
+        positionKey: "pos-same",
+        attempts: 4,
+        firstAttemptAt: null,
+        firstAttemptResult: "correct",
+        confidence: 1,
+        updatedAt: "2026-07-14T00:00:00Z",
+      },
+    ],
+    weaknesses: [],
+  });
+  assert.equal(nodes[0].status, "unseen");
+  assert.equal(nodes[0].positionKey, "pos-same");
 });

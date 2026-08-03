@@ -3,6 +3,7 @@ import type {
   RuntimeOpeningNode,
 } from "./trainingRuntimeSchema";
 import { TRAINER_MAX_PLY } from "./trainerBranchingContract";
+import { appendRuntimeMove } from "./runtimePlayKey";
 
 export type TrainerTreeIndex = {
   nodesByKey: ReadonlyMap<string, RuntimeOpeningNode>;
@@ -26,7 +27,7 @@ export function createRuntimeEvidenceIndices(
     const key = `${candidate.openingId}:${candidate.playKeyBefore}`;
     all.set(key, [...(all.get(key) ?? []), candidate]);
     const parent = nodesByKey.get(key);
-    const childKey = `${candidate.openingId}:${candidate.playKeyBefore},${candidate.moveUci}`;
+    const childKey = `${candidate.openingId}:${appendRuntimeMove(candidate.playKeyBefore, candidate.moveUci)}`;
     if (parent && parent.ply < TRAINER_MAX_PLY && nodesByKey.has(childKey))
       nodeBacked.set(key, [...(nodeBacked.get(key) ?? []), candidate]);
   }

@@ -4,6 +4,7 @@ import { Chess } from "chess.js";
 import {
   createDeterministicIdentity,
   createPositionIdentity,
+  BLUNDR_RUNTIME_VERSION,
   type CardFingerprint,
 } from "@/lib/blundr/contracts";
 import { readUserRepertoire } from "@/lib/blundr/accounts/accountRepository";
@@ -885,7 +886,7 @@ export async function applyDailyAction(input: {
           expectedMoveUci: step.acceptedMoves[0] ?? null,
           repertoireSide: privateCard.side,
           moveOrderKey: null,
-          runtimePackageVersion: "stage2-21-opening-stepdown-runtime-v1",
+          runtimePackageVersion: BLUNDR_RUNTIME_VERSION,
         },
         correct: answerCorrect,
         firstAttempt: !current.firstAttemptRecorded && input.action !== "retry",
@@ -1012,7 +1013,7 @@ export async function applyDailyAction(input: {
         expectedMoveUci: privateCard.acceptedMoves[0] ?? null,
         repertoireSide: privateCard.side,
         moveOrderKey: null,
-        runtimePackageVersion: "stage2-21-opening-stepdown-runtime-v1",
+        runtimePackageVersion: BLUNDR_RUNTIME_VERSION,
       },
       correct,
       firstAttempt: true,

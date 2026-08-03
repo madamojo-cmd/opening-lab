@@ -2,8 +2,7 @@
 
 export const BLUNDR_CONTRACT_VERSION = "2026-07-13.v1" as const;
 export const BLUNDR_CONTENT_VERSION = "stage2-approved-content-v1" as const;
-export const BLUNDR_RUNTIME_VERSION =
-  "stage2-21-opening-stepdown-runtime-v1" as const;
+export const BLUNDR_RUNTIME_VERSION = "blundr-opening-runtime-3.99.v1" as const;
 export const BLUNDR_CLASSIFIER_VERSION = "weakness-classifier-v1" as const;
 
 export type EventId = string & { readonly __brand: "EventId" };
@@ -234,6 +233,8 @@ export type ImportJob = {
 
 export type NodeMasteryReadModel = {
   positionKey: string;
+  openingId?: string | null;
+  playKey?: string | null;
   attempts: number;
   firstAttemptAt: string | null;
   firstAttemptResult: "correct" | "incorrect" | "revealed" | null;
@@ -242,6 +243,8 @@ export type NodeMasteryReadModel = {
 };
 export type WeaknessProjection = {
   positionKey: string;
+  openingId?: string | null;
+  playKey?: string | null;
   category: LearningFindingCategory;
   score: number;
   confidence: number;

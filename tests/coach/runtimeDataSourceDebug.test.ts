@@ -49,7 +49,7 @@ export function testRuntimeDataSourceDebug(): void {
   } as any);
 
   assert.equal((snapshot as any).runtime.runtimeDataSource, "local_crawled_package");
-  assert.equal((snapshot as any).runtime.runtimePackageId, "stage2-21-opening-stepdown-runtime-v1");
+  assert.equal((snapshot as any).runtime.runtimePackageId, "blundr-opening-runtime-3.99.v1");
   assert.equal((snapshot as any).runtime.openingCount, 21);
   assert.equal((snapshot as any).runtime.visibleOpeningCount, 21);
   assert.equal((snapshot as any).runtime.approvedContentInventoryCount, 21);
@@ -64,7 +64,7 @@ export function testRuntimeDataSourceDebug(): void {
 
   const copyEverything = buildDebugCopyEverythingPayload(snapshot);
   assert.equal((copyEverything as any).runtime.runtimeDataSource, "local_crawled_package");
-  assert.equal((copyEverything as any).runtime.runtimePackageId, "stage2-21-opening-stepdown-runtime-v1");
+  assert.equal((copyEverything as any).runtime.runtimePackageId, "blundr-opening-runtime-3.99.v1");
   assert.equal((copyEverything as any).runtime.openingCount, 21);
   assert.equal((copyEverything as any).runtime.visibleOpeningCount, 21);
   assert.equal((copyEverything as any).runtime.approvedContentInventoryCount, 21);

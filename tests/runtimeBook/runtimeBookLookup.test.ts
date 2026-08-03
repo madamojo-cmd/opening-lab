@@ -61,13 +61,14 @@ async function testRuntimeBookLookup(): Promise<void> {
   const loaded = await loadStage2RuntimeBook();
   const index = buildStage2RuntimeBookIndex(loaded);
 
-  assert.equal(index.nodeCount, 49_232, "node_count_mismatch");
-  assert.equal(index.moveCount, 116_508, "move_count_mismatch");
+  assert.equal(index.nodeCount, 7_594, "node_count_mismatch");
+  assert.equal(index.moveCount, 7_573, "move_count_mismatch");
   assert.deepEqual(index.openingIds, EXPECTED_OPENING_IDS, "opening_ids_mismatch");
 
   for (const openingId of EXPECTED_OPENING_IDS) {
-    assert.equal(index.maxPlyByOpening[openingId], 12, `max_ply_mismatch:${openingId}`);
+    assert.equal(index.maxPlyByOpening[openingId] <= 12, true, `max_ply_exceeded:${openingId}`);
   }
+  assert.equal(Math.max(...Object.values(index.maxPlyByOpening)), 12, "package_max_ply_mismatch");
 
   const moveGroupKeys = [...index.moveIndexByOpeningAndPlayKeyBefore.keys()];
   for (const key of moveGroupKeys) {

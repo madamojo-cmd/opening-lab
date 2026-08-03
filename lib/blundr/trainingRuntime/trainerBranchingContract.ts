@@ -2,9 +2,13 @@ import type {
   RuntimeCandidateMove,
   RuntimeOpeningNode,
 } from "./trainingRuntimeSchema";
+import {
+  parentRuntimePlayKey,
+  RUNTIME_STARTPOS_PLAY_KEY,
+} from "./runtimePlayKey";
 
 export const TRAINER_BRANCHING_CAP_BY_CHILD_PLY = [
-  0, 8, 8, 4, 4, 3, 3, 2, 2, 2, 2, 2, 2,
+  0, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
 ] as const;
 export const TRAINER_MAX_PLY = 12;
 export const TRAINER_MIN_TOTAL_GAMES = 500;
@@ -55,26 +59,25 @@ export function validateTrainerBranchingContract(
       node.totalGames < TRAINER_MIN_TOTAL_GAMES
     )
       issues.push(`frequency:${node.openingId}:${node.playKey}`);
-    const moves = node.playKey.split(",").filter(Boolean);
-    if (moves.length <= 1) {
+    if (node.playKey === RUNTIME_STARTPOS_PLAY_KEY) {
       rootsByOpening.set(
         node.openingId,
         (rootsByOpening.get(node.openingId) ?? 0) + 1,
       );
       continue;
     }
-    const parentKey = moves.slice(0, -1).join(",");
+    const parentKey = parentRuntimePlayKey(node.playKey);
+    if (!parentKey) {
+      issues.push(`parent:${node.openingId}:${node.playKey}`);
+      continue;
+    }
     const parent = byKey.get(`${node.openingId}:${parentKey}`);
     if (!parent) {
-      // Runtime roots are seeded per opening and can start after ply one.
-      rootsByOpening.set(
-        node.openingId,
-        (rootsByOpening.get(node.openingId) ?? 0) + 1,
-      );
+      issues.push(`parent:${node.openingId}:${node.playKey}`);
       continue;
     }
     edges += 1;
-    const move = moves.at(-1)!;
+    const move = node.playKey.split(",").at(-1)!;
     const evidence = candidateByKey.get(
       `${node.openingId}:${parentKey}:${move}`,
     );
@@ -94,7 +97,8 @@ export function validateTrainerBranchingContract(
     [...rootsByOpening.values()].some((count) => count !== 1)
   )
     issues.push("opening_roots");
-  if (terminals.size !== openings.size) issues.push("terminal_openings");
+  if (!nodes.some((node) => node.ply === TRAINER_MAX_PLY))
+    issues.push("maximum_ply");
   return {
     roots: rootsByOpening.size,
     nodes: nodes.length,

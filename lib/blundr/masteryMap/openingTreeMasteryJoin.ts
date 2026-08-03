@@ -3,6 +3,10 @@ import type {
   WeaknessProjection,
 } from "@/lib/blundr/contracts";
 import type { RuntimeOpeningNode } from "@/lib/blundr/trainingRuntime/trainingRuntimeSchema";
+import {
+  parentRuntimePlayKey,
+  RUNTIME_STARTPOS_PLAY_KEY,
+} from "@/lib/blundr/trainingRuntime/runtimePlayKey";
 import { resolveMasteryStatus } from "./masteryStatusPolicy";
 import type { MasteryMapNode } from "./masteryMapTypes";
 
@@ -13,6 +17,15 @@ export type MasteryMapEvidence = {
   alternateRoute: boolean;
 };
 
+function runtimeCoordinate(
+  openingId: string | null | undefined,
+  playKey: string | null | undefined,
+): string | null {
+  const opening = String(openingId ?? "").trim();
+  const play = String(playKey ?? "").trim();
+  return opening && play ? `${opening}:${play}` : null;
+}
+
 export function joinOpeningTreeToMastery(input: {
   openingId: string;
   runtimeNodes: readonly RuntimeOpeningNode[];
@@ -21,11 +34,17 @@ export function joinOpeningTreeToMastery(input: {
   evidence?: readonly MasteryMapEvidence[];
   now?: number;
 }): MasteryMapNode[] {
-  const masteryByKey = new Map(
-    input.mastery.map((row) => [row.positionKey, row]),
+  const masteryByCoordinate = new Map(
+    input.mastery.flatMap((row) => {
+      const coordinate = runtimeCoordinate(row.openingId, row.playKey);
+      return coordinate ? [[coordinate, row] as const] : [];
+    }),
   );
-  const weaknessByKey = new Map(
-    input.weaknesses.map((row) => [row.positionKey, row]),
+  const weaknessByCoordinate = new Map(
+    input.weaknesses.flatMap((row) => {
+      const coordinate = runtimeCoordinate(row.openingId, row.playKey);
+      return coordinate ? [[coordinate, row] as const] : [];
+    }),
   );
   const evidenceByKey = new Map(
     (input.evidence ?? []).map((row) => [row.positionKey, row]),
@@ -34,11 +53,18 @@ export function joinOpeningTreeToMastery(input: {
   const nodes = input.runtimeNodes
     .filter((node) => node.openingId === input.openingId)
     .map((runtimeNode) => {
+      const coordinate = runtimeCoordinate(
+        runtimeNode.openingId,
+        runtimeNode.playKey,
+      )!;
+      const mastery = masteryByCoordinate.get(coordinate);
+      const weakness = weaknessByCoordinate.get(coordinate);
       const positionKey = String(
-        runtimeNode.positionKey ?? runtimeNode.playKey,
+        mastery?.positionKey ??
+          weakness?.positionKey ??
+          runtimeNode.positionKey ??
+          "",
       );
-      const mastery = masteryByKey.get(positionKey);
-      const weakness = weaknessByKey.get(positionKey);
       const evidence = evidenceByKey.get(positionKey);
       const confidence = Math.max(
         0,
@@ -64,9 +90,9 @@ export function joinOpeningTreeToMastery(input: {
         nodeId: runtimeNode.nodeId,
         positionKey,
         openingId: input.openingId,
-        sanSequence: String(
-          runtimeNode.playSequenceUci ?? runtimeNode.playKey,
-        ).split(","),
+        sanSequence: String(runtimeNode.playSequenceUci ?? runtimeNode.playKey)
+          .split(",")
+          .filter(Boolean),
         status,
         confidence,
         lastFirstAttemptResult: first,
@@ -84,11 +110,19 @@ export function joinOpeningTreeToMastery(input: {
     });
   const childCounts = new Map<string, number>();
   for (const node of nodes) {
-    const parent = node.sanSequence.slice(0, -1).join(",");
+    const playKey = node.sanSequence.length
+      ? node.sanSequence.join(",")
+      : RUNTIME_STARTPOS_PLAY_KEY;
+    const parent = parentRuntimePlayKey(playKey);
     if (parent) childCounts.set(parent, (childCounts.get(parent) ?? 0) + 1);
   }
   return nodes.map((node) => ({
     ...node,
-    childCount: childCounts.get(node.sanSequence.join(",")) ?? 0,
+    childCount:
+      childCounts.get(
+        node.sanSequence.length
+          ? node.sanSequence.join(",")
+          : RUNTIME_STARTPOS_PLAY_KEY,
+      ) ?? 0,
   }));
 }
