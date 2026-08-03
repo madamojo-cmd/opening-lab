@@ -3,12 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 
-import { STAGE2_RUNTIME_OPENING_IDS, STAGE2_RUNTIME_PACKAGE_ID, STAGE2_RUNTIME_PACKAGE_ROOT } from "../../lib/blundr/openings/openingAvailability";
+import { STAGE2_RUNTIME_OPENING_IDS, STAGE2_RUNTIME_PACKAGE_ROOT } from "../../lib/blundr/openings/openingAvailability";
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
-const PACKAGE_DIR = path.join(REPO_ROOT, "data", "blundr", STAGE2_RUNTIME_PACKAGE_ID);
-const NODE_JSONL = path.join(PACKAGE_DIR, "runtime", "opening-book.nodes.runtime.v1.jsonl");
-const MOVE_JSONL = path.join(PACKAGE_DIR, "runtime", "opening-book.moves.runtime.v1.jsonl");
+const PACKAGE_DIR = path.join(REPO_ROOT, STAGE2_RUNTIME_PACKAGE_ROOT);
+const NODE_JSONL = path.join(PACKAGE_DIR, "opening-book.nodes.runtime.v1.jsonl");
+const MOVE_JSONL = path.join(PACKAGE_DIR, "opening-book.candidates.runtime.v1.jsonl");
 
 async function readJsonl(filePath: string, onRow: (row: any) => void): Promise<void> {
   const stream = fs.createReadStream(filePath, "utf8");
@@ -25,7 +25,7 @@ async function testRuntimeCanonical21Openings(): Promise<void> {
   assert.equal(fs.existsSync(NODE_JSONL), true, "runtime_node_jsonl_missing");
   assert.equal(fs.existsSync(MOVE_JSONL), true, "runtime_move_jsonl_missing");
 
-  const packageFiles = fs.readdirSync(path.join(PACKAGE_DIR, "runtime"));
+  const packageFiles = fs.readdirSync(PACKAGE_DIR);
   assert.equal(packageFiles.includes("opening-nodes.latest.csv"), false, "stale_opening_nodes_latest_csv_present");
   assert.equal(packageFiles.includes("candidate-moves.latest.csv"), false, "stale_candidate_moves_latest_csv_present");
 

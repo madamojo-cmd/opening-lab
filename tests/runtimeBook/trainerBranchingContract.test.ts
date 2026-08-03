@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { validateTrainerBranchingContract } from "../../lib/blundr/trainingRuntime/trainerBranchingContract";
 import { createRuntimeEvidenceIndices } from "../../lib/blundr/trainingRuntime/runtimeEvidenceIndices";
+import { TRAINING_RUNTIME_PACKAGE_ROOT } from "../../lib/blundr/trainingRuntime/trainingRuntimeSchema";
 
-const root = "data/blundr/training-runtime/blundr-opening-runtime-3.99.v1/";
+const root = TRAINING_RUNTIME_PACKAGE_ROOT + "/";
 const read = (file: string) =>
   readFileSync(root + file, "utf8")
     .trim()
@@ -16,9 +17,9 @@ const shuffled = validateTrainerBranchingContract(
   [...nodes].reverse(),
   [...candidates].reverse(),
 );
-assert.equal(first.nodes, 7594);
+assert.equal(first.nodes, 8111);
 assert.equal(first.roots, 21);
-assert.equal(first.edges, 7573);
+assert.equal(first.edges, 8090);
 assert.equal(first.terminalOpenings, 1);
 assert.deepEqual(first, shuffled);
 assert.deepEqual(first.issues, []);

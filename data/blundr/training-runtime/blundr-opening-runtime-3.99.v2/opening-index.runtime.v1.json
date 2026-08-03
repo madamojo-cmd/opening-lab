@@ -1,0 +1,195 @@
+{
+  "schemaVersion": "3.99.v1",
+  "packageId": "blundr-opening-runtime-3.99.v2",
+  "openings": [
+    {
+      "openingId": "caro-kann-black",
+      "displayName": "Caro-Kann Defense",
+      "learnerPerspective": "black",
+      "rootPlayKey": "startpos",
+      "nodeCount": 101,
+      "candidateCount": 100,
+      "maximumStoredPly": 6
+    },
+    {
+      "openingId": "colle-white",
+      "displayName": "Colle System",
+      "learnerPerspective": "white",
+      "rootPlayKey": "startpos",
+      "nodeCount": 1059,
+      "candidateCount": 1058,
+      "maximumStoredPly": 9
+    },
+    {
+      "openingId": "english-white",
+      "displayName": "English Opening",
+      "learnerPerspective": "white",
+      "rootPlayKey": "startpos",
+      "nodeCount": 267,
+      "candidateCount": 266,
+      "maximumStoredPly": 7
+    },
+    {
+      "openingId": "french-black",
+      "displayName": "French Defense",
+      "learnerPerspective": "black",
+      "rootPlayKey": "startpos",
+      "nodeCount": 251,
+      "candidateCount": 250,
+      "maximumStoredPly": 7
+    },
+    {
+      "openingId": "italian-black",
+      "displayName": "Italian Game as Black",
+      "learnerPerspective": "black",
+      "rootPlayKey": "startpos",
+      "nodeCount": 1013,
+      "candidateCount": 1012,
+      "maximumStoredPly": 9
+    },
+    {
+      "openingId": "italian-white",
+      "displayName": "Italian Game",
+      "learnerPerspective": "white",
+      "rootPlayKey": "startpos",
+      "nodeCount": 1161,
+      "candidateCount": 1160,
+      "maximumStoredPly": 12
+    },
+    {
+      "openingId": "kings-indian-black",
+      "displayName": "King's Indian Defense",
+      "learnerPerspective": "black",
+      "rootPlayKey": "startpos",
+      "nodeCount": 150,
+      "candidateCount": 149,
+      "maximumStoredPly": 6
+    },
+    {
+      "openingId": "london-white",
+      "displayName": "London System",
+      "learnerPerspective": "white",
+      "rootPlayKey": "startpos",
+      "nodeCount": 1484,
+      "candidateCount": 1483,
+      "maximumStoredPly": 8
+    },
+    {
+      "openingId": "nimzo-indian-black",
+      "displayName": "Nimzo-Indian Defense",
+      "learnerPerspective": "black",
+      "rootPlayKey": "startpos",
+      "nodeCount": 227,
+      "candidateCount": 226,
+      "maximumStoredPly": 8
+    },
+    {
+      "openingId": "petroff-black",
+      "displayName": "Petroff Defense",
+      "learnerPerspective": "black",
+      "rootPlayKey": "startpos",
+      "nodeCount": 126,
+      "candidateCount": 125,
+      "maximumStoredPly": 6
+    },
+    {
+      "openingId": "pirc-black",
+      "displayName": "Pirc Defense",
+      "learnerPerspective": "black",
+      "rootPlayKey": "startpos",
+      "nodeCount": 145,
+      "candidateCount": 144,
+      "maximumStoredPly": 6
+    },
+    {
+      "openingId": "qgd-black",
+      "displayName": "Queen's Gambit Declined",
+      "learnerPerspective": "black",
+      "rootPlayKey": "startpos",
+      "nodeCount": 156,
+      "candidateCount": 155,
+      "maximumStoredPly": 6
+    },
+    {
+      "openingId": "queens-gambit-white",
+      "displayName": "Queen's Gambit",
+      "learnerPerspective": "white",
+      "rootPlayKey": "startpos",
+      "nodeCount": 139,
+      "candidateCount": 138,
+      "maximumStoredPly": 5
+    },
+    {
+      "openingId": "queens-indian-black",
+      "displayName": "Queen's Indian Defense",
+      "learnerPerspective": "black",
+      "rootPlayKey": "startpos",
+      "nodeCount": 200,
+      "candidateCount": 199,
+      "maximumStoredPly": 8
+    },
+    {
+      "openingId": "reti-white",
+      "displayName": "Réti Opening",
+      "learnerPerspective": "white",
+      "rootPlayKey": "startpos",
+      "nodeCount": 165,
+      "candidateCount": 164,
+      "maximumStoredPly": 5
+    },
+    {
+      "openingId": "ruy-lopez-white",
+      "displayName": "Ruy Lopez",
+      "learnerPerspective": "white",
+      "rootPlayKey": "startpos",
+      "nodeCount": 755,
+      "candidateCount": 754,
+      "maximumStoredPly": 8
+    },
+    {
+      "openingId": "scandinavian-black",
+      "displayName": "Scandinavian Defense",
+      "learnerPerspective": "black",
+      "rootPlayKey": "startpos",
+      "nodeCount": 79,
+      "candidateCount": 78,
+      "maximumStoredPly": 4
+    },
+    {
+      "openingId": "scotch-white",
+      "displayName": "Scotch Game",
+      "learnerPerspective": "white",
+      "rootPlayKey": "startpos",
+      "nodeCount": 136,
+      "candidateCount": 135,
+      "maximumStoredPly": 7
+    },
+    {
+      "openingId": "sicilian-black",
+      "displayName": "Sicilian Defense",
+      "learnerPerspective": "black",
+      "rootPlayKey": "startpos",
+      "nodeCount": 226,
+      "candidateCount": 225,
+      "maximumStoredPly": 7
+    },
+    {
+      "openingId": "slav-black",
+      "displayName": "Slav Defense",
+      "learnerPerspective": "black",
+      "rootPlayKey": "startpos",
+      "nodeCount": 154,
+      "candidateCount": 153,
+      "maximumStoredPly": 6
+    },
+    {
+      "openingId": "vienna-white",
+      "displayName": "Vienna Game",
+      "learnerPerspective": "white",
+      "rootPlayKey": "startpos",
+      "nodeCount": 117,
+      "candidateCount": 116,
+      "maximumStoredPly": 5
+    }
+  ]
+}

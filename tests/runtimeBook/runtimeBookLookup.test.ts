@@ -61,8 +61,8 @@ async function testRuntimeBookLookup(): Promise<void> {
   const loaded = await loadStage2RuntimeBook();
   const index = buildStage2RuntimeBookIndex(loaded);
 
-  assert.equal(index.nodeCount, 7_594, "node_count_mismatch");
-  assert.equal(index.moveCount, 7_573, "move_count_mismatch");
+  assert.equal(index.nodeCount, 8_111, "node_count_mismatch");
+  assert.equal(index.moveCount, 8_090, "move_count_mismatch");
   assert.deepEqual(index.openingIds, EXPECTED_OPENING_IDS, "opening_ids_mismatch");
 
   for (const openingId of EXPECTED_OPENING_IDS) {

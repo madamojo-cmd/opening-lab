@@ -78,9 +78,9 @@ function getNodeZlib(): typeof import("node:zlib") {
   return requireFn("node:zlib") as typeof import("node:zlib");
 }
 
-function getLoadStage2RuntimeBook(): typeof import("../runtimeBook/loadStage2RuntimeBook")["loadStage2RuntimeBook"] {
+function getLoadLegacyStage2RuntimeBook(): typeof import("../runtimeBook/loadLegacyStage2RuntimeBook")["loadLegacyStage2RuntimeBook"] {
   const requireFn = eval("require") as NodeJS.Require;
-  return requireFn("../runtimeBook/loadStage2RuntimeBook").loadStage2RuntimeBook as typeof import("../runtimeBook/loadStage2RuntimeBook")["loadStage2RuntimeBook"];
+  return requireFn("../runtimeBook/loadLegacyStage2RuntimeBook").loadLegacyStage2RuntimeBook as typeof import("../runtimeBook/loadLegacyStage2RuntimeBook")["loadLegacyStage2RuntimeBook"];
 }
 
 function normalizeText(value: unknown): string {
@@ -669,7 +669,7 @@ function buildSummary(input: {
 export async function validateStage2ApprovedContentCandidatePackage(
   loadResult: Stage2ApprovedContentCandidatePackageLoadResult,
 ): Promise<Stage2ApprovedContentPackageValidationInventory> {
-  const runtimeLoad = await getLoadStage2RuntimeBook()({
+  const runtimeLoad = await getLoadLegacyStage2RuntimeBook()({
     packageRoot: `${process.cwd()}/data/blundr/stage2-21-opening-stepdown-runtime-v1`,
   });
   const runtimeIndex = buildStage2RuntimeBookIndex(runtimeLoad);
@@ -761,7 +761,7 @@ function validateStage2ApprovedContentCandidatePackageWithRuntimeIndex(
 export async function validateStage2ApprovedContentCandidatePackageCollection(
   loadResult: Stage2ApprovedContentCandidatePackageCollectionLoadResult,
 ): Promise<Stage2ApprovedContentCandidatePackageCollectionValidationInventory> {
-  const runtimeLoad = await getLoadStage2RuntimeBook()({
+  const runtimeLoad = await getLoadLegacyStage2RuntimeBook()({
     packageRoot: `${process.cwd()}/data/blundr/stage2-21-opening-stepdown-runtime-v1`,
   });
   const runtimeIndex = buildStage2RuntimeBookIndex(runtimeLoad);

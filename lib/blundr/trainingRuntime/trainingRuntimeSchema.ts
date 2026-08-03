@@ -1,8 +1,8 @@
 export const TRAINING_RUNTIME_SCHEMA_VERSION = "3.99.v1" as const;
 export const TRAINING_RUNTIME_PACKAGE_ID =
-  "blundr-opening-runtime-3.99.v1" as const;
+  "blundr-opening-runtime-3.99.v2" as const;
 export const TRAINING_RUNTIME_BUILDER_VERSION =
-  "blundr-training-runtime-builder-3.99.v1" as const;
+  "blundr-training-runtime-builder-3.99.v2" as const;
 export const TRAINING_RUNTIME_SOURCE = "lichess" as const;
 export const TRAINING_RUNTIME_PROFILE =
   "all_blitz_rapid_classical_1200_plus" as const;
@@ -11,19 +11,19 @@ export const TRAINING_RUNTIME_MAX_MOVES_PER_PARENT = 8;
 export const TRAINING_RUNTIME_MAX_PLY = 12;
 export const TRAINING_RUNTIME_OPENING_COUNT = 21;
 export const TRAINING_RUNTIME_BUILD_GIT_SHA =
-  "1f6008a0506946f52a734be05ae7a757388b294f" as const;
+  "2502653f43221050be76c46690b6a2abe4ce41cc" as const;
 export const TRAINING_RUNTIME_PACKAGE_ROOT =
-  "data/blundr/training-runtime/blundr-opening-runtime-3.99.v1" as const;
+  "data/blundr/training-runtime/blundr-opening-runtime-3.99.v2" as const;
 export const TRAINING_RUNTIME_SOURCE_FILES = {
   openingNodes: {
-    fileName: "opening-nodes.v1.jsonl",
-    rows: 7_430,
-    sha256: "fbc7d750a84b47ccc1e9c0b95d7fd2b511246beda2e65f99b1b5d2caf4ed9512",
+    fileName: "opening-nodes.v2.jsonl",
+    rows: 7_498,
+    sha256: "a5e6cbe34e28a5930ed466d23274c7a30b836897e8aa640b4af7c6e22c623603",
   },
   candidateMoves: {
-    fileName: "candidate-moves.v1.jsonl",
-    rows: 170_860,
-    sha256: "a8e76805524f256afb90583140f277d734266efb831155c8e9b98f424e5f97d4",
+    fileName: "candidate-moves.v2.jsonl",
+    rows: 171_647,
+    sha256: "aada94cbe547e6f3c12add4fa46f8b03acf936ceef5cc5eb000b46c8427adda0",
   },
 } as const;
 export const TRAINING_RUNTIME_FILES = {

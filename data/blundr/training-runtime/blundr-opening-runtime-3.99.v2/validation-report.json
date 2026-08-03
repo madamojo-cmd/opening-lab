@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "3.99.v1",
+  "packageId": "blundr-opening-runtime-3.99.v2",
+  "valid": true,
+  "sourceRows": {
+    "openingNodes": 7498,
+    "candidateMoves": 171647
+  },
+  "runtimeRows": {
+    "nodes": 8111,
+    "candidates": 8090
+  },
+  "openingCount": 21,
+  "maximumStoredPly": 12,
+  "generatedTerminalNodeCount": 6562,
+  "checks": [
+    "source_checksums",
+    "source_row_counts",
+    "authoritative_jsonl_schema",
+    "canonical_startpos",
+    "canonical_uci_replay",
+    "candidate_parent_identity",
+    "candidate_uniqueness",
+    "candidate_frequency_bounds",
+    "maximum_eight_moves_per_parent",
+    "maximum_twelve_plies",
+    "twenty_one_openings"
+  ]
+}

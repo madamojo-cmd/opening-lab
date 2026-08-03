@@ -2,7 +2,7 @@
 
 export const BLUNDR_CONTRACT_VERSION = "2026-07-13.v1" as const;
 export const BLUNDR_CONTENT_VERSION = "stage2-approved-content-v1" as const;
-export const BLUNDR_RUNTIME_VERSION = "blundr-opening-runtime-3.99.v1" as const;
+export const BLUNDR_RUNTIME_VERSION = "blundr-opening-runtime-3.99.v2" as const;
 export const BLUNDR_CLASSIFIER_VERSION = "weakness-classifier-v1" as const;
 
 export type EventId = string & { readonly __brand: "EventId" };

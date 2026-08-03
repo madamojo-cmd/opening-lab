@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "3.99.v1",
+  "packageId": "blundr-opening-runtime-3.99.v2",
+  "source": "lichess",
+  "sourceFiles": {
+    "openingNodes": {
+      "fileName": "opening-nodes.v2.jsonl",
+      "rows": 7498,
+      "sha256": "a5e6cbe34e28a5930ed466d23274c7a30b836897e8aa640b4af7c6e22c623603"
+    },
+    "candidateMoves": {
+      "fileName": "candidate-moves.v2.jsonl",
+      "rows": 171647,
+      "sha256": "aada94cbe547e6f3c12add4fa46f8b03acf936ceef5cc5eb000b46c8427adda0"
+    }
+  },
+  "openingCount": 21,
+  "maxPly": 12,
+  "builtAt": "2026-08-03T00:00:00.000Z",
+  "builderVersion": "blundr-training-runtime-builder-3.99.v2",
+  "gitSha": "2502653f43221050be76c46690b6a2abe4ce41cc",
+  "runtimeProfile": "all_blitz_rapid_classical_1200_plus",
+  "minimumTotalGames": 500,
+  "maximumMovesPerParent": 8,
+  "roundingPolicy": "preserve-source-play-pct-v1",
+  "files": {
+    "opening-book.nodes.runtime.v1.jsonl": "733eed769cb99da43dec31e0b9ec01151d89501ef8adf46a063d0212ed7bf959",
+    "opening-book.candidates.runtime.v1.jsonl": "203e2ce1b9875598005614a62a8bc71b0621d54275a821527e9c2b7928c7a434",
+    "opening-index.runtime.v1.json": "9e08df331898dcabdc627282f65d8256810fc4415ef4d2fc8cf74ce23f18419b",
+    "opening-availability.runtime.v1.json": "28c1c90e831fbb83e0eff6c3948b8174f36ae53ca280002576a115d2da12d59a",
+    "validation-report.json": "dbbfd2acf44f2544820ac5d1c1b9aaa5cba69c694bf4339475f55de58100d94b"
+  },
+  "acceptedCounts": {
+    "nodes": 8111,
+    "candidates": 8090
+  },
+  "rejectedCount": 0,
+  "transpositionGroupCount": 1612
+}

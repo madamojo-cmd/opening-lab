@@ -4,11 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { loadStage2RuntimeBook } from "../../lib/blundr/runtimeBook";
-import { TRAINING_RUNTIME_FILES } from "../../lib/blundr/trainingRuntime/trainingRuntimeSchema";
+import { TRAINING_RUNTIME_FILES, TRAINING_RUNTIME_PACKAGE_ROOT } from "../../lib/blundr/trainingRuntime/trainingRuntimeSchema";
 
-const packageRoot = path.resolve(
-  "data/blundr/training-runtime/blundr-opening-runtime-3.99.v1",
-);
+const packageRoot = path.resolve(TRAINING_RUNTIME_PACKAGE_ROOT);
 
 test("runtime book loads only the checksum-verified canonical package", async () => {
   const tempRoot = fs.mkdtempSync(
@@ -20,8 +18,8 @@ test("runtime book loads only the checksum-verified canonical package", async ()
     }
     fs.writeFileSync(path.join(tempRoot, "reference-only.csv"), "ignored");
     const result = await loadStage2RuntimeBook({ packageRoot: tempRoot });
-    assert.equal(result.nodes.length, 7_594);
-    assert.equal(result.moves.length, 7_573);
+    assert.equal(result.nodes.length, 8_111);
+    assert.equal(result.moves.length, 8_090);
     assert.equal(new Set(result.nodes.map((node) => node.openingId)).size, 21);
     assert.equal(result.nodeFilePath.endsWith(".jsonl"), true);
     assert.equal(result.moveFilePath.endsWith(".jsonl"), true);
