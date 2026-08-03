@@ -26,7 +26,7 @@ test("shared contracts create stable separated identities", () => {
     expectedMoveUci: "g1f3",
     moveOrderKey: "b",
   });
-  assert.equal(a.positionKey, b.positionKey);
+  assert.notEqual(a.positionKey, b.positionKey);
   assert.notEqual(a.moveOrderKey, b.moveOrderKey);
   assert.equal(
     createDeterministicIdentity("event", ["a", 1]),

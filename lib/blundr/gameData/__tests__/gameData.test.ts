@@ -13,6 +13,7 @@ import { extractDeterministicFindings } from "../findingExtractor";
 import { dedupeFindings } from "../findingDedupe";
 import { normalizeProviderUsername } from "../gameFingerprint";
 import { InMemoryImportJobRepository } from "../inMemoryImportJobRepository";
+import { ImportJobRepository } from "../importJobRepository";
 import { buildImportedFindingLearningEventInput } from "../importedFindingProjection";
 import { buildSuccessfulProviderSyncAccount } from "../providerAccountSync";
 import type {
@@ -400,6 +401,51 @@ test("in-memory import jobs deduplicate concurrent sync requests and lease takeo
       new Date("2026-01-01T00:02:00Z"),
     ),
   );
+});
+
+test("provider import jobs recover stranded work and retain cumulative attempts", async () => {
+  const repository = new ImportJobRepository();
+  const cursor = {
+    provider: "lichess" as const,
+    cursor: null,
+    requestedFrom: "2026-01-01T00:00:00Z",
+    requestedTo: "2026-01-02T00:00:00Z",
+    updatedAt: "2026-01-01T00:00:00Z",
+  };
+  const job = await repository.enqueue({
+    userId: "recovery-user",
+    provider: "lichess",
+    cursor,
+    correlationId: "recovery",
+  });
+  const firstLease = await repository.lease(
+    job.id,
+    "worker-a",
+    new Date("2026-01-01T00:00:00Z"),
+  );
+  assert.equal(firstLease?.attemptCount, 1);
+  await repository.update(job.id, { status: "running" });
+  await repository.recoverStranded(new Date("2026-01-01T00:02:00Z"));
+  const pending = await repository.nextPending(3);
+  assert.equal(pending.some((candidate) => candidate.id === job.id), true);
+  const recovered = await repository.lease(
+    job.id,
+    "worker-b",
+    new Date("2026-01-01T00:02:00Z"),
+  );
+  assert.equal(recovered?.attemptCount, 2);
+  await repository.update(job.id, {
+    status: "retryable_error",
+    errorCode: "provider_unavailable",
+    leaseOwner: null,
+    leaseExpiresAt: null,
+  });
+  const retry = await repository.lease(
+    job.id,
+    "worker-c",
+    new Date("2026-01-01T00:03:00Z"),
+  );
+  assert.equal(retry?.attemptCount, 3);
 });
 
 test("a completed provider worker records a truthful successful sync timestamp", () => {

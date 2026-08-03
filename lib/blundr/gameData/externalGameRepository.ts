@@ -12,13 +12,18 @@ const segments = new Map<string, OpeningSegmentRecord>();
 const findings = new Map<string, ExtractedFinding>();
 
 export class ExternalGameRepository {
-  async hasGame(userId: string, fingerprint: string): Promise<boolean> {
+  async hasGame(
+    userId: string,
+    provider: ProviderGameRecord["provider"],
+    fingerprint: string,
+  ): Promise<boolean> {
     const client = createBlundrSupabaseAdminClient();
-    if (!client) return games.has(`${userId}:${fingerprint}`);
+    if (!client) return games.has(`${userId}:${provider}:${fingerprint}`);
     const result = await client
       .from("blundr_external_games")
       .select("id")
       .eq("user_id", userId)
+      .eq("provider", provider)
       .or(
         `provider_fingerprint.eq.${fingerprint},fallback_fingerprint.eq.${fingerprint}`,
       )
@@ -30,7 +35,7 @@ export class ExternalGameRepository {
     const key = game.providerFingerprint ?? game.fallbackFingerprint;
     const client = createBlundrSupabaseAdminClient();
     if (!client) {
-      games.set(`${userId}:${key}`, game);
+      games.set(`${userId}:${game.provider}:${key}`, game);
       return;
     }
     const result = await client.from("blundr_external_games").upsert(

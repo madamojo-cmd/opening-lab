@@ -4,7 +4,6 @@ import { Chess } from "chess.js";
 import {
   createDeterministicIdentity,
   createPositionIdentity,
-  BLUNDR_RUNTIME_VERSION,
   type CardFingerprint,
 } from "@/lib/blundr/contracts";
 import { readUserRepertoire } from "@/lib/blundr/accounts/accountRepository";
@@ -38,11 +37,29 @@ import { legalMoves } from "./activities/activityUtils";
 import { toPublicDailySession } from "./productionDailyProjection";
 import { readDueReviewKeys } from "./productionReviewRepository.server";
 import { upsertReviewState } from "./productionReviewRepository.server";
+import type { DailyReservationIdentity } from "./productionDailyTypes";
 
 // Request-time Daily selection uses only verified runtime data. Bound the
 // amount of chess reconstruction per reservation so a large runtime package
 // cannot turn an empty or newly unlocked account into an unbounded request.
 const MAX_RUNTIME_CANDIDATES_PER_RESERVATION = 600;
+const DAILY_COMPOSER_VERSION = "daily-board-first-v2";
+
+function dailyProfileVersion(
+  flags: ReturnType<typeof getServerFeatureFlags>,
+): string {
+  return [
+    "daily-production-profile-v1",
+    ...[
+      "daily_candidate_choice",
+      "daily_plan_recall",
+      "daily_same_position_different_route",
+      "daily_continuation_challenge",
+      "daily_punish_the_mistake",
+      "daily_mixed_test",
+    ].filter((flag) => flags[flag as keyof typeof flags]),
+  ].join(",");
+}
 
 function stableDailyHash(value: string): number {
   let hash = 2166136261;
@@ -187,6 +204,11 @@ async function buildReservation(
   const runtime = await loadTrainingRuntimePackage();
   const access = await openingAccess(user);
   const featureFlags = getServerFeatureFlags();
+  const reservationIdentity: DailyReservationIdentity = {
+    composerVersion: DAILY_COMPOSER_VERSION,
+    runtimePackageId: runtime.manifest.packageId,
+    profileVersion: dailyProfileVersion(featureFlags),
+  };
   const movesByOpeningPlayKey = new Map<string, typeof runtime.candidates>();
   for (const move of runtime.candidates) {
     const key = `${move.openingId}:${move.playKeyBefore}`;
@@ -295,7 +317,6 @@ async function buildReservation(
     priority: number;
     stableKey: string;
   }> = [];
-  const advancedCount = new Map<string, number>();
   const addCard = (
     entry: (typeof runtimeCandidates)[number],
     activityId: string,
@@ -349,7 +370,6 @@ async function buildReservation(
       priority: entry.priority,
       stableKey: fingerprint,
     });
-    advancedCount.set(activityId, (advancedCount.get(activityId) ?? 0) + 1);
   };
 
   for (const entry of runtimeCandidates) {
@@ -362,6 +382,15 @@ async function buildReservation(
       .slice(0, 3)
       .filter((move) => legalByUci.has(move.moveUci));
     if (!primary || !legalByUci.has(primary.moveUci)) continue;
+
+    addCard(
+      entry,
+      "daily_move_recall",
+      "Opening recall",
+      "Play the approved move for this exact position.",
+      [primary.moveUci],
+      "This move keeps the approved opening plan on track.",
+    );
 
     if (featureFlags.daily_plan_recall && labels.length >= 2) {
       const question = {
@@ -555,15 +584,6 @@ async function buildReservation(
         );
     }
 
-    if (advancedCount.size === 0 || !featureFlags.daily_plan_recall)
-      addCard(
-        entry,
-        "daily_move_recall",
-        "Opening recall",
-        "Play the approved move for this exact position.",
-        [primary.moveUci],
-        "This move keeps the approved opening plan on track.",
-      );
   }
 
   if (featureFlags.daily_same_position_different_route) {
@@ -676,6 +696,14 @@ async function buildReservation(
   const selected: typeof cards = [];
   const selectedPositions = new Set<string>();
   const selectedActivities = new Set<string>();
+  const boardRecall = ordered.find(
+    (card) => card.publicCard.activityId === "daily_move_recall",
+  );
+  if (boardRecall) {
+    selected.push(boardRecall);
+    selectedActivities.add(boardRecall.publicCard.activityId);
+    selectedPositions.add(boardRecall.publicCard.positionKey);
+  }
   for (const card of orderedCards) {
     if (
       selectedActivities.has(card.publicCard.activityId) ||
@@ -698,6 +726,7 @@ async function buildReservation(
   const deck = buildDeterministicDailyDeck({
     userId: user.userId,
     dateKey,
+    reservationIdentity,
     candidates: selected.map(({ publicCard, priority, stableKey }) => ({
       ...publicCard,
       deckFingerprint: "pending" as never,
@@ -746,6 +775,7 @@ async function buildReservation(
     publicCards,
     privateCards,
     state,
+    reservationIdentity,
   };
 }
 
@@ -755,8 +785,6 @@ export async function getOrReserveDaily(
   now = new Date().toISOString(),
 ) {
   const repository = new ProductionDailyRepository();
-  const existing = await repository.getByDate(user.userId, dateKey);
-  if (existing) return existing;
   const built = await buildReservation(user, dateKey, now);
   return (
     await repository.reserve({ userId: user.userId, dateKey, now, ...built })
@@ -885,8 +913,8 @@ export async function applyDailyAction(input: {
           openingId: privateCard.openingId,
           expectedMoveUci: step.acceptedMoves[0] ?? null,
           repertoireSide: privateCard.side,
-          moveOrderKey: null,
-          runtimePackageVersion: BLUNDR_RUNTIME_VERSION,
+          moveOrderKey: privateCard.playKey,
+          runtimePackageVersion: session.reservationIdentity.runtimePackageId,
         },
         correct: answerCorrect,
         firstAttempt: !current.firstAttemptRecorded && input.action !== "retry",
@@ -1012,8 +1040,8 @@ export async function applyDailyAction(input: {
         openingId: privateCard.openingId,
         expectedMoveUci: privateCard.acceptedMoves[0] ?? null,
         repertoireSide: privateCard.side,
-        moveOrderKey: null,
-        runtimePackageVersion: BLUNDR_RUNTIME_VERSION,
+        moveOrderKey: privateCard.playKey,
+        runtimePackageVersion: session.reservationIdentity.runtimePackageId,
       },
       correct,
       firstAttempt: true,

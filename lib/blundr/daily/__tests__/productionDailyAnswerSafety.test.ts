@@ -74,6 +74,7 @@ test("production Daily exposes only the current multi-step projection", () => {
         prompt: privateSteps[0].prompt,
         positionFen: privateSteps[0].positionFen,
         openingId: "italian-white",
+        playKey: "e2e4,c7c5",
         side: "black",
         why: "Verified continuation.",
         interaction: "move",
@@ -89,6 +90,7 @@ test("production Daily exposes only the current multi-step projection", () => {
         prompt: privateSteps[0].prompt,
         positionFen: privateSteps[0].positionFen,
         openingId: "italian-white",
+        playKey: "e2e4,c7c5",
         side: "black",
         why: "Verified continuation.",
         interaction: "move",
@@ -98,6 +100,11 @@ test("production Daily exposes only the current multi-step projection", () => {
         explanation: "Verified continuation.",
       },
     ],
+    reservationIdentity: {
+      composerVersion: "test-composer",
+      runtimePackageId: "test-runtime",
+      profileVersion: "test-profile",
+    },
     version: 1,
     completedAt: null,
   };

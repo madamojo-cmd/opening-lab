@@ -63,6 +63,8 @@ export async function processGameImportBatch(
     deps.runtime.candidates,
   );
   await jobs.update(job.id, { status: "running" });
+  if (!(await jobs.heartbeat(job.id, deps.workerId, now())))
+    throw new Error("lease_lost");
   let counts: ImportMetrics = job.counts;
   const acceptedGames = [] as ReturnType<typeof normalizeProviderGame>[];
   const bounds: ProviderRequestBounds = {
@@ -71,6 +73,8 @@ export async function processGameImportBatch(
     maxGames,
   };
   for await (const raw of deps.source.streamGames(account.username, bounds)) {
+    if (!(await jobs.heartbeat(job.id, deps.workerId, now())))
+      throw new Error("lease_lost");
     counts = addImportMetrics(counts, { fetched: 1 });
     const normalized = normalizeProviderGame(raw);
     if (!normalized || !shouldIncludeTimeControl(normalized.timeControl)) {
@@ -79,7 +83,7 @@ export async function processGameImportBatch(
     }
     const fingerprint =
       normalized.providerFingerprint ?? normalized.fallbackFingerprint;
-    if (await games.hasGame(job.userId, fingerprint)) {
+    if (await games.hasGame(job.userId, normalized.provider, fingerprint)) {
       counts = addImportMetrics(counts, { duplicate: 1 });
       continue;
     }

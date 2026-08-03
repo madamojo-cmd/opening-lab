@@ -52,6 +52,56 @@ test("Daily deck policy is deterministic and deduplicates positions", () => {
     deck.deckFingerprint,
   );
 });
+test("Daily deck identity changes with the reservation composer, runtime, and profile", () => {
+  const candidate = {
+    ...card,
+    activityId: "daily_move_recall",
+    cardFingerprint: "board-recall" as CardFingerprint,
+  };
+  const base = buildDeterministicDailyDeck({
+    userId: "u",
+    dateKey: "2026-07-13",
+    candidates: [candidate],
+    reservationIdentity: {
+      composerVersion: "composer-a",
+      runtimePackageId: "runtime-a",
+      profileVersion: "profile-a",
+    },
+  });
+  const changedRuntime = buildDeterministicDailyDeck({
+    userId: "u",
+    dateKey: "2026-07-13",
+    candidates: [candidate],
+    reservationIdentity: {
+      composerVersion: "composer-a",
+      runtimePackageId: "runtime-b",
+      profileVersion: "profile-a",
+    },
+  });
+  assert.notEqual(base.deckFingerprint, changedRuntime.deckFingerprint);
+  assert.notEqual(base.sessionId, changedRuntime.sessionId);
+});
+test("Daily deck reserves board recall before optional choice activities", () => {
+  const boardRecall = {
+    ...card,
+    activityId: "daily_move_recall",
+    cardFingerprint: "board-recall" as CardFingerprint,
+    stableKey: "z",
+  };
+  const choice = {
+    ...card,
+    activityId: "daily_candidate_choice",
+    cardFingerprint: "choice" as CardFingerprint,
+    positionKey: "choice-position",
+    stableKey: "a",
+  };
+  const deck = buildDeterministicDailyDeck({
+    userId: "u",
+    dateKey: "2026-07-13",
+    candidates: [choice, boardRecall],
+  });
+  assert.equal(deck.cards[0]?.activityId, "daily_move_recall");
+});
 test("Daily reservation is atomic and scored first attempts are immutable", () => {
   const deck = buildDeterministicDailyDeck({
     userId: "u",

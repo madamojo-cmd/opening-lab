@@ -22,6 +22,11 @@ function rowToSession(row: Record<string, unknown>): ProductionDailySession {
       []) as ProductionDailySession["publicCards"],
     privateCards: (row.server_cards ??
       []) as ProductionDailySession["privateCards"],
+    reservationIdentity: {
+      composerVersion: String(row.composer_version ?? "legacy-composer"),
+      runtimePackageId: String(row.runtime_package_id ?? "legacy-runtime"),
+      profileVersion: String(row.profile_version ?? "legacy-profile"),
+    },
     version: Number(row.state_version ?? 1),
     completedAt: row.completed_at ? String(row.completed_at) : null,
   };
@@ -39,7 +44,7 @@ export class ProductionDailyRepository {
     const result = await client
       .from("blundr_daily_decks")
       .select(
-        "deck_id,local_date,public_cards,server_cards,blundr_daily_sessions!inner(session_id,user_id,state,state_version,completed_at)",
+        "deck_id,local_date,public_cards,server_cards,composer_version,runtime_package_id,profile_version,blundr_daily_sessions!inner(session_id,user_id,state,state_version,completed_at)",
       )
       .eq("user_id", userId)
       .eq("local_date", dateKey)
@@ -60,6 +65,7 @@ export class ProductionDailyRepository {
     publicCards: unknown;
     privateCards: unknown;
     state: DailySessionState;
+    reservationIdentity: ProductionDailySession["reservationIdentity"];
     now: string;
   }): Promise<{ created: boolean; session: ProductionDailySession }> {
     const existing = await this.getByDate(input.userId, input.dateKey);
@@ -76,6 +82,7 @@ export class ProductionDailyRepository {
       publicCards: input.publicCards as ProductionDailySession["publicCards"],
       privateCards:
         input.privateCards as ProductionDailySession["privateCards"],
+      reservationIdentity: input.reservationIdentity,
       version: 1,
       completedAt: null,
     };
@@ -91,6 +98,9 @@ export class ProductionDailyRepository {
       public_cards: input.publicCards,
       server_cards: input.privateCards,
       content_version: "daily-production-v1",
+      composer_version: input.reservationIdentity.composerVersion,
+      runtime_package_id: input.reservationIdentity.runtimePackageId,
+      profile_version: input.reservationIdentity.profileVersion,
       reserved_at: input.now,
     });
     if (deck.error && deck.error.code !== "23505")
@@ -127,7 +137,7 @@ export class ProductionDailyRepository {
     const result = await client
       .from("blundr_daily_sessions")
       .select(
-        "session_id,deck_id,user_id,state,state_version,completed_at,blundr_daily_decks!inner(local_date,public_cards,server_cards)",
+        "session_id,deck_id,user_id,state,state_version,completed_at,blundr_daily_decks!inner(local_date,public_cards,server_cards,composer_version,runtime_package_id,profile_version)",
       )
       .eq("session_id", sessionId)
       .eq("user_id", userId)

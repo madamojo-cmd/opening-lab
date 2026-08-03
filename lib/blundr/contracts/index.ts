@@ -58,6 +58,8 @@ export function createPositionIdentity(input: IdentityInput): PositionIdentity {
     identity.canonicalFen,
     identity.openingId ?? "",
     identity.repertoireSide,
+    identity.moveOrderKey ?? "",
+    identity.expectedMoveUci ?? "",
   ].join("|");
   identity.positionKey = `pos-${stableHash(masteryKey)}`;
   return identity;

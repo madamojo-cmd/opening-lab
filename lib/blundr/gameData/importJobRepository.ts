@@ -8,21 +8,63 @@ import type {
 } from "./gameDataTypes";
 
 const jobs = new Map<string, GameImportJob>();
+export const MAX_IMPORT_ATTEMPTS = 5;
 
 export class ImportJobRepository {
   async nextPending(limit = 5): Promise<GameImportJob[]> {
+    const now = new Date();
+    await this.recoverStranded(now);
     const client = createBlundrSupabaseAdminClient();
     if (!client)
       return [...jobs.values()]
-        .filter((job) => job.status === "queued")
+        .filter(
+          (job) =>
+            job.status === "queued" ||
+            (job.status === "retryable_error" &&
+              job.attemptCount < MAX_IMPORT_ATTEMPTS),
+        )
         .slice(0, limit);
     const result = await client
       .from("blundr_game_import_jobs")
       .select("*")
-      .in("status", ["queued", "leased"])
+      .in("status", ["queued", "retryable_error"])
+      .lt("attempt_count", MAX_IMPORT_ATTEMPTS)
       .order("created_at", { ascending: true })
       .limit(limit);
     return (result.data ?? []).map(mapJob);
+  }
+
+  async recoverStranded(now = new Date()): Promise<void> {
+    const updatedAt = now.toISOString();
+    const client = createBlundrSupabaseAdminClient();
+    if (!client) {
+      for (const [jobId, job] of jobs) {
+        if (
+          (job.status === "leased" || job.status === "running") &&
+          job.leaseExpiresAt &&
+          Date.parse(job.leaseExpiresAt) <= now.valueOf()
+        ) {
+          jobs.set(jobId, {
+            ...job,
+            status: "queued",
+            leaseOwner: null,
+            leaseExpiresAt: null,
+            updatedAt,
+          });
+        }
+      }
+      return;
+    }
+    await client
+      .from("blundr_game_import_jobs")
+      .update({
+        status: "queued",
+        lease_owner: null,
+        lease_expires_at: null,
+        updated_at: updatedAt,
+      })
+      .in("status", ["leased", "running"])
+      .lt("lease_expires_at", updatedAt);
   }
   async enqueue(input: {
     userId: string;
@@ -37,7 +79,9 @@ export class ImportJobRepository {
         (job) =>
           job.userId === input.userId &&
           job.provider === input.provider &&
-          ["queued", "leased", "running"].includes(job.status),
+          ["queued", "leased", "running", "retryable_error"].includes(
+            job.status,
+          ),
       );
       if (existing) return existing;
       const localJob: GameImportJob = {
@@ -114,7 +158,9 @@ export class ImportJobRepository {
           (job) =>
             job.userId === userId &&
             job.provider === provider &&
-            ["queued", "leased", "running"].includes(job.status),
+            ["queued", "leased", "running", "retryable_error"].includes(
+              job.status,
+            ),
         ) ?? null
       );
     const result = await client
@@ -122,7 +168,7 @@ export class ImportJobRepository {
       .select("*")
       .eq("user_id", userId)
       .eq("provider", provider)
-      .in("status", ["queued", "leased", "running"])
+      .in("status", ["queued", "leased", "running", "retryable_error"])
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -141,6 +187,8 @@ export class ImportJobRepository {
       const job = jobs.get(jobId);
       if (
         !job ||
+        !["queued", "retryable_error"].includes(job.status) ||
+        job.attemptCount >= MAX_IMPORT_ATTEMPTS ||
         (job.leaseExpiresAt && Date.parse(job.leaseExpiresAt) > now.valueOf())
       )
         return null;
@@ -155,21 +203,59 @@ export class ImportJobRepository {
       jobs.set(jobId, next);
       return next;
     }
+    const current = await client
+      .from("blundr_game_import_jobs")
+      .select("*")
+      .eq("id", jobId)
+      .maybeSingle();
+    if (!current.data) return null;
+    const currentJob = mapJob(current.data);
+    if (currentJob.attemptCount >= MAX_IMPORT_ATTEMPTS) return null;
     const result = await client
       .from("blundr_game_import_jobs")
       .update({
         status: "leased",
         lease_owner: workerId,
         lease_expires_at: expiry,
-        attempt_count: 1,
+        attempt_count: currentJob.attemptCount + 1,
         updated_at: now.toISOString(),
       })
       .eq("id", jobId)
+      .eq("attempt_count", currentJob.attemptCount)
       .or(`lease_expires_at.is.null,lease_expires_at.lt.${now.toISOString()}`)
-      .in("status", ["queued", "leased", "running"])
+      .in("status", ["queued", "retryable_error"])
       .select("*")
       .maybeSingle();
     return result.data ? mapJob(result.data) : null;
+  }
+
+  async heartbeat(
+    jobId: string,
+    workerId: string,
+    now = new Date(),
+    ttlMs = 60_000,
+  ): Promise<boolean> {
+    const expiry = new Date(now.valueOf() + ttlMs).toISOString();
+    const client = createBlundrSupabaseAdminClient();
+    if (!client) {
+      const job = jobs.get(jobId);
+      if (job?.status !== "running" || job.leaseOwner !== workerId) return false;
+      jobs.set(jobId, {
+        ...job,
+        leaseExpiresAt: expiry,
+        updatedAt: now.toISOString(),
+      });
+      return true;
+    }
+    const result = await client
+      .from("blundr_game_import_jobs")
+      .update({ lease_expires_at: expiry, updated_at: now.toISOString() })
+      .eq("id", jobId)
+      .eq("status", "running")
+      .eq("lease_owner", workerId)
+      .gt("lease_expires_at", now.toISOString())
+      .select("id");
+    return Boolean(result.data?.length);
   }
 
   async update(
@@ -240,7 +326,7 @@ function toPatch(
   return {
     ...(patch.status ? { status: patch.status } : {}),
     ...(patch.cursor ? { cursor: patch.cursor } : {}),
-    ...(patch.errorCode ? { error_code: patch.errorCode } : {}),
+    ...(patch.errorCode !== undefined ? { error_code: patch.errorCode } : {}),
     ...(patch.leaseOwner !== undefined
       ? { lease_owner: patch.leaseOwner }
       : {}),

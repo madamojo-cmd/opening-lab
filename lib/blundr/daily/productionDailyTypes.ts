@@ -1,6 +1,12 @@
 import type { DailySessionState } from "./core/dailyActivityTypes";
 import type { CardFingerprint } from "@/lib/blundr/contracts";
 
+export type DailyReservationIdentity = {
+  composerVersion: string;
+  runtimePackageId: string;
+  profileVersion: string;
+};
+
 export type ProductionDailyPublicStep = {
   stepIndex: number;
   positionFen: string;
@@ -46,6 +52,7 @@ export type ProductionDailySession = {
   state: DailySessionState;
   publicCards: readonly ProductionDailyPublicCard[];
   privateCards: readonly ProductionDailyPrivateCard[];
+  reservationIdentity: DailyReservationIdentity;
   version: number;
   completedAt: string | null;
 };
