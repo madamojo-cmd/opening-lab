@@ -426,7 +426,10 @@ test("provider import jobs recover stranded work and retain cumulative attempts"
   await repository.update(job.id, { status: "running" });
   await repository.recoverStranded(new Date("2026-01-01T00:02:00Z"));
   const pending = await repository.nextPending(3);
-  assert.equal(pending.some((candidate) => candidate.id === job.id), true);
+  assert.equal(
+    pending.some((candidate) => candidate.id === job.id),
+    true,
+  );
   const recovered = await repository.lease(
     job.id,
     "worker-b",

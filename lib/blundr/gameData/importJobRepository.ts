@@ -239,7 +239,8 @@ export class ImportJobRepository {
     const client = createBlundrSupabaseAdminClient();
     if (!client) {
       const job = jobs.get(jobId);
-      if (job?.status !== "running" || job.leaseOwner !== workerId) return false;
+      if (job?.status !== "running" || job.leaseOwner !== workerId)
+        return false;
       jobs.set(jobId, {
         ...job,
         leaseExpiresAt: expiry,

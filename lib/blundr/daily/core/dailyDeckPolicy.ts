@@ -27,10 +27,7 @@ export function buildDeterministicDailyDeck(input: {
   const boardRecall = ordered.find(
     (card) => card.activityId === "daily_move_recall",
   );
-  const cards = [
-    ...(boardRecall ? [boardRecall] : []),
-    ...ordered,
-  ]
+  const cards = [...(boardRecall ? [boardRecall] : []), ...ordered]
     .filter((card) => !seen.has(card.positionKey) && seen.add(card.positionKey))
     .slice(0, input.limit ?? 5);
   const deckFingerprint = createDeterministicIdentity("deck", [
