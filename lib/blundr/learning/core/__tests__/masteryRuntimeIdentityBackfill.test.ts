@@ -7,7 +7,7 @@ test("mastery runtime identity backfill uses only unambiguous learning events", 
   const sql = fs.readFileSync(
     path.join(
       process.cwd(),
-      "supabase/migrations/20260803_001_blundr_mastery_runtime_identity.sql",
+      "supabase/migrations/20260803180000_blundr_mastery_runtime_identity.sql",
     ),
     "utf8",
   );
