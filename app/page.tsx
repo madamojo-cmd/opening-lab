@@ -62,7 +62,7 @@ import { validateLiveCoachCopy } from "@/lib/blundr/liveCoach/liveCoachSafety";
 import { buildLiveCoachDebug } from "@/lib/blundr/liveCoach/liveCoachDebug";
 import { buildCoachExplanationPipeline, buildVerifiedUserFacingFallback, isDebugLeakText } from "@/lib/blundr/coachBrain/coachExplanationPipeline";
 import { filterLegacyMainUiLines } from "@/lib/blundr/visualRecipe/legacyVisualSuppression";
-import { selectContinuedPlayMove, shouldForceContinuationPause } from "@/lib/blundr/continuedPlay/continuedPlayMovePolicy";
+import { shouldForceContinuationPause } from "@/lib/blundr/continuedPlay/continuedPlayMovePolicy";
 import { decideCoachSurfacePolicy } from "@/lib/blundr/coachSurface/coachSurfacePolicy";
 import { presentMoveImpact } from "@/lib/blundr/coachSurface/moveImpactPresenter";
 import { computeTrainerPresentationFrame } from "@/lib/blundr/presentation/trainerPresentationFrame";
@@ -5431,7 +5431,6 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     await new Promise(r=>setTimeout(r,700));
     let chosen:{san:string;uci:string;fen:string}|null=null;
     let source="";
-    let continuationPolicyDecision:ReturnType<typeof selectContinuedPlayMove>|null=null;
     if(mode==="restricted"){
       const initialRestrictedOpponentMoveUci=request.initialRestrictedOpponentMoveUci?.trim().toLowerCase()??null;
       const currentRestrictedLegalMoveUcis=(current.moves({verbose:true}) as Array<{from:string;to:string;promotion?:string}>).map((move)=>`${move.from}${move.to}${move.promotion??""}`.toLowerCase());
@@ -5730,7 +5729,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
         );
         if(maiaResultIsStale){
           setMaiaOpponentStaleResultIgnored(true);
-          setMaiaOpponentFallbackUsed(true);
+          setMaiaOpponentFallbackUsed(false);
           setMaiaOpponentFallbackReason("stale_request");
           pushMaiaTimelineEvent({
             event:"maia_result_stale_ignored",
@@ -5761,7 +5760,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
             setMaiaOpponentRuntimeCandidateLegal(legality.legalOnRequestFen);
             if(!legality.legalOnRequestFen||!legality.applied||!legality.appliedMoveUci||!legality.appliedMoveSan||!legality.appliedFen){
               setMaiaOpponentIllegalCandidateRejected(true);
-              setMaiaOpponentFallbackUsed(true);
+              setMaiaOpponentFallbackUsed(false);
               setMaiaOpponentFallbackReason("maia_candidate_illegal");
               pushMaiaTimelineEvent({
                 event:"maia_candidate_rejected_illegal",
@@ -5784,7 +5783,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
               setMaiaOpponentSanityGuardResult(sanityGuard.result);
               setMaiaOpponentSanityGuardBlockedReason(sanityGuard.blockedReason);
               if(!sanityGuard.allowed){
-                setMaiaOpponentFallbackUsed(true);
+                setMaiaOpponentFallbackUsed(false);
                 setMaiaOpponentFallbackReason(sanityGuard.blockedReason ?? "maia_sanity_guard_rejected_candidate");
                 pushMaiaTimelineEvent({
                   event:"maia_candidate_rejected_sanity_guard",
@@ -5829,16 +5828,16 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
               :maiaResult.status==="unavailable"
                 ?"provider_unavailable"
                 :"no_legal_candidate";
-            setMaiaOpponentFallbackUsed(true);
+            setMaiaOpponentFallbackUsed(false);
             setMaiaOpponentFallbackReason(fallbackReason);
             pushMaiaTimelineEvent({
-              event:"maia_fallback_used",
+              event:"maia_candidate_unavailable",
               requestId:maiaRequestId,
               fen4:currentFen4,
               candidateCount:maiaResult.candidates.length,
               selectedUci:null,
               selectedSan:null,
-              reason:"fallback_used",
+              reason:"provider_did_not_supply_move",
               fallbackReason,
               skillLevel:maiaSkill,
               sideToMove:current.turn() as ChessColor,
@@ -5847,113 +5846,20 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
         }
       }
       if(!chosen){
-        const explorer=await loadExplorer(current.fen());
-        const playable=explorer.map(m=>{const a=applyUci(current.fen(),m.uci);return a?{...a,weight:m.total,pct:m.pct,branchKey:`${positionKey}::${m.uci}`}:null}).filter(Boolean) as Array<{san:string;uci:string;fen:string;weight:number;pct:number;branchKey:string}>;
-        const policyEngine=(engineLines.length?{source:"engine_preview",pvs:engineLines}:await runBrowserStockfish(current.fen(),rating.skill,550,3));
-        const bestCp=typeof policyEngine?.pvs?.[0]?.cp==="number"?Number(policyEngine.pvs[0].cp):undefined;
-        const safeUcis=new Set<string>(
-          (policyEngine?.pvs??[])
-            .filter((line,index)=>{
-              if(index===0)return true;
-              if(bestCp===undefined||typeof line.cp!=="number")return false;
-              return Math.abs(bestCp-Number(line.cp))<=100;
-            })
-            .map((line)=>line.uci),
-        );
-        if(playable.length){
-          const decision=selectOpponentCandidateWithVariation({
-            context:variationContext,
-            memory,
-            candidates:playable.map((candidate)=>({
-              uci:candidate.uci,
-              san:candidate.san,
-              branchKey:candidate.branchKey,
-              weight:candidate.weight,
-              legal:true,
-              supported:true,
-              engineSafe:safeUcis.has(candidate.uci),
-              severeBlunder:false,
-              source:"lichess_continuation",
-              pct:candidate.pct,
-            })),
-          });
-          const policy=selectContinuedPlayMove({
-            fen:current.fen(),
-            lichessCandidates:playable.map((candidate)=>({
-              uci:candidate.uci,
-              san:candidate.san,
-              source:"lichess",
-              pct:candidate.pct,
-              weight:candidate.weight,
-              engineSafe:safeUcis.has(candidate.uci),
-              supported:true,
-            })),
-            engineTop:policyEngine?.pvs?.[0]?{uci:policyEngine.pvs[0].uci,san:policyEngine.pvs[0].san,source:"engine",engineSafe:true,supported:true}:null,
-          });
-          continuationPolicyDecision=policy;
-          const preferredUci=policy?.selectedUci??(decision?playable.find((candidate)=>candidate.branchKey===decision.selected.branchKey)?.uci:undefined);
-          const pick=playable.find((candidate)=>candidate.uci===preferredUci)??(decision?playable.find((candidate)=>candidate.branchKey===decision.selected.branchKey)??playable[0]:pickWeighted(playable));
-          variationDebug=decision?{...decision}:variationDebug;
-          chosen=pick;
-          source=
-            policy?.source==="lichess_engine_validated"
-              ? `Lichess continuation (${pick.pct}%)`
-              : policy?.source==="human_continuation_unverified"
-                ? "Lichess continuation"
-                : policy?.source==="engine_top"
-                  ? `Engine continuation (${rating.target})`
-                  : `Lichess continuation (${pick.pct}%)`;
-          variationDebug.opponentVariationReason=policy?.reason??variationDebug.opponentVariationReason;
-        }
-        else{
-          const policy=selectContinuedPlayMove({
-            fen:current.fen(),
-            engineTop:policyEngine?.pvs?.[0]?{uci:policyEngine.pvs[0].uci,san:policyEngine.pvs[0].san,source:"engine",engineSafe:true,supported:true}:null,
-          });
-          continuationPolicyDecision=policy;
-          if(policy?.selectedUci){
-            const a=applyUci(current.fen(),policy.selectedUci);
-            if(a){
-              chosen=a;
-              source=policy.source==="emergency_legal_fallback"?"Emergency legal fallback":`Engine continuation (${rating.target})`;
-              variationDebug.opponentVariationReason=policy.reason;
-            }
-          }
-          if(!chosen){
-            const data=await runBrain("bot_select",{skipGpt:true});
-            const top=data?.engine?.pvs?.[0];
-            const a=top?applyUci(current.fen(),top.uci):null;
-            if(a){chosen=a;source=`Engine continuation (${rating.target})`;}
-          }
-        }
+        clearPendingOpponentReplyRequest({clearStaleIssue:true});
+        pushRuntimeCriticalIssue("maia_continuation_unavailable");
+        setTrainerPhase("error");
+        setFeedback("Maia is unavailable for this exact continuation position. No substitute opponent move was played; try again when Maia is ready.");
+        setBrain(p=>({...p,book:"complete",source:"maia_continuation_unavailable",lichess:"ready"}));
+        return;
       }
     }
     if(!chosen){
-      const emergency=selectContinuedPlayMove({fen:current.fen()});
-      continuationPolicyDecision=emergency;
-      if(emergency?.selectedUci){
-        const a=applyUci(current.fen(),emergency.selectedUci);
-        if(a){
-          chosen={san:a.san,uci:a.uci,fen:a.fen};
-          source="Emergency legal fallback";
-          variationDebug.fallbackUsed=true;
-          variationDebug.opponentVariationReason=emergency.reason;
-        }
-      }
-      if(!chosen){
-        const legal=current.moves({verbose:true}) as any[];
-        if(!legal.length){
-          clearPendingOpponentReplyRequest({clearStaleIssue:true});
-          setTrainerPhase("terminal");
-          return;
-        }
-        const move=legal[0];
-        current.move({from:move.from,to:move.to,promotion:move.promotion??undefined});
-        chosen={san:move.san,uci:moveToUci(move),fen:current.fen()};
-        source="Emergency legal fallback";
-        variationDebug.fallbackUsed=true;
-        variationDebug.opponentVariationReason="no_supported_alternative";
-      }
+      clearPendingOpponentReplyRequest({clearStaleIssue:true});
+      pushRuntimeCriticalIssue("opponent_reply_authority_unavailable");
+      setTrainerPhase("error");
+      setFeedback("The approved opponent-reply provider is unavailable. No substitute move was played.");
+      return;
     }
     const requestAfterCompute=pendingOpponentRequestRef.current;
     if(shouldFlagStaleOpponentReplyCommit({
@@ -5966,25 +5872,6 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     }
     const selectedBranchKey=`${positionKey}::${chosen.uci}`;
     variationDebug.selectedOpponentBranchKey=selectedBranchKey;
-    if(continuationPolicyDecision?.debug){
-      variationDebug.candidateOpponentBranches=continuationPolicyDecision.debug.candidates.map((candidate)=>({
-        branchKey:`${positionKey}::${candidate.moveUci}`,
-        uci:candidate.moveUci,
-        san:candidate.moveSan,
-        baseWeight:candidate.selectionScore,
-        adjustedWeight:candidate.selectionScore,
-        source:candidate.source,
-        safetyStatus:candidate.safetyStatus,
-        selectionScore:candidate.selectionScore,
-        blockedReason:candidate.blockedReason,
-      }));
-      variationDebug.continuedPlaySelectedMoveInCandidateList=continuationPolicyDecision.debug.selectedMoveInCandidateList;
-      variationDebug.continuedPlaySelectionConsistency=continuationPolicyDecision.debug.selectionConsistency;
-      variationDebug.continuationMoveSafetySource=continuationPolicyDecision.debug.continuationMoveSafetySource;
-      if(!continuationPolicyDecision.debug.selectedMoveInCandidateList){
-        variationDebug.opponentVariationReason="selection_inconsistent_with_candidates";
-      }
-    }
     if(!variationDebug.opponentVariationReason||variationDebug.opponentVariationReason==="not_applied"){
       const recent=variationDebug.recentOpponentBranchKeys;
       if(recent.length>=2&&recent[0]===selectedBranchKey&&recent[1]===selectedBranchKey)variationDebug.opponentVariationReason="no_supported_alternative";

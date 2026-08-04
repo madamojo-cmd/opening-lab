@@ -84,7 +84,7 @@ git push
 - Local `lc0` plus weights is fine for development and container-based testing.
 - Serverless hosts, including Vercel-style environments, may not be a good fit for spawning `lc0` directly.
 - If Maia traffic grows, prefer a persistent Maia service behind the app instead of direct per-request spawning.
-- Maia runtime env vars: `MAIA_ENABLED`, `MAIA_LC0_PATH`, `MAIA_WEIGHTS_PATH`, `MAIA_SKILL_LEVEL`, `MAIA_TIMEOUT_MS`, `MAIA_NODES`, `MAIA_CACHE_ENABLED`, `MAIA_MAX_CONCURRENT_REQUESTS`, `MAIA_BACKEND`.
+- Maia production env vars: `MAIA_ENABLED`, `MAIA_REMOTE_URL`, `MAIA_REMOTE_HEALTH_URL`, `MAIA_REMOTE_TOKEN`, `MAIA_SKILL_LEVEL`, and `MAIA_TIMEOUT_MS`. Local `MAIA_LC0_PATH` / `MAIA_WEIGHTS_PATH` configuration is development-only.
 
 ## v2.9.1E Projective Tactical Visualizations
 

@@ -15,13 +15,16 @@ Blundr uses Maia only for continuation-mode opponent replies.
 Blundr uses an internal route and local runtime adapter, not unofficial public endpoints.
 
 ## Architecture
-Frontend -> `/api/maia/opponent-reply` -> MaiaLc0RuntimeAdapter -> `lc0 --weights=<maia weights>` -> legal UCI candidate -> frontend stale/legal guards -> opponent reply.
+Production: Frontend -> `/api/maia/opponent-reply` -> authenticated HTTPS Maia service -> exact-frame legal UCI candidate -> frontend stale/legal guards -> opponent reply.
+
+Development/test may use `MaiaLc0RuntimeAdapter` with local `lc0` and weights. That transport is rejected when `NODE_ENV=production`.
 
 ## Environment Variables
 - `NEXT_PUBLIC_MAIA_API_ENABLED=true`
 - `MAIA_ENABLED=true`
-- `MAIA_LC0_PATH=/absolute/path/to/lc0`
-- `MAIA_WEIGHTS_PATH=/absolute/path/to/.maia/maia-1500.pb.gz`
+- `MAIA_REMOTE_URL=https://maia.example.internal/move`
+- `MAIA_REMOTE_HEALTH_URL=https://maia.example.internal/health`
+- `MAIA_REMOTE_TOKEN=<scoped-service-token>`
 - `MAIA_SKILL_LEVEL=maia-1500`
 - `MAIA_TIMEOUT_MS=1500`
 - `MAIA_NODES=1`
@@ -29,22 +32,21 @@ Frontend -> `/api/maia/opponent-reply` -> MaiaLc0RuntimeAdapter -> `lc0 --weight
 - `MAIA_CACHE_ENABLED=true`
 
 ## Setup
-1. `npm run maia:setup 1500`
-2. Install `lc0` for your platform.
-3. Set env vars above.
-4. Run `npm run maia:check`.
-5. Optionally run `npm run maia:bench`.
+1. Deploy a persistent Maia service with authenticated move and health endpoints.
+2. Set the remote environment variables above on the isolated app target.
+3. Confirm `/api/maia/health` reports `transport: remote` and `ready: true`.
+4. Run an exact-position continuation journey and retain the request/deployment evidence.
 
-## Disable/Fallback
-Set `MAIA_ENABLED=false` and/or `NEXT_PUBLIC_MAIA_API_ENABLED=false`; continuation fallback path remains active.
+## Disable / Fail Closed
+Set `MAIA_ENABLED=false` and/or `NEXT_PUBLIC_MAIA_API_ENABLED=false`. Continuation reports Maia unavailable and plays no substitute opponent move.
 
 ## Known Limitations
-- Package 14B adapter uses per-request process spawn for safety/simplicity.
-- Warm worker pool deferred to Package 14C.
+- The local Package 14B adapter remains development-only.
+- Remote service capacity and model lifecycle are operated separately from the app deployment.
 
 ## Deployment Notes
-- Serverless targets may be unsuitable for engine process work.
-- Containerized backend/worker deployment is preferred for production.
+- The app deployment never spawns the production Maia process.
+- The remote service must expose HTTPS and require the scoped bearer token.
 
 ## License Note
 Maia and lc0 are GPL-family licensed. Obtain legal review for commercial distribution.
