@@ -2,13 +2,22 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowRight, BarChart3, BookOpen, ChevronRight, Flame, RefreshCw, Sparkles, Target, Trophy } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart3,
+  BookOpen,
+  ChevronRight,
+  Flame,
+  RefreshCw,
+  Sparkles,
+  Target,
+  Trophy,
+} from "lucide-react";
 
-import { getLocalAccountCurrentUserId } from "@/lib/blundr/accounts/localAccountStorage";
+import { authenticatedApiFetch } from "@/lib/blundr/api/authenticatedApiClient";
 import { BLUNDR_DAILY_RING_REFRESH_EVENT } from "@/lib/blundr/daily-rings/dailyRingRefreshSignal";
+import { getLocalDateKey } from "@/lib/blundr/daily-rings/dailyRingDate";
 import { BLUNDR_LOCAL_DEMO_USER_ID } from "@/lib/blundr/persistence/persistenceKeys";
-import { reconcileDailyBlundrRingCompletionForToday } from "@/lib/blundr/daily-rings/dailyRingBlundrReconciliation";
-import { loadBlundrProgressSummary } from "@/lib/blundr/progress/progressSummaryService";
 import type { BlundrProgressSummary } from "@/lib/blundr/progress/progressTypes";
 import { ProfileSettingsIcon } from "@/components/navigation/ProfileSettingsIcon";
 import { NestedDailyRings } from "@/components/daily-rings/NestedDailyRings";
@@ -20,12 +29,10 @@ type ProgressDashboardProps = {
   className?: string;
 };
 
-function classNames(...classes: Array<string | false | null | undefined>): string {
+function classNames(
+  ...classes: Array<string | false | null | undefined>
+): string {
   return classes.filter(Boolean).join(" ");
-}
-
-function nowIso(): string {
-  return new Date().toISOString();
 }
 
 function buildPendingWeek(): BlundrProgressSummary["streak"]["week"] {
@@ -47,9 +54,30 @@ function buildEmptySummary(): BlundrProgressSummary {
     todayDateKey: "pending",
     today: {
       rings: [
-        { ringId: "daily_tempo", label: "Tempo", progress: 0, goal: 0, percent: 0, closed: false },
-        { ringId: "daily_battery", label: "Battery", progress: 0, goal: 0, percent: 0, closed: false },
-        { ringId: "daily_blundr", label: "Blundr", progress: 0, goal: 0, percent: 0, closed: false },
+        {
+          ringId: "daily_tempo",
+          label: "Tempo",
+          progress: 0,
+          goal: 0,
+          percent: 0,
+          closed: false,
+        },
+        {
+          ringId: "daily_battery",
+          label: "Battery",
+          progress: 0,
+          goal: 0,
+          percent: 0,
+          closed: false,
+        },
+        {
+          ringId: "daily_blundr",
+          label: "Blundr",
+          progress: 0,
+          goal: 0,
+          percent: 0,
+          closed: false,
+        },
       ],
       allRingsClosed: false,
       nextBestAction: "Progress will load after mount.",
@@ -93,12 +121,14 @@ function buildEmptySummary(): BlundrProgressSummary {
     },
     weakAreas: {
       items: [],
-      message: "Tempo will show weak areas after there is enough training data.",
+      message:
+        "Tempo will show weak areas after there is enough training data.",
     },
     milestones: [
       {
         title: "Start here",
-        message: "Finish an opening run and Daily Blundr session, then check back for milestone progress.",
+        message:
+          "Finish an opening run and Daily Blundr session, then check back for milestone progress.",
       },
     ],
     recentActivity: [],
@@ -133,13 +163,24 @@ function ProgressStatCard({
         : "border-stone-200 bg-white text-stone-700";
 
   return (
-    <div className={classNames("rounded-[1.5rem] border p-4 shadow-sm", toneClasses)}>
+    <div
+      className={classNames(
+        "rounded-[1.5rem] border p-4 shadow-sm",
+        toneClasses,
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-xs font-black uppercase tracking-[0.18em] opacity-80">{label}</div>
-          <div className="mt-2 text-2xl font-black tracking-tight text-stone-950">{value}</div>
+          <div className="text-xs font-black uppercase tracking-[0.18em] opacity-80">
+            {label}
+          </div>
+          <div className="mt-2 text-2xl font-black tracking-tight text-stone-950">
+            {value}
+          </div>
         </div>
-        <div className="rounded-full bg-white p-2 ring-1 ring-stone-200">{icon}</div>
+        <div className="rounded-full bg-white p-2 ring-1 ring-stone-200">
+          {icon}
+        </div>
       </div>
       <p className="mt-2 text-xs leading-5 text-stone-500">{detail}</p>
     </div>
@@ -149,32 +190,58 @@ function ProgressStatCard({
 function SectionHeader({ title, copy }: { title: string; copy: string }) {
   return (
     <div>
-      <div className="text-xs font-black uppercase tracking-[0.22em] text-green-700">{title}</div>
+      <div className="text-xs font-black uppercase tracking-[0.22em] text-green-700">
+        {title}
+      </div>
       <p className="mt-1 text-sm leading-6 text-stone-600">{copy}</p>
     </div>
   );
 }
 
-export function ProgressDashboard({ embedded = false, homeHref = "/", settingsHref = "/settings", className }: ProgressDashboardProps) {
-  const [summary, setSummary] = useState<BlundrProgressSummary>(() => buildEmptySummary());
+export function ProgressDashboard({
+  embedded = false,
+  homeHref = "/",
+  settingsHref = "/settings",
+  className,
+}: ProgressDashboardProps) {
+  const [summary, setSummary] = useState<BlundrProgressSummary>(() =>
+    buildEmptySummary(),
+  );
   const [refreshCount, setRefreshCount] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const isMountedRef = useRef(true);
 
-  const visibleActions = useMemo(() => summary.nextActions.slice(0, 5), [summary.nextActions]);
+  const visibleActions = useMemo(
+    () => summary.nextActions.slice(0, 5),
+    [summary.nextActions],
+  );
   const todayRingItems = summary.today.rings;
   const todayClosedCount = todayRingItems.filter((ring) => ring.closed).length;
-  const todayRingStatus = summary.today.allRingsClosed ? "Complete" : todayClosedCount > 0 ? "In progress" : "Open";
+  const todayRingStatus = summary.today.allRingsClosed
+    ? "Complete"
+    : todayClosedCount > 0
+      ? "In progress"
+      : "Open";
 
   async function refreshSummary() {
-    const userId = getLocalAccountCurrentUserId();
     try {
-      await reconcileDailyBlundrRingCompletionForToday({ userId });
+      const response = await authenticatedApiFetch<{
+        ok: true;
+        data: BlundrProgressSummary;
+      }>(
+        `/api/blundr/progress/summary?localDate=${encodeURIComponent(getLocalDateKey())}`,
+        { cache: "no-store" },
+      );
+      if (!isMountedRef.current) return;
+      setSummary(response.data);
+      setLoadError(null);
+      setRefreshCount((count) => count + 1);
     } catch {
-      // Keep the progress dashboard responsive if reconciliation fails.
+      if (!isMountedRef.current) return;
+      setLoadError(
+        "Progress could not be confirmed from durable storage. Try again.",
+      );
     }
-    if (!isMountedRef.current) return;
-    setSummary(loadBlundrProgressSummary({ userId, now: nowIso() }));
-    setRefreshCount((count) => count + 1);
   }
 
   useEffect(() => {
@@ -192,10 +259,12 @@ export function ProgressDashboard({ embedded = false, homeHref = "/", settingsHr
     return () => {
       isMountedRef.current = false;
       window.removeEventListener("storage", handleRefresh);
-      window.removeEventListener(BLUNDR_DAILY_RING_REFRESH_EVENT, handleRefresh);
+      window.removeEventListener(
+        BLUNDR_DAILY_RING_REFRESH_EVENT,
+        handleRefresh,
+      );
       window.removeEventListener("focus", handleRefresh);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -207,8 +276,12 @@ export function ProgressDashboard({ embedded = false, homeHref = "/", settingsHr
               <BarChart3 size={14} />
               Progress
             </div>
-            <h1 className="mt-3 text-2xl font-black tracking-tight text-stone-950">Training momentum</h1>
-            <p className="mt-2 text-sm leading-6 text-stone-600">{summary.today.nextBestAction}</p>
+            <h1 className="mt-3 text-2xl font-black tracking-tight text-stone-950">
+              Training momentum
+            </h1>
+            <p className="mt-2 text-sm leading-6 text-stone-600">
+              {summary.today.nextBestAction}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <ProfileSettingsIcon />
@@ -228,27 +301,73 @@ export function ProgressDashboard({ embedded = false, homeHref = "/", settingsHr
         <div className="mt-4 rounded-[1.5rem] border border-stone-200 bg-[#fbfcf7] p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">Today</div>
-              <h2 className="mt-1 text-lg font-black tracking-tight text-stone-950">Daily rings</h2>
+              <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
+                Today
+              </div>
+              <h2 className="mt-1 text-lg font-black tracking-tight text-stone-950">
+                Daily rings
+              </h2>
             </div>
-            <div className={classNames("rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em]", todayRingStatus === "Complete" ? "bg-green-50 text-green-700" : todayRingStatus === "In progress" ? "bg-blue-50 text-blue-700" : "bg-stone-100 text-stone-500")}>
+            <div
+              className={classNames(
+                "rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em]",
+                todayRingStatus === "Complete"
+                  ? "bg-green-50 text-green-700"
+                  : todayRingStatus === "In progress"
+                    ? "bg-blue-50 text-blue-700"
+                    : "bg-stone-100 text-stone-500",
+              )}
+            >
               {todayRingStatus}
             </div>
           </div>
-          <NestedDailyRings className="mt-4" rings={todayRingItems} closedCount={todayClosedCount} totalCount={todayRingItems.length} allClosed={summary.today.allRingsClosed} streakDays={summary.streak.currentDays} />
+          <NestedDailyRings
+            className="mt-4"
+            rings={todayRingItems}
+            closedCount={todayClosedCount}
+            totalCount={todayRingItems.length}
+            allClosed={summary.today.allRingsClosed}
+            streakDays={summary.streak.currentDays}
+          />
           <div className="mt-4 grid gap-2">
             {todayRingItems.map((ring) => (
-              <div key={ring.ringId} className="flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-2 ring-1 ring-stone-100">
+              <div
+                key={ring.ringId}
+                className="flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-2 ring-1 ring-stone-100"
+              >
                 <div className="min-w-0">
-                  <div className="text-sm font-black text-stone-950">{ring.label}</div>
+                  <div className="text-sm font-black text-stone-950">
+                    {ring.label}
+                  </div>
                   <div className="mt-0.5 text-[11px] font-semibold text-stone-500">
-                    {ring.closed ? "Complete" : ring.percent > 0 ? "In progress" : "Open"}
+                    {ring.closed
+                      ? "Complete"
+                      : ring.percent > 0
+                        ? "In progress"
+                        : "Open"}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-sm font-black text-stone-950">{ring.goal > 0 ? `${ring.progress}/${ring.goal}` : "Loading"}</div>
-                  <div className={classNames("mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.14em]", ring.closed ? "bg-green-50 text-green-700" : ring.percent > 0 ? "bg-blue-50 text-blue-700" : "bg-stone-100 text-stone-500")}>
-                    {ring.closed ? "Complete" : ring.percent > 0 ? "In progress" : "Open"}
+                  <div className="text-sm font-black text-stone-950">
+                    {ring.goal > 0
+                      ? `${ring.progress}/${ring.goal}`
+                      : "Loading"}
+                  </div>
+                  <div
+                    className={classNames(
+                      "mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.14em]",
+                      ring.closed
+                        ? "bg-green-50 text-green-700"
+                        : ring.percent > 0
+                          ? "bg-blue-50 text-blue-700"
+                          : "bg-stone-100 text-stone-500",
+                    )}
+                  >
+                    {ring.closed
+                      ? "Complete"
+                      : ring.percent > 0
+                        ? "In progress"
+                        : "Open"}
                   </div>
                 </div>
               </div>
@@ -258,37 +377,70 @@ export function ProgressDashboard({ embedded = false, homeHref = "/", settingsHr
 
         <div className="mt-4 grid gap-3">
           <div className="rounded-[1.5rem] border border-stone-200 bg-white p-4 shadow-sm">
-            <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">Next step</div>
-            <p className="mt-2 text-sm leading-6 text-stone-600">{summary.today.nextBestAction}</p>
+            <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
+              Next step
+            </div>
+            <p className="mt-2 text-sm leading-6 text-stone-600">
+              {summary.today.nextBestAction}
+            </p>
           </div>
-          <Link href={summary.today.allRingsClosed ? "/daily" : "/"} className="inline-flex items-center justify-center gap-2 rounded-[1.5rem] bg-green-700 px-4 py-3 text-sm font-black text-white shadow-sm">
-            {summary.today.allRingsClosed ? "Open Daily Blundr" : "Continue Training"}
+          <Link
+            href={summary.today.allRingsClosed ? "/daily" : "/"}
+            className="inline-flex items-center justify-center gap-2 rounded-[1.5rem] bg-green-700 px-4 py-3 text-sm font-black text-white shadow-sm"
+          >
+            {summary.today.allRingsClosed
+              ? "Open Daily Blundr"
+              : "Continue Training"}
             <ArrowRight size={16} />
           </Link>
         </div>
       </header>
 
+      {loadError ? (
+        <div
+          role="status"
+          className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950"
+        >
+          {loadError}
+        </div>
+      ) : null}
+
       <section className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
-        <SectionHeader title="Streak and consistency" copy="Keep the cadence gentle, steady, and repeatable." />
+        <SectionHeader
+          title="Streak and consistency"
+          copy="Keep the cadence gentle, steady, and repeatable."
+        />
         <div className="mt-4 grid gap-3 sm:grid-cols-[1.1fr_0.9fr]">
           <div className="rounded-[1.5rem] bg-[#fbfcf7] p-4 ring-1 ring-stone-200">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">Current streak</div>
-                <div className="mt-2 text-3xl font-black tracking-tight text-stone-950">{summary.streak.currentDays}</div>
+                <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">
+                  Current streak
+                </div>
+                <div className="mt-2 text-3xl font-black tracking-tight text-stone-950">
+                  {summary.streak.currentDays}
+                </div>
               </div>
               <div className="rounded-full bg-white p-2 text-green-700 ring-1 ring-stone-200">
                 <Flame size={18} />
               </div>
             </div>
             <p className="mt-2 text-sm leading-6 text-stone-600">
-              Best streak: <span className="font-black text-stone-900">{summary.streak.bestDays}</span> days. Tempo prefers consistency over sprinting.
+              Best streak:{" "}
+              <span className="font-black text-stone-900">
+                {summary.streak.bestDays}
+              </span>{" "}
+              days. Tempo prefers consistency over sprinting.
             </p>
             <div className="mt-3 rounded-2xl bg-white px-3 py-3 text-sm leading-6 text-stone-600 ring-1 ring-stone-200">
               {summary.streak.daysTrainedThisWeek > 0 ? (
                 <>
-                  <span className="font-black text-stone-900">{summary.streak.daysTrainedThisWeek}</span> training day
-                  {summary.streak.daysTrainedThisWeek === 1 ? "" : "s"} this week.
+                  <span className="font-black text-stone-900">
+                    {summary.streak.daysTrainedThisWeek}
+                  </span>{" "}
+                  training day
+                  {summary.streak.daysTrainedThisWeek === 1 ? "" : "s"} this
+                  week.
                 </>
               ) : (
                 "Start with one clean session and the week will begin to fill in."
@@ -296,19 +448,29 @@ export function ProgressDashboard({ embedded = false, homeHref = "/", settingsHr
             </div>
           </div>
           <div className="rounded-[1.5rem] bg-stone-50 p-4 ring-1 ring-stone-200">
-            <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">Weekly grid</div>
+            <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">
+              Weekly grid
+            </div>
             <div className="mt-3 grid grid-cols-7 gap-2">
               {summary.streak.week.map((day) => (
                 <div
                   key={day.localDate}
                   className={classNames(
                     "rounded-2xl px-2 py-3 text-center text-[11px] font-black uppercase tracking-[0.18em]",
-                    day.allRingsClosed ? "bg-green-50 text-green-700" : day.hasTraining ? "bg-white text-stone-700 ring-1 ring-stone-200" : "bg-stone-100 text-stone-400",
+                    day.allRingsClosed
+                      ? "bg-green-50 text-green-700"
+                      : day.hasTraining
+                        ? "bg-white text-stone-700 ring-1 ring-stone-200"
+                        : "bg-stone-100 text-stone-400",
                   )}
                 >
                   <div>{day.label}</div>
                   <div className="mt-2 text-[10px] leading-4 normal-case tracking-normal">
-                    {day.allRingsClosed ? "All rings" : day.hasTraining ? `${day.reviewCount} review${day.reviewCount === 1 ? "" : "s"}` : "Rest"}
+                    {day.allRingsClosed
+                      ? "All rings"
+                      : day.hasTraining
+                        ? `${day.reviewCount} review${day.reviewCount === 1 ? "" : "s"}`
+                        : "Rest"}
                   </div>
                 </div>
               ))}
@@ -318,7 +480,10 @@ export function ProgressDashboard({ embedded = false, homeHref = "/", settingsHr
       </section>
 
       <section className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
-        <SectionHeader title="Training volume" copy="Volume is a useful signal, but Tempo only counts what matters." />
+        <SectionHeader
+          title="Training volume"
+          copy="Volume is a useful signal, but Tempo only counts what matters."
+        />
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <ProgressStatCard
             label="Opening runs"
@@ -338,7 +503,11 @@ export function ProgressDashboard({ embedded = false, homeHref = "/", settingsHr
             value={`${summary.trainingVolume.dailyBlundrToday}`}
             detail={`${summary.trainingVolume.dailyBlundrWeek} this week`}
             icon={<Sparkles size={16} className="text-green-700" />}
-            tone={summary.trainingVolume.dailyBlundrToday > 0 ? "positive" : "neutral"}
+            tone={
+              summary.trainingVolume.dailyBlundrToday > 0
+                ? "positive"
+                : "neutral"
+            }
           />
           <ProgressStatCard
             label="Minigames"
@@ -350,30 +519,48 @@ export function ProgressDashboard({ embedded = false, homeHref = "/", settingsHr
       </section>
 
       <section className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
-        <SectionHeader title="Accuracy and recall" copy="Tempo only shows this when there is enough signal." />
+        <SectionHeader
+          title="Accuracy and recall"
+          copy="Tempo only shows this when there is enough signal."
+        />
         <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
           <div className="rounded-[1.5rem] bg-[#fbfcf7] p-4 ring-1 ring-stone-200">
-            <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">Quality</div>
-            <p className="mt-2 text-sm leading-6 text-stone-600">{summary.accuracy.message}</p>
+            <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">
+              Quality
+            </div>
+            <p className="mt-2 text-sm leading-6 text-stone-600">
+              {summary.accuracy.message}
+            </p>
             {summary.accuracy.accuracyPct !== null ? (
-              <div className="mt-3 text-3xl font-black tracking-tight text-stone-950">{summary.accuracy.accuracyPct}%</div>
+              <div className="mt-3 text-3xl font-black tracking-tight text-stone-950">
+                {summary.accuracy.accuracyPct}%
+              </div>
             ) : null}
             <div className="mt-2 text-sm font-semibold text-stone-500">
-              {summary.accuracy.correct} correct, {summary.accuracy.incorrect} incorrect today.
+              {summary.accuracy.correct} correct, {summary.accuracy.incorrect}{" "}
+              incorrect today.
             </div>
           </div>
           <div className="rounded-[1.5rem] bg-stone-50 p-4 ring-1 ring-stone-200">
-            <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">Next unlock</div>
-            <div className="mt-2 text-3xl font-black tracking-tight text-stone-950">{summary.repertoire.nextUnlockProgressPct}%</div>
+            <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">
+              Next unlock
+            </div>
+            <div className="mt-2 text-3xl font-black tracking-tight text-stone-950">
+              {summary.repertoire.nextUnlockProgressPct}%
+            </div>
             <p className="mt-2 text-sm leading-6 text-stone-600">
-              {summary.repertoire.availablePoints} points ready. {summary.repertoire.lockedOpenings} openings remain locked.
+              {summary.repertoire.availablePoints} points ready.{" "}
+              {summary.repertoire.lockedOpenings} openings remain locked.
             </p>
           </div>
         </div>
       </section>
 
       <section className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
-        <SectionHeader title="Repertoire progress" copy="Keep building points and Tempo will widen the pool." />
+        <SectionHeader
+          title="Repertoire progress"
+          copy="Keep building points and Tempo will widen the pool."
+        />
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <ProgressStatCard
             label="Unlocked openings"
@@ -391,59 +578,102 @@ export function ProgressDashboard({ embedded = false, homeHref = "/", settingsHr
           <ProgressStatCard
             label="Most trained"
             value={summary.repertoire.mostTrainedOpeningName ?? "None yet"}
-            detail={summary.repertoire.mostTrainedOpeningId ? `Opening ID: ${summary.repertoire.mostTrainedOpeningId}` : "Train a line and Tempo will learn it."}
+            detail={
+              summary.repertoire.mostTrainedOpeningId
+                ? `Opening ID: ${summary.repertoire.mostTrainedOpeningId}`
+                : "Train a line and Tempo will learn it."
+            }
             icon={<Trophy size={16} className="text-green-700" />}
           />
           <ProgressStatCard
             label="Recommended"
             value={summary.repertoire.recommendedOpeningName ?? "None yet"}
-            detail={summary.repertoire.recommendedOpeningId ? `Opening ID: ${summary.repertoire.recommendedOpeningId}` : "Tempo will surface a target when it has enough data."}
+            detail={
+              summary.repertoire.recommendedOpeningId
+                ? `Opening ID: ${summary.repertoire.recommendedOpeningId}`
+                : "Tempo will surface a target when it has enough data."
+            }
             icon={<Target size={16} className="text-green-700" />}
           />
         </div>
       </section>
 
       <section className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
-        <SectionHeader title="Weak areas" copy="Tempo prefers calm, specific feedback over generic shame." />
+        <SectionHeader
+          title="Weak areas"
+          copy="Tempo prefers calm, specific feedback over generic shame."
+        />
         <div className="mt-4 space-y-3">
-          {summary.weakAreas.items.length > 0 && summary.weakAreas.items[0].openingId !== "none" ? (
+          {summary.weakAreas.items.length > 0 &&
+          summary.weakAreas.items[0].openingId !== "none" ? (
             summary.weakAreas.items.map((item) => (
-              <div key={item.openingId} className="flex items-start justify-between gap-3 rounded-[1.5rem] bg-stone-50 px-4 py-3 ring-1 ring-stone-200">
+              <div
+                key={item.openingId}
+                className="flex items-start justify-between gap-3 rounded-[1.5rem] bg-stone-50 px-4 py-3 ring-1 ring-stone-200"
+              >
                 <div>
-                  <div className="text-sm font-black text-stone-950">{item.openingName}</div>
-                  <div className="mt-1 text-xs leading-5 text-stone-500">{item.misses} missed idea{item.misses === 1 ? "" : "s"}</div>
+                  <div className="text-sm font-black text-stone-950">
+                    {item.openingName}
+                  </div>
+                  <div className="mt-1 text-xs leading-5 text-stone-500">
+                    {item.misses} missed idea{item.misses === 1 ? "" : "s"}
+                  </div>
                 </div>
-                <div className="rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-stone-500 ring-1 ring-stone-200">Focus</div>
+                <div className="rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-stone-500 ring-1 ring-stone-200">
+                  Focus
+                </div>
               </div>
             ))
           ) : (
-            <div className="rounded-[1.5rem] bg-stone-50 p-4 text-sm leading-6 text-stone-600 ring-1 ring-stone-200">{summary.weakAreas.message}</div>
+            <div className="rounded-[1.5rem] bg-stone-50 p-4 text-sm leading-6 text-stone-600 ring-1 ring-stone-200">
+              {summary.weakAreas.message}
+            </div>
           )}
         </div>
       </section>
 
       <section className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
-        <SectionHeader title="Achievements" copy="Small milestones keep the loop visible." />
+        <SectionHeader
+          title="Achievements"
+          copy="Small milestones keep the loop visible."
+        />
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {summary.milestones.map((milestone) => (
-            <div key={milestone.title} className="rounded-[1.5rem] bg-[#fbfcf7] p-4 ring-1 ring-stone-200">
-              <div className="text-sm font-black text-stone-950">{milestone.title}</div>
-              <p className="mt-2 text-sm leading-6 text-stone-600">{milestone.message}</p>
+            <div
+              key={milestone.title}
+              className="rounded-[1.5rem] bg-[#fbfcf7] p-4 ring-1 ring-stone-200"
+            >
+              <div className="text-sm font-black text-stone-950">
+                {milestone.title}
+              </div>
+              <p className="mt-2 text-sm leading-6 text-stone-600">
+                {milestone.message}
+              </p>
             </div>
           ))}
         </div>
       </section>
 
       <section className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
-        <SectionHeader title="Recent activity" copy="A compact history of what Tempo noticed recently." />
+        <SectionHeader
+          title="Recent activity"
+          copy="A compact history of what Tempo noticed recently."
+        />
         <div className="mt-4 space-y-3">
           {summary.recentActivity.length > 0 ? (
             summary.recentActivity.map((item) => (
-              <div key={item.key} className="rounded-[1.5rem] bg-stone-50 px-4 py-3 ring-1 ring-stone-200">
+              <div
+                key={item.key}
+                className="rounded-[1.5rem] bg-stone-50 px-4 py-3 ring-1 ring-stone-200"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-sm font-black text-stone-950">{item.title}</div>
-                    <p className="mt-1 text-sm leading-6 text-stone-600">{item.message}</p>
+                    <div className="text-sm font-black text-stone-950">
+                      {item.title}
+                    </div>
+                    <p className="mt-1 text-sm leading-6 text-stone-600">
+                      {item.message}
+                    </p>
                   </div>
                   <div className="rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-stone-500 ring-1 ring-stone-200">
                     {item.tone ?? "neutral"}
@@ -453,14 +683,18 @@ export function ProgressDashboard({ embedded = false, homeHref = "/", settingsHr
             ))
           ) : (
             <div className="rounded-[1.5rem] bg-stone-50 p-4 text-sm leading-6 text-stone-600 ring-1 ring-stone-200">
-              Tempo has not recorded a recent activity yet. Finish one opening run or Daily Blundr session and this area will fill in.
+              Tempo has not recorded a recent activity yet. Finish one opening
+              run or Daily Blundr session and this area will fill in.
             </div>
           )}
         </div>
       </section>
 
       <section className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
-        <SectionHeader title="Next actions" copy="Fast paths back into the training loop." />
+        <SectionHeader
+          title="Next actions"
+          copy="Fast paths back into the training loop."
+        />
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           {visibleActions.map((action) => (
             <Link
@@ -470,10 +704,17 @@ export function ProgressDashboard({ embedded = false, homeHref = "/", settingsHr
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-sm font-black text-stone-950">{action.title}</div>
-                  <p className="mt-2 text-sm leading-6 text-stone-600">{action.description}</p>
+                  <div className="text-sm font-black text-stone-950">
+                    {action.title}
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-stone-600">
+                    {action.description}
+                  </p>
                 </div>
-                <ChevronRight size={16} className="text-stone-400 transition group-hover:text-green-700" />
+                <ChevronRight
+                  size={16}
+                  className="text-stone-400 transition group-hover:text-green-700"
+                />
               </div>
             </Link>
           ))}

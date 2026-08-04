@@ -1,4 +1,10 @@
-import { createDefaultDailyRetentionProgress, createDefaultRewardHistory, createDefaultStreakRecord, createDefaultTrainingProfile, createDefaultUserRepertoire } from "./accountDefaults";
+import {
+  createDefaultDailyRetentionProgress,
+  createDefaultRewardHistory,
+  createDefaultStreakRecord,
+  createDefaultTrainingProfile,
+  createDefaultUserRepertoire,
+} from "./accountDefaults";
 import type {
   CurrentBlundrUser,
   DailyRetentionProgress,
@@ -12,7 +18,18 @@ import type {
 } from "./accountTypes";
 import type { PersistenceResult } from "../persistence/persistenceTypes";
 import { getCurrentBlundrUser } from "./accountSession";
-import { readDailyRetentionProgress, readRewardHistory, readStreakRecord, readTrainingProfile, readUserRepertoire, saveDailyRetentionProgress, saveRewardHistory, saveStreakRecord, saveTrainingProfile, saveUserRepertoire } from "./accountRepository";
+import {
+  readDailyRetentionProgress,
+  readRewardHistory,
+  readStreakRecord,
+  readTrainingProfile,
+  readUserRepertoire,
+  saveDailyRetentionProgress,
+  saveRewardHistory,
+  saveStreakRecord,
+  saveTrainingProfile,
+  saveUserRepertoire,
+} from "./accountRepository";
 import { syncLocalDemoStateToAccount as syncDailyStateToAccount } from "./accountSync";
 
 export type AccountServiceContext = {
@@ -34,7 +51,10 @@ function localDateKey(date = new Date()): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-function chooseExisting<T extends { updatedAt: string }>(current: T, existing: T | null): T {
+function chooseExisting<T extends { updatedAt: string }>(
+  current: T,
+  existing: T | null,
+): T {
   // `current` is a newly-created default whose timestamp is necessarily newer
   // than durable account state. Bootstrap must never let that timestamp erase
   // onboarding choices, repertoire access, or accumulated progress.
@@ -48,64 +68,133 @@ function getPersistenceError(result: PersistenceResult<unknown>) {
   return { code: "persistence_error", message: "Unknown persistence error." };
 }
 
-function failBootstrap(result: PersistenceResult<unknown>): PersistenceResult<UserAccountBootstrap> {
+function failBootstrap(
+  result: PersistenceResult<unknown>,
+): PersistenceResult<UserAccountBootstrap> {
   return { ok: false, error: getPersistenceError(result) };
 }
 
 async function createOrUpdate<T extends { updatedAt: string }>(
   read: Promise<PersistenceResult<T | null>>,
-  write: (value: T, context: AccountServiceContext) => Promise<PersistenceResult<T>>,
+  write: (
+    value: T,
+    context: AccountServiceContext,
+  ) => Promise<PersistenceResult<T>>,
   fallback: T,
   context: AccountServiceContext,
+  persistMissing = true,
 ): Promise<PersistenceResult<T>> {
   const existing = await read;
-  const next = existing.ok && existing.data ? chooseExisting(fallback, existing.data) : fallback;
-  return write(next, context);
+  if (!existing.ok) return existing;
+  if (existing.data)
+    return { ok: true, data: chooseExisting(fallback, existing.data) };
+  if (!persistMissing) return { ok: true, data: fallback };
+  return write(fallback, context);
 }
 
-export async function getOrCreateTrainingProfile(userId: string, context: AccountServiceContext = {}): Promise<PersistenceResult<UserTrainingProfile>> {
+export async function getOrCreateTrainingProfile(
+  userId: string,
+  context: AccountServiceContext = {},
+): Promise<PersistenceResult<UserTrainingProfile>> {
   const now = context.now ?? nowIso();
   const fallback = createDefaultTrainingProfile(userId, now);
-  return createOrUpdate(readTrainingProfile(userId, context), saveTrainingProfile, fallback, context);
+  return createOrUpdate(
+    readTrainingProfile(userId, context),
+    saveTrainingProfile,
+    fallback,
+    context,
+  );
 }
 
-export async function getOrCreateUserRepertoire(userId: string, context: AccountServiceContext = {}): Promise<PersistenceResult<UserRepertoire>> {
+export async function getOrCreateUserRepertoire(
+  userId: string,
+  context: AccountServiceContext = {},
+): Promise<PersistenceResult<UserRepertoire>> {
   const now = context.now ?? nowIso();
   // Do not grant a starter pack merely because an account is authenticated.
   // The confirmed onboarding service performs the idempotent initialization.
   const fallback = createDefaultUserRepertoire(userId, now);
-  return createOrUpdate(readUserRepertoire(userId, context), saveUserRepertoire, fallback, context);
+  return createOrUpdate(
+    readUserRepertoire(userId, context),
+    saveUserRepertoire,
+    fallback,
+    context,
+    false,
+  );
 }
 
-export async function getOrCreateStreakRecord(userId: string, context: AccountServiceContext = {}): Promise<PersistenceResult<StreakRecord>> {
+export async function getOrCreateStreakRecord(
+  userId: string,
+  context: AccountServiceContext = {},
+): Promise<PersistenceResult<StreakRecord>> {
   const now = context.now ?? nowIso();
   const fallback = createDefaultStreakRecord(userId, now);
-  return createOrUpdate(readStreakRecord(userId, context), saveStreakRecord, fallback, context);
+  return createOrUpdate(
+    readStreakRecord(userId, context),
+    saveStreakRecord,
+    fallback,
+    context,
+    false,
+  );
 }
 
-export async function getOrCreateRewardHistory(userId: string, context: AccountServiceContext = {}): Promise<PersistenceResult<UserRewardHistory>> {
+export async function getOrCreateRewardHistory(
+  userId: string,
+  context: AccountServiceContext = {},
+): Promise<PersistenceResult<UserRewardHistory>> {
   const now = context.now ?? nowIso();
   const fallback = createDefaultRewardHistory(userId, now);
-  return createOrUpdate(readRewardHistory(userId, context), saveRewardHistory, fallback, context);
+  return createOrUpdate(
+    readRewardHistory(userId, context),
+    saveRewardHistory,
+    fallback,
+    context,
+    false,
+  );
 }
 
-export async function getOrCreateDailyRetentionProgress(userId: string, context: AccountServiceContext = {}): Promise<PersistenceResult<DailyRetentionProgress>> {
+export async function getOrCreateDailyRetentionProgress(
+  userId: string,
+  context: AccountServiceContext = {},
+): Promise<PersistenceResult<DailyRetentionProgress>> {
   const now = context.now ?? nowIso();
   const localDate = context.localDate ?? localDateKey(new Date(now));
   const profileResult = await getOrCreateTrainingProfile(userId, context);
-  const profile = profileResult.ok ? profileResult.data : createDefaultTrainingProfile(userId, now);
-  const fallback = createDefaultDailyRetentionProgress(userId, localDate, {
-    dailyTempoGoal: profile.dailyTempoGoal,
-    dailyBatteryGoal: profile.dailyBatteryGoal,
-    dailyBlundrGoal: profile.dailyBlundrGoal,
-  }, now);
-  return createOrUpdate(readDailyRetentionProgress(userId, localDate, context), saveDailyRetentionProgress, fallback, context);
+  const profile = profileResult.ok
+    ? profileResult.data
+    : createDefaultTrainingProfile(userId, now);
+  const fallback = createDefaultDailyRetentionProgress(
+    userId,
+    localDate,
+    {
+      dailyTempoGoal: profile.dailyTempoGoal,
+      dailyBatteryGoal: profile.dailyBatteryGoal,
+      dailyBlundrGoal: profile.dailyBlundrGoal,
+    },
+    now,
+  );
+  return createOrUpdate(
+    readDailyRetentionProgress(userId, localDate, context),
+    saveDailyRetentionProgress,
+    fallback,
+    context,
+    false,
+  );
 }
 
-export async function initializeAccountDefaults(userId: string, context: AccountServiceContext = {}): Promise<PersistenceResult<UserAccountBootstrap>> {
+export async function initializeAccountDefaults(
+  userId: string,
+  context: AccountServiceContext = {},
+): Promise<PersistenceResult<UserAccountBootstrap>> {
   const now = context.now ?? nowIso();
   const localDate = context.localDate ?? localDateKey(new Date(now));
-  const [profileResult, repertoireResult, streakRecordResult, rewardHistoryResult, dailyRetentionProgressResult] = await Promise.all([
+  const [
+    profileResult,
+    repertoireResult,
+    streakRecordResult,
+    rewardHistoryResult,
+    dailyRetentionProgressResult,
+  ] = await Promise.all([
     getOrCreateTrainingProfile(userId, context),
     getOrCreateUserRepertoire(userId, context),
     getOrCreateStreakRecord(userId, context),
@@ -117,7 +206,8 @@ export async function initializeAccountDefaults(userId: string, context: Account
   if (!repertoireResult.ok) return failBootstrap(repertoireResult);
   if (!streakRecordResult.ok) return failBootstrap(streakRecordResult);
   if (!rewardHistoryResult.ok) return failBootstrap(rewardHistoryResult);
-  if (!dailyRetentionProgressResult.ok) return failBootstrap(dailyRetentionProgressResult);
+  if (!dailyRetentionProgressResult.ok)
+    return failBootstrap(dailyRetentionProgressResult);
 
   const user = context.user ?? {
     userId,
@@ -142,8 +232,15 @@ export async function initializeAccountDefaults(userId: string, context: Account
   };
 }
 
-export async function bootstrapBlundrAccount(input: AccountServiceContext & { request?: Request | null } = {}): Promise<PersistenceResult<UserAccountBootstrap>> {
-  const user = input.user ?? (await getCurrentBlundrUser({ request: input.request ?? null, allowLocalFallback: input.allowLocalFallback }));
+export async function bootstrapBlundrAccount(
+  input: AccountServiceContext & { request?: Request | null } = {},
+): Promise<PersistenceResult<UserAccountBootstrap>> {
+  const user =
+    input.user ??
+    (await getCurrentBlundrUser({
+      request: input.request ?? null,
+      allowLocalFallback: input.allowLocalFallback,
+    }));
   if (!user) {
     return {
       ok: false,
@@ -160,6 +257,9 @@ export async function bootstrapBlundrAccount(input: AccountServiceContext & { re
   });
 }
 
-export async function syncLocalDemoStateToAccount(userId: string, context: AccountServiceContext = {}) {
+export async function syncLocalDemoStateToAccount(
+  userId: string,
+  context: AccountServiceContext = {},
+) {
   return syncDailyStateToAccount(userId, context);
 }
