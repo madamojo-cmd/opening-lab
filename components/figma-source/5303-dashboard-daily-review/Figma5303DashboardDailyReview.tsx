@@ -12,6 +12,7 @@ import { BLUNDR_DAILY_RING_REFRESH_EVENT } from "@/lib/blundr/daily-rings/dailyR
 import type { DailyRingSnapshot } from "@/lib/blundr/daily-rings/dailyRingTypes";
 import { loadRepertoireProgress } from "@/lib/blundr/repertoire/repertoireProgressService";
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
+import { clampProgressPercentage, formatProgressPercentage, formatRepertoirePoints } from "@/lib/blundr/presentation/userFacingNumbers";
 import { NestedDailyRings } from "@/components/daily-rings/NestedDailyRings";
 import svgPaths from "./svg-lrkovulksy";
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -325,6 +326,9 @@ function HomeStatsRow({
   const bestValue = longestStreakDays === null ? "Loading" : String(longestStreakDays);
   const allRingValue = allRingDays === null ? "Loading" : String(allRingDays);
   const closedRingsValue = `${closedRingCount}/3 rings closed`;
+  const clampedUnlockProgress = clampProgressPercentage(nextUnlockProgressPct);
+  const availablePointsLabel = formatRepertoirePoints(availablePoints);
+  const unlockProgressLabel = formatProgressPercentage(clampedUnlockProgress);
 
   return (
     <div className="grid w-full gap-3 sm:grid-cols-2">
@@ -365,14 +369,14 @@ function HomeStatsRow({
           </p>
         </div>
         <div className="mt-3 flex items-end justify-between gap-3">
-          <p style={{ fontFamily: G.inter, fontWeight: 800, fontSize: 30, lineHeight: "30px", color: G.textPrimary }}>{String(availablePoints)}</p>
+          <p style={{ fontFamily: G.inter, fontWeight: 800, fontSize: 30, lineHeight: "30px", color: G.textPrimary }}>{availablePointsLabel}</p>
           <p style={{ fontFamily: G.inter, fontWeight: 600, fontSize: 12, lineHeight: "16.5px", color: G.textMuted }}>
-            {`${nextUnlockProgressPct}% to next unlock`}
+            {`${unlockProgressLabel} to next unlock`}
           </p>
         </div>
         <div className="mt-3">
           <div className="rounded-full w-full overflow-clip" style={{ height: 6, background: "#eae7e1" }}>
-            <div className="rounded-full" style={{ width: `${nextUnlockProgressPct}%`, height: 6, background: G.gold }} />
+            <div className="rounded-full" style={{ width: `${clampedUnlockProgress}%`, height: 6, background: G.gold }} />
           </div>
         </div>
         <div className="mt-2">

@@ -53,6 +53,10 @@ const nextConfig: NextConfig = {
 const sentryBuildConfig = {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
+  // The bundler plugin emits its own telemetry even when source-map uploads
+  // are disabled. Keep deployment evidence intact while making local release
+  // verification deterministic and network-independent.
+  telemetry: isDeploymentBuild,
   silent: !process.env.CI,
   sourcemaps: {
     // Preserve production source-map uploads, but keep Preview deployments

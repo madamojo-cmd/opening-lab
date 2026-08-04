@@ -10,6 +10,7 @@ import { createDefaultDailyRingDay } from "@/lib/blundr/daily-rings/dailyRingPro
 import { getLocalAccountCurrentUserId } from "@/lib/blundr/accounts/localAccountStorage";
 import { BLUNDR_LOCAL_DEMO_USER_ID } from "@/lib/blundr/persistence/persistenceKeys";
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
+import { formatProgressPercentage, formatRepertoirePoints } from "@/lib/blundr/presentation/userFacingNumbers";
 import { getDailyRingSnapshotSummary, loadDailyRingSnapshot } from "@/lib/blundr/daily-rings/dailyRingService";
 import { reconcileDailyBlundrRingCompletionForToday } from "@/lib/blundr/daily-rings/dailyRingBlundrReconciliation";
 import { BLUNDR_DAILY_RING_REFRESH_EVENT } from "@/lib/blundr/daily-rings/dailyRingRefreshSignal";
@@ -238,10 +239,10 @@ export function DailyRingsCard({ repertoireProgress, refreshKey, completionResul
             <Sparkles size={14} />
             Repertoire points
           </div>
-          <div className="mt-2 text-3xl font-black tracking-tight text-stone-950">{repertoireProgress.availablePoints}</div>
+          <div className="mt-2 text-3xl font-black tracking-tight text-stone-950">{formatRepertoirePoints(repertoireProgress.availablePoints)}</div>
           <p className="mt-2 text-sm leading-6 text-stone-600">
             {repertoireProgress.lockedOpeningIds.length > 0
-              ? `${repertoireProgress.nextUnlockProgressPct}% toward the next unlock.`
+              ? `${formatProgressPercentage(repertoireProgress.nextUnlockProgressPct)} toward the next unlock.`
               : "All current openings are unlocked."}
           </p>
           <div className="mt-4 rounded-2xl bg-white px-3 py-3 text-sm font-semibold text-stone-600 ring-1 ring-stone-100">
