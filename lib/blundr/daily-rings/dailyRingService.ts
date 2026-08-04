@@ -1,19 +1,62 @@
 import { BLUNDR_ANALYTICS_EVENTS } from "../analytics/blundrAnalyticsEvents";
 import { trackBlundrAnalyticsEvent } from "../analytics/blundrAnalyticsService";
-import { getLocalAccountCurrentUserId, getLocalDailyRetentionProgress, getLocalStreakRecord, getLocalTrainingProfile, setLocalAccountCurrentUserId, upsertLocalDailyRetentionProgress, upsertLocalStreakRecord } from "../accounts/localAccountStorage";
-import type { DailyRetentionProgress, StreakRecord, UserTrainingProfile } from "../accounts/accountTypes";
+import {
+  getLocalAccountCurrentUserId,
+  getLocalDailyRetentionProgress,
+  getLocalStreakRecord,
+  getLocalTrainingProfile,
+  setLocalAccountCurrentUserId,
+  upsertLocalDailyRetentionProgress,
+  upsertLocalStreakRecord,
+} from "../accounts/localAccountStorage";
+import type {
+  DailyRetentionProgress,
+  StreakRecord,
+  UserTrainingProfile,
+} from "../accounts/accountTypes";
 import { getOnboardingAuthSession } from "../onboarding/onboardingAuth";
-import { loadRepertoireProgress, earnAndPersistRepertoirePoints } from "../repertoire/repertoireProgressService";
+import {
+  loadRepertoireProgress,
+  earnAndPersistRepertoirePoints,
+  saveRepertoireProgress,
+} from "../repertoire/repertoireProgressService";
 import { getPointAwardForSource } from "../repertoire/repertoirePoints";
 import { REWARD_CACHE_COPY } from "../rewards/rewardConstants";
 import { evaluateTempoCacheRewards } from "../rewards/tempoCacheService";
 import { getDailyBlundrDateKey } from "../daily/dailyBlundrStorage";
-import { createAllRingsClosedEventId, createStreakMilestoneEventId } from "./dailyRingEvents";
+import {
+  createAllRingsClosedEventId,
+  createStreakMilestoneEventId,
+} from "./dailyRingEvents";
 import { notifyDailyRingRefresh } from "./dailyRingRefreshSignal";
-import { createDefaultDailyRingDay, applyDailyRingActivity, getDailyRingPercent, getDailyRingSummary, isDailyRingClosed, areAllDailyRingsClosed } from "./dailyRingProgress";
-import { applyAllRingsClosedDay, createDefaultStreakRecord, getStreakMilestoneBonuses, isConsecutiveLocalDateWrapper } from "../streaks/streakService";
-import { createXpEvent, getXpAwardForAllRingsClosed, getXpAwardForStreakMilestone } from "../xp/xpService";
-import type { DailyRingActivity, DailyRingCompletionFailure, DailyRingCompletionResult, DailyRingCompletionResultLike, DailyRingDayRecord, DailyRingId, DailyRingSnapshot } from "./dailyRingTypes";
+import {
+  createDefaultDailyRingDay,
+  applyDailyRingActivity,
+  getDailyRingPercent,
+  getDailyRingSummary,
+  isDailyRingClosed,
+  areAllDailyRingsClosed,
+} from "./dailyRingProgress";
+import {
+  applyAllRingsClosedDay,
+  createDefaultStreakRecord,
+  getStreakMilestoneBonuses,
+  isConsecutiveLocalDateWrapper,
+} from "../streaks/streakService";
+import {
+  createXpEvent,
+  getXpAwardForAllRingsClosed,
+  getXpAwardForStreakMilestone,
+} from "../xp/xpService";
+import type {
+  DailyRingActivity,
+  DailyRingCompletionFailure,
+  DailyRingCompletionResult,
+  DailyRingCompletionResultLike,
+  DailyRingDayRecord,
+  DailyRingId,
+  DailyRingSnapshot,
+} from "./dailyRingTypes";
 import type { RepertoireProgress } from "../repertoire/repertoireTypes";
 import type { StreakProgressRecord } from "../streaks/streakTypes";
 
@@ -26,7 +69,10 @@ function normalizeText(value: unknown): string {
 }
 
 function sum(values: readonly number[]): number {
-  return values.reduce((total, value) => total + Math.max(0, Number(value) || 0), 0);
+  return values.reduce(
+    (total, value) => total + Math.max(0, Number(value) || 0),
+    0,
+  );
 }
 
 function toStreakProgressRecord(record: StreakRecord): StreakProgressRecord {
@@ -34,8 +80,12 @@ function toStreakProgressRecord(record: StreakRecord): StreakProgressRecord {
     userId: normalizeText(record.userId),
     currentStreakDays: Math.max(0, Number(record.currentStreak) || 0),
     longestStreakDays: Math.max(0, Number(record.longestStreak) || 0),
-    totalAllRingsClosedDays: Math.max(0, Number(record.totalAllRingsClosedDays) || 0),
-    lastCompletedLocalDate: normalizeText(record.lastCompletedLocalDate) || undefined,
+    totalAllRingsClosedDays: Math.max(
+      0,
+      Number(record.totalAllRingsClosedDays) || 0,
+    ),
+    lastCompletedLocalDate:
+      normalizeText(record.lastCompletedLocalDate) || undefined,
     updatedAt: normalizeText(record.updatedAt) || nowIso(),
   };
 }
@@ -45,13 +95,19 @@ function toAccountStreakRecord(record: StreakProgressRecord): StreakRecord {
     userId: normalizeText(record.userId),
     currentStreak: Math.max(0, Number(record.currentStreakDays) || 0),
     longestStreak: Math.max(0, Number(record.longestStreakDays) || 0),
-    totalAllRingsClosedDays: Math.max(0, Number(record.totalAllRingsClosedDays) || 0),
-    lastCompletedLocalDate: normalizeText(record.lastCompletedLocalDate) || undefined,
+    totalAllRingsClosedDays: Math.max(
+      0,
+      Number(record.totalAllRingsClosedDays) || 0,
+    ),
+    lastCompletedLocalDate:
+      normalizeText(record.lastCompletedLocalDate) || undefined,
     updatedAt: normalizeText(record.updatedAt) || nowIso(),
   };
 }
 
-function toDailyRingDayRecord(progress: DailyRetentionProgress): DailyRingDayRecord {
+function toDailyRingDayRecord(
+  progress: DailyRetentionProgress,
+): DailyRingDayRecord {
   return {
     userId: normalizeText(progress.userId),
     localDate: normalizeText(progress.localDate),
@@ -77,16 +133,32 @@ function toDailyRingDayRecord(progress: DailyRetentionProgress): DailyRingDayRec
       closedAt: progress.rings.dailyBlundr.completedAt ?? undefined,
     },
     allRingsClosed: Boolean(progress.allRingsClosed),
-    allRingsClosedAt: progress.allRingsClosedAt ?? progress.completedAt ?? undefined,
+    allRingsClosedAt:
+      progress.allRingsClosedAt ?? progress.completedAt ?? undefined,
     xpEarnedToday: Math.max(0, Number(progress.xpEarned) || 0),
-    repertoirePointsEarnedToday: Math.max(0, Number(progress.openingPointsEarned) || 0),
-    activityEventIds: Array.from(new Set((progress.activityEventIds ?? []).map((entry) => normalizeText(entry)).filter(Boolean))),
+    repertoirePointsEarnedToday: Math.max(
+      0,
+      Number(progress.openingPointsEarned) || 0,
+    ),
+    activityEventIds: Array.from(
+      new Set(
+        (progress.activityEventIds ?? [])
+          .map((entry) => normalizeText(entry))
+          .filter(Boolean),
+      ),
+    ),
     createdAt: progress.completedAt ?? progress.updatedAt,
     updatedAt: normalizeText(progress.updatedAt) || nowIso(),
   };
 }
 
-function toDailyRetentionProgress(dayRecord: DailyRingDayRecord, profile?: Pick<UserTrainingProfile, "dailyTempoGoal" | "dailyBatteryGoal" | "dailyBlundrGoal">): DailyRetentionProgress {
+function toDailyRetentionProgress(
+  dayRecord: DailyRingDayRecord,
+  profile?: Pick<
+    UserTrainingProfile,
+    "dailyTempoGoal" | "dailyBatteryGoal" | "dailyBlundrGoal"
+  >,
+): DailyRetentionProgress {
   const goals = profile ?? {
     dailyTempoGoal: dayRecord.dailyTempo.goal,
     dailyBatteryGoal: dayRecord.dailyBattery.goal,
@@ -98,21 +170,30 @@ function toDailyRetentionProgress(dayRecord: DailyRingDayRecord, profile?: Pick<
     rings: {
       dailyTempo: {
         type: "daily_tempo",
-        goal: Math.max(1, Number(goals.dailyTempoGoal) || dayRecord.dailyTempo.goal),
+        goal: Math.max(
+          1,
+          Number(goals.dailyTempoGoal) || dayRecord.dailyTempo.goal,
+        ),
         progress: Math.max(0, Number(dayRecord.dailyTempo.progress) || 0),
         completed: Boolean(dayRecord.dailyTempo.closed),
         completedAt: dayRecord.dailyTempo.closedAt ?? undefined,
       },
       dailyBattery: {
         type: "daily_battery",
-        goal: Math.max(1, Number(goals.dailyBatteryGoal) || dayRecord.dailyBattery.goal),
+        goal: Math.max(
+          1,
+          Number(goals.dailyBatteryGoal) || dayRecord.dailyBattery.goal,
+        ),
         progress: Math.max(0, Number(dayRecord.dailyBattery.progress) || 0),
         completed: Boolean(dayRecord.dailyBattery.closed),
         completedAt: dayRecord.dailyBattery.closedAt ?? undefined,
       },
       dailyBlundr: {
         type: "daily_blundr",
-        goal: Math.max(1, Number(goals.dailyBlundrGoal) || dayRecord.dailyBlundr.goal),
+        goal: Math.max(
+          1,
+          Number(goals.dailyBlundrGoal) || dayRecord.dailyBlundr.goal,
+        ),
         progress: Math.max(0, Number(dayRecord.dailyBlundr.progress) || 0),
         completed: Boolean(dayRecord.dailyBlundr.closed),
         completedAt: dayRecord.dailyBlundr.closedAt ?? undefined,
@@ -121,15 +202,31 @@ function toDailyRetentionProgress(dayRecord: DailyRingDayRecord, profile?: Pick<
     allRingsClosed: Boolean(dayRecord.allRingsClosed),
     allRingsClosedAt: dayRecord.allRingsClosedAt ?? undefined,
     xpEarned: Math.max(0, Number(dayRecord.xpEarnedToday) || 0),
-    openingPointsEarned: Math.max(0, Number(dayRecord.repertoirePointsEarnedToday) || 0),
+    openingPointsEarned: Math.max(
+      0,
+      Number(dayRecord.repertoirePointsEarnedToday) || 0,
+    ),
     streakEligible: Boolean(dayRecord.allRingsClosed),
-    activityEventIds: Array.from(new Set(dayRecord.activityEventIds.map((entry) => normalizeText(entry)).filter(Boolean))),
+    activityEventIds: Array.from(
+      new Set(
+        dayRecord.activityEventIds
+          .map((entry) => normalizeText(entry))
+          .filter(Boolean),
+      ),
+    ),
     completedAt: dayRecord.allRingsClosedAt ?? undefined,
     updatedAt: normalizeText(dayRecord.updatedAt) || nowIso(),
   };
 }
 
-function syncDailyRingSnapshotLocally(dayRecord: DailyRingDayRecord, streakRecord: StreakProgressRecord, profile?: Pick<UserTrainingProfile, "dailyTempoGoal" | "dailyBatteryGoal" | "dailyBlundrGoal">): DailyRingSnapshot {
+function syncDailyRingSnapshotLocally(
+  dayRecord: DailyRingDayRecord,
+  streakRecord: StreakProgressRecord,
+  profile?: Pick<
+    UserTrainingProfile,
+    "dailyTempoGoal" | "dailyBatteryGoal" | "dailyBlundrGoal"
+  >,
+): DailyRingSnapshot {
   const dailyProgress = toDailyRetentionProgress(dayRecord, profile);
   upsertLocalDailyRetentionProgress(dailyProgress);
   upsertLocalStreakRecord(toAccountStreakRecord(streakRecord));
@@ -137,7 +234,12 @@ function syncDailyRingSnapshotLocally(dayRecord: DailyRingDayRecord, streakRecor
   const summary = getDailyRingSummary(dayRecord);
   const toSnapshotItem = (ringId: DailyRingId) => {
     const item = summary.find((entry) => entry.ringId === ringId);
-    return { current: item?.progress ?? 0, target: item?.goal ?? 1, percent: item?.percent ?? 0, complete: item?.closed ?? false };
+    return {
+      current: item?.progress ?? 0,
+      target: item?.goal ?? 1,
+      percent: item?.percent ?? 0,
+      complete: item?.closed ?? false,
+    };
   };
   return {
     userId: dayRecord.userId,
@@ -152,7 +254,14 @@ function syncDailyRingSnapshotLocally(dayRecord: DailyRingDayRecord, streakRecor
   };
 }
 
-async function syncDailyRingSnapshotRemotely(dayRecord: DailyRingDayRecord, streakRecord: StreakProgressRecord, profile?: Pick<UserTrainingProfile, "dailyTempoGoal" | "dailyBatteryGoal" | "dailyBlundrGoal">): Promise<void> {
+async function syncDailyRingSnapshotRemotely(
+  dayRecord: DailyRingDayRecord,
+  streakRecord: StreakProgressRecord,
+  profile?: Pick<
+    UserTrainingProfile,
+    "dailyTempoGoal" | "dailyBatteryGoal" | "dailyBlundrGoal"
+  >,
+): Promise<void> {
   const session = await getOnboardingAuthSession().catch(() => null);
   if (!session?.accessToken) return;
   try {
@@ -176,7 +285,94 @@ async function syncDailyRingSnapshotRemotely(dayRecord: DailyRingDayRecord, stre
   }
 }
 
-function buildFallbackFailure(code: string, message: string): DailyRingCompletionFailure {
+type AuthoritativeCompletion = {
+  duplicate: boolean;
+  localDate: string;
+  ringClosedThisAction: boolean;
+  allRingsClosedThisAction: boolean;
+  repertoirePointsAwarded: number;
+  rewardPointsAwarded: number;
+  xpAwarded: number;
+  rewardGrants: DailyRingCompletionResult["rewardGrants"];
+  rewardHistory?: DailyRingCompletionResult["rewardHistory"];
+  tempoCacheState: DailyRingCompletionResult["tempoCacheState"];
+  availablePoints: number;
+  lifetimePoints: number;
+  spentPoints: number;
+  dayRecord: DailyRingDayRecord;
+  streakRecord: StreakProgressRecord;
+};
+
+async function applyActivityCompletionRemotely(input: {
+  activity: DailyRingActivity;
+  localDate: string;
+}): Promise<
+  | { mode: "local" }
+  | { mode: "remote"; data: AuthoritativeCompletion }
+  | { mode: "failed"; code: string; message: string }
+> {
+  const session = await getOnboardingAuthSession().catch(() => null);
+  if (!session?.accessToken) {
+    if (process.env.NODE_ENV !== "production") return { mode: "local" };
+    return {
+      mode: "failed",
+      code: "authentication_required",
+      message: "Sign in again before recording this completion.",
+    };
+  }
+  const evidenceId = normalizeText(input.activity.dailySessionId);
+  if (!evidenceId) {
+    return {
+      mode: "failed",
+      code: "completion_evidence_missing",
+      message: "This completion has no durable session evidence yet.",
+    };
+  }
+  try {
+    const response = await fetch("/api/blundr/rewards/complete", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${session.accessToken}`,
+      },
+      cache: "no-store",
+      body: JSON.stringify({
+        completionId: input.activity.completionId,
+        source: input.activity.source,
+        evidenceId,
+        localDate: input.localDate,
+        openingId: input.activity.openingId ?? null,
+      }),
+    });
+    const payload = (await response.json().catch(() => null)) as {
+      data?: AuthoritativeCompletion;
+      error?: unknown;
+      message?: unknown;
+    } | null;
+    if (!response.ok || !payload?.data) {
+      return {
+        mode: "failed",
+        code: normalizeText(payload?.error) || "reward_persistence_failed",
+        message:
+          normalizeText(payload?.message) ||
+          "Progress was not awarded because it could not be saved.",
+      };
+    }
+    return { mode: "remote", data: payload.data };
+  } catch {
+    return {
+      mode: "failed",
+      code: "reward_persistence_unavailable",
+      message:
+        "Progress was not awarded because the server could not be reached.",
+    };
+  }
+}
+
+function buildFallbackFailure(
+  code: string,
+  message: string,
+): DailyRingCompletionFailure {
   return {
     ok: false,
     code,
@@ -184,18 +380,36 @@ function buildFallbackFailure(code: string, message: string): DailyRingCompletio
   };
 }
 
-function chooseTempoMessage(result: Pick<DailyRingCompletionResult, "source" | "ringClosedThisAction" | "allRingsClosedThisAction" | "streakMilestones" | "activityAlreadyApplied" | "rewardPointsAwarded">): string {
+function chooseTempoMessage(
+  result: Pick<
+    DailyRingCompletionResult,
+    | "source"
+    | "ringClosedThisAction"
+    | "allRingsClosedThisAction"
+    | "streakMilestones"
+    | "activityAlreadyApplied"
+    | "rewardPointsAwarded"
+  >,
+): string {
   if (result.activityAlreadyApplied) return "That rep already counted.";
   if (result.rewardPointsAwarded > 0) return REWARD_CACHE_COPY.intro;
   if (result.allRingsClosedThisAction) {
-    return result.streakMilestones?.length ? "All three rings closed. Tempo approves." : "All three rings closed. Tempo approves.";
+    return result.streakMilestones?.length
+      ? "All three rings closed. Tempo approves."
+      : "All three rings closed. Tempo approves.";
   }
   if (result.ringClosedThisAction) return "Nice. That rep counts.";
-  if (result.source === "daily_blundr_deck_completed") return "That one goes into Daily Blundr if it needs review.";
+  if (result.source === "daily_blundr_deck_completed")
+    return "That one goes into Daily Blundr if it needs review.";
   return "Your repertoire just got a little stronger.";
 }
 
-function chooseNextRecommendedAction(result: Pick<DailyRingCompletionResult, "allRingsClosedThisAction" | "dayRecord" | "source">): string {
+function chooseNextRecommendedAction(
+  result: Pick<
+    DailyRingCompletionResult,
+    "allRingsClosedThisAction" | "dayRecord" | "source"
+  >,
+): string {
   if (result.allRingsClosedThisAction) {
     return "Come back tomorrow to keep the streak alive.";
   }
@@ -206,9 +420,13 @@ function chooseNextRecommendedAction(result: Pick<DailyRingCompletionResult, "al
         : "daily_blundr"
       : "daily_battery"
     : "daily_tempo";
-  if (incompleteRing === "daily_tempo") return "Keep training your opening reps.";
-  if (incompleteRing === "daily_battery") return "Play a few continuations next.";
-  return result.source === "daily_blundr_deck_completed" ? "Train another opening or continuation to keep the loop moving." : "Open Daily Blundr if you want to review today’s misses.";
+  if (incompleteRing === "daily_tempo")
+    return "Keep training your opening reps.";
+  if (incompleteRing === "daily_battery")
+    return "Play a few continuations next.";
+  return result.source === "daily_blundr_deck_completed"
+    ? "Train another opening or continuation to keep the loop moving."
+    : "Open Daily Blundr if you want to review today’s misses.";
 }
 
 function buildSummaryLines(input: {
@@ -218,7 +436,11 @@ function buildSummaryLines(input: {
   repertoirePointsAwarded: number;
   rewardPointsAwarded: number;
   xpAwarded: number;
-  streakMilestones: ReadonlyArray<{ milestoneDays: 7 | 30; pointsAwarded: number; xpAwarded: number }>;
+  streakMilestones: ReadonlyArray<{
+    milestoneDays: 7 | 30;
+    pointsAwarded: number;
+    xpAwarded: number;
+  }>;
   rewardSummaries?: readonly string[];
 }): string[] {
   const lines: string[] = [];
@@ -236,13 +458,17 @@ function buildSummaryLines(input: {
     lines.push("All rings closed.");
   }
   if (input.repertoirePointsAwarded > 0) {
-    lines.push(`+${input.repertoirePointsAwarded} repertoire point${input.repertoirePointsAwarded === 1 ? "" : "s"}.`);
+    lines.push(
+      `+${input.repertoirePointsAwarded} repertoire point${input.repertoirePointsAwarded === 1 ? "" : "s"}.`,
+    );
   }
   if (input.xpAwarded > 0) {
     lines.push(`+${input.xpAwarded} XP.`);
   }
   if (input.rewardPointsAwarded > 0) {
-    lines.push(`+${input.rewardPointsAwarded} reward point${input.rewardPointsAwarded === 1 ? "" : "s"}.`);
+    lines.push(
+      `+${input.rewardPointsAwarded} reward point${input.rewardPointsAwarded === 1 ? "" : "s"}.`,
+    );
   }
   for (const milestone of input.streakMilestones) {
     lines.push(`${milestone.milestoneDays}-day streak reached.`);
@@ -253,24 +479,33 @@ function buildSummaryLines(input: {
   return lines;
 }
 
-export function loadDailyRingSnapshot(input: {
-  userId?: string | null;
-  localDate?: string | null;
-  profile?: Pick<UserTrainingProfile, "dailyTempoGoal" | "dailyBatteryGoal" | "dailyBlundrGoal"> | null;
-} = {}): DailyRingSnapshot {
+export function loadDailyRingSnapshot(
+  input: {
+    userId?: string | null;
+    localDate?: string | null;
+    profile?: Pick<
+      UserTrainingProfile,
+      "dailyTempoGoal" | "dailyBatteryGoal" | "dailyBlundrGoal"
+    > | null;
+  } = {},
+): DailyRingSnapshot {
   const userId = normalizeText(input.userId) || getLocalAccountCurrentUserId();
   const localDate = normalizeText(input.localDate) || getDailyBlundrDateKey();
   const profile = input.profile ?? getLocalTrainingProfile(userId);
   const existingDay = getLocalDailyRetentionProgress(userId, localDate);
   const existingStreak = getLocalStreakRecord(userId);
-  const dayRecord = existingDay ? toDailyRingDayRecord(existingDay) : createDefaultDailyRingDay({
-    userId,
-    localDate,
-    dailyTempoGoal: profile?.dailyTempoGoal,
-    dailyBatteryGoal: profile?.dailyBatteryGoal,
-    dailyBlundrGoal: profile?.dailyBlundrGoal,
-  });
-  const streakRecord = existingStreak ? toStreakProgressRecord(existingStreak) : createDefaultStreakRecord(userId);
+  const dayRecord = existingDay
+    ? toDailyRingDayRecord(existingDay)
+    : createDefaultDailyRingDay({
+        userId,
+        localDate,
+        dailyTempoGoal: profile?.dailyTempoGoal,
+        dailyBatteryGoal: profile?.dailyBatteryGoal,
+        dailyBlundrGoal: profile?.dailyBlundrGoal,
+      });
+  const streakRecord = existingStreak
+    ? toStreakProgressRecord(existingStreak)
+    : createDefaultStreakRecord(userId);
   syncDailyRingSnapshotLocally(dayRecord, streakRecord, profile ?? undefined);
   const summary = getDailyRingSummary(dayRecord);
   const toSnapshotItem = (ringId: DailyRingId) => {
@@ -301,24 +536,32 @@ export function buildDailyRingCompletionResult(args: {
   dayRecord?: DailyRingDayRecord | null;
   streakRecord?: StreakProgressRecord | null;
   repertoireProgress: RepertoireProgress;
-  profile?: Pick<UserTrainingProfile, "dailyTempoGoal" | "dailyBatteryGoal" | "dailyBlundrGoal"> | null;
+  profile?: Pick<
+    UserTrainingProfile,
+    "dailyTempoGoal" | "dailyBatteryGoal" | "dailyBlundrGoal"
+  > | null;
   now?: string;
 }): DailyRingCompletionResult | DailyRingCompletionFailure {
   const now = normalizeText(args.now) || nowIso();
-  const userId = normalizeText(args.userId) || normalizeText(args.activity.userId) || getLocalAccountCurrentUserId();
+  const userId =
+    normalizeText(args.userId) ||
+    normalizeText(args.activity.userId) ||
+    getLocalAccountCurrentUserId();
   if (!userId) {
     return buildFallbackFailure("missing_user", "A user id is required.");
   }
   const localDate = args.dayRecord?.localDate ?? getDailyBlundrDateKey();
   const profile = args.profile ?? getLocalTrainingProfile(userId) ?? undefined;
-  const currentDay = args.dayRecord ?? createDefaultDailyRingDay({
-    userId,
-    localDate,
-    dailyTempoGoal: profile?.dailyTempoGoal,
-    dailyBatteryGoal: profile?.dailyBatteryGoal,
-    dailyBlundrGoal: profile?.dailyBlundrGoal,
-    now,
-  });
+  const currentDay =
+    args.dayRecord ??
+    createDefaultDailyRingDay({
+      userId,
+      localDate,
+      dailyTempoGoal: profile?.dailyTempoGoal,
+      dailyBatteryGoal: profile?.dailyBatteryGoal,
+      dailyBlundrGoal: profile?.dailyBlundrGoal,
+      now,
+    });
   const currentStreak = args.streakRecord ?? createDefaultStreakRecord(userId);
   const baseResult = applyDailyRingActivity(currentDay, {
     ...args.activity,
@@ -375,7 +618,12 @@ export function buildDailyRingCompletionResult(args: {
   let nextStreakRecord = currentStreak;
   let pointAwards = [...baseResult.pointAwards];
   let xpEvents = [...baseResult.xpEvents];
-  const streakMilestones = [] as Array<{ milestoneDays: 7 | 30; pointsAwarded: number; xpAwarded: number; eventId: string }>;
+  const streakMilestones = [] as Array<{
+    milestoneDays: 7 | 30;
+    pointsAwarded: number;
+    xpAwarded: number;
+    eventId: string;
+  }>;
 
   if (baseResult.allRingsClosedThisAction) {
     const allRingsEventId = createAllRingsClosedEventId(userId, localDate);
@@ -384,9 +632,13 @@ export function buildDailyRingCompletionResult(args: {
         ...nextDayRecord,
         allRingsClosed: true,
         allRingsClosedAt: nextDayRecord.allRingsClosedAt ?? now,
-        activityEventIds: Array.from(new Set([...nextDayRecord.activityEventIds, allRingsEventId])),
-        repertoirePointsEarnedToday: nextDayRecord.repertoirePointsEarnedToday + 10,
-        xpEarnedToday: nextDayRecord.xpEarnedToday + getXpAwardForAllRingsClosed(),
+        activityEventIds: Array.from(
+          new Set([...nextDayRecord.activityEventIds, allRingsEventId]),
+        ),
+        repertoirePointsEarnedToday:
+          nextDayRecord.repertoirePointsEarnedToday + 10,
+        xpEarnedToday:
+          nextDayRecord.xpEarnedToday + getXpAwardForAllRingsClosed(),
         updatedAt: now,
       };
       pointAwards.push({
@@ -395,25 +647,33 @@ export function buildDailyRingCompletionResult(args: {
         points: 10,
         label: "All rings closed",
       });
-      xpEvents.push(createXpEvent({
-        userId,
-        source: "all_rings_closed",
-        xp: getXpAwardForAllRingsClosed(),
-        createdAt: now,
-        localDate,
-        activityId: allRingsEventId,
-      }));
+      xpEvents.push(
+        createXpEvent({
+          userId,
+          source: "all_rings_closed",
+          xp: getXpAwardForAllRingsClosed(),
+          createdAt: now,
+          localDate,
+          activityId: allRingsEventId,
+        }),
+      );
     }
 
     nextStreakRecord = applyAllRingsClosedDay(currentStreak, localDate, now);
-    const milestoneBonuses = getStreakMilestoneBonuses(nextStreakRecord, localDate);
+    const milestoneBonuses = getStreakMilestoneBonuses(
+      nextStreakRecord,
+      localDate,
+    );
     for (const milestone of milestoneBonuses) {
       if (nextDayRecord.activityEventIds.includes(milestone.eventId)) continue;
       streakMilestones.push(milestone);
       nextDayRecord = {
         ...nextDayRecord,
-        activityEventIds: Array.from(new Set([...nextDayRecord.activityEventIds, milestone.eventId])),
-        repertoirePointsEarnedToday: nextDayRecord.repertoirePointsEarnedToday + milestone.pointsAwarded,
+        activityEventIds: Array.from(
+          new Set([...nextDayRecord.activityEventIds, milestone.eventId]),
+        ),
+        repertoirePointsEarnedToday:
+          nextDayRecord.repertoirePointsEarnedToday + milestone.pointsAwarded,
         xpEarnedToday: nextDayRecord.xpEarnedToday + milestone.xpAwarded,
         updatedAt: now,
       };
@@ -423,15 +683,17 @@ export function buildDailyRingCompletionResult(args: {
         points: milestone.pointsAwarded,
         label: `${milestone.milestoneDays}-day streak`,
       });
-      xpEvents.push(createXpEvent({
-        userId,
-        source: "streak_milestone",
-        xp: milestone.xpAwarded,
-        createdAt: now,
-        localDate,
-        milestoneDays: milestone.milestoneDays,
-        activityId: milestone.eventId,
-      }));
+      xpEvents.push(
+        createXpEvent({
+          userId,
+          source: "streak_milestone",
+          xp: milestone.xpAwarded,
+          createdAt: now,
+          localDate,
+          milestoneDays: milestone.milestoneDays,
+          activityId: milestone.eventId,
+        }),
+      );
     }
   }
 
@@ -494,10 +756,16 @@ export async function completeDailyRingActivity(args: {
   dayRecord?: DailyRingDayRecord | null;
   streakRecord?: StreakProgressRecord | null;
   repertoireProgress?: RepertoireProgress | null;
-  profile?: Pick<UserTrainingProfile, "dailyTempoGoal" | "dailyBatteryGoal" | "dailyBlundrGoal"> | null;
+  profile?: Pick<
+    UserTrainingProfile,
+    "dailyTempoGoal" | "dailyBatteryGoal" | "dailyBlundrGoal"
+  > | null;
   now?: string;
 }): Promise<DailyRingCompletionResultLike> {
-  const userId = normalizeText(args.userId) || normalizeText(args.activity.userId) || getLocalAccountCurrentUserId();
+  const userId =
+    normalizeText(args.userId) ||
+    normalizeText(args.activity.userId) ||
+    getLocalAccountCurrentUserId();
   if (!userId) {
     return buildFallbackFailure("missing_user", "A user id is required.");
   }
@@ -506,7 +774,8 @@ export async function completeDailyRingActivity(args: {
     userId,
     profile: args.profile ?? undefined,
   });
-  const repertoireProgress = args.repertoireProgress ?? loadRepertoireProgress({ userId });
+  const repertoireProgress =
+    args.repertoireProgress ?? loadRepertoireProgress({ userId });
   const result = buildDailyRingCompletionResult({
     userId,
     activity: {
@@ -523,7 +792,93 @@ export async function completeDailyRingActivity(args: {
     return result;
   }
 
-  syncDailyRingSnapshotLocally(result.dayRecord, result.streakRecord, args.profile ?? getLocalTrainingProfile(userId) ?? undefined);
+  const authoritative = await applyActivityCompletionRemotely({
+    activity: result.activityEvent,
+    localDate: result.localDate,
+  });
+  if (authoritative.mode === "failed") {
+    return buildFallbackFailure(authoritative.code, authoritative.message);
+  }
+  if (authoritative.mode === "remote") {
+    const data = authoritative.data;
+    const nextProgress: RepertoireProgress = {
+      ...repertoireProgress,
+      availablePoints: data.availablePoints,
+      lifetimePoints: data.lifetimePoints,
+      spentPoints: data.spentPoints,
+      updatedAt: data.dayRecord.updatedAt,
+    };
+    await saveRepertoireProgress(nextProgress, { syncRemote: false });
+    syncDailyRingSnapshotLocally(
+      data.dayRecord,
+      data.streakRecord,
+      args.profile ?? getLocalTrainingProfile(userId) ?? undefined,
+    );
+    const confirmed: DailyRingCompletionResult = {
+      ...result,
+      localDate: data.localDate,
+      dayRecord: data.dayRecord,
+      streakRecord: data.streakRecord,
+      repertoireProgress: nextProgress,
+      ringClosedThisAction: data.duplicate ? false : data.ringClosedThisAction,
+      allRingsClosedThisAction: data.duplicate
+        ? false
+        : data.allRingsClosedThisAction,
+      activityAlreadyApplied: data.duplicate,
+      repertoirePointsAwarded: data.duplicate
+        ? 0
+        : data.repertoirePointsAwarded,
+      rewardPointsAwarded: data.duplicate ? 0 : data.rewardPointsAwarded,
+      xpAwarded: data.duplicate ? 0 : data.xpAwarded,
+      pointAwards: data.duplicate ? [] : result.pointAwards,
+      xpEvents: data.duplicate ? [] : result.xpEvents,
+      rewardGrants: data.duplicate ? [] : (data.rewardGrants ?? []),
+      rewardHistory: data.rewardHistory,
+      tempoCacheState: data.duplicate ? "closed" : data.tempoCacheState,
+      summaryTitle: data.duplicate
+        ? "Already counted"
+        : data.allRingsClosedThisAction
+          ? "All rings closed"
+          : data.ringClosedThisAction
+            ? "Ring closed"
+            : "Ring updated",
+      summaryLines: data.duplicate
+        ? ["Tempo already recorded this rep."]
+        : buildSummaryLines({
+            source: result.source,
+            ringClosedThisAction: data.ringClosedThisAction,
+            allRingsClosedThisAction: data.allRingsClosedThisAction,
+            repertoirePointsAwarded: data.repertoirePointsAwarded,
+            rewardPointsAwarded: data.rewardPointsAwarded,
+            xpAwarded: data.xpAwarded,
+            streakMilestones: result.streakMilestones ?? [],
+            rewardSummaries: (data.rewardGrants ?? []).map(
+              (grant) =>
+                `${grant.displayName} +${grant.pointsApplied} repertoire points.`,
+            ),
+          }),
+      tempoMessage:
+        data.rewardPointsAwarded > 0
+          ? REWARD_CACHE_COPY.intro
+          : data.duplicate
+            ? "That rep already counted."
+            : result.tempoMessage,
+    };
+    notifyDailyRingRefresh({
+      userId,
+      localDate: confirmed.localDate,
+      source: confirmed.source,
+      activityEventId: confirmed.activityEvent.id,
+      updatedAt: confirmed.dayRecord.updatedAt,
+    });
+    return confirmed;
+  }
+
+  syncDailyRingSnapshotLocally(
+    result.dayRecord,
+    result.streakRecord,
+    args.profile ?? getLocalTrainingProfile(userId) ?? undefined,
+  );
 
   if (!result.activityAlreadyApplied) {
     for (const award of result.pointAwards) {
@@ -573,12 +928,17 @@ export async function completeDailyRingActivity(args: {
   if (rewardBatch.rewardPointsAwarded > 0) {
     result.dayRecord = {
       ...result.dayRecord,
-      repertoirePointsEarnedToday: result.dayRecord.repertoirePointsEarnedToday + rewardBatch.rewardPointsAwarded,
+      repertoirePointsEarnedToday:
+        result.dayRecord.repertoirePointsEarnedToday +
+        rewardBatch.rewardPointsAwarded,
       updatedAt: args.now ?? result.dayRecord.updatedAt,
     };
     result.summaryLines = [
       ...result.summaryLines,
-      ...rewardBatch.rewardGrants.map((grant) => `${grant.displayName} +${grant.pointsApplied} repertoire points.`),
+      ...rewardBatch.rewardGrants.map(
+        (grant) =>
+          `${grant.displayName} +${grant.pointsApplied} repertoire points.`,
+      ),
     ];
     result.tempoMessage = REWARD_CACHE_COPY.intro;
   }
@@ -586,7 +946,11 @@ export async function completeDailyRingActivity(args: {
   const latestProgress = loadRepertoireProgress({ userId, now: args.now });
   result.repertoireProgress = latestProgress;
 
-  syncDailyRingSnapshotLocally(result.dayRecord, result.streakRecord, args.profile ?? getLocalTrainingProfile(userId) ?? undefined);
+  syncDailyRingSnapshotLocally(
+    result.dayRecord,
+    result.streakRecord,
+    args.profile ?? getLocalTrainingProfile(userId) ?? undefined,
+  );
 
   await syncDailyRingSnapshotRemotely(
     result.dayRecord,
@@ -617,13 +981,16 @@ export async function completeDailyRingActivity(args: {
 
   if (result.streakMilestones?.length) {
     for (const milestone of result.streakMilestones) {
-      trackBlundrAnalyticsEvent(BLUNDR_ANALYTICS_EVENTS.STREAK_MILESTONE_REACHED, {
-        userId,
-        localDate: result.localDate,
-        milestoneDays: milestone.milestoneDays,
-        pointsAwarded: milestone.pointsAwarded,
-        xpAwarded: milestone.xpAwarded,
-      });
+      trackBlundrAnalyticsEvent(
+        BLUNDR_ANALYTICS_EVENTS.STREAK_MILESTONE_REACHED,
+        {
+          userId,
+          localDate: result.localDate,
+          milestoneDays: milestone.milestoneDays,
+          pointsAwarded: milestone.pointsAwarded,
+          xpAwarded: milestone.xpAwarded,
+        },
+      );
     }
   }
 
@@ -635,7 +1002,10 @@ export async function completeDailyRingActivity(args: {
     });
   }
 
-  if (result.streakRecord.currentStreakDays > 0 && result.allRingsClosedThisAction) {
+  if (
+    result.streakRecord.currentStreakDays > 0 &&
+    result.allRingsClosedThisAction
+  ) {
     trackBlundrAnalyticsEvent(BLUNDR_ANALYTICS_EVENTS.STREAK_INCREMENTED, {
       userId,
       localDate: result.localDate,
@@ -656,8 +1026,14 @@ export async function completeDailyRingActivity(args: {
   return result;
 }
 
-export function getDailyRingSnapshotSummary(snapshot: DailyRingSnapshot): string {
-  const closedCount = [snapshot.dayRecord.dailyTempo.closed, snapshot.dayRecord.dailyBattery.closed, snapshot.dayRecord.dailyBlundr.closed].filter(Boolean).length;
+export function getDailyRingSnapshotSummary(
+  snapshot: DailyRingSnapshot,
+): string {
+  const closedCount = [
+    snapshot.dayRecord.dailyTempo.closed,
+    snapshot.dayRecord.dailyBattery.closed,
+    snapshot.dayRecord.dailyBlundr.closed,
+  ].filter(Boolean).length;
   return `${closedCount}/3 rings closed`;
 }
 

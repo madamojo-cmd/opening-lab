@@ -1,15 +1,57 @@
 import { BLUNDR_ANALYTICS_EVENTS } from "../analytics/blundrAnalyticsEvents";
 import { trackBlundrAnalyticsEvent } from "../analytics/blundrAnalyticsService";
-import { getLocalAccountCurrentUserId, getLocalRepertoirePointEvents, getLocalRepertoireUnlockEvents, getLocalTrainingProfile, getLocalUserRepertoire, setLocalAccountCurrentUserId, appendLocalRepertoirePointEvent, appendLocalRepertoireUnlockEvent, upsertLocalUserRepertoire } from "../accounts/localAccountStorage";
+import {
+  getLocalAccountCurrentUserId,
+  getLocalRepertoirePointEvents,
+  getLocalRepertoireUnlockEvents,
+  getLocalTrainingProfile,
+  getLocalUserRepertoire,
+  setLocalAccountCurrentUserId,
+  appendLocalRepertoirePointEvent,
+  appendLocalRepertoireUnlockEvent,
+  upsertLocalUserRepertoire,
+} from "../accounts/localAccountStorage";
 import type { StarterPackId, UserRepertoire } from "../accounts/accountTypes";
 import { getOnboardingAuthSession } from "../onboarding/onboardingAuth";
-import { getDefaultStarterPack, getStarterPackById, getStarterPackOpeningIds } from "../onboarding/starterPacks";
-import { buildLockedOpeningIds, getEligibleRepertoireOpeningIds, normalizeOpeningPool } from "./repertoireOpeningPool";
-import { applyRepertoirePointEvent, createRepertoirePointEvent, getPointAwardForSource } from "./repertoirePoints";
-import { createDefaultRepertoireProgress, isOpeningUnlocked, unlockOpening } from "./repertoireUnlockService";
-import { getNextUnlockCost, getUnlockProgressPct } from "./repertoireUnlockCurve";
-import { getRepertoirePointEventTotal, getRepertoireUnlockSpendTotal, normalizeRepertoirePointEvent, normalizeRepertoireUnlockEvent, sortRepertoirePointEvents, sortRepertoireUnlockEvents } from "./repertoireEvents";
-import type { RepertoirePointEvent, RepertoirePointSource, RepertoireProgress, RepertoireUnlockEvent, RepertoireUnlockResult } from "./repertoireTypes";
+import {
+  getDefaultStarterPack,
+  getStarterPackById,
+  getStarterPackOpeningIds,
+} from "../onboarding/starterPacks";
+import {
+  buildLockedOpeningIds,
+  getEligibleRepertoireOpeningIds,
+  normalizeOpeningPool,
+} from "./repertoireOpeningPool";
+import {
+  applyRepertoirePointEvent,
+  createRepertoirePointEvent,
+  getPointAwardForSource,
+} from "./repertoirePoints";
+import {
+  createDefaultRepertoireProgress,
+  isOpeningUnlocked,
+  unlockOpening,
+} from "./repertoireUnlockService";
+import {
+  getNextUnlockCost,
+  getUnlockProgressPct,
+} from "./repertoireUnlockCurve";
+import {
+  getRepertoirePointEventTotal,
+  getRepertoireUnlockSpendTotal,
+  normalizeRepertoirePointEvent,
+  normalizeRepertoireUnlockEvent,
+  sortRepertoirePointEvents,
+  sortRepertoireUnlockEvents,
+} from "./repertoireEvents";
+import type {
+  RepertoirePointEvent,
+  RepertoirePointSource,
+  RepertoireProgress,
+  RepertoireUnlockEvent,
+  RepertoireUnlockResult,
+} from "./repertoireTypes";
 
 type RepertoireProgressLoadOptions = {
   userId?: string | null;
@@ -83,24 +125,39 @@ function resolveUserId(input?: string | null): string {
   return setLocalAccountCurrentUserId(getLocalAccountCurrentUserId());
 }
 
-function resolveStarterPackId(userId: string, starterPackId?: StarterPackId | null): StarterPackId {
+function resolveStarterPackId(
+  userId: string,
+  starterPackId?: StarterPackId | null,
+): StarterPackId {
   const profile = getLocalTrainingProfile(userId);
-  const selected = getStarterPackById(starterPackId ?? profile?.selectedStarterPackId ?? null);
+  const selected = getStarterPackById(
+    starterPackId ?? profile?.selectedStarterPackId ?? null,
+  );
   return selected?.id ?? getDefaultStarterPack().id;
 }
 
 function getAllOpeningIds(allOpeningIds?: readonly string[]): string[] {
-  const eligible = allOpeningIds && allOpeningIds.length > 0 ? allOpeningIds : getEligibleRepertoireOpeningIds();
+  const eligible =
+    allOpeningIds && allOpeningIds.length > 0
+      ? allOpeningIds
+      : getEligibleRepertoireOpeningIds();
   return normalizeOpeningPool(eligible);
 }
 
-function getStarterPackOpeningIdsForProgress(starterPackId: StarterPackId): string[] {
+function getStarterPackOpeningIdsForProgress(
+  starterPackId: StarterPackId,
+): string[] {
   const pack = getStarterPackById(starterPackId) ?? getDefaultStarterPack();
   const packOpenings = getStarterPackOpeningIds(pack.id);
-  return normalizeOpeningPool([packOpenings.whiteOpeningId, packOpenings.blackOpeningId]);
+  return normalizeOpeningPool([
+    packOpenings.whiteOpeningId,
+    packOpenings.blackOpeningId,
+  ]);
 }
 
-function createSnapshotFromRepertoire(progress: RepertoireProgress): RepertoireProgressSnapshot {
+function createSnapshotFromRepertoire(
+  progress: RepertoireProgress,
+): RepertoireProgressSnapshot {
   const repertoire: UserRepertoire = {
     userId: progress.userId,
     selectedStarterPackId: progress.selectedStarterPackId,
@@ -112,9 +169,14 @@ function createSnapshotFromRepertoire(progress: RepertoireProgress): RepertoireP
   return { progress, repertoire };
 }
 
-function toStoredProgress(progress: RepertoireProgress, allOpeningIds?: readonly string[]): RepertoireProgress {
+function toStoredProgress(
+  progress: RepertoireProgress,
+  allOpeningIds?: readonly string[],
+): RepertoireProgress {
   const openingPool = getAllOpeningIds(allOpeningIds);
-  const starterPackOpenings = getStarterPackOpeningIdsForProgress(progress.selectedStarterPackId);
+  const starterPackOpenings = getStarterPackOpeningIdsForProgress(
+    progress.selectedStarterPackId,
+  );
   const pointEvents = sortRepertoirePointEvents(progress.pointEvents ?? []);
   const unlockEvents = sortRepertoireUnlockEvents(progress.unlockEvents ?? []);
   const cachedUnlocked = normalizeOpeningPool([
@@ -122,13 +184,25 @@ function toStoredProgress(progress: RepertoireProgress, allOpeningIds?: readonly
     ...progress.unlockedOpeningIds,
     ...unlockEvents.map((event) => event.openingId),
   ]);
-  const unlockedOpeningIds = normalizeOpeningPool([...openingPool, ...cachedUnlocked]).filter((openingId) => cachedUnlocked.includes(openingId));
-  const lockedOpeningIds = buildLockedOpeningIds(openingPool, unlockedOpeningIds);
+  const unlockedOpeningIds = normalizeOpeningPool([
+    ...openingPool,
+    ...cachedUnlocked,
+  ]).filter((openingId) => cachedUnlocked.includes(openingId));
+  const lockedOpeningIds = buildLockedOpeningIds(
+    openingPool,
+    unlockedOpeningIds,
+  );
   const availableFromCache = Math.max(0, Number(progress.availablePoints) || 0);
   const earnedFromEvents = getRepertoirePointEventTotal(pointEvents);
   const spentFromEvents = getRepertoireUnlockSpendTotal(unlockEvents);
-  const availablePoints = Math.max(0, Math.max(availableFromCache, earnedFromEvents - spentFromEvents));
-  const lifetimePoints = Math.max(availablePoints + spentFromEvents, earnedFromEvents);
+  const availablePoints = Math.max(
+    0,
+    Math.max(availableFromCache, earnedFromEvents - spentFromEvents),
+  );
+  const lifetimePoints = Math.max(
+    availablePoints + spentFromEvents,
+    earnedFromEvents,
+  );
   const nextUnlockCost = getNextUnlockCost({
     selectedStarterPackId: progress.selectedStarterPackId,
     unlockedOpeningIds,
@@ -151,12 +225,18 @@ function toStoredProgress(progress: RepertoireProgress, allOpeningIds?: readonly
     }),
     pointEvents,
     unlockEvents,
-    updatedAt: maxIso([progress.updatedAt, pointEvents.at(-1)?.createdAt, unlockEvents.at(-1)?.createdAt]),
+    updatedAt: maxIso([
+      progress.updatedAt,
+      pointEvents.at(-1)?.createdAt,
+      unlockEvents.at(-1)?.createdAt,
+    ]),
   };
   return normalized;
 }
 
-async function syncProgressToBackend(progress: RepertoireProgress): Promise<void> {
+async function syncProgressToBackend(
+  progress: RepertoireProgress,
+): Promise<void> {
   const session = await getOnboardingAuthSession().catch(() => null);
   if (!session?.accessToken) return;
   try {
@@ -177,7 +257,10 @@ async function syncProgressToBackend(progress: RepertoireProgress): Promise<void
   }
 }
 
-function persistProgressLocally(progress: RepertoireProgress, allOpeningIds?: readonly string[]): RepertoireProgress {
+function persistProgressLocally(
+  progress: RepertoireProgress,
+  allOpeningIds?: readonly string[],
+): RepertoireProgress {
   const normalized = toStoredProgress(progress, allOpeningIds);
   upsertLocalUserRepertoire({
     userId: normalized.userId,
@@ -197,9 +280,14 @@ function persistProgressLocally(progress: RepertoireProgress, allOpeningIds?: re
   return normalized;
 }
 
-export function loadRepertoireProgress(input: RepertoireProgressLoadOptions = {}): RepertoireProgress {
+export function loadRepertoireProgress(
+  input: RepertoireProgressLoadOptions = {},
+): RepertoireProgress {
   const userId = resolveUserId(input.userId);
-  const starterPackId = resolveStarterPackId(userId, input.starterPackId ?? null);
+  const starterPackId = resolveStarterPackId(
+    userId,
+    input.starterPackId ?? null,
+  );
   const allOpeningIds = getAllOpeningIds(input.allOpeningIds);
   const now = input.now ?? nowIso();
   const existingRepertoire = getLocalUserRepertoire(userId);
@@ -214,20 +302,37 @@ export function loadRepertoireProgress(input: RepertoireProgressLoadOptions = {}
     return normalized;
   }
 
-  const pointEvents = sortRepertoirePointEvents(getLocalRepertoirePointEvents(userId));
-  const unlockEvents = sortRepertoireUnlockEvents(getLocalRepertoireUnlockEvents(userId));
-  const starterPackOpenings = getStarterPackOpeningIdsForProgress(starterPackId);
+  const pointEvents = sortRepertoirePointEvents(
+    getLocalRepertoirePointEvents(userId),
+  );
+  const unlockEvents = sortRepertoireUnlockEvents(
+    getLocalRepertoireUnlockEvents(userId),
+  );
+  const starterPackOpenings =
+    getStarterPackOpeningIdsForProgress(starterPackId);
   const unlockedOpeningIds = normalizeOpeningPool([
     ...starterPackOpenings,
     ...existingRepertoire.unlockedOpeningIds,
     ...unlockEvents.map((event) => event.openingId),
   ]);
-  const lockedOpeningIds = buildLockedOpeningIds(allOpeningIds, unlockedOpeningIds);
-  const availableFromCache = Math.max(0, Number(existingRepertoire.openingUnlockPoints) || 0);
+  const lockedOpeningIds = buildLockedOpeningIds(
+    allOpeningIds,
+    unlockedOpeningIds,
+  );
+  const availableFromCache = Math.max(
+    0,
+    Number(existingRepertoire.openingUnlockPoints) || 0,
+  );
   const earnedFromEvents = getRepertoirePointEventTotal(pointEvents);
   const spentFromEvents = getRepertoireUnlockSpendTotal(unlockEvents);
-  const availablePoints = Math.max(0, Math.max(availableFromCache, earnedFromEvents - spentFromEvents));
-  const lifetimePoints = Math.max(earnedFromEvents, availablePoints + spentFromEvents);
+  const availablePoints = Math.max(
+    0,
+    Math.max(availableFromCache, earnedFromEvents - spentFromEvents),
+  );
+  const lifetimePoints = Math.max(
+    earnedFromEvents,
+    availablePoints + spentFromEvents,
+  );
   const progress: RepertoireProgress = {
     userId,
     selectedStarterPackId: starterPackId,
@@ -250,13 +355,21 @@ export function loadRepertoireProgress(input: RepertoireProgressLoadOptions = {}
     }),
     pointEvents,
     unlockEvents,
-    updatedAt: maxIso([existingRepertoire.updatedAt, pointEvents.at(-1)?.createdAt, unlockEvents.at(-1)?.createdAt, now]),
+    updatedAt: maxIso([
+      existingRepertoire.updatedAt,
+      pointEvents.at(-1)?.createdAt,
+      unlockEvents.at(-1)?.createdAt,
+      now,
+    ]),
   };
   const normalized = persistProgressLocally(progress, allOpeningIds);
   return normalized;
 }
 
-export async function saveRepertoireProgress(progress: RepertoireProgress, options: RepertoirePersistenceOptions = {}): Promise<RepertoireProgress> {
+export async function saveRepertoireProgress(
+  progress: RepertoireProgress,
+  options: RepertoirePersistenceOptions = {},
+): Promise<RepertoireProgress> {
   const normalized = persistProgressLocally(progress);
   if (options.syncRemote !== false) {
     await syncProgressToBackend(normalized);
@@ -264,17 +377,24 @@ export async function saveRepertoireProgress(progress: RepertoireProgress, optio
   return normalized;
 }
 
-export function recordRepertoirePointEvent(event: RepertoirePointEvent): RepertoirePointEvent {
-  const normalized = normalizeRepertoirePointEvent(event) ?? createRepertoirePointEvent(event);
+export function recordRepertoirePointEvent(
+  event: RepertoirePointEvent,
+): RepertoirePointEvent {
+  const normalized =
+    normalizeRepertoirePointEvent(event) ?? createRepertoirePointEvent(event);
   appendLocalRepertoirePointEvent(normalized);
   return normalized;
 }
 
-export function recordRepertoireUnlockEvent(event: RepertoireUnlockEvent): RepertoireUnlockEvent {
+export function recordRepertoireUnlockEvent(
+  event: RepertoireUnlockEvent,
+): RepertoireUnlockEvent {
   const normalized = normalizeRepertoireUnlockEvent(event);
   if (!normalized) {
     const fallback: RepertoireUnlockEvent = {
-      id: normalizeText(event.id) || `${normalizeText(event.userId)}:${normalizeText(event.openingId)}:${nowIso()}`,
+      id:
+        normalizeText(event.id) ||
+        `${normalizeText(event.userId)}:${normalizeText(event.openingId)}:${nowIso()}`,
       userId: normalizeText(event.userId),
       openingId: normalizeText(event.openingId),
       pointsSpent: Math.max(0, Number(event.pointsSpent) || 0),
@@ -288,7 +408,9 @@ export function recordRepertoireUnlockEvent(event: RepertoireUnlockEvent): Reper
   return normalized;
 }
 
-export async function earnAndPersistRepertoirePoints(input: RepertoirePointAwardInput): Promise<RepertoirePersistenceResult> {
+export async function earnAndPersistRepertoirePoints(
+  input: RepertoirePointAwardInput,
+): Promise<RepertoirePersistenceResult> {
   const userId = resolveUserId(input.userId);
   const current = loadRepertoireProgress({
     userId,
@@ -299,7 +421,10 @@ export async function earnAndPersistRepertoirePoints(input: RepertoirePointAward
   const event = createRepertoirePointEvent({
     userId,
     source: input.source,
-    points: Math.max(0, Number(input.points) || getPointAwardForSource(input.source)),
+    points: Math.max(
+      0,
+      Number(input.points) || getPointAwardForSource(input.source),
+    ),
     openingId: input.openingId,
     dailySessionId: input.dailySessionId,
     id: input.completionId ? normalizeText(input.completionId) : undefined,
@@ -307,15 +432,18 @@ export async function earnAndPersistRepertoirePoints(input: RepertoirePointAward
   });
   const nextProgress = applyRepertoirePointEvent(current, event);
   const saved = await saveRepertoireProgress(nextProgress);
-  trackBlundrAnalyticsEvent(BLUNDR_ANALYTICS_EVENTS.OPENING_UNLOCK_PROGRESS_EARNED, {
-    userId,
-    source: input.source,
-    points: event.points,
-    openingId: input.openingId ?? null,
-    dailySessionId: input.dailySessionId ?? null,
-    availablePoints: saved.availablePoints,
-    lifetimePoints: saved.lifetimePoints,
-  });
+  trackBlundrAnalyticsEvent(
+    BLUNDR_ANALYTICS_EVENTS.OPENING_UNLOCK_PROGRESS_EARNED,
+    {
+      userId,
+      source: input.source,
+      points: event.points,
+      openingId: input.openingId ?? null,
+      dailySessionId: input.dailySessionId ?? null,
+      availablePoints: saved.availablePoints,
+      lifetimePoints: saved.lifetimePoints,
+    },
+  );
   return {
     ok: true,
     progress: saved,
@@ -323,7 +451,9 @@ export async function earnAndPersistRepertoirePoints(input: RepertoirePointAward
   };
 }
 
-export async function unlockAndPersistOpening(input: RepertoireUnlockRequest): Promise<RepertoireUnlockResult> {
+export async function unlockAndPersistOpening(
+  input: RepertoireUnlockRequest,
+): Promise<RepertoireUnlockResult> {
   const userId = resolveUserId(input.userId);
   const current = loadRepertoireProgress({
     userId,
@@ -331,11 +461,112 @@ export async function unlockAndPersistOpening(input: RepertoireUnlockRequest): P
     allOpeningIds: input.allOpeningIds,
     now: input.now,
   });
+  const session = await getOnboardingAuthSession().catch(() => null);
+  if (session?.accessToken) {
+    try {
+      const response = await fetch("/api/blundr/repertoire/unlock", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${session.accessToken}`,
+        },
+        cache: "no-store",
+        body: JSON.stringify({
+          openingId: input.openingId,
+          idempotencyKey: `${userId}:${input.openingId}:unlock`,
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        data?: {
+          openingId: string;
+          pointsSpent?: number;
+          unlockIndex?: number;
+          availablePoints: number;
+          lifetimePoints?: number;
+          spentPoints?: number;
+          unlockedOpeningIds: string[];
+          lockedOpeningIds?: string[];
+          eventId?: string;
+          updatedAt?: string;
+        };
+        error?: unknown;
+        message?: unknown;
+      } | null;
+      if (!response.ok || !payload?.data) {
+        const rawCode = normalizeText(payload?.error);
+        const code = rawCode.includes("insufficient_points")
+          ? "insufficient_points"
+          : rawCode.includes("opening_not_locked")
+            ? "opening_not_locked"
+            : "unlock_persistence_unavailable";
+        return {
+          ok: false,
+          code,
+          message:
+            normalizeText(payload?.message) ||
+            "The opening was not unlocked because the change could not be saved.",
+        };
+      }
+      const data = payload.data;
+      const createdAt = normalizeText(data.updatedAt) || input.now || nowIso();
+      const event: RepertoireUnlockEvent = {
+        id:
+          normalizeText(data.eventId) || `${userId}:${input.openingId}:unlock`,
+        userId,
+        openingId: input.openingId,
+        pointsSpent: Math.max(0, Number(data.pointsSpent) || 0),
+        unlockIndex: Math.max(1, Number(data.unlockIndex) || 1),
+        createdAt,
+      };
+      const saved = await saveRepertoireProgress(
+        {
+          ...current,
+          unlockedOpeningIds: data.unlockedOpeningIds,
+          lockedOpeningIds:
+            data.lockedOpeningIds ??
+            current.lockedOpeningIds.filter((id) => id !== input.openingId),
+          availablePoints: Math.max(0, Number(data.availablePoints) || 0),
+          lifetimePoints: Math.max(
+            current.lifetimePoints,
+            Number(data.lifetimePoints) || 0,
+          ),
+          spentPoints: Math.max(
+            current.spentPoints,
+            Number(data.spentPoints) || 0,
+          ),
+          unlockEvents: current.unlockEvents.some(
+            (item) => item.id === event.id,
+          )
+            ? current.unlockEvents
+            : [...current.unlockEvents, event],
+          updatedAt: createdAt,
+        },
+        { syncRemote: false },
+      );
+      return { ok: true, progress: saved, event };
+    } catch {
+      return {
+        ok: false,
+        code: "unlock_persistence_unavailable",
+        message:
+          "The opening was not unlocked because the server could not be reached.",
+      };
+    }
+  }
+  if (process.env.NODE_ENV === "production") {
+    return {
+      ok: false,
+      code: "authentication_required",
+      message: "Sign in again before unlocking an opening.",
+    };
+  }
   const result = unlockOpening(current, input.openingId);
   if (!result.ok) {
     return result;
   }
-  const saved = await saveRepertoireProgress(result.progress, { syncRemote: input.syncRemote });
+  const saved = await saveRepertoireProgress(result.progress, {
+    syncRemote: input.syncRemote,
+  });
   trackBlundrAnalyticsEvent(BLUNDR_ANALYTICS_EVENTS.OPENING_UNLOCKED, {
     userId,
     openingId: input.openingId,
@@ -351,9 +582,15 @@ export async function unlockAndPersistOpening(input: RepertoireUnlockRequest): P
   };
 }
 
-export function getRepertoireProgressSnapshot(input: RepertoireProgressLoadOptions = {}): RepertoireProgressSnapshot {
+export function getRepertoireProgressSnapshot(
+  input: RepertoireProgressLoadOptions = {},
+): RepertoireProgressSnapshot {
   const progress = loadRepertoireProgress(input);
   return createSnapshotFromRepertoire(progress);
 }
 
-export { isOpeningUnlocked, getUnlockedOpeningCards, getLockedOpeningCards } from "./repertoireUnlockService";
+export {
+  isOpeningUnlocked,
+  getUnlockedOpeningCards,
+  getLockedOpeningCards,
+} from "./repertoireUnlockService";
