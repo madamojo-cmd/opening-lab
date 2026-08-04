@@ -216,80 +216,95 @@ export function MiniGamePracticeRunner({
             Instance {instance.instanceId.slice(0, 12)}… · {instance.status}
           </p>
         </div>
-        <div className="mt-4">
-          <DailyBlundrBoard
-            fen={instance.board.fen}
-            disabled={
-              submitting ||
-              instance.status === "completed" ||
-              instance.status === "revealed" ||
-              instance.status === "expired"
-            }
-            onSquareClick={() => undefined}
-            onMoveAttempt={(attempt) => {
-              void handleMoveAttempt(attempt);
-            }}
-            openingColor={instance.board.orientation}
-            forcedOrientation={instance.board.orientation}
-            boardVisuals={null}
-            squareStyles={{}}
-            animationClassName={null}
-          />
-        </div>
-        {instance.feedback ? (
-          <DailyBlundrCardFeedback
-            message={instance.feedback}
-            tone={
-              instance.status === "completed" || instance.status === "revealed"
-                ? "complete"
-                : "neutral"
-            }
-          />
-        ) : null}
-        {error ? <p className="mt-3 text-sm text-amber-800">{error}</p> : null}
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <button
-            type="button"
-            disabled={submitting}
-            onClick={() => {
-              void handleReveal();
-            }}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-white px-3 py-3 text-sm font-black text-green-700 ring-1 ring-green-200"
-          >
-            <Sparkles size={15} /> Reveal
-          </button>
-          <button
-            type="button"
-            disabled={submitting}
-            onClick={() => {
-              void handleRetry();
-            }}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-stone-100 px-3 py-3 text-sm font-black text-stone-700"
-          >
-            <RefreshCw size={15} /> Retry
-          </button>
-          <button
-            type="button"
-            disabled={submitting}
-            onClick={() => {
-              void handleReset();
-            }}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-stone-100 px-3 py-3 text-sm font-black text-stone-700"
-          >
-            Reset
-          </button>
-          <Link
-            href={reviewHref}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-stone-100 px-3 py-3 text-sm font-black text-stone-700"
-          >
-            <ArrowLeft size={15} /> Review
-          </Link>
-          <Link
-            href={homeHref}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-stone-100 px-3 py-3 text-sm font-black text-stone-700"
-          >
-            <Home size={15} /> Home
-          </Link>
+        <div className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,0.72fr)]">
+          <div>
+            <DailyBlundrBoard
+              fen={instance.board.fen}
+              disabled={
+                submitting ||
+                instance.status === "completed" ||
+                instance.status === "revealed" ||
+                instance.status === "expired"
+              }
+              onSquareClick={() => undefined}
+              onMoveAttempt={(attempt) => {
+                void handleMoveAttempt(attempt);
+              }}
+              openingColor={instance.board.orientation}
+              forcedOrientation={instance.board.orientation}
+              boardVisuals={null}
+              squareStyles={{}}
+              animationClassName={null}
+            />
+          </div>
+          <div className="space-y-4">
+            {instance.feedback ? (
+              <DailyBlundrCardFeedback
+                message={instance.feedback}
+                tone={
+                  instance.status === "completed" ||
+                  instance.status === "revealed"
+                    ? "complete"
+                    : "neutral"
+                }
+              />
+            ) : null}
+            {error ? <p className="text-sm text-amber-800">{error}</p> : null}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => {
+                  void handleReveal();
+                }}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-white px-3 py-3 text-sm font-black text-green-700 ring-1 ring-green-200"
+              >
+                <Sparkles size={15} /> Reveal
+              </button>
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => {
+                  void handleRetry();
+                }}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-stone-100 px-3 py-3 text-sm font-black text-stone-700"
+              >
+                <RefreshCw size={15} /> Retry
+              </button>
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => {
+                  void handleReset();
+                }}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-stone-100 px-3 py-3 text-sm font-black text-stone-700"
+              >
+                Reset
+              </button>
+              <Link
+                href={reviewHref}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-stone-100 px-3 py-3 text-sm font-black text-stone-700"
+              >
+                <ArrowLeft size={15} /> Review
+              </Link>
+              <Link
+                href={homeHref}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-stone-100 px-3 py-3 text-sm font-black text-stone-700"
+              >
+                <Home size={15} /> Home
+              </Link>
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => {
+                  void load();
+                }}
+                className="col-span-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-green-700 px-3 py-3 text-sm font-black text-white"
+              >
+                <Sparkles size={15} /> Next Game
+              </button>
+            </div>
+          </div>
         </div>
       </section>
     </div>
