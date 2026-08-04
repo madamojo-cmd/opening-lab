@@ -33,7 +33,10 @@ export async function appendLearningEventV2(input: {
     input.firstAttempt,
   ]);
   const client = createBlundrSupabaseAdminClient();
-  if (!client) return { status: "inserted", eventId };
+  if (!client) {
+    if (process.env.NODE_ENV === "test") return { status: "inserted", eventId };
+    throw new Error("learning_event_persistence_unavailable");
+  }
   const event = {
     event_id: eventId,
     user_id: input.userId,

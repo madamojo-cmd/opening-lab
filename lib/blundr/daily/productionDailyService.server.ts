@@ -38,12 +38,14 @@ import { toPublicDailySession } from "./productionDailyProjection";
 import { readDueReviewKeys } from "./productionReviewRepository.server";
 import { upsertReviewState } from "./productionReviewRepository.server";
 import type { DailyReservationIdentity } from "./productionDailyTypes";
+import { runtimeSequenceToFen } from "./runtimeSequence";
+import { selectProductionDailyBoardCards } from "./productionDailyDeckSelection";
 
 // Request-time Daily selection uses only verified runtime data. Bound the
 // amount of chess reconstruction per reservation so a large runtime package
 // cannot turn an empty or newly unlocked account into an unbounded request.
 const MAX_RUNTIME_CANDIDATES_PER_RESERVATION = 600;
-const DAILY_COMPOSER_VERSION = "daily-board-first-v2";
+const DAILY_COMPOSER_VERSION = "daily-board-first-v3";
 
 function dailyProfileVersion(
   flags: ReturnType<typeof getServerFeatureFlags>,
@@ -70,11 +72,13 @@ function stableDailyHash(value: string): number {
   return hash >>> 0;
 }
 
-function selectBoundedRuntimeNodes<T extends {
-  openingId: string;
-  sideToMove: string;
-  playKey: string;
-}>(
+function selectBoundedRuntimeNodes<
+  T extends {
+    openingId: string;
+    sideToMove: string;
+    playKey: string;
+  },
+>(
   nodes: readonly T[],
   priorityOpenings: ReadonlySet<string>,
   priorityPositions: ReadonlySet<string>,
@@ -86,39 +90,50 @@ function selectBoundedRuntimeNodes<T extends {
     if (!unique.has(key)) unique.set(key, node);
   }
   const ranked = (items: readonly T[]) =>
-    [...items].sort((a, b) =>
-      stableDailyHash(`${seed}:${a.openingId}:${a.playKey}`) -
-        stableDailyHash(`${seed}:${b.openingId}:${b.playKey}`) ||
-      a.openingId.localeCompare(b.openingId) ||
-      a.playKey.localeCompare(b.playKey),
+    [...items].sort(
+      (a, b) =>
+        stableDailyHash(`${seed}:${a.openingId}:${a.playKey}`) -
+          stableDailyHash(`${seed}:${b.openingId}:${b.playKey}`) ||
+        a.openingId.localeCompare(b.openingId) ||
+        a.playKey.localeCompare(b.playKey),
     );
   const selected: T[] = [];
   const seen = new Set<string>();
   const add = (node: T) => {
     const key = `${node.openingId}:${node.playKey}`;
-    if (selected.length < MAX_RUNTIME_CANDIDATES_PER_RESERVATION && !seen.has(key)) {
+    if (
+      selected.length < MAX_RUNTIME_CANDIDATES_PER_RESERVATION &&
+      !seen.has(key)
+    ) {
       seen.add(key);
       selected.push(node);
     }
   };
   for (const node of ranked(
-    [...unique.values()].filter((node) =>
-      priorityPositions.has(`${node.openingId}:${node.playKey}`) ||
-      priorityOpenings.has(node.openingId),
+    [...unique.values()].filter(
+      (node) =>
+        priorityPositions.has(`${node.openingId}:${node.playKey}`) ||
+        priorityOpenings.has(node.openingId),
     ),
-  )) add(node);
+  ))
+    add(node);
   const buckets = new Map<string, T[]>();
   for (const node of unique.values()) {
     const key = `${node.openingId}:${node.sideToMove}`;
     buckets.set(key, [...(buckets.get(key) ?? []), node]);
   }
   const queues = [...buckets.entries()]
-    .sort(([a], [b]) =>
-      stableDailyHash(`${seed}:bucket:${a}`) - stableDailyHash(`${seed}:bucket:${b}`) ||
-      a.localeCompare(b),
+    .sort(
+      ([a], [b]) =>
+        stableDailyHash(`${seed}:bucket:${a}`) -
+          stableDailyHash(`${seed}:bucket:${b}`) || a.localeCompare(b),
     )
     .map(([, bucket]) => ranked(bucket));
-  for (let index = 0; selected.length < MAX_RUNTIME_CANDIDATES_PER_RESERVATION; index += 1) {
+  for (
+    let index = 0;
+    selected.length < MAX_RUNTIME_CANDIDATES_PER_RESERVATION;
+    index += 1
+  ) {
     let added = false;
     for (const queue of queues) {
       const node = queue[index];
@@ -130,22 +145,6 @@ function selectBoundedRuntimeNodes<T extends {
     if (!added) break;
   }
   return selected;
-}
-
-function fenForSequence(sequence: string): string | null {
-  try {
-    const chess = new Chess();
-    for (const uci of sequence.trim().split(/\s+/).filter(Boolean)) {
-      chess.move({
-        from: uci.slice(0, 2),
-        to: uci.slice(2, 4),
-        promotion: uci[4] as "q" | "r" | "b" | "n" | undefined,
-      });
-    }
-    return chess.fen();
-  } catch {
-    return null;
-  }
 }
 
 function fenAfterMoves(
@@ -226,10 +225,12 @@ async function buildReservation(
   if (admin) {
     const [projectionResult, priorityResult] = await Promise.all([
       admin
-      .from("blundr_weakness_projection")
-      .select("position_key,opening_id,play_key,score,confidence,updated_at,access_decision")
-      .eq("user_id", user.userId)
-      .eq("access_decision", "active"),
+        .from("blundr_weakness_projection")
+        .select(
+          "position_key,opening_id,play_key,score,confidence,updated_at,access_decision",
+        )
+        .eq("user_id", user.userId)
+        .eq("access_decision", "active"),
       admin
         .from("blundr_daily_priorities")
         .select("opening_id,status,requested_for")
@@ -243,25 +244,26 @@ async function buildReservation(
         if (Number.isFinite(score) && score > 0)
           weaknessScores.set(String(projection.position_key), score);
         if (projection.opening_id && projection.play_key)
-          priorityPositions.add(`${projection.opening_id}:${projection.play_key}`);
+          priorityPositions.add(
+            `${projection.opening_id}:${projection.play_key}`,
+          );
       }
     }
     if (!priorityResult.error)
       for (const priority of priorityResult.data ?? [])
         priorityOpenings.add(String(priority.opening_id));
   }
-  const eligibleNodes = runtime.nodes
-    .filter((node) => {
-      const availability = getStage2OpeningAvailability(node.openingId);
-      return Boolean(
-        availability &&
-          access.get({
-            userId: user.userId,
-            openingId: node.openingId,
-            repertoireSide: node.sideToMove,
-          }).decision === "active",
-      );
-    })
+  const eligibleNodes = runtime.nodes.filter((node) => {
+    const availability = getStage2OpeningAvailability(node.openingId);
+    return Boolean(
+      availability &&
+        access.get({
+          userId: user.userId,
+          openingId: node.openingId,
+          repertoireSide: node.sideToMove,
+        }).decision === "active",
+    );
+  });
   const boundedNodes = selectBoundedRuntimeNodes(
     eligibleNodes,
     priorityOpenings,
@@ -277,7 +279,7 @@ async function buildReservation(
         openingId: node.openingId,
         repertoireSide: side,
       }).decision;
-      const fen = fenForSequence(node.playSequenceUci);
+      const fen = runtimeSequenceToFen(node.playSequenceUci);
       const snapshot = {
         openingId: node.openingId,
         repertoireSide: side,
@@ -285,9 +287,9 @@ async function buildReservation(
         checkedAt: now,
         expiresAt: new Date(Date.parse(now) + 300000).toISOString(),
       } as const;
-      const moves = (movesByOpeningPlayKey.get(
-        `${node.openingId}:${node.playKey}`,
-      ) ?? [])
+      const moves = (
+        movesByOpeningPlayKey.get(`${node.openingId}:${node.playKey}`) ?? []
+      )
         .slice()
         .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
       if (!availability || decision !== "active" || !fen || !moves.length)
@@ -390,6 +392,15 @@ async function buildReservation(
       "Play the approved move for this exact position.",
       [primary.moveUci],
       "This move keeps the approved opening plan on track.",
+    );
+
+    addCard(
+      entry,
+      "daily_repair_line",
+      "Repair the line",
+      "Restore the verified line by playing the missing move.",
+      [primary.moveUci],
+      "This move repairs the line using the checksum-pinned runtime position.",
     );
 
     if (featureFlags.daily_plan_recall && labels.length >= 2) {
@@ -583,13 +594,12 @@ async function buildReservation(
           privateSteps,
         );
     }
-
   }
 
   if (featureFlags.daily_same_position_different_route) {
     const routeGroups = new Map<string, (typeof runtimeCandidates)[number][]>();
     for (const entry of runtimeCandidates) {
-      const finalFen = fenForSequence(entry.node.playSequenceUci);
+      const finalFen = runtimeSequenceToFen(entry.node.playSequenceUci);
       if (!finalFen) continue;
       const key = `${entry.node.openingId}:${finalFen.split(" ").slice(0, 4).join(" ")}`;
       routeGroups.set(key, [...(routeGroups.get(key) ?? []), entry]);
@@ -690,39 +700,7 @@ async function buildReservation(
     }
   }
 
-  const orderedCards = cards.sort(
-    (a, b) => b.priority - a.priority || a.stableKey.localeCompare(b.stableKey),
-  );
-  const selected: typeof cards = [];
-  const selectedPositions = new Set<string>();
-  const selectedActivities = new Set<string>();
-  const boardRecall = orderedCards.find(
-    (card) => card.publicCard.activityId === "daily_move_recall",
-  );
-  if (boardRecall) {
-    selected.push(boardRecall);
-    selectedActivities.add(boardRecall.publicCard.activityId);
-    selectedPositions.add(boardRecall.publicCard.positionKey);
-  }
-  for (const card of orderedCards) {
-    if (
-      selectedActivities.has(card.publicCard.activityId) ||
-      selectedPositions.has(card.publicCard.positionKey)
-    )
-      continue;
-    selected.push(card);
-    selectedActivities.add(card.publicCard.activityId);
-    selectedPositions.add(card.publicCard.positionKey);
-    if (selected.length >= 5) break;
-  }
-  if (selected.length < 5) {
-    for (const card of orderedCards) {
-      if (selectedPositions.has(card.publicCard.positionKey)) continue;
-      selected.push(card);
-      selectedPositions.add(card.publicCard.positionKey);
-      if (selected.length >= 5) break;
-    }
-  }
+  const selected = selectProductionDailyBoardCards(cards, 5);
   const deck = buildDeterministicDailyDeck({
     userId: user.userId,
     dateKey,
@@ -869,8 +847,6 @@ export async function applyDailyAction(input: {
           ? (session.completedAt ?? now)
           : session.completedAt,
     };
-    if ((await repository.update(next, input.expectedVersion)) === "conflict")
-      throw new Error("daily_session_conflict");
     const attemptId = createDeterministicIdentity("daily-step-attempt", [
       input.sessionId,
       input.cardFingerprint,
@@ -934,11 +910,19 @@ export async function applyDailyAction(input: {
         userId: input.user.userId,
         openingId: privateCard.openingId,
         playKey: privateCard.playKey,
-        dueAt: new Date(Date.parse(now) + (answerCorrect ? 86400000 : 300000)).toISOString(),
+        dueAt: new Date(
+          Date.parse(now) + (answerCorrect ? 86400000 : 300000),
+        ).toISOString(),
         attemptId,
-        outcome: answerCorrect ? "correct" : input.action === "reveal" ? "revealed" : "incorrect",
+        outcome: answerCorrect
+          ? "correct"
+          : input.action === "reveal"
+            ? "revealed"
+            : "incorrect",
         srsState: { intervalDays: answerCorrect ? 1 : 0 },
       });
+    if ((await repository.update(next, input.expectedVersion)) === "conflict")
+      throw new Error("daily_session_conflict");
     return {
       session: next,
       presentation: {
@@ -1008,8 +992,6 @@ export async function applyDailyAction(input: {
         ? (session.completedAt ?? now)
         : session.completedAt,
   };
-  if ((await repository.update(next, input.expectedVersion)) === "conflict")
-    throw new Error("daily_session_conflict");
   await repository.appendAttempt({
     attemptId:
       reduced.state.attempts.at(-1)?.attemptId ??
@@ -1056,6 +1038,8 @@ export async function applyDailyAction(input: {
       },
       explanation: privateCard.explanation,
     });
+  if ((await repository.update(next, input.expectedVersion)) === "conflict")
+    throw new Error("daily_session_conflict");
   return {
     session: next,
     presentation: reduced.presentation,

@@ -38,7 +38,12 @@ import { RepertoirePointsSummary } from "@/components/repertoire/RepertoirePoint
 import { RepertoireUnlockProgress } from "@/components/repertoire/RepertoireUnlockProgress";
 import { ProgressDashboard } from "@/components/progress/ProgressDashboard";
 import { ReviewHub } from "@/components/review/ReviewHub";
-import { createLearningSessionId, recordLearningEvent } from "@/lib/blundr/learning/learningEvents";
+import {
+  createLearningSessionId,
+  persistLearningEventRemotely,
+  recordLearningEvent,
+  shouldPersistRemoteLearningEvent,
+} from "@/lib/blundr/learning/learningEvents";
 import type { LearningEvent } from "@/lib/blundr/learning/learningEvents";
 import { loadOpponentVariationMemory, recordOpponentChoice } from "@/lib/blundr/opponent/opponentVariationMemory";
 import { selectOpponentCandidateWithVariation } from "@/lib/blundr/opponent/opponentVariationPolicy";
@@ -4190,7 +4195,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     });
   }
   function trackLearningEvent(input:Partial<LearningEvent>&Pick<LearningEvent,"type"|"source">){
-    recordLearningEvent({
+    const event=recordLearningEvent({
       sessionId:learningSessionIdRef.current,
       source:input.source,
       type:input.type,
@@ -4204,6 +4209,12 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       moveQualityUserStatus,
       ...input,
     });
+    if(shouldPersistRemoteLearningEvent(event)){
+      void persistLearningEventRemotely(event).catch(()=>{
+        setFeedback("Your move was not credited because secure progress storage is unavailable. Check your connection and try again.");
+        pushRuntimeCriticalIssue("learning_event_persistence_unavailable");
+      });
+    }
   }
   function pushMaiaTimelineEvent(input:{
     event:MaiaTimelineEvent["event"];

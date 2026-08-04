@@ -128,24 +128,26 @@ export function recordLearningEvent(
   );
   writeLocalEvents(merged);
 
-  if (typeof window !== "undefined" && shouldPersistRemoteLearningEvent(full)) {
-    void import("../onboarding/onboardingAuth")
-      .then(({ getOnboardingAuthSession }) => getOnboardingAuthSession())
-      .then((session) => {
-        if (!session?.accessToken) return;
-        return import("../api/authenticatedApiClient")
-          .then(({ authenticatedApiFetch }) =>
-            authenticatedApiFetch("/api/blundr/learning/events", {
-              method: "POST",
-              body: JSON.stringify(buildRemoteLearningEventPayload(full)),
-            }),
-          )
-          .catch(() => undefined);
-      })
-      .catch(() => undefined);
-  }
-
   return full;
+}
+
+export async function persistLearningEventRemotely(
+  event: LearningEvent,
+): Promise<"persisted" | "not_required" | "signed_out"> {
+  if (!shouldPersistRemoteLearningEvent(event)) return "not_required";
+  if (typeof window === "undefined") return "not_required";
+  const [{ getOnboardingAuthSession }, { authenticatedApiFetch }] =
+    await Promise.all([
+      import("../onboarding/onboardingAuth"),
+      import("../api/authenticatedApiClient"),
+    ]);
+  const session = await getOnboardingAuthSession();
+  if (!session?.accessToken) return "signed_out";
+  await authenticatedApiFetch("/api/blundr/learning/events", {
+    method: "POST",
+    body: JSON.stringify(buildRemoteLearningEventPayload(event)),
+  });
+  return "persisted";
 }
 
 export function getLocalLearningEvents(): LearningEvent[] {

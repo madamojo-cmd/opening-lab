@@ -191,7 +191,9 @@ export class ProductionDailyRepository {
     outcome: string;
     answer?: unknown;
   }): Promise<"inserted" | "duplicate"> {
-    const client = createBlundrSupabaseAdminClient();
+    const client = requireProductionPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
     if (!client) return "inserted";
     const result = await client.from("blundr_daily_attempts").insert({
       attempt_id: input.attemptId,
