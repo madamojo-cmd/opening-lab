@@ -10,6 +10,7 @@ import {
   isDeepMiniGameId,
 } from "@/lib/blundr/daily/miniGames/deep";
 import { getServerFeatureFlags } from "@/lib/blundr/contracts/serverFeatureFlags";
+import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTelemetry.server";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,10 @@ export async function POST(request: Request) {
       expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
     };
     await new StandaloneMiniGameRepository().create(record);
+    await emitBlundrOperationalEvent("minigame_instance_created", {
+      kind: "deep",
+      miniGameId: body.miniGameId,
+    });
     return NextResponse.json({ instance: projectStandaloneMiniGame(record) });
   }
   const definition = body?.miniGameId
@@ -98,5 +103,9 @@ export async function POST(request: Request) {
   } as const;
   const repository = new StandaloneMiniGameRepository();
   await repository.create(record);
+  await emitBlundrOperationalEvent("minigame_instance_created", {
+    kind: "standalone",
+    miniGameId: definition.id,
+  });
   return NextResponse.json({ instance: projectStandaloneMiniGame(record) });
 }

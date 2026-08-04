@@ -3,6 +3,7 @@ import { ImportJobRepository } from "@/lib/blundr/gameData/importJobRepository";
 import { requireGameDataUser } from "@/lib/blundr/gameData/gameDataService";
 import { ProviderAccountRepository } from "@/lib/blundr/gameData/providerAccountRepository";
 import { getServerFeatureFlags } from "@/lib/blundr/contracts/serverFeatureFlags";
+import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTelemetry.server";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,10 @@ export async function POST(request: Request) {
       updatedAt: now.toISOString(),
     },
     correlationId: crypto.randomUUID(),
+  });
+  await emitBlundrOperationalEvent("import_enqueued", {
+    provider,
+    status: job.status,
   });
   return NextResponse.json({ jobId: job.id, status: job.status });
 }

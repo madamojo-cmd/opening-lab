@@ -3,6 +3,10 @@ import type { BlundrAnalyticsEventName } from "./blundrAnalyticsEvents";
 export type BlundrAnalyticsPayload = Record<string, unknown>;
 
 const TELEMETRY_PATH = "/api/blundr/telemetry";
+const PUBLIC_TELEMETRY_EVENTS = new Set<BlundrAnalyticsEventName>([
+  "AUTH_HYDRATION_COMPLETED",
+  "AUTH_HYDRATION_FAILED",
+]);
 
 function safePayload(payload: BlundrAnalyticsPayload): BlundrAnalyticsPayload {
   return Object.fromEntries(
@@ -24,6 +28,10 @@ export function trackBlundrAnalyticsEvent(
   name: BlundrAnalyticsEventName,
   payload: BlundrAnalyticsPayload = {},
 ): void {
+  // Product outcomes such as rewards, learning events, and imports are emitted
+  // by their trusted server boundary. The public endpoint is intentionally
+  // limited to auth hydration, which also needs to work while signed out.
+  if (!PUBLIC_TELEMETRY_EVENTS.has(name)) return;
   const body = JSON.stringify({ name, payload: safePayload(payload) });
   if (typeof window === "undefined") return;
   if (

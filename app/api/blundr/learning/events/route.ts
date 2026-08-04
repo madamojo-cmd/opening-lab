@@ -8,6 +8,7 @@ import { appendLearningEventV2 } from "@/lib/blundr/learning/core/learningEventS
 import { getOpeningSide } from "@/lib/blundr/repertoire/repertoireOpeningPool";
 import { resolveVerifiedRuntimeLearningPosition } from "@/lib/blundr/learning/core/runtimeLearningPosition.server";
 import { resolveLearningEventAttemptId } from "@/lib/blundr/learning/core/learningEventRequest";
+import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTelemetry.server";
 
 export const dynamic = "force-dynamic";
 
@@ -51,11 +52,16 @@ export async function POST(request: Request) {
       canonicalFen: body.fen,
       expectedMoveUci: body.expectedMoveUci ?? null,
     });
-    if (!verified)
+    if (!verified) {
+      await emitBlundrOperationalEvent("learning_event_rejected", {
+        reason: "runtime_position_unverified",
+        taxonomy,
+      });
       return NextResponse.json(
         { error: "runtime_position_unverified" },
         { status: 422 },
       );
+    }
     const side =
       getOpeningSide(verified.openingId) === "black" ? "black" : "white";
     const position = createPositionIdentity({
@@ -86,10 +92,22 @@ export async function POST(request: Request) {
       now: body.createdAt ?? new Date().toISOString(),
       access: snapshot,
     });
+    await emitBlundrOperationalEvent("learning_event_accepted", {
+      status: result.status,
+      taxonomy,
+      source: "train",
+    });
     return NextResponse.json(result, {
       status: result.status === "duplicate" ? 200 : 201,
     });
   } catch (error) {
+    await emitBlundrOperationalEvent("learning_event_rejected", {
+      reason:
+        error instanceof Error
+          ? error.message
+          : "learning_event_persistence_unavailable",
+      taxonomy,
+    });
     return NextResponse.json(
       {
         error:

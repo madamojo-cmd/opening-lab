@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentBlundrUser } from "@/lib/blundr/accounts/accountSession";
 import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
+import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTelemetry.server";
 
 export const dynamic = "force-dynamic";
 
@@ -113,6 +114,10 @@ export async function POST(request: Request) {
   });
   if (error || !data) {
     const message = text(error?.message) || "reward_persistence_unavailable";
+    await emitBlundrOperationalEvent("reward_completion_rejected", {
+      source,
+      reason: message,
+    });
     return NextResponse.json(
       {
         error: message,
@@ -122,5 +127,9 @@ export async function POST(request: Request) {
       { status: statusForDatabaseError(message) },
     );
   }
+  await emitBlundrOperationalEvent("reward_completion_applied", {
+    source,
+    duplicate: Boolean((data as { duplicate?: unknown }).duplicate),
+  });
   return NextResponse.json({ ok: true, data });
 }

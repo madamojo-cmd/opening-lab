@@ -9,6 +9,7 @@ import {
 } from "@/lib/blundr/contracts";
 import { reduceNodeMastery } from "./nodeMasteryReducer";
 import { shouldCreateWeaknessProjection } from "./weaknessProjectionPolicy";
+import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTelemetry.server";
 
 export async function appendLearningEventV2(input: {
   userId: string;
@@ -128,6 +129,11 @@ export async function appendLearningEventV2(input: {
     );
     if (savedMastery.error)
       throw new Error("node_mastery_persistence_unavailable");
+    await emitBlundrOperationalEvent("mastery_projected", {
+      status,
+      attempts: mastery.state.attempts,
+      access: mastery.state.access,
+    });
   }
   const createsWeakness = shouldCreateWeaknessProjection(input);
   if (createsWeakness) {
