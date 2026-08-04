@@ -3,6 +3,7 @@ import type { ProviderKind } from "@/lib/blundr/contracts";
 import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
 import type { ProviderAccountRecord } from "./gameDataTypes";
 import { normalizeProviderUsername } from "./gameFingerprint";
+import { requireProviderPersistence } from "./providerPersistence.server";
 
 const memory = new Map<string, ProviderAccountRecord>();
 
@@ -11,7 +12,9 @@ export class ProviderAccountRepository {
     userId: string,
     provider: ProviderKind,
   ): Promise<ProviderAccountRecord | null> {
-    const client = createBlundrSupabaseAdminClient();
+    const client = requireProviderPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
     if (!client) return memory.get(`${userId}:${provider}`) ?? null;
     const result = await client
       .from("blundr_provider_accounts")
@@ -32,7 +35,9 @@ export class ProviderAccountRepository {
       createdAt: now,
       updatedAt: now,
     };
-    const client = createBlundrSupabaseAdminClient();
+    const client = requireProviderPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
     if (!client) {
       memory.set(`${input.userId}:${input.provider}`, value);
       return value;
@@ -52,7 +57,9 @@ export class ProviderAccountRepository {
     provider: ProviderKind,
     deleteSource = false,
   ): Promise<void> {
-    const client = createBlundrSupabaseAdminClient();
+    const client = requireProviderPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
     if (!client) {
       memory.delete(`${userId}:${provider}`);
       return;

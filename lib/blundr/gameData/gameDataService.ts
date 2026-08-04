@@ -7,6 +7,7 @@ import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes
 import type { CurrentBlundrUser } from "@/lib/blundr/accounts/accountTypes";
 import type { UserRepertoire } from "@/lib/blundr/accounts/accountTypes";
 import { BLUNDR_PERSISTENCE_TABLES } from "@/lib/blundr/persistence/persistenceKeys";
+import { requireProviderPersistence } from "./providerPersistence.server";
 
 function toOpeningAccessRepertoire(
   stored: UserRepertoire | null,
@@ -51,7 +52,7 @@ export async function loadOpeningAccess(user: CurrentBlundrUser) {
 }
 
 export async function loadOpeningAccessForWorker(userId: string) {
-  const client = createBlundrSupabaseAdminClient();
+  const client = requireProviderPersistence(createBlundrSupabaseAdminClient());
   if (!client) throw new Error("provider_worker_persistence_unavailable");
   const result = await client
     .from(BLUNDR_PERSISTENCE_TABLES.userRepertoires)
@@ -86,7 +87,7 @@ export async function loadOpeningAccessForWorker(userId: string) {
 }
 
 export async function readGameDataStatus(userId: string) {
-  const client = createBlundrSupabaseAdminClient();
+  const client = requireProviderPersistence(createBlundrSupabaseAdminClient());
   if (!client) return { accounts: [], jobs: [], gamesMatched: 0, findings: 0 };
   const [accounts, jobs, segments, findings] = await Promise.all([
     client
@@ -123,65 +124,11 @@ export async function readGameDataStatus(userId: string) {
 }
 
 export async function deleteGameData(userId: string, provider?: string) {
-  const client = createBlundrSupabaseAdminClient();
+  const client = requireProviderPersistence(createBlundrSupabaseAdminClient());
   if (!client) return;
-  let sourceGamesQuery = client
-    .from("blundr_external_games")
-    .select("provider_fingerprint,fallback_fingerprint")
-    .eq("user_id", userId);
-  if (provider) sourceGamesQuery = sourceGamesQuery.eq("provider", provider);
-  const sourceGames = await sourceGamesQuery.then(
-    (result) => result.data ?? [],
-  );
-  const fingerprints = sourceGames
-    .map((row) => row.provider_fingerprint ?? row.fallback_fingerprint)
-    .filter(Boolean);
-  const affectedFindings = fingerprints.length
-    ? await client
-        .from("blundr_learning_findings")
-        .select("position_key")
-        .eq("user_id", userId)
-        .in("game_fingerprint", fingerprints)
-        .then((result) => result.data ?? [])
-    : [];
-  if (fingerprints.length) {
-    await client
-      .from("blundr_learning_findings")
-      .delete()
-      .eq("user_id", userId)
-      .in("game_fingerprint", fingerprints);
-    await client
-      .from("blundr_game_opening_segments")
-      .delete()
-      .eq("user_id", userId)
-      .in("game_fingerprint", fingerprints);
-  }
-  let gamesQuery = client
-    .from("blundr_external_games")
-    .delete()
-    .eq("user_id", userId);
-  if (provider) gamesQuery = gamesQuery.eq("provider", provider);
-  await gamesQuery;
-  let jobsQuery = client
-    .from("blundr_game_import_jobs")
-    .delete()
-    .eq("user_id", userId);
-  if (provider) jobsQuery = jobsQuery.eq("provider", provider);
-  await jobsQuery;
-  for (const row of affectedFindings) {
-    const remaining = await client
-      .from("blundr_learning_findings")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("position_key", row.position_key)
-      .eq("status", "active")
-      .limit(1);
-    if (!remaining.data?.length) {
-      await client
-        .from("blundr_weakness_projection")
-        .delete()
-        .eq("user_id", userId)
-        .eq("position_key", row.position_key);
-    }
-  }
+  const result = await client.rpc("blundr_delete_provider_game_data", {
+    p_user_id: userId,
+    p_provider: provider ?? null,
+  });
+  if (result.error) throw new Error("provider_data_deletion_failed");
 }
