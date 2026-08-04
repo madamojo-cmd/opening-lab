@@ -15,7 +15,7 @@ function noStore(body: unknown, status = 200): NextResponse {
 
 export async function GET(request: Request): Promise<Response> {
   const authorization = authorizeReleaseEvidenceRequest(request);
-  if (!authorization.authorized)
+  if (authorization.authorized === false)
     return noStore({ error: authorization.error }, authorization.status);
   const identity = readBlundrBuildIdentity();
   return noStore(identity, identity.ready ? 200 : 503);
