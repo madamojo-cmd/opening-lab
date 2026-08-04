@@ -21,6 +21,10 @@ import { BLUNDR_LOCAL_DEMO_USER_ID } from "@/lib/blundr/persistence/persistenceK
 import type { BlundrProgressSummary } from "@/lib/blundr/progress/progressTypes";
 import { ProfileSettingsIcon } from "@/components/navigation/ProfileSettingsIcon";
 import { NestedDailyRings } from "@/components/daily-rings/NestedDailyRings";
+import {
+  formatProgressPercentage,
+  formatRepertoirePoints,
+} from "@/lib/blundr/presentation/userFacingNumbers";
 
 type ProgressDashboardProps = {
   embedded?: boolean;
@@ -546,11 +550,14 @@ export function ProgressDashboard({
               Next unlock
             </div>
             <div className="mt-2 text-3xl font-black tracking-tight text-stone-950">
-              {summary.repertoire.nextUnlockProgressPct}%
+              {formatProgressPercentage(
+                summary.repertoire.nextUnlockProgressPct,
+              )}
             </div>
             <p className="mt-2 text-sm leading-6 text-stone-600">
-              {summary.repertoire.availablePoints} points ready.{" "}
-              {summary.repertoire.lockedOpenings} openings remain locked.
+              {formatRepertoirePoints(summary.repertoire.availablePoints)}{" "}
+              points ready. {summary.repertoire.lockedOpenings} openings remain
+              locked.
             </p>
           </div>
         </div>
@@ -571,8 +578,8 @@ export function ProgressDashboard({
           />
           <ProgressStatCard
             label="Repertoire points"
-            value={`${summary.repertoire.availablePoints}`}
-            detail={`${summary.repertoire.nextUnlockCost} needed next`}
+            value={formatRepertoirePoints(summary.repertoire.availablePoints)}
+            detail={`${formatRepertoirePoints(summary.repertoire.nextUnlockCost)} needed next`}
             icon={<Sparkles size={16} className="text-green-700" />}
           />
           <ProgressStatCard

@@ -66,6 +66,11 @@ import { shouldForceContinuationPause } from "@/lib/blundr/continuedPlay/continu
 import { decideCoachSurfacePolicy } from "@/lib/blundr/coachSurface/coachSurfacePolicy";
 import { presentMoveImpact } from "@/lib/blundr/coachSurface/moveImpactPresenter";
 import { computeTrainerPresentationFrame } from "@/lib/blundr/presentation/trainerPresentationFrame";
+import { buildOpponentReplyFeedback } from "@/lib/blundr/presentation/opponentReplyCopy";
+import {
+  resolveTrainerEvaluationDisplay,
+  type TrainerEvaluationDisplay,
+} from "@/lib/blundr/presentation/trainerEvaluationDisplay";
 import { attributeLastMove, decideTrainerPhaseActionGate } from "@/lib/blundr/presentation/phaseActionGating";
 import { buildVisibleTeachingSurface } from "@/lib/blundr/presentation/buildVisibleTeachingSurface"; // v2.7.40 Agent 3: single visible owner surface
 import { buildLiveVisibleTeachingSurface } from "@/lib/blundr/presentation/buildLiveVisibleTeachingSurface";
@@ -158,6 +163,7 @@ import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes
 import { completeDailyRingActivity } from "@/lib/blundr/daily-rings/dailyRingService";
 import { isBatteryCompletionEligible, isTempoCompletionEligible } from "@/lib/blundr/daily-rings/trainingCompletionEligibility";
 import { resolvePlyFromFen, resolveSelectedRuntimeLineOpponentReply } from "@/lib/blundr/runtime/selectedRuntimeLineReply";
+import { isSelectedRuntimeLineComplete } from "@/lib/blundr/runtime/selectedRuntimeLineCompletion";
 import type { DailyRingCompletionResultLike } from "@/lib/blundr/daily-rings/dailyRingTypes";
 import type { BlundrBoardPreferences } from "@/lib/blundr/board/boardThemeTypes";
 
@@ -1121,22 +1127,8 @@ function evalForWhite(cp:number|undefined,turn:ChessColor){
   return turn==="w"?cp:-cp;
 }
 
-function whiteEvalPercent(cpWhite:number|undefined){
-  if(typeof cpWhite!=="number")return 50;
-  const bounded=Math.max(-1200,Math.min(1200,cpWhite));
-  return Math.max(5,Math.min(95,50+bounded/24));
-}
-
 function nowIso(): string {
   return new Date().toISOString();
-}
-
-function advantageLabel(cpWhite:number|undefined){
-  if(typeof cpWhite!=="number")return "Engine pending";
-  if(Math.abs(cpWhite)>90000)return cpWhite>0?"White mate":"Black mate";
-  if(Math.abs(cpWhite)<18)return "Equal";
-  const side=cpWhite>0?"White":"Black";
-  return `${side} +${(Math.abs(cpWhite)/100).toFixed(1)}`;
 }
 
 function pieceGlyph(color:ChessColor,type:string,style:PieceStyle){
@@ -3848,8 +3840,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
   const accuracy=getAccuracy(progress);
   const mistakes=Object.values(progress.mistakes).sort((a,b)=>b.count-a.count);
   const cpWhite=evalForWhite(engineLines[0]?.cp,game.turn() as ChessColor);
-  const whitePct=whiteEvalPercent(cpWhite);
-  const evalText=advantageLabel(cpWhite);
+  const evaluationDisplay=resolveTrainerEvaluationDisplay(cpWhite);
   const captured=capturedSummary(game);
   const adaptiveOpeningMoveHistoryUci = (buildRuntimePlayKeyBeforeFromSanHistory(moveHistory) ?? "")
     .split(",")
@@ -5431,7 +5422,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     setOverlayClearedOnPhaseChange(true);
     setBrain(p=>({...p,source:"opponent thinking",book:mode==="restricted"?(currentOpponentBookOptions.length?"active":"complete"):"complete",lichess:"loading"}));
     await new Promise(r=>setTimeout(r,700));
-    let chosen:{san:string;uci:string;fen:string}|null=null;
+    let chosen:{san:string;uci:string;fen:string;playPct?:number|null}|null=null;
     let source="";
     if(mode==="restricted"){
       const initialRestrictedOpponentMoveUci=request.initialRestrictedOpponentMoveUci?.trim().toLowerCase()??null;
@@ -5442,6 +5433,9 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
         currentPly:resolvePlyFromFen(current.fen())??moveHistory.length,
         legalMoveUcis:currentRestrictedLegalMoveUcis,
       });
+      const runtimeCandidateForMove=(uci:string|null|undefined)=>runtimeBookFrameQuery.candidates.find(
+        (candidate)=>candidate.uci.trim().toLowerCase()===String(uci ?? "").trim().toLowerCase(),
+      )??null;
       if(initialRestrictedOpponentMoveUci){
         const applied=applyUci(current.fen(),initialRestrictedOpponentMoveUci);
         if(!applied||applied.color!==opponentColor){
@@ -5453,12 +5447,12 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
           return;
         }
         clearPendingOpponentReplyRequest({clearStaleIssue:true});
-        chosen={san:applied.san,uci:applied.uci,fen:applied.fen};
+        chosen={san:applied.san,uci:applied.uci,fen:applied.fen,playPct:runtimeCandidateForMove(applied.uci)?.playPct??null};
         source="Selected runtime line initial reply";
         variationDebug={
           ...variationDebug,
           fallbackUsed:false,
-          opponentVariationApplied:true,
+          opponentVariationApplied:false,
           opponentVariationReason:"selected_runtime_line_initial_reply",
           selectedOpponentBranchKey:`${positionKey}::${applied.uci}`,
           candidateOpponentBranches:[{
@@ -5484,12 +5478,12 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
           return;
         }
         clearPendingOpponentReplyRequest({clearStaleIssue:true});
-        chosen={san:applied.san,uci:applied.uci,fen:applied.fen};
+        chosen={san:applied.san,uci:applied.uci,fen:applied.fen,playPct:runtimeCandidateForMove(applied.uci)?.playPct??null};
         source="Selected runtime line reply";
         variationDebug={
           ...variationDebug,
           fallbackUsed:false,
-          opponentVariationApplied:true,
+          opponentVariationApplied:false,
           opponentVariationReason:"selected_runtime_line_reply",
           selectedOpponentBranchKey:`${positionKey}::${applied.uci}`,
           candidateOpponentBranches:[{
@@ -5542,12 +5536,12 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
             return;
           }
           clearPendingOpponentReplyRequest({clearStaleIssue:true});
-          chosen={san:applied.san,uci:applied.uci,fen:applied.fen};
+          chosen={san:applied.san,uci:applied.uci,fen:applied.fen,playPct:restrictedOpponentReplyAuthority.opponentReplyAuthorityCandidatePlayPct};
           source=`Runtime book reply (${restrictedOpponentReplyAuthority.opponentReplyAuthoritySource})`;
           variationDebug={
             ...variationDebug,
             fallbackUsed:false,
-            opponentVariationApplied:true,
+            opponentVariationApplied:false,
             opponentVariationReason:"runtime_book_reply_selected",
             selectedOpponentBranchKey:`${positionKey}::${applied.uci}`,
             candidateOpponentBranches:runtimeBookRestrictedCandidates.map((candidate)=>({
@@ -5598,7 +5592,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
         });
         const weighted=decision?valid.find((candidate)=>candidate.branchKey===decision.selected.branchKey)??valid[0]:pickWeighted(valid);
         variationDebug=decision?{...decision}:variationDebug;
-        chosen={san:weighted.san,uci:weighted.uci,fen:weighted.resultingFen};
+        chosen={san:weighted.san,uci:weighted.uci,fen:weighted.resultingFen,playPct:weighted.pct>0?weighted.pct/100:null};
         source=weighted.pct?`Lichess-weighted opening branch (${weighted.pct}%)`:"Saved opening branch";
       }
     }else{
@@ -5920,7 +5914,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     clearRuntimeCriticalIssue("stale_opponent_reply_commit");
     clearRuntimeCriticalIssue("restricted_opponent_reply_missing_runtime_authority");
     clearRuntimeCriticalIssue("restricted_initial_black_opponent_handoff_illegal");
-    setLastMove(chosen.uci);setLastMoveSan(chosen.san);setLastMoveColor(opponentColor);setMoveHistory(prev=>[...prev,chosen.san]);setSelectedSquare(null);setShowAnswer(false);setOpponentCue(boardSettings.showOpponentCue?{expiresAt:Date.now()+2500,title:`Opponent: ${chosen.san}`,message:"Brief opponent cue. Your selected user-side view stays visible after this fades.",lines:[{from:chosen.uci.slice(0,2),to:chosen.uci.slice(2,4),kind:"opponent",label:chosen.san}],cues:[{square:chosen.uci.slice(2,4),kind:"opponent"}],committed:true,fen:normalizeFen(chosen.fen)}:null);setFeedback(`Opponent played ${chosen.san}. Source: ${source}. ${variationNote}`);maybeShowProjectiveTacticsAfterMove({nextFen:chosen.fen,lastMoveUci:chosen.uci,movedColor:opponentColor});setBrain(p=>({...p,source,lichess:source.includes("Lichess")?"active":p.lichess,note:variationNote}))
+    setLastMove(chosen.uci);setLastMoveSan(chosen.san);setLastMoveColor(opponentColor);setMoveHistory(prev=>[...prev,chosen.san]);setSelectedSquare(null);setShowAnswer(false);setOpponentCue(boardSettings.showOpponentCue?{expiresAt:Date.now()+2500,title:`Opponent: ${chosen.san}`,message:"Brief opponent cue. Your selected user-side view stays visible after this fades.",lines:[{from:chosen.uci.slice(0,2),to:chosen.uci.slice(2,4),kind:"opponent",label:chosen.san}],cues:[{square:chosen.uci.slice(2,4),kind:"opponent"}],committed:true,fen:normalizeFen(chosen.fen)}:null);setFeedback(buildOpponentReplyFeedback({san:chosen.san,playPct:chosen.playPct,variationApplied:variationDebug.opponentVariationApplied,blockedThirdRepeatBranches:variationDebug.blockedThirdRepeatBranches}));maybeShowProjectiveTacticsAfterMove({nextFen:chosen.fen,lastMoveUci:chosen.uci,movedColor:opponentColor});setBrain(p=>({...p,source,lichess:source.includes("Lichess")?"active":p.lichess,note:variationNote}))
   }
   function handleTrainerViewChange(nextTrainerView:TrainerView){
     if(nextTrainerView===trainerView)return;
@@ -6200,11 +6194,12 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     const nextExplicitCuratedTerminalNode=nextExactSelectedLineNodes.some((node)=>node.terminal&&node.sideToMove===nextGame.turn());
     const nextRuntimePlayKeyBefore=buildRuntimePlayKeyBeforeFromSanHistory([...moveHistory,legal.san])??null;
     const nextRuntimeLineCurrentPly=moveHistory.length+1;
-    const nextRuntimeLineExhausted=selectedRuntimeLinePlyLength>0&&nextRuntimeLineCurrentPly>=selectedRuntimeLinePlyLength;
-    const nextSelectedLineConfirmedComplete=Boolean(
-      (selectedRuntimeLinePlyLength>0 ? nextRuntimeLineExhausted : nextLineCompleteConfirmed) &&
-      nextExactNodeHasChildren===false
-    );
+    const nextSelectedLineConfirmedComplete=isSelectedRuntimeLineComplete({
+      selectedRuntimeLinePlyLength,
+      currentPly:nextRuntimeLineCurrentPly,
+      resolverLineComplete:nextLineCompleteConfirmed,
+      exactNodeHasChildren:nextExactNodeHasChildren,
+    });
     const nextRestrictedRuntimeBookExhaustedOnOpponentTurnAfterUserMove=Boolean(
       trainingMode==="restricted"&&
       !userExplicitlyEnteredContinuation&&
@@ -7256,7 +7251,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
           <p className="mt-2 text-[11px] font-semibold text-stone-500">{trainerView==="assisted"?"Shows the visual pattern cue before the move.":"Hides pre-move hints for independent recall."}</p>
         </div>
         {blundrDebugEnabled && activeBoard && enabledViews.length>0 && <div className="mb-3 grid gap-2" style={{gridTemplateColumns:`repeat(${enabledViews.length}, minmax(0,1fr))`}}>{enabledViews.map(v=><button key={v} onClick={()=>setActiveBoardView(v)} className={classNames("rounded-full px-4 py-2 text-sm font-black capitalize",safeBoardView===v?"bg-green-700 text-white shadow-sm":"bg-white text-stone-500 ring-1 ring-stone-200")}>{v}</button>)}</div>}
-        <TapChessboard game={game} orientation={repertoire.color} selectedSquare={selectedSquare} squareStyles={squareStyles} lines={projectiveTacticsVisualPriorityActive?[]:boardLinesToRender} transientLines={transientLinesToRender} projectiveTacticVisuals={projectiveTacticDisplay.visuals} projectiveTacticsFading={projectiveTacticsFading} projectiveTacticShowLines={projectiveTacticDisplay.showLines} projectiveTacticShowLabels={projectiveTacticDisplay.showLabels} onSquareTap={handleSquareTap} whitePct={whitePct} evalText={evalText} settings={boardSettings} captured={captured} userColor={userColor} animationName={visualAnimationName} adaptiveOpeningIdentity={adaptiveOpeningIdentity} pendingPromotion={pendingPromotion} onPromotionSelect={handlePromotionPieceSelection} onPromotionCancel={cancelPromotionSelection}/>
+        <TapChessboard game={game} orientation={repertoire.color} selectedSquare={selectedSquare} squareStyles={squareStyles} lines={projectiveTacticsVisualPriorityActive?[]:boardLinesToRender} transientLines={transientLinesToRender} projectiveTacticVisuals={projectiveTacticDisplay.visuals} projectiveTacticsFading={projectiveTacticsFading} projectiveTacticShowLines={projectiveTacticDisplay.showLines} projectiveTacticShowLabels={projectiveTacticDisplay.showLabels} onSquareTap={handleSquareTap} evaluation={evaluationDisplay} settings={boardSettings} captured={captured} userColor={userColor} animationName={visualAnimationName} adaptiveOpeningIdentity={adaptiveOpeningIdentity} pendingPromotion={pendingPromotion} onPromotionSelect={handlePromotionPieceSelection} onPromotionCancel={cancelPromotionSelection}/>
         <HistoryControls index={historyIndex} total={positionHistory.length} onBack={()=>jumpHistory(-1)} onForward={()=>jumpHistory(1)}/>
       </div>
       {showDetails&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Coach Debug</div><div className="mt-2">coachMode: {coachDecision.mode}</div><div>coachAction: {coachDecision.action}</div><div>coachUtteranceId: {coachDecision.utteranceId??"none"}</div><div>coachUtteranceFamily: {coachDecision.utteranceFamily??"none"}</div><div>coachVariationReason: {String((coachDecision.debug as any)?.coachVariationReason??"n/a")}</div><div>coachHintStrength: {String((coachDecision.debug as any)?.coachHintStrength??"none")}</div><div>coachRevealRisk: {coachDecision.revealRisk}</div><div>coachGivesAnswer: {coachDecision.givesAnswer?"true":"false"}</div><div>coachButtons: {displayedCoachDecision.buttons.join(", ")||"none"}</div><div>coachShouldMarkReviewWorthy: {coachDecision.shouldMarkReviewWorthy?"true":"false"}</div><div>coachSuppressedReason: {coachDecision.suppressedReason??"none"}</div><div>coachFrameMatchesBoard: {coachContextResult.context?.recipeFrameMatchesBoard?"true":"false"}</div><div>coachFenMatchesBoard: {coachContextResult.context?.recipeFenMatchesBoard?"true":"false"}</div><div>recentCoachUtteranceIds: {coachUtteranceMemory.slice(-5).map((entry:any)=>entry.utteranceId).join(", ")||"none"}</div><div>coachSafetyWarnings: {JSON.stringify((coachDecision.debug as any)?.coachSafetyWarnings??[])}</div><div>coachReviewMarked: {coachReviewMarked?"true":"false"}</div><div>selectedOpportunity: {String((coachDecision.debug as any)?.selectedOpportunity??liveCoachState?.selected?.opportunity??"none")}</div><div>selectedIntent: {String((coachDecision.debug as any)?.selectedIntent??liveCoachState?.selected?.intent??"none")}</div><div>exactMoveAllowed: {coachContextResult.context?.exactMoveAllowed?"true":"false"}</div><div>claimTypes: {coachDecision.claimTypes.join(", ")||"none"}</div><div>blockedClaims: {String((coachDecision.debug as any)?.blockedClaims??"none")}</div><div>silenceReason: {String((coachDecision.debug as any)?.silenceReason??liveCoachState?.debug?.silenceReason??"none")}</div><div>branchTransitionSurfaceRendered: {branchTransitionSurface?.render?"true":"false"}</div><div>branchTransitionReason: {branchTransitionSurface?.reason??"none"}</div><div>continueFromHereAvailable: {branchTransitionSurface?.render?"true":"false"}</div><div>continueFromHereClicked: {continueFromHereClicked?"true":"false"}</div><div>coachSurfaceOwner: {coachSurfacePolicy.owner}</div><div>allowLegacyTrainingCard: {coachSurfacePolicy.allowLegacyTrainingCard?"true":"false"}</div><div>allowMoveImpactCard: {coachSurfacePolicy.allowMoveImpactCard?"true":"false"}</div><div>allowNextMoveText: {coachSurfacePolicy.allowNextMoveText?"true":"false"}</div><div>legacyCueSuppressedReason: {coachSurfacePolicy.reason}</div><div>moveImpactPresenterReason: {moveImpactPresentation.reason}</div></div>}
@@ -7326,7 +7321,7 @@ function coordTone(theme:BoardTheme,isDark:boolean){
   return isDark?"text-white/70":"text-stone-600/70";
 }
 
-function TapChessboard({game,orientation,selectedSquare,squareStyles,lines,transientLines,projectiveTacticVisuals,projectiveTacticsFading,projectiveTacticShowLines,projectiveTacticShowLabels,onSquareTap,whitePct,evalText,settings,captured,userColor,animationName,adaptiveOpeningIdentity,pendingPromotion,onPromotionSelect,onPromotionCancel}:{game:Chess;orientation:RepertoireColor;selectedSquare:string|null;squareStyles:Record<string,CSSProperties>;lines:ActiveLine[];transientLines:ActiveLine[];projectiveTacticVisuals:ProjectiveTacticVisual[];projectiveTacticsFading:boolean;projectiveTacticShowLines:boolean;projectiveTacticShowLabels:boolean;onSquareTap:(s:string)=>void;whitePct:number;evalText:string;settings:BoardSettings;captured:CapturedSummary;userColor:ChessColor;animationName?:string;adaptiveOpeningIdentity:AdaptiveOpeningIdentity | null;pendingPromotion:PendingPromotion | null;onPromotionSelect:(piece:PromotionPiece)=>void;onPromotionCancel:()=>void;}){
+function TapChessboard({game,orientation,selectedSquare,squareStyles,lines,transientLines,projectiveTacticVisuals,projectiveTacticsFading,projectiveTacticShowLines,projectiveTacticShowLabels,onSquareTap,evaluation,settings,captured,userColor,animationName,adaptiveOpeningIdentity,pendingPromotion,onPromotionSelect,onPromotionCancel}:{game:Chess;orientation:RepertoireColor;selectedSquare:string|null;squareStyles:Record<string,CSSProperties>;lines:ActiveLine[];transientLines:ActiveLine[];projectiveTacticVisuals:ProjectiveTacticVisual[];projectiveTacticsFading:boolean;projectiveTacticShowLines:boolean;projectiveTacticShowLabels:boolean;onSquareTap:(s:string)=>void;evaluation:TrainerEvaluationDisplay|null;settings:BoardSettings;captured:CapturedSummary;userColor:ChessColor;animationName?:string;adaptiveOpeningIdentity:AdaptiveOpeningIdentity | null;pendingPromotion:PendingPromotion | null;onPromotionSelect:(piece:PromotionPiece)=>void;onPromotionCancel:()=>void;}){
   const ranks=orientation==="white"?[8,7,6,5,4,3,2,1]:[1,2,3,4,5,6,7,8];
   const files=orientation==="white"?FILES:[...FILES].reverse();
   const centerFor=(sq:string)=>{
@@ -7340,7 +7335,7 @@ function TapChessboard({game,orientation,selectedSquare,squareStyles,lines,trans
   return <div className="mx-auto w-full max-w-[450px]">
     {settings.showCaptured?<CapturedStrip color={topColor} captured={topColor==="w"?captured.blackCaptured:captured.whiteCaptured} advantage={captured.materialAdvantage.side===topColor?captured.materialAdvantage.value:0} label="Opponent" settings={settings}/>:null}
     <div className="flex items-stretch gap-2">
-      {settings.showEvalBar?<EvalBar whitePct={whitePct} evalText={evalText}/>:null}
+      {settings.showEvalBar&&evaluation?<EvalBar evaluation={evaluation}/>:null}
       <div className="flex-1 rounded-[28px] bg-white p-3 shadow-xl shadow-stone-300/40 ring-1 ring-stone-200">
         <div className={classNames("relative aspect-square w-full overflow-hidden rounded-[18px] border border-stone-300 bg-stone-200",visualAnimationClass(animationName))}>
           <BoardLines lines={lines} centerFor={centerFor} transient={false}/>
@@ -7415,12 +7410,13 @@ function CapturedStrip({color,captured,advantage,label,settings}:{color:ChessCol
   </div>
 }
 
-function EvalBar({whitePct,evalText}:{whitePct:number;evalText:string}){
-  const blackPct=100-whitePct;
-  return <div className="relative flex w-10 shrink-0 flex-col overflow-hidden rounded-2xl bg-stone-950 shadow-sm ring-1 ring-stone-200">
-    <div className="flex items-center justify-center bg-stone-950 text-[10px] font-black text-white transition-all duration-500" style={{height:`${blackPct}%`,minHeight:"8%"}}>{blackPct>34?<span className="rotate-90 tracking-tight">Black</span>:null}</div>
-    <div className="flex items-center justify-center bg-stone-50 text-[10px] font-black text-stone-950 transition-all duration-500" style={{height:`${whitePct}%`,minHeight:"8%"}}>{whitePct>34?<span className="-rotate-90 tracking-tight">White</span>:null}</div>
-    <div className="pointer-events-none absolute inset-x-0 top-2 mx-auto max-w-9 rounded-full bg-amber-50/95 px-1 text-center text-[8px] font-black leading-3 text-amber-700 shadow-sm">{evalText}</div>
+function EvalBar({evaluation}:{evaluation:TrainerEvaluationDisplay}){
+  return <div className="flex w-14 shrink-0 flex-col gap-2">
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-stone-950 shadow-sm ring-1 ring-stone-200">
+      <div className="flex items-center justify-center bg-stone-950 text-[10px] font-black text-white transition-all duration-500" style={{height:`${evaluation.blackPercent}%`,minHeight:"8%"}}>{evaluation.blackPercent>34?<span className="rotate-90 tracking-tight">Black</span>:null}</div>
+      <div className="flex items-center justify-center bg-stone-50 text-[10px] font-black text-stone-950 transition-all duration-500" style={{height:`${evaluation.whitePercent}%`,minHeight:"8%"}}>{evaluation.whitePercent>34?<span className="-rotate-90 tracking-tight">White</span>:null}</div>
+    </div>
+    <div className="rounded-xl bg-white px-1 py-1 text-center text-[9px] font-black leading-3 text-stone-700 shadow-sm ring-1 ring-stone-200">{evaluation.label}</div>
   </div>
 }
 
