@@ -3,7 +3,33 @@ name: Blundr release candidate
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, release/blundr-staging-3.99]
+  workflow_dispatch:
+    inputs:
+      deployment_url:
+        description: Immutable staging deployment URL
+        required: true
+        type: string
+      expected_sha:
+        description: Full candidate Git SHA
+        required: true
+        type: string
+      rollback_sha:
+        description: Full previously accepted Git SHA
+        required: true
+        type: string
+      browser_qa_evidence_url:
+        description: Browser and accessibility evidence URL
+        required: true
+        type: string
+      telemetry_evidence_url:
+        description: Telemetry delivery evidence URL
+        required: true
+        type: string
+      rollback_evidence_url:
+        description: Rollback rehearsal evidence URL
+        required: true
+        type: string
 
 jobs:
   verify:
@@ -42,6 +68,7 @@ jobs:
       - name: Static checks
         run: |
           npm run verify:registry
+          npm run verify:feature-profile
           npm run verify:deep-minigame-catalog
           npm run typecheck
           npm run lint
@@ -66,3 +93,49 @@ jobs:
       - name: Strict registry release gate
         if: github.ref == 'refs/heads/main'
         run: npm run verify:registry:release
+
+  staging-golden:
+    if: github.event_name == 'workflow_dispatch'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: blundr-staging
+    env:
+      BLUNDR_STAGING_BASE_URL: ${{ inputs.deployment_url }}
+      BLUNDR_EXPECTED_GIT_SHA: ${{ inputs.expected_sha }}
+      BLUNDR_ROLLBACK_GIT_SHA: ${{ inputs.rollback_sha }}
+      BLUNDR_BROWSER_QA_EVIDENCE_URL: ${{ inputs.browser_qa_evidence_url }}
+      BLUNDR_TELEMETRY_EVIDENCE_URL: ${{ inputs.telemetry_evidence_url }}
+      BLUNDR_ROLLBACK_EVIDENCE_URL: ${{ inputs.rollback_evidence_url }}
+      BLUNDR_RELEASE_EVIDENCE_TOKEN: ${{ secrets.BLUNDR_RELEASE_EVIDENCE_TOKEN }}
+      BLUNDR_STAGING_SUPABASE_URL: ${{ secrets.BLUNDR_STAGING_SUPABASE_URL }}
+      BLUNDR_STAGING_SUPABASE_ANON_KEY: ${{ secrets.BLUNDR_STAGING_SUPABASE_ANON_KEY }}
+      BLUNDR_STAGING_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.BLUNDR_STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+      BLUNDR_STAGING_QA_PASSWORD: ${{ secrets.BLUNDR_STAGING_QA_PASSWORD }}
+      BLUNDR_STAGING_QA_EMAIL_DOMAIN: ${{ secrets.BLUNDR_STAGING_QA_EMAIL_DOMAIN }}
+      BLUNDR_STAGING_CHESSCOM_USERNAME: ${{ secrets.BLUNDR_STAGING_CHESSCOM_USERNAME }}
+      BLUNDR_STAGING_LICHESS_USERNAME: ${{ secrets.BLUNDR_STAGING_LICHESS_USERNAME }}
+      BLUNDR_STAGING_CRON_SECRET: ${{ secrets.BLUNDR_STAGING_CRON_SECRET }}
+      BLUNDR_EVIDENCE_OUTPUT: release/evidence/staging-3.99-${{ inputs.expected_sha }}.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+      - name: Assert immutable checkout
+        run: test "$(git rev-parse HEAD)" = "$BLUNDR_EXPECTED_GIT_SHA"
+      - name: Install dependencies
+        run: npm ci
+      - name: Run ten exact-SHA golden journeys
+        run: npm run staging:golden
+      - name: Preserve staging evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blundr-staging-3.99-${{ inputs.expected_sha }}
+          path: release/evidence/*.json
+          if-no-files-found: error
+          retention-days: 90

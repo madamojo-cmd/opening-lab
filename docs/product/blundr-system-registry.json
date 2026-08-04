@@ -246,20 +246,20 @@
     {
       "id": "RELEASE-001",
       "name": "Exact-SHA release",
-      "contractVersion": "1",
-      "userPromise": "The tested commit, deployed Preview, migration state, environment contract, and rollback target identify one release candidate.",
+      "contractVersion": "2",
+      "userPromise": "The tested commit, immutable isolated-staging deployment, migration state, feature profile, runtime package, and rehearsed rollback identify one release candidate.",
       "status": "blocked",
       "releaseRequired": true,
-      "authority": [".github/workflows/blundr-release-candidate.yml", "docs/operations"],
-      "entryPoints": ["CI", "Vercel staging Preview"],
+      "authority": [".github/workflows/blundr-release-candidate.yml", "release/feature-profiles/staging-3.99.json", "scripts/blundr/runStagingGoldenJourneys.mjs", "docs/operations"],
+      "entryPoints": ["CI", "/api/build-info", "/api/health", "immutable blundr-staging production-target deployment"],
       "persistence": ["Release evidence and deployment metadata"],
       "dependencies": ["All release-required registry entries"],
       "featureFlags": [],
       "fallback": "Do not move the stable alias or deploy Production.",
-      "requiredTests": ["npm run verify:registry:release", "npm run verify:release"],
+      "requiredTests": ["npm run verify:release", "npm run verify:manifest", "npm run staging:golden", "npm run verify:registry:release"],
       "lastVerifiedSha": null,
       "evidence": [],
-      "blockers": ["Release-critical registry entries are not all exact-SHA verified.", "Rollback rehearsal and private-beta gate are incomplete."]
+      "blockers": ["The final pushed SHA has not been deployed to the isolated blundr-staging production target.", "Ten golden journeys, browser/accessibility QA, telemetry delivery, and rollback rehearsal have not yet produced one accepted exact-SHA artifact.", "Release-critical registry entries must be promoted to verified only from that artifact."]
     }
   ]
 }

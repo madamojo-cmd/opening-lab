@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 
 const manifest = JSON.parse(
   readFileSync("release/blundr-mvp-release-manifest.json", "utf8"),
@@ -8,14 +8,27 @@ const lockfileSha = createHash("sha256")
   .update(readFileSync("package-lock.json"))
   .digest("hex");
 const errors = [];
-if (!manifest.gitSha || manifest.gitSha === "PENDING_STEP5_CHECKPOINT")
-  errors.push("gitSha must be the real deployable candidate SHA");
-else if (!/^[0-9a-f]{7,40}$/.test(manifest.gitSha))
-  errors.push("gitSha must be a hexadecimal commit SHA");
+if (Object.hasOwn(manifest, "gitSha"))
+  errors.push(
+    "static release manifest must not self-reference a mutable gitSha",
+  );
+if (manifest.gitShaSource !== "VERCEL_GIT_COMMIT_SHA")
+  errors.push("immutable deployment SHA source is missing");
 if (manifest.lockfileSha256 !== lockfileSha)
   errors.push("lockfile checksum mismatch");
-if (manifest.migrations?.count !== manifest.migrations?.versions?.length)
+const migrations = readdirSync("supabase/migrations")
+  .filter((file) => file.endsWith(".sql"))
+  .sort();
+if (manifest.migrations?.count !== migrations.length)
   errors.push("migration count mismatch");
+if (manifest.migrations?.head !== migrations.at(-1)?.split("_")[0])
+  errors.push("migration head mismatch");
+if (manifest.releaseId !== "blundr-staging-3.99")
+  errors.push("release identity mismatch");
+if (manifest.runtime?.packageId !== "blundr-opening-runtime-3.99.v2")
+  errors.push("runtime package mismatch");
+if (manifest.evidence?.status !== "PENDING_EXACT_SHA_STAGING")
+  errors.push("static manifest must not claim deployed evidence");
 if (
   manifest.featureFlags?.default !== "off" ||
   manifest.featureFlags?.globalEnablement !== false

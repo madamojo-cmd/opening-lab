@@ -1,61 +1,31 @@
 {
-  "release": "blundr-mvp-step5-release-candidate",
-  "gitSha": "d7b9d1733d6728bed677ff4939e0c532299d2c11",
-  "buildIdentifier": "blundr-advanced-feature-wiring",
-  "node": "v24.14.0",
-  "npm": "11.9.0",
+  "schemaVersion": 2,
+  "releaseId": "blundr-staging-3.99",
+  "gitShaSource": "VERCEL_GIT_COMMIT_SHA",
+  "buildIdentityEndpoint": "/api/build-info",
+  "healthEndpoint": "/api/health",
+  "featureProfile": "release/feature-profiles/staging-3.99.json",
   "lockfileSha256": "2925f4dd30fbe1757ca6274534b3948bde67ff97999b0a0eee4e49c6f3e09a34",
   "runtime": {
-    "packageId": "stage2-21-opening-stepdown-runtime-v1",
-    "nodesSha256": "81c095ba652d4ad9eb3d378c469ea0f0e2b030b571ad101ac7ba773ca7aecb01",
-    "movesSha256": "84e7aa4359a28371d7f3703990e77757189a8bc1b83bc1eca4cbb504dc5ebcef"
+    "packageId": "blundr-opening-runtime-3.99.v2",
+    "manifestSha256": "abf8f0eef724ef30b94910932d94a04733668f211b43bbd094590c3fad4b35b8",
+    "nodesSha256": "733eed769cb99da43dec31e0b9ec01151d89501ef8adf46a063d0212ed7bf959",
+    "movesSha256": "203e2ce1b9875598005614a62a8bc71b0621d54275a821527e9c2b7928c7a434"
   },
   "migrations": {
-    "count": 11,
-    "versions": [
-      "20260703_001",
-      "20260704_001",
-      "20260705_001",
-      "20260706_001",
-      "20260713_001",
-      "20260714_001",
-      "20260715_001",
-      "20260716_001",
-      "20260717_001",
-      "20260718_001",
-      "20260719_001"
-    ],
-    "checksum": "1e96b45e36703f5ed74adc7482d59680a08794a45b4417f6ad942af4a4192bb2"
+    "count": 21,
+    "head": "20260804130000"
   },
   "featureFlags": {
     "default": "off",
     "serverControlled": true,
-    "globalEnablement": false
+    "globalEnablement": false,
+    "stagingProfile": "staging-3.99"
   },
-  "verification": {
-    "unit": "547/547 serial unit tests passed; exhaustive generator gate passed separately",
-    "generatorDepth": "8/8 deterministic OS-process shards passed; 2 concurrent processes; one Stockfish WASM engine per process; all 2,000 seed targets covered exactly once",
-    "component": "8/8",
-    "integration": "6/6",
-    "securityRls": "STAGING_APPLIED; 8/8 security tests passed",
-    "e2e": "4/4 root smoke; authenticated matrix NOT_RUN",
-    "staging": {
-      "supabaseMigrations": "11/11 applied; local and remote versions match",
-      "vercelProject": "blundr-staging",
-      "vercelDeploymentId": "dpl_GdZTHV6QP47s1CmGw1XAyKe69P6d",
-      "vercelPreviewUrl": "https://blundr-staging.vercel.app",
-      "vercelReadyState": "READY",
-      "candidateSha": "d7b9d1733d6728bed677ff4939e0c532299d2c11",
-      "gitMetadata": "confirmed",
-      "unauthenticatedRouteBoundary": "401 after staging SSO protection was disabled"
-    },
-    "lintWarnings": 109,
-    "browserCoverage": [
-      "Chromium root smoke",
-      "Firefox root smoke",
-      "WebKit root smoke",
-      "Mobile Chromium root smoke"
-    ]
+  "evidence": {
+    "status": "PENDING_EXACT_SHA_STAGING",
+    "generator": "scripts/blundr/runStagingGoldenJourneys.mjs",
+    "outputPattern": "release/evidence/staging-3.99-<full-sha>-<run-id>.json"
   },
   "privacy": {
     "publicProviderHistoryOnly": true,
@@ -64,11 +34,9 @@
     "policyPublication": "STAGING_BLOCKER_UNPUBLISHED"
   },
   "knownStagingBlockers": [
-    "BLUNDR_STAGING_QA_EMAIL and BLUNDR_STAGING_QA_PASSWORD are configured as repository Codespaces secrets but are not injected into this Codespace environment.",
-    "Four-browser E2E and deployed staging validation remain pending.",
-    "Disposable staging provider imports and production telemetry sink validation remain pending.",
+    "Exact-SHA isolated-staging deployment and ten golden journeys have not yet produced an accepted evidence artifact.",
+    "Browser/accessibility, telemetry delivery, and rollback rehearsal evidence are required before release approval.",
     "Privacy policy publication is not asserted by this repository."
   ],
-  "previousCheckpoint": "checkpoint-v2.10.7q0-step4-repertoire-intelligence-deep-minigames",
   "rollbackRunbook": "release/blundr-mvp-rollback-runbook.md"
 }

@@ -36,6 +36,7 @@ generated_training_data/
 blundr-deploy-v*/
 blundr_takeover_*/
 blundr_*_bundle/
+release/evidence/*.json
 
 # Diagnostics, review bundles, and performance audit output
 diagnostics/
