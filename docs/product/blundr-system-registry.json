@@ -16,16 +16,16 @@
       "userPromise": "Sign-in, recovery, refresh, and reauthentication preserve the user's durable account and progress.",
       "status": "partial",
       "releaseRequired": true,
-      "authority": ["lib/blundr/accounts", "lib/blundr/onboarding", "components/auth"],
-      "entryPoints": ["/login", "/forgot-password", "/reset-password", "/auth/callback"],
+      "authority": ["lib/blundr/accounts", "lib/blundr/onboarding", "components/auth", "components/profile"],
+      "entryPoints": ["/login", "/forgot-password", "/reset-password", "/auth/callback", "/profile"],
       "persistence": ["Supabase Auth", "Blundr account/profile tables"],
       "dependencies": ["Supabase"],
       "featureFlags": [],
       "fallback": "No authenticated route may persist to local-demo identity.",
-      "requiredTests": ["lib/blundr/accounts/__tests__", "components/auth/__tests__", "tests/security"],
+      "requiredTests": ["lib/blundr/accounts/__tests__", "components/auth/__tests__", "components/profile/BlundrProfilePage.component.test.tsx", "tests/security"],
       "lastVerifiedSha": null,
       "evidence": [],
-      "blockers": ["Exact-SHA browser recovery and reauthentication persistence evidence is not recorded."]
+      "blockers": ["Profile and username editing are implemented, but exact-SHA browser recovery, uniqueness, and reauthentication persistence evidence is not recorded."]
     },
     {
       "id": "ONBOARD-001",
@@ -58,10 +58,10 @@
       "dependencies": ["DATA-OPENINGS-001"],
       "featureFlags": ["BLUNDR_FEATURE_LEARNING_CORE_V2"],
       "fallback": "Missing runtime content is unavailable; it is not silently replaced by Maia or random moves.",
-      "requiredTests": ["lib/blundr/trainingRuntime/__tests__", "tests/integration/runtimeAuthority.integration.test.ts"],
+      "requiredTests": ["lib/blundr/trainingRuntime/__tests__", "lib/blundr/runtime/__tests__/selectedRuntimeLineCompletion.test.ts", "lib/blundr/presentation/__tests__/opponentReplyCopy.test.ts", "tests/integration/runtimeAuthority.integration.test.ts"],
       "lastVerifiedSha": null,
       "evidence": [],
-      "blockers": ["Full exact-SHA training journey remains to be recorded."]
+      "blockers": ["The selected-line completion and reply-copy regressions are covered locally; a full exact-SHA training journey remains to be recorded."]
     },
     {
       "id": "TRAIN-MAIA-001",
@@ -142,16 +142,16 @@
       "userPromise": "Starter openings and canonical openingId plus playKey seen-line coordinates persist across sessions.",
       "status": "partial",
       "releaseRequired": true,
-      "authority": ["lib/blundr/repertoire", "lib/blundr/masteryMap"],
+      "authority": ["lib/blundr/repertoire", "lib/blundr/masteryMap", "lib/blundr/presentation/userFacingNumbers.ts"],
       "entryPoints": ["/repertoire", "/progress", "/train"],
       "persistence": ["User repertoire", "seen-line records", "mastery projections"],
       "dependencies": ["ONBOARD-001", "TRAIN-RUNTIME-001"],
       "featureFlags": [],
       "fallback": "Missing opening content is explicit; user selection is not manufactured.",
-      "requiredTests": ["lib/blundr/repertoire/__tests__", "lib/blundr/masteryMap/__tests__"],
+      "requiredTests": ["lib/blundr/repertoire/__tests__", "lib/blundr/masteryMap/__tests__", "lib/blundr/presentation/__tests__/userFacingNumbers.test.ts"],
       "lastVerifiedSha": null,
       "evidence": [],
-      "blockers": ["Exact-SHA browser/database persistence proof is incomplete."]
+      "blockers": ["User-facing repertoire values are formatted at presentation boundaries; exact-SHA browser/database persistence proof is incomplete."]
     },
     {
       "id": "IMPORT-001",
