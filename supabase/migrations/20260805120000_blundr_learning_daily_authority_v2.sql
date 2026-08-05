@@ -9,7 +9,8 @@
 begin;
 
 -- IANA locations are validated against the database timezone catalogue. The
--- slash requirement deliberately excludes ambiguous abbreviations such as EST.
+-- slash requirement deliberately excludes ambiguous abbreviations such as EST;
+-- canonical UTC is the one explicit no-slash IANA exception accepted here.
 create or replace function public.blundr_is_valid_iana_time_zone(p_time_zone text)
 returns boolean
 language sql
@@ -17,7 +18,7 @@ stable
 security invoker
 set search_path = pg_catalog
 as $$
-  select p_time_zone ~ '^[A-Za-z][A-Za-z0-9_+.-]*(/[A-Za-z0-9_+.-]+)+$'
+  select (p_time_zone = 'UTC' or p_time_zone ~ '^[A-Za-z][A-Za-z0-9_+.-]*(/[A-Za-z0-9_+.-]+)+$')
     and exists (
       select 1
       from pg_catalog.pg_timezone_names
@@ -334,7 +335,9 @@ create index if not exists blundr_daily_attempts_session_step_v2_idx
 
 -- The report is an immutable migration-time accounting record, not a repair
 -- queue. It proves exactly what was classified and leaves uncertain mappings
--- available for a later, authenticated reconciliation process.
+-- available for a later, authenticated reconciliation process. Its
+-- generated_at value is insert-only: a repeated application with identical
+-- inputs preserves report identity instead of manufacturing a new timestamp.
 create table if not exists public.blundr_learning_daily_backfill_reports (
   migration_id text not null,
   domain text not null,
@@ -363,8 +366,7 @@ from public.blundr_learning_events
 on conflict (migration_id, domain) do update
 set resolved_count = excluded.resolved_count,
     unresolved_count = excluded.unresolved_count,
-    details = excluded.details,
-    generated_at = now();
+    details = excluded.details;
 
 insert into public.blundr_learning_daily_backfill_reports (
   migration_id, domain, resolved_count, unresolved_count, details
@@ -379,8 +381,7 @@ from public.blundr_learning_events
 on conflict (migration_id, domain) do update
 set resolved_count = excluded.resolved_count,
     unresolved_count = excluded.unresolved_count,
-    details = excluded.details,
-    generated_at = now();
+    details = excluded.details;
 
 insert into public.blundr_learning_daily_backfill_reports (
   migration_id, domain, resolved_count, unresolved_count, details
@@ -395,8 +396,7 @@ from public.blundr_user_profiles
 on conflict (migration_id, domain) do update
 set resolved_count = excluded.resolved_count,
     unresolved_count = excluded.unresolved_count,
-    details = excluded.details,
-    generated_at = now();
+    details = excluded.details;
 
 insert into public.blundr_learning_daily_backfill_reports (
   migration_id, domain, resolved_count, unresolved_count, details
@@ -419,8 +419,7 @@ from public.blundr_daily_decks
 on conflict (migration_id, domain) do update
 set resolved_count = excluded.resolved_count,
     unresolved_count = excluded.unresolved_count,
-    details = excluded.details,
-    generated_at = now();
+    details = excluded.details;
 
 -- These are deliberately non-mutating authority shells. PR-02 replaces their
 -- bodies with the single atomic projector/reservation/action transactions after
