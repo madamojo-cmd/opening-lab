@@ -3,7 +3,8 @@ name: Blundr release candidate
 on:
   pull_request:
   push:
-    branches: [main, release/blundr-staging-3.99]
+    branches:
+      [main, release/blundr-staging-3.99, release/blundr-production-3.99]
   workflow_dispatch:
     inputs:
       deployment_url:
@@ -32,9 +33,99 @@ on:
         type: string
 
 jobs:
-  verify:
+  source-identity:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    steps:
+      - name: Bind dispatch to the requested exact SHA
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          echo "Exact SHA $GITHUB_SHA"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          fi
+
+  static-and-registry:
+    needs: source-identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+      - run: echo "Exact SHA $GITHUB_SHA"
+      - run: npm ci
+      - name: Static checks
+        run: |
+          npm run verify:registry
+          npm run verify:feature-profile
+          npm run verify:manifest
+          npm run verify:flags
+          npm run verify:deep-minigame-catalog
+          npm run verify:migrations
+          npm run verify:unit-shards
+          npm run typecheck
+          npm run lint
+          npm run format:check
+          npm run security:audit
+          npm run dependency:audit
+      - name: Strict registry release gate
+        if: github.ref == 'refs/heads/main'
+        run: npm run verify:registry:release
+
+  unit-tests:
+    needs: source-identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+      - run: echo "Exact SHA $GITHUB_SHA; unit shard ${{ matrix.shard }}/4"
+      - run: npm ci
+      - run: npm run test:unit:shard:${{ matrix.shard }}
+
+  component-and-integration:
+    needs: source-identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+      - run: echo "Exact SHA $GITHUB_SHA"
+      - run: npm ci
+      - run: npm run test:component
+      - run: npm run test:integration
+
+  chess-content:
+    needs: source-identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+      - run: echo "Exact SHA $GITHUB_SHA"
+      - run: npm ci
+      - run: npm run test:chess-content
+
+  supabase-rls:
+    needs: source-identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       BLUNDR_RLS_TEST_URL: ${{ secrets.BLUNDR_RLS_TEST_URL }}
       BLUNDR_RLS_TEST_ANON_KEY: ${{ secrets.BLUNDR_RLS_TEST_ANON_KEY }}
@@ -49,56 +140,65 @@ jobs:
         with:
           node-version: 24.14.0
           cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps
+      - run: echo "Exact SHA $GITHUB_SHA"
+      - run: npm ci
       - name: Require disposable RLS test configuration
         run: |
           set -eu
-          for name in \
-            BLUNDR_RLS_TEST_URL \
-            BLUNDR_RLS_TEST_ANON_KEY \
-            BLUNDR_RLS_TEST_SERVICE_ROLE_KEY \
-            BLUNDR_RLS_TEST_USER_A_EMAIL \
-            BLUNDR_RLS_TEST_USER_A_PASSWORD \
-            BLUNDR_RLS_TEST_USER_B_EMAIL \
-            BLUNDR_RLS_TEST_USER_B_PASSWORD
+          for name in BLUNDR_RLS_TEST_URL BLUNDR_RLS_TEST_ANON_KEY BLUNDR_RLS_TEST_SERVICE_ROLE_KEY BLUNDR_RLS_TEST_USER_A_EMAIL BLUNDR_RLS_TEST_USER_A_PASSWORD BLUNDR_RLS_TEST_USER_B_EMAIL BLUNDR_RLS_TEST_USER_B_PASSWORD
           do
             test -n "${!name:-}" || { echo "$name is required"; exit 1; }
           done
-      - name: Static checks
+      - run: npm run test:security
+
+  production-build:
+    needs:
+      [
+        static-and-registry,
+        unit-tests,
+        component-and-integration,
+        chess-content,
+        supabase-rls,
+      ]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+      - run: echo "Exact SHA $GITHUB_SHA"
+      - run: npm ci
+      - run: npx playwright install --with-deps
+      - run: npm run build
+      - run: npm run bundle:audit
+      - run: npm run test:e2e
+
+  release-summary:
+    if: always()
+    needs:
+      [
+        static-and-registry,
+        unit-tests,
+        component-and-integration,
+        chess-content,
+        supabase-rls,
+        production-build,
+      ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every release job
+        env:
+          RESULTS: ${{ join(needs.*.result, ',') }}
         run: |
-          npm run verify:registry
-          npm run verify:feature-profile
-          npm run verify:deep-minigame-catalog
-          npm run typecheck
-          npm run lint
-          npm run format:check
-          npm run security:audit
-          npm run dependency:audit
-      - name: Test suites
-        run: |
-          npm run test:unit
-          npm run test:component
-          npm run test:integration
-          npm run test:chess-content
-          npm run test:security
-          npm run verify:migrations
-      - name: Production build and browser checks
-        run: |
-          rm -rf .next
-          npm run build
-          npm run bundle:audit
-          npm run test:e2e
-          npm run verify:release
-      - name: Strict registry release gate
-        if: github.ref == 'refs/heads/main'
-        run: npm run verify:registry:release
+          echo "Exact SHA $GITHUB_SHA"
+          echo "Required results: $RESULTS"
+          test "$RESULTS" = "success,success,success,success,success,success"
 
   staging-golden:
     if: github.event_name == 'workflow_dispatch'
-    needs: verify
+    needs: release-summary
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: blundr-staging

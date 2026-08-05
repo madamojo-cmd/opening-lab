@@ -85,6 +85,40 @@ The missing CSV references must not be regenerated, substituted, or committed in
 
 ## Next release gate
 
-1. Run and classify the complete clean baseline gate at the cumulative release head.
+1. Validate and integrate deterministic unit sharding and the required aggregate CI job.
 2. Keep Gate 1 evidence partial until the original protected CSV files are verified.
 3. Open isolated PR-01 workstreams for registry/profiles, learning/Daily migration expansion, and Rewards migration expansion.
+
+## Verification cadence
+
+- Level 1 commit gate: `git diff --check`, typecheck, changed-file tests, and scoped lint/schema checks.
+- Level 2 internal PR gate: format/lint/typecheck plus affected unit, component, integration, migration, RLS, build, and browser gates.
+- Level 3 complete clean release gate: every command in the authoritative execution plan; CI may replace serial unit execution only when all four deterministic shards are required and pass.
+- Complete runs are scheduled at Checkpoint B after PR-04, Checkpoint C after PR-06, Checkpoint D after PR-07, and once for any source-changing exact-SHA staging repair.
+- An earlier Level 3 run is required for changes to broad authorities, including test discovery and CI sharding.
+
+### Checkpoint A baseline
+
+- Verification level: Level 3
+- Exact SHA: `0155dc9f2464ba793058f803977030d6fe9dd2c8`
+- Unit execution: serial full; 554/554 passed in 713 seconds
+- Component tests: 28/28 passed
+- Integration tests: 6/6 passed
+- Chess-content suites: passed
+- Security/RLS: passed; sandbox DNS failure rerun successfully with approved network access
+- Production build: passed; webpack compile 4.3 minutes plus TypeScript/page finalization
+- Bundle audit: passed; 139 assets scanned
+- Browser stage: 4/4 passed in 19.9 seconds after installing exact browser binaries in temporary storage
+- Full clean wall time: approximately 25 minutes including environmental remediation
+- Result: source-suite accepted; complete Gate 1 evidence remains partial because both protected CSV originals are unavailable
+- Next scheduled complete run: immediate sharding-infrastructure validation, then Checkpoint B after cumulative PR-04
+
+### Unit sharding policy
+
+- Four one-based deterministic shards use the sorted discovered unit-test path list and stable index modulo four.
+- Every shard prints its complete assigned file list and fails on empty discovery.
+- CI requires all four matrix results through `release-summary`; one shard cannot satisfy unit acceptance.
+- `npm run test:unit` remains the canonical serial diagnostic and release command.
+- First validation: 1/4 passed 139 tests in 301.2s; 2/4 passed 139 tests in 324.4s; 3/4 passed 138 tests in 208.6s; 4/4 passed 138 tests in 395.2s.
+- All four shards passed against one working SHA; their 554-file union exactly matched the successful 554-test serial baseline with empty intersections.
+- Parallel aggregate wall time was approximately 6m35s, compared with 11m53s for the serial unit baseline. The slowest shard was less than twice the fastest; no weighted manifest is warranted after one run.

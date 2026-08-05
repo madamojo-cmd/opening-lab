@@ -1,18 +1,26 @@
-import { readdir } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import { join, relative, resolve } from "node:path";
+import { relative, resolve } from "node:path";
+import { discoverUnitTests } from "./unit-test-discovery.mjs";
 
 const root = resolve(process.cwd());
-const explicitRoots = process.argv.slice(2);
-const testRoots = explicitRoots.length > 0 ? explicitRoots : ["lib", "tests"];
-const shardCount = Number.parseInt(
-  process.env.BLUNDR_TEST_SHARD_COUNT ?? "1",
-  10,
+const cliArgs = process.argv.slice(2);
+const shardArgument = cliArgs.find((argument) =>
+  argument.startsWith("--shard="),
 );
-const shardIndex = Number.parseInt(
-  process.env.BLUNDR_TEST_SHARD_INDEX ?? "0",
-  10,
+const listJson = cliArgs.includes("--list-json");
+const explicitRoots = cliArgs.filter(
+  (argument) => argument !== "--list-json" && !argument.startsWith("--shard="),
 );
+const shardMatch = shardArgument?.match(/^--shard=(\d+)\/(\d+)$/);
+if (shardArgument && !shardMatch) {
+  throw new Error("--shard must use the one-based INDEX/TOTAL form");
+}
+const shardCount = shardMatch
+  ? Number.parseInt(shardMatch[2], 10)
+  : Number.parseInt(process.env.BLUNDR_TEST_SHARD_COUNT ?? "1", 10);
+const shardIndex = shardMatch
+  ? Number.parseInt(shardMatch[1], 10) - 1
+  : Number.parseInt(process.env.BLUNDR_TEST_SHARD_INDEX ?? "0", 10);
 
 if (!Number.isInteger(shardCount) || shardCount < 1) {
   throw new Error("BLUNDR_TEST_SHARD_COUNT must be a positive integer");
@@ -25,57 +33,21 @@ if (
   throw new Error("BLUNDR_TEST_SHARD_INDEX must be within the shard count");
 }
 
-function stableShard(path) {
-  let hash = 2166136261;
-  for (const character of path) {
-    hash ^= character.charCodeAt(0);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0) % shardCount;
-}
-
-async function collect(directory) {
-  if (
-    explicitRoots.length === 0 &&
-    [
-      "tests/architecture",
-      "tests/integration",
-      "tests/security",
-      "tests/e2e",
-    ].some(
-      (prefix) => directory === prefix || directory.startsWith(`${prefix}/`),
-    )
-  ) {
-    return [];
-  }
-  const entries = await readdir(join(root, directory), { withFileTypes: true });
-  const files = [];
-  for (const entry of entries) {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...(await collect(path)));
-    else if (/\.(test|spec)\.ts$/.test(entry.name)) {
-      if (
-        explicitRoots.length === 0 &&
-        entry.name === "dailyMiniGameGeneratorDepth.test.ts"
-      )
-        continue;
-      files.push(path);
-    }
-  }
-  return files;
-}
-
-const discoveredFiles = (await Promise.all(testRoots.map(collect)))
-  .flat()
-  .sort();
+const discoveredFiles = await discoverUnitTests({ root, explicitRoots });
 const files = discoveredFiles.filter(
-  (file) => stableShard(file) === shardIndex,
+  (_, index) => index % shardCount === shardIndex,
 );
 if (files.length === 0) {
   console.error("No unit test files were discovered for this shard.");
   process.exit(1);
 }
 
+if (listJson) {
+  console.log(
+    JSON.stringify({ shardIndex: shardIndex + 1, shardCount, files }),
+  );
+  process.exit(0);
+}
 if (explicitRoots.length === 0) {
   console.log(
     "Unit runner excludes the exhaustive dailyMiniGameGeneratorDepth gate; run npm run test:mini-game-depth.",
@@ -83,9 +55,11 @@ if (explicitRoots.length === 0) {
 }
 if (shardCount > 1) {
   console.log(
-    `Unit shard ${shardIndex + 1}/${shardCount}: ${files.length}/${discoveredFiles.length} files (stable FNV partition).`,
+    `Unit shard ${shardIndex + 1}/${shardCount}: ${files.length}/${discoveredFiles.length} files (sorted index modulo).`,
   );
 }
+console.log("Assigned test files:");
+for (const file of files) console.log(`- ${file}`);
 
 const child = spawn(
   process.execPath,
