@@ -172,10 +172,31 @@ jobs:
             fi
             rm -f "$command_log"
           }
+          require_dry_run_migrations() {
+            expected_file="$1"
+            command_log="$(mktemp)"
+            actual_file="$(mktemp)"
+            if ! npx --yes supabase@2.111.0 db push --dry-run >"$command_log" 2>&1; then
+              rm -f "$command_log" "$actual_file" "$expected_file"
+              echo "Supabase migration dry-run failed without emitting target details"
+              exit 1
+            fi
+            grep -oE '[0-9]{8}([0-9]{6})?_[A-Za-z0-9._-]+\.sql' "$command_log" | sort -u >"$actual_file" || true
+            if ! cmp -s "$expected_file" "$actual_file"; then
+              rm -f "$command_log" "$actual_file" "$expected_file"
+              echo "Supabase migration dry-run did not contain the exact expected migration set"
+              exit 1
+            fi
+            expected_count="$(wc -l <"$expected_file" | tr -d ' ')"
+            rm -f "$command_log" "$actual_file" "$expected_file"
+            echo "Validated sanitized migration dry-run with $expected_count expected migrations"
+          }
           BLUNDR_PR01_PREFLIGHT_MODE=fresh BLUNDR_PR01_PREFLIGHT_PROJECT_REF="$BLUNDR_RLS_FRESH_PROJECT_REF" BLUNDR_PR01_EXPORT_API_KEYS=true npm run verify:pr01-disposable-project
           run_supabase link --project-ref "$BLUNDR_RLS_FRESH_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
           BLUNDR_RLS_TEST_PROJECT_REF="$BLUNDR_RLS_FRESH_PROJECT_REF" BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=fresh-empty npm run verify:pr01-remote-migration-history
-          run_supabase db push --dry-run
+          expected_migrations="$(mktemp)"
+          find supabase/migrations -maxdepth 1 -name '*.sql' -type f -printf '%f\n' | sort >"$expected_migrations"
+          require_dry_run_migrations "$expected_migrations"
           run_supabase db push
           BLUNDR_RLS_TEST_PROJECT_REF="$BLUNDR_RLS_FRESH_PROJECT_REF" BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=fresh-final npm run verify:pr01-remote-migration-history
       - name: Run non-skippable fresh authority matrix
@@ -241,6 +262,25 @@ jobs:
             fi
             rm -f "$command_log"
           }
+          require_dry_run_migrations() {
+            expected_file="$1"
+            command_log="$(mktemp)"
+            actual_file="$(mktemp)"
+            if ! npx --yes supabase@2.111.0 db push --dry-run >"$command_log" 2>&1; then
+              rm -f "$command_log" "$actual_file" "$expected_file"
+              echo "Supabase migration dry-run failed without emitting target details"
+              exit 1
+            fi
+            grep -oE '[0-9]{8}([0-9]{6})?_[A-Za-z0-9._-]+\.sql' "$command_log" | sort -u >"$actual_file" || true
+            if ! cmp -s "$expected_file" "$actual_file"; then
+              rm -f "$command_log" "$actual_file" "$expected_file"
+              echo "Supabase migration dry-run did not contain the exact expected migration set"
+              exit 1
+            fi
+            expected_count="$(wc -l <"$expected_file" | tr -d ' ')"
+            rm -f "$command_log" "$actual_file" "$expected_file"
+            echo "Validated sanitized migration dry-run with $expected_count expected migrations"
+          }
           BLUNDR_PR01_PREFLIGHT_MODE=upgrade BLUNDR_PR01_PREFLIGHT_PROJECT_REF="$BLUNDR_RLS_UPGRADE_PROJECT_REF" BLUNDR_PR01_EXPORT_API_KEYS=true npm run verify:pr01-disposable-project
           run_supabase link --project-ref "$BLUNDR_RLS_UPGRADE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
           BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=upgrade-initial npm run verify:pr01-remote-migration-history
@@ -260,15 +300,18 @@ jobs:
             mv "supabase/migrations/$migration" "$hidden_migrations_dir/$migration"
           done
           test "$(find supabase/migrations -maxdepth 1 -name '*.sql' -type f | wc -l | tr -d ' ')" = "21"
-          run_supabase db push --dry-run
+          expected_prior_migrations="$(mktemp)"
+          find supabase/migrations -maxdepth 1 -name '*.sql' -type f -printf '%f\n' | sort | tail -n +8 >"$expected_prior_migrations"
+          require_dry_run_migrations "$expected_prior_migrations"
           run_supabase db push
           restore_pr01_migrations
           trap - EXIT
           BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=upgrade-prior21 npm run verify:pr01-remote-migration-history
           BLUNDR_PR01_SNAPSHOT_PATH="$RUNNER_TEMP/pr01-upgrade-snapshot.json" npm run pr01:upgrade-preservation:seed
           BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=upgrade-prior21 npm run verify:pr01-remote-migration-history
-          run_supabase db push --dry-run
-          printf '%s\n' "20260805120000_blundr_learning_daily_authority_v2.sql" "20260805130000_blundr_rewards_inventory_presentations_v2.sql"
+          expected_pr01_migrations="$(mktemp)"
+          printf '%s\n' "20260805120000_blundr_learning_daily_authority_v2.sql" "20260805130000_blundr_rewards_inventory_presentations_v2.sql" >"$expected_pr01_migrations"
+          require_dry_run_migrations "$expected_pr01_migrations"
           run_supabase db push
           BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=upgrade-final npm run verify:pr01-remote-migration-history
           BLUNDR_PR01_SNAPSHOT_PATH="$RUNNER_TEMP/pr01-upgrade-snapshot.json" npm run pr01:upgrade-preservation:verify
