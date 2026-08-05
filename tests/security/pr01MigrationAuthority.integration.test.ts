@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import test from "node:test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
@@ -31,6 +33,12 @@ const rewardTables = [
   "blundr_reward_inventory_events_v2",
   "blundr_reward_presentations_v2",
 ] as const;
+const dailyTables = [
+  "blundr_daily_decks",
+  "blundr_daily_sessions",
+  "blundr_daily_attempts",
+] as const;
+const legacyRewardTables = ["blundr_completion_grants"] as const;
 const reportDomains = [
   "learning_imported_observations",
   "learning_canonical_coordinates",
@@ -402,6 +410,13 @@ async function assertRewardsAndCascade(
       .error,
     null,
   );
+  for (const table of rewardTables) {
+    const response = await userB
+      .from(table)
+      .select("user_id")
+      .eq("user_id", userAId);
+    assert.deepEqual(response.data, [], `User B must not read User A ${table}`);
+  }
   for (const [name, result] of [
     [
       "grant",
@@ -445,12 +460,137 @@ async function assertRewardsAndCascade(
   );
 }
 
+async function assertDailyOwnership(
+  service: TestClient,
+  userA: TestClient,
+  userB: TestClient,
+  userAId: string,
+  userBId: string,
+  runTag: string,
+) {
+  const deckId = `pr01-daily-deck-${runTag}`;
+  const sessionId = `pr01-daily-session-${runTag}`;
+  const attemptId = `pr01-daily-attempt-${runTag}`;
+  const deck = {
+    deck_id: deckId,
+    user_id: userAId,
+    local_date: "2026-08-05",
+    deck_fingerprint: `pr01-daily-deck-fingerprint-${runTag}`,
+    public_cards: [],
+    server_cards: [],
+    content_version: "pr01-test",
+  };
+  const session = {
+    session_id: sessionId,
+    deck_id: deckId,
+    user_id: userAId,
+    state: {},
+  };
+  const attempt = {
+    attempt_id: attemptId,
+    session_id: sessionId,
+    user_id: userAId,
+    card_fingerprint: `pr01-card-${runTag}`,
+    outcome: "incorrect",
+  };
+  assert.equal(
+    (await service.from("blundr_daily_decks").insert(deck)).error,
+    null,
+  );
+  assert.equal(
+    (await service.from("blundr_daily_sessions").insert(session)).error,
+    null,
+  );
+  assert.equal(
+    (await service.from("blundr_daily_attempts").insert(attempt)).error,
+    null,
+  );
+  assert.equal(
+    (
+      await userA
+        .from("blundr_daily_attempts")
+        .select("attempt_id")
+        .eq("attempt_id", attemptId)
+    ).data?.length,
+    1,
+  );
+  for (const table of dailyTables) {
+    const response = await userB
+      .from(table)
+      .select("user_id")
+      .eq("user_id", userAId);
+    assert.deepEqual(response.data, [], `User B must not read User A ${table}`);
+  }
+  for (const [name, response] of [
+    [
+      "deck",
+      await userB.from("blundr_daily_decks").insert({
+        ...deck,
+        deck_id: `pr01-cross-daily-deck-${runTag}`,
+      }),
+    ],
+    [
+      "session",
+      await userB.from("blundr_daily_sessions").insert({
+        ...session,
+        session_id: `pr01-cross-daily-session-${runTag}`,
+        user_id: userBId,
+      }),
+    ],
+    [
+      "attempt",
+      await userB.from("blundr_daily_attempts").insert({
+        ...attempt,
+        attempt_id: `pr01-cross-daily-attempt-${runTag}`,
+        user_id: userBId,
+      }),
+    ],
+  ] as const) {
+    assert.ok(
+      response.error,
+      `User B cannot attach a ${name} to User A Daily parent`,
+    );
+  }
+  for (const [name, response] of [
+    [
+      "session",
+      await service.from("blundr_daily_sessions").insert({
+        ...session,
+        session_id: `pr01-service-cross-daily-session-${runTag}`,
+        user_id: userBId,
+      }),
+    ],
+    [
+      "attempt",
+      await service.from("blundr_daily_attempts").insert({
+        ...attempt,
+        attempt_id: `pr01-service-cross-daily-attempt-${runTag}`,
+        user_id: userBId,
+      }),
+    ],
+  ] as const) {
+    assert.equal(
+      response.error?.code,
+      "23503",
+      `service authority must reject a User B Daily ${name} attached to User A parent by composite ownership FK`,
+    );
+  }
+}
+
 async function assertAccountDeletionCascade(
   service: TestClient,
   userAId: string,
 ) {
   assert.equal((await service.auth.admin.deleteUser(userAId)).error, null);
-  for (const table of ["blundr_learning_events", ...rewardTables]) {
+  for (const table of [
+    "blundr_learning_events",
+    "blundr_node_mastery",
+    "blundr_weakness_projection",
+    "blundr_review_states",
+    ...dailyTables,
+    ...legacyRewardTables,
+    ...rewardTables,
+  ]) {
     const response = await service
       .from(table)
       .select("*")
@@ -545,6 +685,7 @@ async function runPr01RlsMatrix(): Promise<void> {
       userBId,
       runTag,
     );
+    await assertDailyOwnership(service, userA, userB, userAId, userBId, runTag);
     await assertServiceOnlyShells(service, anonymous, userA, userB, userAId);
     await assertAccountDeletionCascade(service, userAId);
     userAId = undefined;
@@ -566,3 +707,21 @@ test(
   },
   runPr01RlsMatrix,
 );
+
+test("PR-01 keeps the v2 Daily and reward writers disabled in committed profiles", async () => {
+  for (const profileName of ["staging-3.99.json", "production-3.99.json"]) {
+    const profile = JSON.parse(
+      await readFile(
+        join(process.cwd(), "release", "feature-profiles", profileName),
+        "utf8",
+      ),
+    ) as { featureFlags?: Record<string, unknown> };
+    assert.equal(profile.featureFlags?.daily_adaptive_v2, false, profileName);
+    assert.equal(profile.featureFlags?.rewards_v2_enabled, false, profileName);
+    assert.equal(
+      profile.featureFlags?.reward_presentations_v2_enabled,
+      false,
+      profileName,
+    );
+  }
+});
