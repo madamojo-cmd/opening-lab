@@ -14,6 +14,11 @@ function walk(directory) {
   }
 }
 walk(root);
+if (files.length === 0) {
+  throw new Error(
+    "Bundle audit requires a completed production build; no .next/static assets were found.",
+  );
+}
 const violations = [];
 for (const file of files) {
   const text = readFileSync(file, "utf8");
