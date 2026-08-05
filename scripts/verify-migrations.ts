@@ -194,12 +194,24 @@ function assertPr01Contracts(migrations: MigrationSource[]): void {
       learning.match(
         /on\s+conflict\s*\(\s*migration_id\s*,\s*domain\s*\)\s*do\s+nothing/gi,
       ) ?? []
-    ).length === 4 &&
+    ).length === 5 &&
       !/on\s+conflict\s*\(\s*migration_id\s*,\s*domain\s*\)\s*do\s+update/i.test(
         learning,
       ),
     "migration-time backfill reports must preserve their original deterministic accounting with ON CONFLICT DO NOTHING.",
   );
+  for (const ownershipContract of [
+    "blundr_daily_sessions_deck_owner_fk",
+    "blundr_daily_attempts_session_owner_fk",
+  ]) {
+    assertContract(
+      new RegExp(
+        `${ownershipContract}[\\s\\S]*?foreign\\s+key[\\s\\S]*?on\\s+delete\\s+cascade[\\s\\S]*?not\\s+valid`,
+        "i",
+      ).test(learning),
+      `${ownershipContract} must reject new cross-user Daily parents without fabricating legacy repair.`,
+    );
+  }
   assertContract(
     /create\s+trigger\s+blundr_learning_daily_backfill_reports_immutable\s+before\s+update\s+or\s+delete/i.test(
       learning,

@@ -36,6 +36,7 @@ const reportDomains = [
   "learning_canonical_coordinates",
   "user_iana_time_zones",
   "daily_reservation_identity",
+  "daily_parent_ownership",
 ] as const;
 
 const rpcCases = [

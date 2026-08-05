@@ -284,6 +284,23 @@ alter table public.blundr_daily_sessions
   add column if not exists session_contract_version text not null default 'legacy-unclassified',
   add column if not exists current_step_id text;
 
+alter table public.blundr_daily_decks
+  add constraint blundr_daily_decks_id_user_unique
+  unique (deck_id, user_id);
+
+alter table public.blundr_daily_sessions
+  add constraint blundr_daily_sessions_id_user_unique
+  unique (session_id, user_id);
+
+-- Existing mismatched legacy parents remain reportable rather than blocking the
+-- expansion. PostgreSQL enforces NOT VALID foreign keys for every new row.
+alter table public.blundr_daily_sessions
+  add constraint blundr_daily_sessions_deck_owner_fk
+  foreign key (deck_id, user_id)
+  references public.blundr_daily_decks (deck_id, user_id)
+  on delete cascade
+  not valid;
+
 alter table public.blundr_daily_sessions
   drop constraint if exists blundr_daily_sessions_reservation_generation_check;
 alter table public.blundr_daily_sessions
@@ -305,6 +322,13 @@ alter table public.blundr_daily_attempts
   add column if not exists reservation_generation integer not null default 1,
   add column if not exists session_state_version integer not null default 1,
   add column if not exists learning_exposure_id text;
+
+alter table public.blundr_daily_attempts
+  add constraint blundr_daily_attempts_session_owner_fk
+  foreign key (session_id, user_id)
+  references public.blundr_daily_sessions (session_id, user_id)
+  on delete cascade
+  not valid;
 
 alter table public.blundr_daily_attempts
   drop constraint if exists blundr_daily_attempts_action_id_check;
@@ -382,6 +406,40 @@ select
   0,
   jsonb_build_object('rule', 'source=imported_game -> imported_observation; first_attempt=false')
 from public.blundr_learning_events
+on conflict (migration_id, domain) do nothing;
+
+insert into public.blundr_learning_daily_backfill_reports (
+  migration_id, domain, resolved_count, unresolved_count, details
+)
+select
+  '20260805120000_blundr_learning_daily_authority_v2',
+  'daily_parent_ownership',
+  (
+    select count(*) from public.blundr_daily_sessions session
+    join public.blundr_daily_decks deck
+      on deck.deck_id = session.deck_id and deck.user_id = session.user_id
+  ) + (
+    select count(*) from public.blundr_daily_attempts attempt
+    join public.blundr_daily_sessions session
+      on session.session_id = attempt.session_id and session.user_id = attempt.user_id
+  ),
+  (
+    select count(*) from public.blundr_daily_sessions session
+    where not exists (
+      select 1 from public.blundr_daily_decks deck
+      where deck.deck_id = session.deck_id and deck.user_id = session.user_id
+    )
+  ) + (
+    select count(*) from public.blundr_daily_attempts attempt
+    where not exists (
+      select 1 from public.blundr_daily_sessions session
+      where session.session_id = attempt.session_id and session.user_id = attempt.user_id
+    )
+  ),
+  jsonb_build_object(
+    'rule',
+    'legacy cross-user Daily parent mismatches remain unresolved; new rows enforce composite ownership'
+  )
 on conflict (migration_id, domain) do nothing;
 
 insert into public.blundr_learning_daily_backfill_reports (
