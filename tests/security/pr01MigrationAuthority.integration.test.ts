@@ -622,7 +622,11 @@ async function assertAccountDeletionCascade(
   }
 }
 
-async function assertAnonymousProtectedStateDenied(anonymous: TestClient) {
+async function assertAnonymousProtectedStateDenied(
+  service: TestClient,
+  anonymous: TestClient,
+  protectedUserId: string,
+) {
   for (const table of [
     "blundr_learning_events",
     "blundr_review_states",
@@ -637,13 +641,28 @@ async function assertAnonymousProtectedStateDenied(anonymous: TestClient) {
       read.error || read.data?.length === 0,
       `signed-out users must not read protected ${table} state`,
     );
+    const isBackfillReport = table === "blundr_learning_daily_backfill_reports";
+    const filterColumn = isBackfillReport ? "migration_id" : "user_id";
+    const filterValue = isBackfillReport
+      ? "20260805120000_blundr_learning_daily_authority_v2"
+      : protectedUserId;
     const mutation = await anonymous
       .from(table)
       .delete()
-      .eq("user_id", randomUUID());
+      .eq(filterColumn, filterValue)
+      .select("*");
     assert.ok(
-      mutation.error,
-      `signed-out users must not mutate protected ${table} state`,
+      mutation.error || mutation.data?.length === 0,
+      `signed-out ${table} mutation must error or affect zero rows`,
+    );
+    const unchanged = await service
+      .from(table)
+      .select("*", { count: "exact", head: true })
+      .eq(filterColumn, filterValue);
+    assert.equal(unchanged.error, null);
+    assert.ok(
+      (unchanged.count ?? 0) > 0,
+      `service verification must prove protected ${table} state remains`,
     );
   }
 }
@@ -859,7 +878,7 @@ async function runPr01RlsMatrix(): Promise<void> {
       userBId,
       runTag,
     );
-    await assertAnonymousProtectedStateDenied(anonymous);
+    await assertAnonymousProtectedStateDenied(service, anonymous, userAId);
     await assertServiceOnlyShells(service, anonymous, userA, userB, userAId);
     await assertAccountDeletionCascade(service, userAId);
     userAId = undefined;
