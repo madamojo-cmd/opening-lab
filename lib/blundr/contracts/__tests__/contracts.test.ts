@@ -74,6 +74,9 @@ test("shared contracts keep flags off and detect solution fields", () => {
     Object.values(FEATURE_FLAGS).every((flag) => flag === false),
     true,
   );
+  assert.equal(FEATURE_FLAGS.daily_adaptive_v2, false);
+  assert.equal(FEATURE_FLAGS.rewards_v2_enabled, false);
+  assert.equal(FEATURE_FLAGS.reward_presentations_v2_enabled, false);
   assert.equal(
     hasSolutionBearingFields({ prompt: "safe", expectedMoveUci: "e2e4" }),
     true,

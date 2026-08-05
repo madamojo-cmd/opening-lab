@@ -1,8 +1,8 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "profileId": "staging-3.99",
   "releaseId": "blundr-staging-3.99",
-  "migrationHead": "20260804130000",
+  "migrationHead": "20260805130000",
   "runtimePackageId": "blundr-opening-runtime-3.99.v2",
   "deploymentTarget": "production",
   "storageMode": "authenticated",
@@ -10,6 +10,8 @@
   "requiresRemoteMaia": true,
   "requiresWorker": true,
   "requiresTelemetry": true,
+  "failureClosed": true,
+  "deprecatedDailyCapabilities": ["daily_deep_minigames", "daily_mixed_test"],
   "featureFlags": {
     "learning_core_v2": true,
     "learning_core_v2_write": true,
@@ -30,7 +32,10 @@
     "daily_same_position_different_route": true,
     "daily_continuation_challenge": true,
     "daily_punish_the_mistake": true,
-    "daily_mixed_test": true,
-    "daily_deep_minigames": true
+    "daily_mixed_test": false,
+    "daily_deep_minigames": false,
+    "daily_adaptive_v2": false,
+    "rewards_v2_enabled": false,
+    "reward_presentations_v2_enabled": false
   }
 }

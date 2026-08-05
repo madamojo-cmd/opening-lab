@@ -19,7 +19,15 @@ test("staging profile requires the isolated production target", () => {
   assert.equal(profile.requiresRemoteMaia, true);
   assert.equal(profile.requiresWorker, true);
   assert.equal(profile.requiresTelemetry, true);
-  assert.equal(Object.values(profile.featureFlags).every(Boolean), true);
+  for (const disabledUntilAcceptedWriter of [
+    "daily_deep_minigames",
+    "daily_mixed_test",
+    "daily_adaptive_v2",
+    "rewards_v2_enabled",
+    "reward_presentations_v2_enabled",
+  ]) {
+    assert.equal(profile.featureFlags[disabledUntilAcceptedWriter], false);
+  }
 });
 
 test("canonical release routes are no-store and fail closed", () => {

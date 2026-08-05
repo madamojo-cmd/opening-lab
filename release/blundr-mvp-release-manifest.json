@@ -13,8 +13,8 @@
     "movesSha256": "203e2ce1b9875598005614a62a8bc71b0621d54275a821527e9c2b7928c7a434"
   },
   "migrations": {
-    "count": 21,
-    "head": "20260804130000"
+    "count": 23,
+    "head": "20260805130000"
   },
   "featureFlags": {
     "default": "off",
