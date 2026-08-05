@@ -643,6 +643,84 @@ async function assertAnonymousProtectedStateDenied(anonymous: TestClient) {
   }
 }
 
+async function assertLearningProjectionIsolation(
+  service: TestClient,
+  userA: TestClient,
+  userB: TestClient,
+  userAId: string,
+  userBId: string,
+  runTag: string,
+) {
+  for (const [userId, suffix] of [
+    [userAId, "a"],
+    [userBId, "b"],
+  ] as const) {
+    assert.equal(
+      (
+        await service.from("blundr_review_states").insert({
+          user_id: userId,
+          opening_id: `pr01-${runTag}`,
+          play_key: `pr01-${suffix}-${runTag}`,
+          due_at: new Date().toISOString(),
+        })
+      ).error,
+      null,
+    );
+    assert.equal(
+      (
+        await service.from("blundr_node_mastery").insert({
+          user_id: userId,
+          position_key: `pr01-${suffix}-${runTag}`,
+        })
+      ).error,
+      null,
+    );
+    assert.equal(
+      (
+        await service.from("blundr_weakness_projection").insert({
+          user_id: userId,
+          position_key: `pr01-${suffix}-${runTag}`,
+          category: "pr01-isolation",
+          explanation: "PR-01 isolation fixture",
+          recommended_daily_intervention: "none",
+        })
+      ).error,
+      null,
+    );
+  }
+  for (const [actor, otherUserId] of [
+    [userA, userBId],
+    [userB, userAId],
+  ] as const) {
+    for (const table of [
+      "blundr_learning_events",
+      "blundr_review_states",
+      "blundr_node_mastery",
+      "blundr_weakness_projection",
+    ]) {
+      const read = await actor
+        .from(table)
+        .select("user_id")
+        .eq("user_id", otherUserId);
+      assert.equal(
+        read.error,
+        null,
+        `cross-user ${table} read must be filtered`,
+      );
+      assert.deepEqual(
+        read.data,
+        [],
+        `cross-user ${table} rows must be private`,
+      );
+      const mutation = await actor
+        .from(table)
+        .update({ updated_at: new Date().toISOString() })
+        .eq("user_id", otherUserId);
+      assert.ok(mutation.error, `cross-user ${table} mutation must be denied`);
+    }
+  }
+}
+
 async function runPr01RlsMatrix(): Promise<void> {
   assert.ok(
     configured,
@@ -748,6 +826,14 @@ async function runPr01RlsMatrix(): Promise<void> {
       userBId,
       userAId,
       `${runTag}-reverse`,
+    );
+    await assertLearningProjectionIsolation(
+      service,
+      userA,
+      userB,
+      userAId,
+      userBId,
+      runTag,
     );
     await assertAnonymousProtectedStateDenied(anonymous);
     await assertServiceOnlyShells(service, anonymous, userA, userB, userAId);

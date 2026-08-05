@@ -181,7 +181,7 @@ jobs:
               echo "Supabase migration dry-run failed without emitting target details"
               exit 1
             fi
-            grep -oE '[0-9]{8}([0-9]{6})?_[A-Za-z0-9._-]+\.sql' "$command_log" | sort -u >"$actual_file" || true
+            grep -oE '[0-9]{8}([0-9]{6})?_[A-Za-z0-9._-]+\.sql' "$command_log" >"$actual_file" || true
             if ! cmp -s "$expected_file" "$actual_file"; then
               rm -f "$command_log" "$actual_file" "$expected_file"
               echo "Supabase migration dry-run did not contain the exact expected migration set"
@@ -271,7 +271,7 @@ jobs:
               echo "Supabase migration dry-run failed without emitting target details"
               exit 1
             fi
-            grep -oE '[0-9]{8}([0-9]{6})?_[A-Za-z0-9._-]+\.sql' "$command_log" | sort -u >"$actual_file" || true
+            grep -oE '[0-9]{8}([0-9]{6})?_[A-Za-z0-9._-]+\.sql' "$command_log" >"$actual_file" || true
             if ! cmp -s "$expected_file" "$actual_file"; then
               rm -f "$command_log" "$actual_file" "$expected_file"
               echo "Supabase migration dry-run did not contain the exact expected migration set"

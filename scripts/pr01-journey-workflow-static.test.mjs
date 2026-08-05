@@ -50,8 +50,9 @@ assert.equal(
 );
 assert.match(
   workflow,
-  /grep -oE '\[0-9\]\{8\}\(\[0-9\]\{6\}\)\?_[^\n]+sort -u >"\$actual_file"/,
+  /grep -oE '\[0-9\]\{8\}\(\[0-9\]\{6\}\)\?_[^\n]+>"\$actual_file"/,
 );
+assert.doesNotMatch(workflow, /command_log" \| sort/);
 assert.equal(
   (workflow.match(/cmp -s "\$expected_file" "\$actual_file"/g) ?? []).length,
   2,
