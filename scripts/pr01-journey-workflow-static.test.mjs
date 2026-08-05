@@ -48,6 +48,7 @@ assert.equal(
   (workflow.match(/require_dry_run_migrations\(\)/g) ?? []).length,
   2,
 );
+assert.equal((workflow.match(/grep -q '\"_tag\":\"Error\"'/g) ?? []).length, 2);
 assert.match(
   workflow,
   /grep -oE '\[0-9\]\{8\}\(\[0-9\]\{6\}\)\?_[^\n]+>"\$actual_file"/,

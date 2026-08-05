@@ -170,6 +170,11 @@ jobs:
               echo "Supabase migration command failed without emitting target details"
               exit 1
             fi
+            if grep -q '"_tag":"Error"' "$command_log"; then
+              rm -f "$command_log"
+              echo "Supabase migration command returned a structured failure"
+              exit 1
+            fi
             rm -f "$command_log"
           }
           require_dry_run_migrations() {
@@ -258,6 +263,11 @@ jobs:
             if ! npx --yes supabase@2.111.0 "$@" >"$command_log" 2>&1; then
               rm -f "$command_log"
               echo "Supabase migration command failed without emitting target details"
+              exit 1
+            fi
+            if grep -q '"_tag":"Error"' "$command_log"; then
+              rm -f "$command_log"
+              echo "Supabase migration command returned a structured failure"
               exit 1
             fi
             rm -f "$command_log"

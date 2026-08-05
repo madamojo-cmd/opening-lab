@@ -345,7 +345,7 @@ begin
     v_reward_trigger := 'all_rings_closed'; v_reward_mode := 'random_bonus';
   elsif v_ring_closed_after and not v_ring_closed_before
     and public.blundr_reward_random(p_user_id::text || ':' || p_local_date::text || ':' || v_ring) <
-      case when v_ring = 'daily_blundr' then 0.02 else 0.01 end then
+      (case when v_ring = 'daily_blundr' then 0.02 else 0.01 end) then
     v_reward_trigger := case v_ring
       when 'daily_tempo' then 'daily_tempo_ring_closed'
       when 'daily_battery' then 'daily_battery_ring_closed'

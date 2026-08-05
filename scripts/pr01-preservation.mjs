@@ -73,7 +73,11 @@ function requireConfiguration() {
 
 async function expectNoError(request, operation) {
   const response = await request;
-  if (response.error) failClosed(operation);
+  if (response.error) {
+    const errorCode =
+      typeof response.error.code === "string" ? response.error.code : "unknown";
+    failClosed(`${operation} (database error code ${errorCode})`);
+  }
   return response.data;
 }
 
