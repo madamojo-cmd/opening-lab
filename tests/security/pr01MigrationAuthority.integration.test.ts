@@ -617,6 +617,32 @@ async function assertAccountDeletionCascade(
   }
 }
 
+async function assertAnonymousProtectedStateDenied(anonymous: TestClient) {
+  for (const table of [
+    "blundr_learning_events",
+    "blundr_review_states",
+    "blundr_node_mastery",
+    "blundr_weakness_projection",
+    ...dailyTables,
+    ...rewardTables,
+    "blundr_learning_daily_backfill_reports",
+  ]) {
+    const read = await anonymous.from(table).select("*").limit(1);
+    assert.ok(
+      read.error || read.data?.length === 0,
+      `signed-out users must not read protected ${table} state`,
+    );
+    const mutation = await anonymous
+      .from(table)
+      .delete()
+      .eq("user_id", randomUUID());
+    assert.ok(
+      mutation.error,
+      `signed-out users must not mutate protected ${table} state`,
+    );
+  }
+}
+
 async function runPr01RlsMatrix(): Promise<void> {
   assert.ok(
     configured,
@@ -699,6 +725,31 @@ async function runPr01RlsMatrix(): Promise<void> {
       runTag,
     );
     await assertDailyOwnership(service, userA, userB, userAId, userBId, runTag);
+    await assertFirstAttemptSpoofDenied(
+      service,
+      userB,
+      userA,
+      userBId,
+      `${runTag}-reverse`,
+    );
+    await assertRewardsAndCascade(
+      service,
+      anonymous,
+      userB,
+      userA,
+      userBId,
+      userAId,
+      `${runTag}-reverse`,
+    );
+    await assertDailyOwnership(
+      service,
+      userB,
+      userA,
+      userBId,
+      userAId,
+      `${runTag}-reverse`,
+    );
+    await assertAnonymousProtectedStateDenied(anonymous);
     await assertServiceOnlyShells(service, anonymous, userA, userB, userAId);
     await assertAccountDeletionCascade(service, userAId);
     userAId = undefined;
