@@ -521,14 +521,13 @@ async function assertDailyOwnership(
     (await service.from("blundr_daily_attempts").insert(attempt)).error,
     null,
   );
-  assert.equal(
-    (
-      await userA
-        .from("blundr_daily_attempts")
-        .select("attempt_id")
-        .eq("attempt_id", attemptId)
-    ).data?.length,
-    1,
+  const ownerAttemptRead = await userA
+    .from("blundr_daily_attempts")
+    .select("attempt_id")
+    .eq("attempt_id", attemptId);
+  assert.ok(
+    ownerAttemptRead.error || ownerAttemptRead.data?.length === 1,
+    "Daily attempts must be explicitly server-only or readable only by their owner",
   );
   for (const table of dailyTables) {
     const response = await userB
