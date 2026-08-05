@@ -126,7 +126,12 @@ jobs:
     needs: source-identity
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment: blundr-disposable-rls
     env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      BLUNDR_RLS_TEST_PROJECT_REF: ${{ secrets.BLUNDR_RLS_TEST_PROJECT_REF }}
+      BLUNDR_RLS_TEST_ENVIRONMENT_ROLE: ${{ secrets.BLUNDR_RLS_TEST_ENVIRONMENT_ROLE }}
       BLUNDR_RLS_TEST_URL: ${{ secrets.BLUNDR_RLS_TEST_URL }}
       BLUNDR_RLS_TEST_ANON_KEY: ${{ secrets.BLUNDR_RLS_TEST_ANON_KEY }}
       BLUNDR_RLS_TEST_SERVICE_ROLE_KEY: ${{ secrets.BLUNDR_RLS_TEST_SERVICE_ROLE_KEY }}
@@ -140,16 +145,44 @@ jobs:
         with:
           node-version: 24.14.0
           cache: npm
-      - run: echo "Exact SHA $GITHUB_SHA"
+      - name: Report checked-out exact SHA
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "Exact SHA $(git rev-parse HEAD)"
       - run: npm ci
       - name: Require disposable RLS test configuration
         run: |
           set -eu
-          for name in BLUNDR_RLS_TEST_URL BLUNDR_RLS_TEST_ANON_KEY BLUNDR_RLS_TEST_SERVICE_ROLE_KEY BLUNDR_RLS_TEST_USER_A_EMAIL BLUNDR_RLS_TEST_USER_A_PASSWORD BLUNDR_RLS_TEST_USER_B_EMAIL BLUNDR_RLS_TEST_USER_B_PASSWORD
+          for name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD BLUNDR_RLS_TEST_PROJECT_REF BLUNDR_RLS_TEST_ENVIRONMENT_ROLE BLUNDR_RLS_TEST_URL BLUNDR_RLS_TEST_ANON_KEY BLUNDR_RLS_TEST_SERVICE_ROLE_KEY BLUNDR_RLS_TEST_USER_A_EMAIL BLUNDR_RLS_TEST_USER_A_PASSWORD BLUNDR_RLS_TEST_USER_B_EMAIL BLUNDR_RLS_TEST_USER_B_PASSWORD
           do
             test -n "${!name:-}" || { echo "$name is required"; exit 1; }
           done
-      - run: npm run test:security
+          test "$BLUNDR_RLS_TEST_ENVIRONMENT_ROLE" = "disposable" || {
+            echo "Remote RLS target must have the disposable environment role"
+            exit 1
+          }
+      - name: Apply PR-01 migrations only to the disposable target
+        run: |
+          set -eu
+          run_supabase() {
+            command_log="$(mktemp)"
+            if ! npx --yes supabase@2.111.0 "$@" >"$command_log" 2>&1; then
+              rm -f "$command_log"
+              echo "Supabase migration command failed without emitting target details"
+              exit 1
+            fi
+            rm -f "$command_log"
+          }
+          run_supabase link --project-ref "$BLUNDR_RLS_TEST_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+          BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=pre-push npm run verify:pr01-remote-migration-history
+          run_supabase db push --dry-run
+          echo "20260805120000_blundr_learning_daily_authority_v2.sql"
+          echo "20260805130000_blundr_rewards_inventory_presentations_v2.sql"
+          run_supabase db push
+          BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=post-push npm run verify:pr01-remote-migration-history
+      - name: Run non-skippable remote authority matrix
+        run: node --preserve-symlinks --import tsx tests/security/pr01MigrationAuthority.integration.test.ts
 
   production-build:
     needs:
