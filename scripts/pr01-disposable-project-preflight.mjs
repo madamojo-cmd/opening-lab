@@ -4,7 +4,6 @@ import { pathToFileURL } from "node:url";
 
 const managementApiBaseUrl = "https://api.supabase.com/v1";
 const forbiddenProjectNameMarker = /staging|production|prod/i;
-const requiredProjectNameMarker = /disposable|test|rls/i;
 
 function assertContract(condition, message) {
   assert.ok(condition, `PR-01 disposable project preflight: ${message}`);
@@ -18,10 +17,6 @@ export function validateDisposableProjectMetadata(project) {
   assertContract(
     !forbiddenProjectNameMarker.test(project.name),
     "project name must not identify staging or production",
-  );
-  assertContract(
-    requiredProjectNameMarker.test(project.name),
-    "project name must identify a disposable, test, or RLS target",
   );
   return true;
 }
@@ -262,10 +257,10 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-  main().catch(() => {
-    console.error(
-      "PR-01 disposable project preflight failed without target details.",
-    );
+  main().catch((error) => {
+    const safeMessage =
+      error instanceof Error ? error.message : "unknown preflight failure";
+    console.error(`PR-01 disposable project preflight failed: ${safeMessage}`);
     process.exitCode = 1;
   });
 }

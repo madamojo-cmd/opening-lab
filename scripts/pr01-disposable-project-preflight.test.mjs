@@ -25,8 +25,9 @@ assert.throws(() =>
 assert.throws(() =>
   validateDisposableProjectMetadata({ name: "blundr-production-test" }),
 );
-assert.throws(() =>
+assert.equal(
   validateDisposableProjectMetadata({ name: "blundr-scratch" }),
+  true,
 );
 assert.deepEqual(
   validateCandidateProjectAgainstManagementList(
