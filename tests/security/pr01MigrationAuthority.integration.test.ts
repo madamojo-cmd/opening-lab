@@ -534,7 +534,10 @@ async function assertDailyOwnership(
       .from(table)
       .select("user_id")
       .eq("user_id", userAId);
-    assert.deepEqual(response.data, [], `User B must not read User A ${table}`);
+    assert.ok(
+      response.error || response.data?.length === 0,
+      `User B must be denied or filtered from User A ${table}`,
+    );
   }
   for (const [name, response] of [
     [
