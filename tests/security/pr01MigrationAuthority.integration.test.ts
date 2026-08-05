@@ -176,10 +176,9 @@ async function runPr01RlsMatrix(): Promise<void> {
     },
   );
   if (!(await hasPr01Schema(service))) {
-    console.log(
-      "[security:pr01-rls] skipped: disposable RLS database has not applied PR-01 migrations.",
+    assert.fail(
+      "Disposable RLS database must apply both PR-01 migrations before this gate can pass.",
     );
-    return;
   }
 
   const runTag = randomUUID().slice(0, 8);
@@ -308,12 +307,12 @@ async function runPr01RlsMatrix(): Promise<void> {
   }
 }
 
-test("PR-01 RLS keeps v2 tables private and RPC shells service-only", async () => {
-  if (!configured) {
-    console.log(
-      "[security:pr01-rls] skipped: BLUNDR_RLS_TEST_* disposable credentials are not configured.",
-    );
-    return;
-  }
-  await runPr01RlsMatrix();
-});
+test(
+  "PR-01 RLS keeps v2 tables private and RPC shells service-only",
+  {
+    skip:
+      !configured &&
+      "BLUNDR_RLS_TEST_* disposable credentials are not configured.",
+  },
+  runPr01RlsMatrix,
+);
