@@ -712,9 +712,13 @@ async function assertLearningProjectionIsolation(
         [],
         `cross-user ${table} rows must be private`,
       );
+      const validMutation =
+        table === "blundr_learning_events"
+          ? { taxonomy: "opening_recall" }
+          : { updated_at: new Date().toISOString() };
       const mutation = await actor
         .from(table)
-        .update({ updated_at: new Date().toISOString() })
+        .update(validMutation)
         .eq("user_id", otherUserId);
       assert.ok(mutation.error, `cross-user ${table} mutation must be denied`);
     }
