@@ -122,19 +122,18 @@ jobs:
       - run: npm ci
       - run: npm run test:chess-content
 
-  supabase-rls:
+  supabase-rls-fresh:
     needs: source-identity
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: blundr-disposable-rls
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      BLUNDR_RLS_FRESH_PROJECT_REF: ${{ secrets.BLUNDR_RLS_FRESH_PROJECT_REF }}
+      BLUNDR_RLS_UPGRADE_PROJECT_REF: ${{ secrets.BLUNDR_RLS_UPGRADE_PROJECT_REF }}
       BLUNDR_RLS_TEST_PROJECT_REF: ${{ secrets.BLUNDR_RLS_TEST_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       BLUNDR_RLS_TEST_ENVIRONMENT_ROLE: ${{ secrets.BLUNDR_RLS_TEST_ENVIRONMENT_ROLE }}
-      BLUNDR_RLS_TEST_URL: ${{ secrets.BLUNDR_RLS_TEST_URL }}
-      BLUNDR_RLS_TEST_ANON_KEY: ${{ secrets.BLUNDR_RLS_TEST_ANON_KEY }}
-      BLUNDR_RLS_TEST_SERVICE_ROLE_KEY: ${{ secrets.BLUNDR_RLS_TEST_SERVICE_ROLE_KEY }}
       BLUNDR_RLS_TEST_USER_A_EMAIL: ${{ secrets.BLUNDR_RLS_TEST_USER_A_EMAIL }}
       BLUNDR_RLS_TEST_USER_A_PASSWORD: ${{ secrets.BLUNDR_RLS_TEST_USER_A_PASSWORD }}
       BLUNDR_RLS_TEST_USER_B_EMAIL: ${{ secrets.BLUNDR_RLS_TEST_USER_B_EMAIL }}
@@ -145,16 +144,15 @@ jobs:
         with:
           node-version: 24.14.0
           cache: npm
-      - name: Report checked-out exact SHA
+      - name: Assert exact immutable checkout
         run: |
           set -eu
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          echo "Exact SHA $(git rev-parse HEAD)"
       - run: npm ci
-      - name: Require disposable RLS test configuration
+      - name: Require fresh disposable migration credentials
         run: |
           set -eu
-          for name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD BLUNDR_RLS_TEST_PROJECT_REF BLUNDR_RLS_TEST_ENVIRONMENT_ROLE BLUNDR_RLS_TEST_URL BLUNDR_RLS_TEST_ANON_KEY BLUNDR_RLS_TEST_SERVICE_ROLE_KEY BLUNDR_RLS_TEST_USER_A_EMAIL BLUNDR_RLS_TEST_USER_A_PASSWORD BLUNDR_RLS_TEST_USER_B_EMAIL BLUNDR_RLS_TEST_USER_B_PASSWORD
+          for name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD BLUNDR_RLS_FRESH_PROJECT_REF BLUNDR_RLS_UPGRADE_PROJECT_REF BLUNDR_RLS_TEST_PROJECT_REF BLUNDR_RLS_TEST_ENVIRONMENT_ROLE BLUNDR_RLS_TEST_USER_A_EMAIL BLUNDR_RLS_TEST_USER_A_PASSWORD BLUNDR_RLS_TEST_USER_B_EMAIL BLUNDR_RLS_TEST_USER_B_PASSWORD
           do
             test -n "${!name:-}" || { echo "$name is required"; exit 1; }
           done
@@ -162,7 +160,7 @@ jobs:
             echo "Remote RLS target must have the disposable environment role"
             exit 1
           }
-      - name: Apply PR-01 migrations only to the disposable target
+      - name: Journey A preflight and fresh zero-to-23 migration
         run: |
           set -eu
           run_supabase() {
@@ -174,15 +172,134 @@ jobs:
             fi
             rm -f "$command_log"
           }
-          run_supabase link --project-ref "$BLUNDR_RLS_TEST_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
-          BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=pre-push npm run verify:pr01-remote-migration-history
+          BLUNDR_PR01_PREFLIGHT_MODE=fresh BLUNDR_PR01_PREFLIGHT_PROJECT_REF="$BLUNDR_RLS_FRESH_PROJECT_REF" BLUNDR_PR01_EXPORT_API_KEYS=true npm run verify:pr01-disposable-project
+          run_supabase link --project-ref "$BLUNDR_RLS_FRESH_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+          BLUNDR_RLS_TEST_PROJECT_REF="$BLUNDR_RLS_FRESH_PROJECT_REF" BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=fresh-empty npm run verify:pr01-remote-migration-history
           run_supabase db push --dry-run
-          echo "20260805120000_blundr_learning_daily_authority_v2.sql"
-          echo "20260805130000_blundr_rewards_inventory_presentations_v2.sql"
           run_supabase db push
-          BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=post-push npm run verify:pr01-remote-migration-history
-      - name: Run non-skippable remote authority matrix
-        run: node --preserve-symlinks --import tsx tests/security/pr01MigrationAuthority.integration.test.ts
+          BLUNDR_RLS_TEST_PROJECT_REF="$BLUNDR_RLS_FRESH_PROJECT_REF" BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=fresh-final npm run verify:pr01-remote-migration-history
+      - name: Run non-skippable fresh authority matrix
+        run: |
+          set -eu
+          for name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD BLUNDR_RLS_TEST_ENVIRONMENT_ROLE BLUNDR_RLS_TEST_URL BLUNDR_RLS_TEST_ANON_KEY BLUNDR_RLS_TEST_SERVICE_ROLE_KEY BLUNDR_RLS_TEST_USER_A_EMAIL BLUNDR_RLS_TEST_USER_A_PASSWORD BLUNDR_RLS_TEST_USER_B_EMAIL BLUNDR_RLS_TEST_USER_B_PASSWORD
+          do
+            test -n "${!name:-}" || { echo "$name is required"; exit 1; }
+          done
+          BLUNDR_RLS_TEST_PROJECT_REF="$BLUNDR_RLS_FRESH_PROJECT_REF" node --preserve-symlinks --import tsx tests/security/pr01MigrationAuthority.integration.test.ts
+
+  supabase-rls-upgrade:
+    needs: source-identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: blundr-disposable-rls
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      BLUNDR_RLS_FRESH_PROJECT_REF: ${{ secrets.BLUNDR_RLS_FRESH_PROJECT_REF }}
+      BLUNDR_RLS_UPGRADE_PROJECT_REF: ${{ secrets.BLUNDR_RLS_UPGRADE_PROJECT_REF }}
+      BLUNDR_RLS_TEST_PROJECT_REF: ${{ secrets.BLUNDR_RLS_TEST_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      BLUNDR_RLS_TEST_ENVIRONMENT_ROLE: ${{ secrets.BLUNDR_RLS_TEST_ENVIRONMENT_ROLE }}
+      BLUNDR_RLS_TEST_USER_A_EMAIL: ${{ secrets.BLUNDR_RLS_TEST_USER_A_EMAIL }}
+      BLUNDR_RLS_TEST_USER_A_PASSWORD: ${{ secrets.BLUNDR_RLS_TEST_USER_A_PASSWORD }}
+      BLUNDR_RLS_TEST_USER_B_EMAIL: ${{ secrets.BLUNDR_RLS_TEST_USER_B_EMAIL }}
+      BLUNDR_RLS_TEST_USER_B_PASSWORD: ${{ secrets.BLUNDR_RLS_TEST_USER_B_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+      - name: Assert exact immutable checkout
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - run: npm ci
+      - name: Require upgrade disposable migration and authority credentials
+        run: |
+          set -eu
+          for name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD BLUNDR_RLS_FRESH_PROJECT_REF BLUNDR_RLS_UPGRADE_PROJECT_REF BLUNDR_RLS_TEST_PROJECT_REF BLUNDR_RLS_TEST_ENVIRONMENT_ROLE BLUNDR_RLS_TEST_USER_A_EMAIL BLUNDR_RLS_TEST_USER_A_PASSWORD BLUNDR_RLS_TEST_USER_B_EMAIL BLUNDR_RLS_TEST_USER_B_PASSWORD
+          do
+            test -n "${!name:-}" || { echo "$name is required"; exit 1; }
+          done
+          test "$BLUNDR_RLS_TEST_ENVIRONMENT_ROLE" = "disposable" || {
+            echo "Remote RLS target must have the disposable environment role"
+            exit 1
+          }
+          test "$BLUNDR_RLS_TEST_PROJECT_REF" = "$BLUNDR_RLS_UPGRADE_PROJECT_REF" || {
+            echo "The RLS authority target must be the upgrade migration target"
+            exit 1
+          }
+      - name: Journey B preflight and controlled seven-to-23 upgrade
+        run: |
+          set -eu
+          run_supabase() {
+            command_log="$(mktemp)"
+            if ! npx --yes supabase@2.111.0 "$@" >"$command_log" 2>&1; then
+              rm -f "$command_log"
+              echo "Supabase migration command failed without emitting target details"
+              exit 1
+            fi
+            rm -f "$command_log"
+          }
+          BLUNDR_PR01_PREFLIGHT_MODE=upgrade BLUNDR_PR01_PREFLIGHT_PROJECT_REF="$BLUNDR_RLS_UPGRADE_PROJECT_REF" BLUNDR_PR01_EXPORT_API_KEYS=true npm run verify:pr01-disposable-project
+          run_supabase link --project-ref "$BLUNDR_RLS_UPGRADE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+          BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=upgrade-initial npm run verify:pr01-remote-migration-history
+          hidden_migrations_dir="$(mktemp -d)"
+          restore_pr01_migrations() {
+            for migration in 20260805120000_blundr_learning_daily_authority_v2.sql 20260805130000_blundr_rewards_inventory_presentations_v2.sql
+            do
+              if [ -f "$hidden_migrations_dir/$migration" ]; then
+                mv "$hidden_migrations_dir/$migration" "supabase/migrations/$migration"
+              fi
+            done
+            rmdir "$hidden_migrations_dir" 2>/dev/null || true
+          }
+          trap restore_pr01_migrations EXIT
+          for migration in 20260805120000_blundr_learning_daily_authority_v2.sql 20260805130000_blundr_rewards_inventory_presentations_v2.sql
+          do
+            mv "supabase/migrations/$migration" "$hidden_migrations_dir/$migration"
+          done
+          test "$(find supabase/migrations -maxdepth 1 -name '*.sql' -type f | wc -l | tr -d ' ')" = "21"
+          run_supabase db push --dry-run
+          run_supabase db push
+          restore_pr01_migrations
+          trap - EXIT
+          BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=upgrade-prior21 npm run verify:pr01-remote-migration-history
+          BLUNDR_PR01_SNAPSHOT_PATH="$RUNNER_TEMP/pr01-upgrade-snapshot.json" npm run pr01:upgrade-preservation:seed
+          BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=upgrade-prior21 npm run verify:pr01-remote-migration-history
+          run_supabase db push --dry-run
+          printf '%s\n' "20260805120000_blundr_learning_daily_authority_v2.sql" "20260805130000_blundr_rewards_inventory_presentations_v2.sql"
+          run_supabase db push
+          BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=upgrade-final npm run verify:pr01-remote-migration-history
+          BLUNDR_PR01_SNAPSHOT_PATH="$RUNNER_TEMP/pr01-upgrade-snapshot.json" npm run pr01:upgrade-preservation:verify
+      - name: Run non-skippable upgraded authority matrix
+        run: |
+          set -eu
+          for name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD BLUNDR_RLS_TEST_PROJECT_REF BLUNDR_RLS_TEST_ENVIRONMENT_ROLE BLUNDR_RLS_TEST_URL BLUNDR_RLS_TEST_ANON_KEY BLUNDR_RLS_TEST_SERVICE_ROLE_KEY BLUNDR_RLS_TEST_USER_A_EMAIL BLUNDR_RLS_TEST_USER_A_PASSWORD BLUNDR_RLS_TEST_USER_B_EMAIL BLUNDR_RLS_TEST_USER_B_PASSWORD
+          do
+            test -n "${!name:-}" || { echo "$name is required"; exit 1; }
+          done
+          node --preserve-symlinks --import tsx tests/security/pr01MigrationAuthority.integration.test.ts
+      - name: Always clean scoped upgrade preservation snapshot
+        if: always()
+        env:
+          BLUNDR_PR01_SNAPSHOT_PATH: ${{ runner.temp }}/pr01-upgrade-snapshot.json
+          BLUNDR_PR01_PRIMARY_FAILURE: ${{ job.status == 'failure' }}
+        run: |
+          set -u
+          if [ ! -f "$BLUNDR_PR01_SNAPSHOT_PATH" ]; then
+            exit 0
+          fi
+          cleanup_status=0
+          npm run pr01:upgrade-preservation:cleanup || cleanup_status=$?
+          if [ "$cleanup_status" -eq 0 ]; then
+            exit 0
+          fi
+          echo "Scoped preservation cleanup failed without target details"
+          if [ "$BLUNDR_PR01_PRIMARY_FAILURE" = "true" ]; then
+            exit 0
+          fi
+          exit "$cleanup_status"
 
   production-build:
     needs:
@@ -191,7 +308,8 @@ jobs:
         unit-tests,
         component-and-integration,
         chess-content,
-        supabase-rls,
+        supabase-rls-fresh,
+        supabase-rls-upgrade,
       ]
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -216,7 +334,8 @@ jobs:
         unit-tests,
         component-and-integration,
         chess-content,
-        supabase-rls,
+        supabase-rls-fresh,
+        supabase-rls-upgrade,
         production-build,
       ]
     runs-on: ubuntu-latest
@@ -227,7 +346,7 @@ jobs:
         run: |
           echo "Exact SHA $GITHUB_SHA"
           echo "Required results: $RESULTS"
-          test "$RESULTS" = "success,success,success,success,success,success"
+          test "$RESULTS" = "success,success,success,success,success,success,success"
 
   staging-golden:
     if: github.event_name == 'workflow_dispatch'

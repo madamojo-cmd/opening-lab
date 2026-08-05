@@ -6,11 +6,23 @@ import { promisify } from "node:util";
 const execFile = promisify(execFileCallback);
 const supabaseVersion = "2.111.0";
 const migrationHistoryModes = {
-  "pre-push": {
+  "fresh-empty": {
+    expectedMigrationCount: 0,
+    expectedHead: null,
+  },
+  "fresh-final": {
+    expectedMigrationCount: 23,
+    expectedHead: "20260805130000",
+  },
+  "upgrade-initial": {
+    expectedMigrationCount: 7,
+    expectedHead: "20260715",
+  },
+  "upgrade-prior21": {
     expectedMigrationCount: 21,
     expectedHead: "20260804130000",
   },
-  "post-push": {
+  "upgrade-final": {
     expectedMigrationCount: 23,
     expectedHead: "20260805130000",
   },
@@ -60,7 +72,7 @@ assertContract(
 );
 assertContract(
   expectation,
-  "BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE must be pre-push or post-push",
+  "BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE must select a defined fresh or upgrade phase",
 );
 
 const localFiles = (await readdir("supabase/migrations"))
@@ -78,7 +90,7 @@ const expectedVersions = localVersions.slice(
   0,
   expectation.expectedMigrationCount,
 );
-assert.equal(expectedVersions.at(-1), expectation.expectedHead);
+assert.equal(expectedVersions.at(-1) ?? null, expectation.expectedHead);
 
 let stdout;
 try {
@@ -112,7 +124,7 @@ try {
 const remoteVersions = collectRemoteVersions(parsed).sort();
 assert.equal(remoteVersions.length, expectation.expectedMigrationCount);
 assert.deepEqual(remoteVersions, [...expectedVersions].sort());
-assert.equal(remoteVersions.at(-1), expectation.expectedHead);
+assert.equal(remoteVersions.at(-1) ?? null, expectation.expectedHead);
 console.log(
-  `Verified disposable remote migration history (${mode}): ${expectation.expectedMigrationCount} migrations through ${expectation.expectedHead}.`,
+  `Verified disposable remote migration history (${mode}): ${expectation.expectedMigrationCount} migrations${expectation.expectedHead ? ` through ${expectation.expectedHead}` : ""}.`,
 );
