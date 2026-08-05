@@ -5,10 +5,11 @@ Last updated: 2026-08-05 UTC
 ## Release identity
 
 - Accepted baseline SHA: `3944da6472d0439b2087ce1e4648ffa6ea69f85e`
-- Current cumulative release SHA: `3944da6472d0439b2087ce1e4648ffa6ea69f85e`
+- Current accepted cumulative release SHA: `c7d4e9e091daecfb19e9933af174bcc6e73a5a7e`
+- Active PR-01 integration head before this record update: `d92ccc4e`
 - Release branch: `release/blundr-production-3.99`
-- Accepted PR: PR #2, PR-00 Restricted Trainer authority
-- Active implementation PRs: none
+- Accepted PRs: PR #2, PR-00 Restricted Trainer authority; PR #3, deterministic release verification sharding
+- Active implementation PR: PR-01 contracts, flags, additive migrations, RPC shells, and verification hardening
 - Rollback tag: `blundr-production-3.99-rollback-pr00`
 - Rollback target: `da959d21aad06c1958c096b8dfef45217bbe26de`
 
@@ -16,17 +17,17 @@ Last updated: 2026-08-05 UTC
 
 - Lead release worktree: `/workspaces/opening-lab/.worktrees/blundr-production-3.99`
 - Shared checkout `/workspaces/opening-lab` is dirty on an unrelated branch and is not authorized for release mutations.
-- No implementation subagent worktrees are active.
+- PR-01 worktrees: `/tmp/blundr-pr01-registry`, `/tmp/blundr-pr01-learning-daily`, `/tmp/blundr-pr01-rewards`, `/tmp/blundr-pr01-tests`, and `/tmp/blundr-pr01-review`.
 
 ## Database and feature controls
 
-- Migration head: `20260804130000_blundr_server_authoritative_rewards.sql`
-- Migration count: 21
-- New migrations applied: none
-- Feature-profile state: existing staging profile only; PR-01 production/failure-closed profiles pending
-- `BLUNDR_FEATURE_DAILY_ADAPTIVE_V2`: not implemented; disabled
-- `BLUNDR_REWARDS_V2_ENABLED`: not implemented; disabled
-- `NEXT_PUBLIC_BLUNDR_REWARD_PRESENTATIONS_V2_ENABLED`: not implemented; disabled
+- Migration head: `20260805130000_blundr_rewards_inventory_presentations_v2.sql`
+- Migration count: 23
+- New migrations applied: none; clean apply and prior-head upgrade remain Level 2 gates
+- Feature-profile state: staging and production schema-v2 profiles committed; both failure-closed and all three new controls disabled
+- `BLUNDR_FEATURE_DAILY_ADAPTIVE_V2`: contract implemented; disabled
+- `BLUNDR_REWARDS_V2_ENABLED`: contract implemented; disabled
+- `NEXT_PUBLIC_BLUNDR_REWARD_PRESENTATIONS_V2_ENABLED`: contract implemented; disabled
 
 ## Protected release state
 
@@ -44,6 +45,11 @@ The missing CSV references must not be regenerated, substituted, or committed in
 
 ## Accepted verification
 
+- PR #3 exact-head workflow: `31034501639`
+- Accepted sharding infrastructure SHA: `c7d4e9e091daecfb19e9933af174bcc6e73a5a7e`
+- Required jobs: source identity, static/registry, unit shards 1-4, component/integration, chess content, disposable RLS, production build/browser, and release summary all passed
+- Staging golden: skipped by design; not staging acceptance
+
 - GitHub workflow: `31028424138`
 - Exact workflow head: `3944da6472d0439b2087ce1e4648ffa6ea69f85e`
 - Static checks: passed
@@ -57,9 +63,9 @@ The missing CSV references must not be regenerated, substituted, or committed in
 
 ## Known preexisting gaps
 
-- Current migration verification is static and does not prove clean apply, prior-head upgrade, deterministic backfill, or the full authority/RLS matrix.
+- Strengthened migration verification remains static and does not prove clean apply or prior-head upgrade; the new live PR-01 matrix has not run against a database with both new migrations applied.
 - Current bundle audit does not enforce numeric route or JavaScript budgets.
-- No committed production feature profile exists.
+- Numeric route and JavaScript bundle budgets remain pending release-infrastructure hardening.
 - Exact-SHA staging J01-J24 evidence does not exist.
 - Current automatic Vercel contexts are Preview evidence only.
 
@@ -85,9 +91,9 @@ The missing CSV references must not be regenerated, substituted, or committed in
 
 ## Next release gate
 
-1. Validate and integrate deterministic unit sharding and the required aggregate CI job.
+1. Finish PR-01 Level 2 clean-apply, upgrade-path, RLS/privilege, flags-off compatibility, and focused verification.
 2. Keep Gate 1 evidence partial until the original protected CSV files are verified.
-3. Open isolated PR-01 workstreams for registry/profiles, learning/Daily migration expansion, and Rewards migration expansion.
+3. Accept PR-01 only after independent review and exact cumulative test evidence, then open PR-02/PR-03 domain implementations.
 
 ## Verification cadence
 
@@ -111,7 +117,7 @@ The missing CSV references must not be regenerated, substituted, or committed in
 - Browser stage: 4/4 passed in 19.9 seconds after installing exact browser binaries in temporary storage
 - Full clean wall time: approximately 25 minutes including environmental remediation
 - Result: source-suite accepted; complete Gate 1 evidence remains partial because both protected CSV originals are unavailable
-- Next scheduled complete run: immediate sharding-infrastructure validation, then Checkpoint B after cumulative PR-04
+- Next scheduled complete run: Checkpoint B after cumulative PR-04
 
 ### Unit sharding policy
 
@@ -122,3 +128,4 @@ The missing CSV references must not be regenerated, substituted, or committed in
 - First validation: 1/4 passed 139 tests in 301.2s; 2/4 passed 139 tests in 324.4s; 3/4 passed 138 tests in 208.6s; 4/4 passed 138 tests in 395.2s.
 - All four shards passed against one working SHA; their 554-file union exactly matched the successful 554-test serial baseline with empty intersections.
 - Parallel aggregate wall time was approximately 6m35s, compared with 11m53s for the serial unit baseline. The slowest shard was less than twice the fastest; no weighted manifest is warranted after one run.
+- PR #3 exact-head CI repeated all four shards and the required aggregate release summary successfully. Sharding optimization is closed for this release; no weighting or speed experiments are scheduled.
