@@ -702,25 +702,40 @@ async function assertLearningProjectionIsolation(
         .from(table)
         .select("user_id")
         .eq("user_id", otherUserId);
-      assert.equal(
-        read.error,
-        null,
-        `cross-user ${table} read must be filtered`,
+      assert.ok(
+        read.error || read.data?.length === 0,
+        `cross-user ${table} rows must be denied or filtered`,
       );
-      assert.deepEqual(
-        read.data,
-        [],
-        `cross-user ${table} rows must be private`,
-      );
+      const mutationMarker = "2099-01-01T00:00:00.000Z";
       const validMutation =
         table === "blundr_learning_events"
-          ? { taxonomy: "opening_recall" }
-          : { updated_at: new Date().toISOString() };
+          ? { taxonomy: "cross_user_spoof" }
+          : { updated_at: mutationMarker };
       const mutation = await actor
         .from(table)
         .update(validMutation)
-        .eq("user_id", otherUserId);
-      assert.ok(mutation.error, `cross-user ${table} mutation must be denied`);
+        .eq("user_id", otherUserId)
+        .select("user_id");
+      assert.ok(
+        mutation.error || mutation.data?.length === 0,
+        `cross-user ${table} mutation must error or affect zero rows`,
+      );
+      const unchanged = await service
+        .from(table)
+        .select("user_id")
+        .eq("user_id", otherUserId)
+        .eq(
+          table === "blundr_learning_events" ? "taxonomy" : "updated_at",
+          table === "blundr_learning_events"
+            ? "cross_user_spoof"
+            : mutationMarker,
+        );
+      assert.equal(unchanged.error, null);
+      assert.deepEqual(
+        unchanged.data,
+        [],
+        `service verification must prove cross-user ${table} remained unchanged`,
+      );
     }
   }
 }
