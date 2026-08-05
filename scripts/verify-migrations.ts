@@ -213,13 +213,13 @@ function assertPr01Contracts(migrations: MigrationSource[]): void {
     );
   }
   assertContract(
-    /create\s+trigger\s+blundr_learning_daily_backfill_reports_immutable\s+before\s+update\s+or\s+delete/i.test(
+    /create\s+trigger\s+blundr_learning_daily_backfill_reports_immutable\s+before\s+insert\s+or\s+update\s+or\s+delete/i.test(
       learning,
     ) &&
       /blundr_learning_daily_backfill_reports rows are immutable/i.test(
         learning,
       ),
-    "migration-time backfill reports must reject service-authority update and delete mutations.",
+    "migration-time backfill reports must reject service-authority insert, update, and delete mutations.",
   );
   assertContract(
     /source\s*=\s*(?:'imported_game'|imported_game)\s*->\s*imported_observation;\s*first_attempt=false/i.test(

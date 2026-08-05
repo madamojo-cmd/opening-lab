@@ -226,6 +226,19 @@ async function assertBackfillReport(
     serviceDelete.error,
     "service role must not delete migration reports",
   );
+  const serviceInsert = await service
+    .from("blundr_learning_daily_backfill_reports")
+    .insert({
+      migration_id: "20260805120000_blundr_learning_daily_authority_v2",
+      domain: "fabricated_evidence",
+      resolved_count: 1,
+      unresolved_count: 0,
+      details: { fabricated: true },
+    });
+  assert.ok(
+    serviceInsert.error,
+    "service role must not append fabricated migration reports",
+  );
   for (const [actor, client] of [
     ["anonymous", anonymous],
     ["user A", userA],

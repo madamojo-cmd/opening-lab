@@ -486,6 +486,15 @@ select
 from public.blundr_daily_decks
 on conflict (migration_id, domain) do nothing;
 
+-- Close the append path only after the migration has written its five
+-- deterministic rows. Even service authority must not fabricate later
+-- evidence under this migration identity.
+drop trigger blundr_learning_daily_backfill_reports_immutable
+  on public.blundr_learning_daily_backfill_reports;
+create trigger blundr_learning_daily_backfill_reports_immutable
+before insert or update or delete on public.blundr_learning_daily_backfill_reports
+for each row execute function public.blundr_learning_daily_backfill_reports_reject_mutation();
+
 -- These are deliberately non-mutating authority shells. PR-02 replaces their
 -- bodies with the single atomic projector/reservation/action transactions after
 -- the TypeScript FSRS and Daily contracts are approved. They fail closed now so
