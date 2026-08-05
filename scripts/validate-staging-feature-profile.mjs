@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 
 const PROFILE_PATHS = [
   "release/feature-profiles/staging-3.99.json",
@@ -9,6 +9,11 @@ const DEPRECATED_DAILY_CAPABILITIES = [
   "daily_mixed_test",
 ];
 const CUMULATIVE_PR01_MIGRATION_HEAD = "20260805130000";
+const migrationHead = (await readdir("supabase/migrations"))
+  .filter((file) => file.endsWith(".sql"))
+  .sort()
+  .at(-1)
+  ?.split("_")[0];
 const profiles = await Promise.all(
   PROFILE_PATHS.map(async (profilePath) => ({
     path: profilePath,
@@ -55,8 +60,9 @@ for (const { path, value: profile } of profiles) {
     `${prefix} feature flags must be explicit booleans.`,
   );
   requireValue(
-    profile.migrationHead === CUMULATIVE_PR01_MIGRATION_HEAD,
-    `${prefix} feature profile must target the cumulative PR-01 migration head.`,
+    migrationHead === CUMULATIVE_PR01_MIGRATION_HEAD &&
+      profile.migrationHead === migrationHead,
+    `${prefix} feature profile must match the repository's cumulative PR-01 migration head.`,
   );
   requireValue(
     profile.runtimePackageId === runtimePackageId,
