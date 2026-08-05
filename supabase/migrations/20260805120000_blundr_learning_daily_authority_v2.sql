@@ -142,9 +142,9 @@ create index if not exists blundr_learning_events_user_canonical_join_idx
   where opening_id is not null and move_order_key is not null;
 
 -- Keep the pre-existing legacy writer available during the compatibility
--- window, but it cannot claim a v2 recall/observation classification. PR-02
--- switches its one writer to the service-only projector before this policy is
--- removed in a later contract migration.
+-- window, but it cannot claim first-attempt evidence or a v2 recall/observation
+-- classification. PR-02 switches its one writer to the service-only projector
+-- before this policy is removed in a later contract migration.
 drop policy if exists blundr_learning_events_insert_own on public.blundr_learning_events;
 create policy blundr_learning_events_insert_legacy_own
   on public.blundr_learning_events
@@ -152,6 +152,7 @@ create policy blundr_learning_events_insert_legacy_own
   with check (
     user_id = auth.uid()
     and evidence_kind = 'legacy_unclassified'
+    and first_attempt = false
     and source not in ('imported_game', 'system')
   );
 
@@ -335,9 +336,9 @@ create index if not exists blundr_daily_attempts_session_step_v2_idx
 
 -- The report is an immutable migration-time accounting record, not a repair
 -- queue. It proves exactly what was classified and leaves uncertain mappings
--- available for a later, authenticated reconciliation process. Its
--- generated_at value is insert-only: a repeated application with identical
--- inputs preserves report identity instead of manufacturing a new timestamp.
+-- available for a later, authenticated reconciliation process. Reapplying this
+-- migration never mutates an existing report row; any later reconciliation
+-- report must use a new migration/report version.
 create table if not exists public.blundr_learning_daily_backfill_reports (
   migration_id text not null,
   domain text not null,
@@ -363,10 +364,7 @@ select
   0,
   jsonb_build_object('rule', 'source=imported_game -> imported_observation; first_attempt=false')
 from public.blundr_learning_events
-on conflict (migration_id, domain) do update
-set resolved_count = excluded.resolved_count,
-    unresolved_count = excluded.unresolved_count,
-    details = excluded.details;
+on conflict (migration_id, domain) do nothing;
 
 insert into public.blundr_learning_daily_backfill_reports (
   migration_id, domain, resolved_count, unresolved_count, details
@@ -378,10 +376,7 @@ select
   count(*) filter (where opening_id is null or move_order_key is null),
   jsonb_build_object('rule', 'only pre-existing canonical coordinates counted; no coordinate inferred')
 from public.blundr_learning_events
-on conflict (migration_id, domain) do update
-set resolved_count = excluded.resolved_count,
-    unresolved_count = excluded.unresolved_count,
-    details = excluded.details;
+on conflict (migration_id, domain) do nothing;
 
 insert into public.blundr_learning_daily_backfill_reports (
   migration_id, domain, resolved_count, unresolved_count, details
@@ -393,10 +388,7 @@ select
   count(*) filter (where time_zone is null),
   jsonb_build_object('rule', 'legacy profiles remain unresolved until a validated IANA timezone is supplied')
 from public.blundr_user_profiles
-on conflict (migration_id, domain) do update
-set resolved_count = excluded.resolved_count,
-    unresolved_count = excluded.unresolved_count,
-    details = excluded.details;
+on conflict (migration_id, domain) do nothing;
 
 insert into public.blundr_learning_daily_backfill_reports (
   migration_id, domain, resolved_count, unresolved_count, details
@@ -416,10 +408,7 @@ select
   ),
   jsonb_build_object('rule', 'legacy reservations retain their stored identity; policy/timezone are not inferred')
 from public.blundr_daily_decks
-on conflict (migration_id, domain) do update
-set resolved_count = excluded.resolved_count,
-    unresolved_count = excluded.unresolved_count,
-    details = excluded.details;
+on conflict (migration_id, domain) do nothing;
 
 -- These are deliberately non-mutating authority shells. PR-02 replaces their
 -- bodies with the single atomic projector/reservation/action transactions after
