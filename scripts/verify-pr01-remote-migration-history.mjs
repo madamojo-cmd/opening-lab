@@ -102,7 +102,7 @@ try {
       "migration",
       "list",
       "--linked",
-      "--output",
+      "--output-format",
       "json",
     ],
     { encoding: "utf8", maxBuffer: 1024 * 1024 },
