@@ -298,7 +298,10 @@ export type FeatureFlagName =
   | "daily_continuation_challenge"
   | "daily_punish_the_mistake"
   | "daily_mixed_test"
-  | "daily_deep_minigames";
+  | "daily_deep_minigames"
+  | "daily_adaptive_v2"
+  | "rewards_v2_enabled"
+  | "reward_presentations_v2_enabled";
 export const FEATURE_FLAGS: Readonly<Record<FeatureFlagName, boolean>> = {
   learning_core_v2: false,
   learning_core_v2_write: false,
@@ -321,6 +324,9 @@ export const FEATURE_FLAGS: Readonly<Record<FeatureFlagName, boolean>> = {
   daily_punish_the_mistake: false,
   daily_mixed_test: false,
   daily_deep_minigames: false,
+  daily_adaptive_v2: false,
+  rewards_v2_enabled: false,
+  reward_presentations_v2_enabled: false,
 };
 
 export function isFailClosedAccess(

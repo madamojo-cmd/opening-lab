@@ -72,6 +72,33 @@ for (const requiredId of [
     `Missing required registry entry ${requiredId}`,
   );
 
+const entryById = new Map(registry.entries.map((entry) => [entry.id, entry]));
+const dailyAdaptive = entryById.get("DAILY-ADAPTIVE-001");
+assert.ok(dailyAdaptive, "Missing Adaptive Daily contract");
+assert.equal(dailyAdaptive.contractVersion, "1");
+assert.deepEqual(dailyAdaptive.featureFlags, [
+  "BLUNDR_FEATURE_DAILY_ADAPTIVE_V2",
+]);
+assert.match(dailyAdaptive.fallback, /Missing, false, or mismatched flags/);
+
+const rewards = entryById.get("REWARD-001");
+assert.ok(rewards, "Missing Rewards contract");
+assert.equal(rewards.contractVersion, "2");
+assert.deepEqual(rewards.featureFlags, [
+  "BLUNDR_REWARDS_V2_ENABLED",
+  "NEXT_PUBLIC_BLUNDR_REWARD_PRESENTATIONS_V2_ENABLED",
+]);
+
+for (const id of ["MINIGAME-PROCEDURAL-001", "MINIGAME-DEEP-001"]) {
+  const entry = entryById.get(id);
+  assert.ok(entry, `Missing ${id} contract`);
+  assert.equal(entry.contractVersion, "2");
+  assert.ok(
+    entry.blockers.some((blocker) => /deprecated and disabled/.test(blocker)),
+    `${id}: Daily deprecation must be recorded`,
+  );
+}
+
 console.log(
   `Blundr system registry valid: ${registry.entries.length} unique feature contracts.`,
 );
