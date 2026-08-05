@@ -45,6 +45,7 @@ export type CurrentInstructionSource =
   | "opening_family_plan"
   | "continuation_candidate"
   | "lesson_line"
+  | "runtime_selected_line"
   | "legacy_recoverable"
   | "engine_preview_fallback";
 

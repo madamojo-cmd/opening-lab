@@ -162,7 +162,14 @@ import { loadRepertoireProgress } from "@/lib/blundr/repertoire/repertoireProgre
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
 import { completeDailyRingActivity } from "@/lib/blundr/daily-rings/dailyRingService";
 import { isBatteryCompletionEligible, isTempoCompletionEligible } from "@/lib/blundr/daily-rings/trainingCompletionEligibility";
-import { resolvePlyFromFen, resolveSelectedRuntimeLineOpponentReply } from "@/lib/blundr/runtime/selectedRuntimeLineReply";
+import {
+  buildRestrictedRuntimeLineRequestSnapshot,
+  isStaleRestrictedRuntimeLineRequest,
+  resolveRestrictedRuntimeLineAuthority,
+  validateRestrictedRuntimeLineSession,
+  type RestrictedRuntimeLineProgress,
+  type RestrictedRuntimeLineRequestSnapshot,
+} from "@/lib/blundr/runtime/restrictedRuntimeLineAuthority";
 import { isSelectedRuntimeLineComplete } from "@/lib/blundr/runtime/selectedRuntimeLineCompletion";
 import type { DailyRingCompletionResultLike } from "@/lib/blundr/daily-rings/dailyRingTypes";
 import type { BlundrBoardPreferences } from "@/lib/blundr/board/boardThemeTypes";
@@ -252,6 +259,17 @@ type PendingOpponentRequest = {
   startedAt: number;
   initialRestrictedOpponentMoveUci?: string;
   initialRestrictedOpponentHandoffKey?: string;
+  restrictedRuntimeLineSnapshot?: RestrictedRuntimeLineRequestSnapshot | null;
+};
+type RestrictedRuntimeLineLiveState = {
+  active: boolean;
+  selectedRuntimeLineId: string | null;
+  selectedRuntimeLineKey: string | null;
+  selectedPlaySequenceUci: readonly string[];
+  committedUciHistory: readonly string[];
+  startingFen: string;
+  userColor: ChessColor;
+  sessionId: string | null;
 };
 type RuntimeBookFrameCandidate = {
   uci: string;
@@ -588,6 +606,43 @@ function countMatchedRuntimeLinePlies(reference:string[], current:string[]):numb
   }
   return matched;
 }
+function preflightRuntimeTrainingLineSelection(selection:RuntimeWeightedTrainingLineSelection|null, repertoire:Repertoire|undefined, sessionId:string):RuntimeWeightedTrainingLineSelection|null{
+  if(!selection||!repertoire)return selection;
+  const userColor=repertoire.color==="white"?"w":"b";
+  const startingFen=new Chess().fen();
+  const selectedPreflight=validateRestrictedRuntimeLineSession({
+    selectedRuntimeLineId:selection.selectedLineId,
+    selectedRuntimeLineKey:selection.selectedLineKey,
+    selectedPlaySequenceUci:selection.selectedPlaySequenceUci,
+    startingFen,
+    userColor,
+    sessionId,
+  });
+  if(selectedPreflight.ok)return selection;
+  for(const summary of selection.lineWeightsSummary){
+    const sequence=summary.playKey.split(",").map((move)=>move.trim().toLowerCase()).filter(Boolean);
+    const preflight=validateRestrictedRuntimeLineSession({
+      selectedRuntimeLineId:summary.lineId,
+      selectedRuntimeLineKey:summary.lineKey,
+      selectedPlaySequenceUci:sequence,
+      startingFen,
+      userColor,
+      sessionId,
+    });
+    if(preflight.ok){
+      return {
+        ...selection,
+        selectedLineId:summary.lineId,
+        selectedLineKey:summary.lineKey,
+        selectedLineIndex:summary.lineIndex,
+        selectedPlayKey:summary.playKey,
+        selectedPlaySequenceUci:sequence,
+        variationReason:"preflight_replaced_invalid_selected_line",
+      };
+    }
+  }
+  return null;
+}
 function buildRuntimeTrainingLineSelection(openingId:string,recentLineKeys:string[],seed:string,repertoire?:Repertoire,ratingFilterValue:string=getStage2RatingBandByFilterValue(DEFAULT_STAGE2_RATING_BAND_ID).value):RuntimeWeightedTrainingLineSelection | null{
   if(!repertoire||repertoire.runtimeLoading)return null;
   const selection=selectRuntimeWeightedTrainingLineSelection({
@@ -597,41 +652,9 @@ function buildRuntimeTrainingLineSelection(openingId:string,recentLineKeys:strin
     repertoire: repertoire ?? null,
     ratingBandId: getStage2RatingBandByFilterValue(ratingFilterValue).id,
   });
-  if(selection)return selection;
-  const line=repertoire?.lines[0] ?? [];
-  const playSequenceUci=buildRuntimePlayKeyBeforeFromSanHistory(line)?.split(",").filter(Boolean) ?? [];
-  const playKey=playSequenceUci.join(",");
-  const lineId=`${openingId}:0`;
-  const lineKey=`${lineId}:${playKey}`;
-  return {
-    mode:"runtime_weighted_line",
-    source:"local_runtime_package",
-    openingId,
-    selectedLineId:lineId,
-    selectedLineKey:lineKey,
-    selectedLineIndex:0,
-    selectedPlayKey:playKey,
-    selectedPlaySequenceUci:playSequenceUci,
-    eligibleCount:line.length>0?1:0,
-    eligibleLineIds:line.length>0?[lineId]:[],
-    eligibleLineKeys:line.length>0?[lineKey]:[],
-    weighted:true,
-    recentLineKeys:recentLineKeys.slice(0,2),
-    blockedRecentLineKeys:[],
-    blockedThirdRepeatLineKeys:[],
-    variationReason:line.length>0?"fallback_curated_line":"no_runtime_line_available",
-    repeatUnavoidable:false,
-    selectionSeed:seed,
-    lineWeightsSummary:line.length>0?[{
-      openingId,
-      lineId,
-      lineKey,
-      lineIndex:0,
-      playKey,
-      moveCount:playSequenceUci.length,
-      weight:Math.max(1, playSequenceUci.length),
-    }]:[],
-  };
+  const preflightedSelection=preflightRuntimeTrainingLineSelection(selection,repertoire,seed);
+  if(preflightedSelection)return preflightedSelection;
+  return null;
 }
 function isValidSquare(square:string){return /^[a-h][1-8]$/.test(square)}
 // v2.7.40 P1 Fix 3: shared reverse guard (also in continuedPlay policy) to break emergency legal fallback loops (Ra1<->Ra2 etc)
@@ -1331,6 +1354,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
   const [continuationPauseClicked,setContinuationPauseClicked]=useState(false);
   const [continuationHardStopAcknowledged,setContinuationHardStopAcknowledged]=useState(false);
   const [moveHistory,setMoveHistory]=useState<string[]>([]);
+  const [moveHistoryUci,setMoveHistoryUci]=useState<string[]>([]);
   const [progress,setProgress]=useState<Progress>(DEFAULT_PROGRESS);
   const [showAnswer,setShowAnswer]=useState(false);
   const [reviewingFen,setReviewingFen]=useState<string|null>(null);
@@ -1504,6 +1528,16 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
   const maiaOpponentRequestSeqRef=useRef(0);
   const maiaTimelineSeqRef=useRef(0);
   const pendingOpponentRequestRef=useRef<PendingOpponentRequest|null>(null);
+  const restrictedRuntimeLineLiveRef=useRef<RestrictedRuntimeLineLiveState>({
+    active:false,
+    selectedRuntimeLineId:null,
+    selectedRuntimeLineKey:null,
+    selectedPlaySequenceUci:[],
+    committedUciHistory:[],
+    startingFen:new Chess().fen(),
+    userColor:"w",
+    sessionId:null,
+  });
   const projectiveTacticTokenRef=useRef(0);
   const projectiveTacticFadeTimeoutRef=useRef<number|null>(null);
   const projectiveTacticClearTimeoutRef=useRef<number|null>(null);
@@ -1617,10 +1651,10 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     [canonicalSelectedRepertoireId],
   );
   const runtimePlayKeyBeforeForFrame=useMemo(
-    ()=>buildRuntimePlayKeyBeforeFromSanHistory(moveHistory),
-    [moveHistory.join("|")],
+    ()=>moveHistoryUci.length?moveHistoryUci.join(","):buildRuntimePlayKeyBeforeFromSanHistory(moveHistory),
+    [moveHistoryUci.join("|"),moveHistory.join("|")],
   );
-  const selectedRuntimeLineCurrentPly=moveHistory.length;
+  const selectedRuntimeLineCurrentPly=moveHistoryUci.length;
   const selectedRuntimeLineExhausted=selectedRuntimeLinePlyLength>0&&selectedRuntimeLineCurrentPly>=selectedRuntimeLinePlyLength;
   const stage2OpeningDepthTargetPly=12;
   const stage2OpeningCurrentPly=selectedRuntimeLineCurrentPly;
@@ -1635,6 +1669,49 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
   const userColor:ChessColor=repertoire.color==="white"?"w":"b";
   const opponentColor:ChessColor=userColor==="w"?"b":"w";
   const isUserTurn=game.turn()===userColor;
+  const runtimeBackedRestrictedLineActive=Boolean(
+    activeTab==="train"&&
+    trainingMode==="restricted"&&
+    !userExplicitlyEnteredContinuation&&
+    !reviewingFen&&
+    historyIndex>=positionHistory.length-1&&
+    selectedRuntimeTrainingLineSelection?.source==="local_runtime_package"&&
+    selectedRuntimeTrainingLineSelection?.openingId===canonicalSelectedRepertoireId&&
+    selectedRuntimeLinePlaySequenceUci.length>0
+  );
+  restrictedRuntimeLineLiveRef.current={
+    active:runtimeBackedRestrictedLineActive,
+    selectedRuntimeLineId,
+    selectedRuntimeLineKey,
+    selectedPlaySequenceUci:selectedRuntimeLinePlaySequenceUci,
+    committedUciHistory:moveHistoryUci,
+    startingFen:initialFen,
+    userColor,
+    sessionId:runtimeTrainingSessionId,
+  };
+  const restrictedRuntimeLineAuthority=useMemo(()=>resolveRestrictedRuntimeLineAuthority({
+    trainingMode:runtimeBackedRestrictedLineActive?"restricted":"continuation",
+    selectedRuntimeLineId,
+    selectedRuntimeLineKey,
+    selectedPlaySequenceUci:selectedRuntimeLinePlaySequenceUci,
+    committedUciHistory:moveHistoryUci,
+    startingFen:initialFen,
+    currentFen:fen,
+    userColor,
+    sessionId:runtimeTrainingSessionId,
+  }),[
+    runtimeBackedRestrictedLineActive,
+    selectedRuntimeLineId,
+    selectedRuntimeLineKey,
+    selectedRuntimeLinePlaySequenceUci.join("|"),
+    moveHistoryUci.join("|"),
+    initialFen,
+    fen,
+    userColor,
+    runtimeTrainingSessionId,
+  ]);
+  const selectedRuntimeLineAuthorityComplete=restrictedRuntimeLineAuthority.kind==="complete";
+  const selectedRuntimeLineLearnerProgress=restrictedRuntimeLineAuthority.progress;
   const key=normalizeFen(fen);
   const exactOpeningNodes=openingTree.nodesByFen4[key]??[];
   const expectedMoveResolution=useMemo(()=>resolveExpectedMoveForFrame({
@@ -1653,10 +1730,29 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     allowEngineFallbackInRestricted:false,
   }),[openingTree,fen,trainerPhase,trainingMode,trainerView,isUserTurn,userColor,opponentColor,lastMoveColor,lastMove,lastMoveSan,enginePreview]);
   const expectedMoveResolverDebug=useMemo(()=>buildOpeningResolverDebug(expectedMoveResolution),[expectedMoveResolution]);
+  const restrictedRuntimeLineUserContinuation=useMemo<Continuation|null>(()=>{
+    if(!runtimeBackedRestrictedLineActive||restrictedRuntimeLineAuthority.kind!=="user_target")return null;
+    return {
+      san:restrictedRuntimeLineAuthority.move.san,
+      uci:restrictedRuntimeLineAuthority.move.uci,
+      color:restrictedRuntimeLineAuthority.move.color,
+      resultingFen:restrictedRuntimeLineAuthority.move.resultingFen,
+      source:"runtime_selected_line",
+      lineId:restrictedRuntimeLineAuthority.selectedLineId,
+      openingId:canonicalSelectedRepertoireId,
+      ply:restrictedRuntimeLineAuthority.move.ply,
+    } as Continuation;
+  },[runtimeBackedRestrictedLineActive,restrictedRuntimeLineAuthority,canonicalSelectedRepertoireId]);
 
   // v2.7.41 TDZ Fix: expectedMovesForValidation + curated / lichess end signals placed early
   // (strict ordering: after expectedMoveResolution, before continuationPolicyCandidate and anything that consumes them)
   const expectedMovesForValidation = useMemo(() => {
+    if(restrictedRuntimeLineUserContinuation){
+      return [{
+        uci: restrictedRuntimeLineUserContinuation.uci.trim().toLowerCase(),
+        san: restrictedRuntimeLineUserContinuation.san,
+      }];
+    }
     // Must be computed only from raw upstream state and/or expectedMoveResolution.
     // Never from continuationPolicyCandidate, currentInstructionFrame, or instructionTarget.
     const candidates = expectedMoveResolution?.candidateMoves ?? [];
@@ -1667,7 +1763,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
         san: typeof move.san === "string" ? move.san : undefined,
       }))
       .filter((move) => move.uci);
-  }, [expectedMoveResolution?.candidateMoves, userColor]);
+  }, [restrictedRuntimeLineUserContinuation, expectedMoveResolution?.candidateMoves, userColor]);
 
   const expectedMovesForValidationKey = useMemo(
     () => expectedMovesForValidation.map((move) => `${move.uci}:${move.san ?? ""}`).join("|"),
@@ -1681,16 +1777,19 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
   // v2.7.41 HOTFIX: Strict confirmed End-of-Book using real lineCursor/lineLength from resolver
   // Never infer from temporary expectedMovesForValidation.length === 0 or source includes("curated"/"terminal")
   const selectedLineCompleteConfirmed = useMemo(() => {
+    if (runtimeBackedRestrictedLineActive) {
+      return selectedRuntimeLineAuthorityComplete;
+    }
     if (selectedRuntimeLinePlyLength > 0) {
       return selectedRuntimeLineExhausted;
     }
     const len = expectedMoveResolution?.lineLength ?? 0;
     const cur = expectedMoveResolution?.lineCursor ?? 0;
     return len > 0 && cur >= len;
-  }, [selectedRuntimeLineExhausted, selectedRuntimeLinePlyLength, expectedMoveResolution?.lineCursor, expectedMoveResolution?.lineLength]);
+  }, [runtimeBackedRestrictedLineActive, selectedRuntimeLineAuthorityComplete, selectedRuntimeLineExhausted, selectedRuntimeLinePlyLength, expectedMoveResolution?.lineCursor, expectedMoveResolution?.lineLength]);
   const exactSelectedLineNodes = useMemo(
     () => exactOpeningNodes.filter((node) => node.lineId === selectedRuntimeLineId),
-    [exactOpeningNodes, canonicalSelectedRepertoireId],
+    [exactOpeningNodes, selectedRuntimeLineId],
   );
   const exactSelectedLineNodeFound = exactSelectedLineNodes.length > 0;
   const selectedLineExactNodeHasChildren = useMemo(() => {
@@ -1764,7 +1863,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       isUserTurn,
       userExplicitlyEnteredContinuation,
       lastUserMoveUci: lastMoveColor === userColor ? lastMove : null,
-      currentPly: moveHistory.length,
+      currentPly: selectedRuntimeLineCurrentPly,
       minimumGuidedDepthPly: DEFAULT_GUIDED_COVERAGE_THRESHOLDS.minimumGuidedDepthPly,
       runtimeBookMatchesFrame:
         runtimeBookFrameQuery.status === "ready" &&
@@ -1783,7 +1882,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       lastMoveColor,
       userColor,
       lastMove,
-      moveHistory.length,
+      selectedRuntimeLineCurrentPly,
       DEFAULT_GUIDED_COVERAGE_THRESHOLDS.minimumGuidedDepthPly,
       runtimeBookFrameQuery.status,
       runtimeBookFrameQuery.openingId,
@@ -1809,7 +1908,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     return lichessStatsStatus === "resolved" && lichessTotalGames !== null && lichessTotalGames < 500;
   }, [lichessStatsStatus, lichessTotalGames]);
 
-  const currentPlyCount = moveHistory.length;
+  const currentPlyCount = trainingMode==="restricted"?moveHistoryUci.length:moveHistory.length;
   const hardStopApplies =
     trainingMode === "restricted" &&
     !userExplicitlyEnteredContinuation &&
@@ -1873,6 +1972,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
   // Step 3/4/10 (exact order): trusted curated target exists for restricted user turn (from opening tree / resolver).
   // This must take precedence over secondary async (brain/visual/lichess/pending) so the lesson is playable from move 1.
   const trustedInstructionTargetExists = useMemo(() => {
+    if(restrictedRuntimeLineUserContinuation)return true;
     const hasCurated = Boolean(expectedMoveResolution?.expectedMoveUci) &&
       (expectedMoveResolution?.source === "lesson_line" ||
        expectedMoveResolution?.source === "opening_branch" ||
@@ -1890,6 +1990,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     expectedMoveResolution?.expectedMoveUci,
     expectedMoveResolution?.source,
     expectedMoveResolution?.lineLength,
+    restrictedRuntimeLineUserContinuation,
   ]);
 
   // Loading detection for instruction frames (prevents flashing Continue during transient states)
@@ -2561,9 +2662,22 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     const lockedForThisFrame = lockedContinuationRef.current[thisFrameKey];
     const useLocked = !!(trainingMode==="continuation" && isUserTurn && lockedForThisFrame?.uci);
     const guidedMoveAuthorityEligible =
-      Boolean(expectedMoveResolution.expectedMoveUci) &&
+      Boolean(restrictedRuntimeLineUserContinuation?.uci || expectedMoveResolution.expectedMoveUci) &&
       expectedMoveResolution.source !== "continuation_candidate" &&
       expectedMoveResolution.source !== "opening_family_plan";
+    const guidedMoveForFrame=restrictedRuntimeLineUserContinuation?{
+      uci:restrictedRuntimeLineUserContinuation.uci,
+      san:restrictedRuntimeLineUserContinuation.san,
+      source:"runtime_selected_line",
+      kind:"guided_move",
+      trust:"runtime_selected_line",
+    }:guidedMoveAuthorityEligible?{
+      uci:expectedMoveResolution.expectedMoveUci,
+      san:expectedMoveResolution.expectedMoveSan,
+      source:expectedMoveResolution.source,
+      kind:expectedMoveResolution.source==="opening_branch"?"lichess_branch_move":expectedMoveResolution.source==="opening_family_plan"?"adaptive_branch_move":"guided_move",
+      trust:"book_verified",
+    }:null;
 
     return buildCurrentInstructionFrame({
       frameId:trainerFrameId,
@@ -2572,13 +2686,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       trainerPhase,
       trainerView,
       isUserTurn,
-      guidedMove:guidedMoveAuthorityEligible?{
-        uci:expectedMoveResolution.expectedMoveUci,
-        san:expectedMoveResolution.expectedMoveSan,
-        source:expectedMoveResolution.source,
-        kind:expectedMoveResolution.source==="opening_branch"?"lichess_branch_move":expectedMoveResolution.source==="opening_family_plan"?"adaptive_branch_move":"guided_move",
-        trust:"book_verified",
-      }:null,
+      guidedMove:guidedMoveForFrame,
       continuationCandidate:trainingMode==="continuation"&&isUserTurn&&userExplicitlyEnteredContinuation&&!forceContinuationPause&&validatedContinuationCandidate?.uci&&validatedContinuationCandidate.source!=="no_reliable_continuation"?{
         uci: useLocked && lockedForThisFrame
           ? lockedForThisFrame.uci
@@ -2601,6 +2709,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     trainerView,
     isUserTurn,
     expectedMoveResolution,
+    restrictedRuntimeLineUserContinuation,
     game,
     engineLines,
     validatedContinuationCandidate,
@@ -4396,9 +4505,21 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     baseFen?:string;
     initialRestrictedOpponentMoveUci?:string;
     initialRestrictedOpponentHandoffKey?:string;
+    restrictedRuntimeLineSnapshot?:RestrictedRuntimeLineRequestSnapshot|null;
   }){
     if((branchCompleteEligibleNow||stage2TerminalProof.proven)&&input.mode==="restricted"){
       clearPendingOpponentReplyRequest({clearStaleIssue:true});
+      return null;
+    }
+    const restrictedRuntimeLineSnapshot=input.restrictedRuntimeLineSnapshot??(input.mode==="restricted"
+      ? buildRestrictedRuntimeLineRequestSnapshot({
+        authority:restrictedRuntimeLineAuthority,
+        baseFen:input.baseFen??fenRef.current??fen,
+      })
+      : null);
+    if(input.mode==="restricted"&&!input.initialRestrictedOpponentMoveUci&&!restrictedRuntimeLineSnapshot){
+      clearPendingOpponentReplyRequest({clearStaleIssue:true});
+      pushRuntimeCriticalIssue("restricted_opponent_reply_missing_runtime_authority");
       return null;
     }
     const baseFenNormalized=normalizeFen(input.baseFen??fenRef.current??fen);
@@ -4415,6 +4536,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       startedAt:Date.now(),
       initialRestrictedOpponentMoveUci:input.initialRestrictedOpponentMoveUci,
       initialRestrictedOpponentHandoffKey:input.initialRestrictedOpponentHandoffKey,
+      restrictedRuntimeLineSnapshot,
     };
     clearOpponentReplyTimeout();
     pendingOpponentRequestRef.current=request;
@@ -4585,10 +4707,10 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       reason:branchCompleteReasonNow??stage2TerminalProof.reason??"line_complete",
       fen4,
       lineId:selectedRuntimeLineId,
-      ply:moveHistory.length,
+      ply:selectedRuntimeLineCurrentPly,
       latchedAtFrameId:trainerFrameId,
     });
-  },[branchCompleteEligibleNow,stage2TerminalProof.proven,stage2TerminalProof.reason,branchCompleteReasonNow,fen,canonicalSelectedRepertoireId,moveHistory.length,trainerFrameId]);
+  },[branchCompleteEligibleNow,stage2TerminalProof.proven,stage2TerminalProof.reason,branchCompleteReasonNow,fen,canonicalSelectedRepertoireId,selectedRuntimeLineCurrentPly,trainerFrameId]);
   useEffect(()=>{
     if(!branchCompleteShouldCancelPending)return;
     const pendingId=pendingOpponentRequestRef.current?.requestId??null;
@@ -4650,7 +4772,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     // Changing the rating band updates the next restricted line from the local package.
     // It does not rewrite the current line mid-drill.
     if(trainingMode!=="restricted")return;
-    if(moveHistory.length!==0)return;
+    if(moveHistoryUci.length!==0)return;
     const nextLineSessionId=createLearningSessionId();
     setRuntimeTrainingSessionId(nextLineSessionId);
     refreshRuntimeTrainingLineSelection(canonicalSelectedRepertoireId,recentRuntimeTrainingLineKeys,nextLineSessionId);
@@ -5131,7 +5253,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       runtimeTrainingSessionId,
       ratingBandId:rating.id,
       fen4:normalizeFen(fen),
-      moveHistoryLength:moveHistory.length,
+      moveHistoryLength:moveHistoryUci.length,
       lastMoveUci:lastMove,
       pendingOpponentRequestExists:Boolean(pendingOpponentRequest||pendingOpponentRequestRef.current),
       handledHandoffKey:initialBlackOpponentHandoffKeyRef.current,
@@ -5166,7 +5288,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     runtimeTrainingSessionId,
     rating.id,
     fen,
-    moveHistory.length,
+    moveHistoryUci.length,
     lastMove,
     pendingOpponentRequest?.requestId,
     continuationLegalMoveUcis.join("|"),
@@ -5190,7 +5312,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
         trainingMode==="restricted"&&
         userColor==="b"&&
         !userExplicitlyEnteredContinuation&&
-        moveHistory.length===0&&
+        moveHistoryUci.length===0&&
         !lastMove&&
         selectedOpeningAvailability?.runtimeAvailable&&
         (
@@ -5213,7 +5335,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       return;
     }
     if(pendingOpponentRequest) clearPendingOpponentReplyRequest({clearStaleIssue:true});
-  },[activeTab,fen,bookComplete,isUserTurn,isReviewingHistory,canonicalSelectedRepertoireId,trainingMode,ratingFilter,game,endingInfo?.title,trainerPhase,pendingOpponentRequest?.requestId,branchCompleteEligibleNow,runtimeBookFrameShouldQuery,runtimeBookFrameQuery.status,userColor,userExplicitlyEnteredContinuation,moveHistory.length,lastMove,selectedOpeningAvailability?.runtimeAvailable,repertoire.runtimeLoading,selectedRuntimeTrainingLineSelection?.source,selectedRuntimeTrainingLineSelection?.openingId,selectedRuntimeLinePlaySequenceUci.length]);
+  },[activeTab,fen,bookComplete,isUserTurn,isReviewingHistory,canonicalSelectedRepertoireId,trainingMode,ratingFilter,game,endingInfo?.title,trainerPhase,pendingOpponentRequest?.requestId,branchCompleteEligibleNow,runtimeBookFrameShouldQuery,runtimeBookFrameQuery.status,userColor,userExplicitlyEnteredContinuation,moveHistoryUci.length,lastMove,selectedOpeningAvailability?.runtimeAvailable,repertoire.runtimeLoading,selectedRuntimeTrainingLineSelection?.source,selectedRuntimeTrainingLineSelection?.openingId,selectedRuntimeLinePlaySequenceUci.length]);
   async function loadExplorer(positionFen:string){
     const cacheKey=`${normalizeFen(positionFen)}|${ratingFilter}|${speedFilter}`;
     if(explorerCache.current[cacheKey]){
@@ -5382,8 +5504,8 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     maiaOpponentRequestSeqRef.current=0;
     maiaTimelineSeqRef.current=0;
   }
-  function selectRepertoire(id:string, options:{allowLocked?:boolean}={}){const startFen=new Chess().fen();const canonicalId=resolveStage2CanonicalOpeningId(id)??id;const isLocked=Boolean(repertoireProgress.lockedOpeningIds.includes(canonicalId));if(isLocked&&!options.allowLocked){setFeedback("Keep training to unlock this opening.");setActiveTab("home");return}const nextLineSessionId=createLearningSessionId();clearProjectiveTacticOverlay("opening_switch");setSelectedRepertoireId(canonicalId);setRuntimeTrainingSessionId(nextLineSessionId);refreshRuntimeTrainingLineSelection(canonicalId,recentRuntimeTrainingLineKeys,nextLineSessionId);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
-  function resetBoard(){const startFen=new Chess().fen();const nextLineSessionId=createLearningSessionId();clearProjectiveTacticOverlay("restart");setRuntimeTrainingSessionId(nextLineSessionId);refreshRuntimeTrainingLineSelection(selectedRepertoireId,recentRuntimeTrainingLineKeys,nextLineSessionId);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveTab("train");bumpRuntimeFrame()}
+  function selectRepertoire(id:string, options:{allowLocked?:boolean}={}){const startFen=new Chess().fen();const canonicalId=resolveStage2CanonicalOpeningId(id)??id;const isLocked=Boolean(repertoireProgress.lockedOpeningIds.includes(canonicalId));if(isLocked&&!options.allowLocked){setFeedback("Keep training to unlock this opening.");setActiveTab("home");return}const nextLineSessionId=createLearningSessionId();clearProjectiveTacticOverlay("opening_switch");setSelectedRepertoireId(canonicalId);setRuntimeTrainingSessionId(nextLineSessionId);refreshRuntimeTrainingLineSelection(canonicalId,recentRuntimeTrainingLineKeys,nextLineSessionId);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setMoveHistoryUci([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
+  function resetBoard(){const startFen=new Chess().fen();const nextLineSessionId=createLearningSessionId();clearProjectiveTacticOverlay("restart");setRuntimeTrainingSessionId(nextLineSessionId);refreshRuntimeTrainingLineSelection(selectedRepertoireId,recentRuntimeTrainingLineKeys,nextLineSessionId);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setMoveHistoryUci([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveTab("train");bumpRuntimeFrame()}
   function recordPosition(nextFen:string){const nextIndex=historyIndex+1;setPositionHistory(prev=>[...prev.slice(0,nextIndex),nextFen]);setHistoryIndex(nextIndex)}
   function jumpHistory(direction:-1|1){const next=Math.max(0,Math.min(positionHistory.length-1,historyIndex+direction));if(next===historyIndex)return;clearProjectiveTacticOverlay("reset");setHistoryIndex(next);setFen(positionHistory[next]);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);clearPendingOpponentReplyRequest({clearStaleIssue:true});setOpponentCue(null);setOpponentVariationDebug(null);setBookComplete(false);setFeedback(next===positionHistory.length-1?"Returned to the live position.":`Reviewing previous position ${next} of ${positionHistory.length-1}. Use the arrows to return to live play.`);bumpRuntimeFrame()}
   async function playOpponentMove(request:PendingOpponentRequest){
@@ -5407,8 +5529,6 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       resultingFen:move.resultingFen,
     }));
     const positionKey=normalizeFen(current.fen());
-    const variationContext={openingId:repertoire.id,lineId:selectedRuntimeLineId,trainingMode:mode,positionKey};
-    const memory=loadOpponentVariationMemory();
     let variationDebug:OpponentVariationDebug={
       opponentVariationApplied:false,
       opponentVariationReason:"not_applied",
@@ -5426,13 +5546,30 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     let source="";
     if(mode==="restricted"){
       const initialRestrictedOpponentMoveUci=request.initialRestrictedOpponentMoveUci?.trim().toLowerCase()??null;
-      const currentRestrictedLegalMoveUcis=(current.moves({verbose:true}) as Array<{from:string;to:string;promotion?:string}>).map((move)=>`${move.from}${move.to}${move.promotion??""}`.toLowerCase());
-      const selectedRuntimeLineOpponentReplyUci=resolveSelectedRuntimeLineOpponentReply({
-        trainingMode:mode,
-        selectedPlaySequenceUci:selectedRuntimeLinePlaySequenceUci,
-        currentPly:resolvePlyFromFen(current.fen())??moveHistory.length,
-        legalMoveUcis:currentRestrictedLegalMoveUcis,
+      const liveRestrictedLine=restrictedRuntimeLineLiveRef.current;
+      const currentSelectedLineAuthority=resolveRestrictedRuntimeLineAuthority({
+        trainingMode:liveRestrictedLine.active?"restricted":"continuation",
+        selectedRuntimeLineId:liveRestrictedLine.selectedRuntimeLineId,
+        selectedRuntimeLineKey:liveRestrictedLine.selectedRuntimeLineKey,
+        selectedPlaySequenceUci:liveRestrictedLine.selectedPlaySequenceUci,
+        committedUciHistory:liveRestrictedLine.committedUciHistory,
+        startingFen:liveRestrictedLine.startingFen,
+        currentFen:current.fen(),
+        userColor:liveRestrictedLine.userColor,
+        sessionId:liveRestrictedLine.sessionId,
       });
+      const currentRestrictedSnapshot=buildRestrictedRuntimeLineRequestSnapshot({
+        authority:currentSelectedLineAuthority,
+        baseFen:current.fen(),
+      });
+      if(!initialRestrictedOpponentMoveUci&&isStaleRestrictedRuntimeLineRequest({
+        request:request.restrictedRuntimeLineSnapshot,
+        current:currentRestrictedSnapshot,
+      })){
+        clearPendingOpponentReplyRequest({clearStaleIssue:true});
+        pushRuntimeCriticalIssue("stale_opponent_reply_commit");
+        return;
+      }
       const runtimeCandidateForMove=(uci:string|null|undefined)=>runtimeBookFrameQuery.candidates.find(
         (candidate)=>candidate.uci.trim().toLowerCase()===String(uci ?? "").trim().toLowerCase(),
       )??null;
@@ -5467,8 +5604,8 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
           }],
           blockedThirdRepeatBranches:[],
         };
-      }else if(selectedRuntimeLineOpponentReplyUci){
-        const applied=applyUci(current.fen(),selectedRuntimeLineOpponentReplyUci);
+      }else if(currentSelectedLineAuthority.kind==="opponent_reply"){
+        const applied=applyUci(current.fen(),currentSelectedLineAuthority.move.uci);
         if(!applied||applied.color!==opponentColor){
           clearPendingOpponentReplyRequest({clearStaleIssue:true});
           pushRuntimeCriticalIssue("restricted_opponent_reply_missing_runtime_authority");
@@ -5498,102 +5635,19 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
           }],
           blockedThirdRepeatBranches:[],
         };
-      }else if(!currentOpponentBookOptions.length){
-        const runtimeBookMatchesFrame=runtimeBookFrameQuery.status==="ready"&&runtimeBookFrameQuery.openingId===runtimeOpeningIdForFrame&&runtimeBookFrameQuery.playKeyBefore===runtimePlayKeyBeforeForFrame;
-        const runtimeBookRestrictedCandidates=runtimeBookMatchesFrame ? runtimeBookFrameQuery.candidates : [];
-        const runtimeBookRestrictedTopCandidate=runtimeBookRestrictedCandidates.find((candidate)=>continuationLegalMoveUcis.includes(candidate.uci))??null;
-        const restrictedOpponentReplyAuthority=resolveRestrictedOpponentReplyAuthority({
-          trainingMode:"restricted",
-          currentOpponentBookOptionCount:currentOpponentBookOptions.length,
-          legalMoveCount:continuationLegalMoveUcis.length,
-          legalMoveUcis:continuationLegalMoveUcis,
-          runtimeBookMatchesFrame,
-          runtimeBookStatus:runtimeBookFrameQuery.status,
-          runtimeBookBookExhausted:runtimeBookFrameQuery.bookExhausted,
-          runtimeBookCandidateCount:runtimeBookRestrictedCandidates.length,
-          runtimeBookOpeningId:runtimeBookFrameQuery.openingId,
-          runtimeBookPlayKeyBefore:runtimeBookFrameQuery.playKeyBefore,
-          currentOpeningId:selectedRepertoireId,
-          currentPlayKeyBefore:runtimePlayKeyBeforeForFrame,
-          runtimeBookCandidates:runtimeBookRestrictedCandidates,
-          runtimeBookTopCandidate:runtimeBookRestrictedTopCandidate,
-        });
-        if(restrictedOpponentReplyAuthority.kind==="terminal"){
-          clearPendingOpponentReplyRequest({clearStaleIssue:true});
-          setTrainerPhase("terminal");
-          setFeedback("Game over. Restart the opening to train again.");
-          setBrain(p=>({...p,book:"complete",source:"terminal_position",lichess:"ready"}));
-          return;
-        }
-        if(restrictedOpponentReplyAuthority.kind==="runtime_reply"&&restrictedOpponentReplyAuthority.opponentReplyAuthorityCandidateUci){
-          const applied=applyUci(current.fen(),restrictedOpponentReplyAuthority.opponentReplyAuthorityCandidateUci);
-          if(!applied){
-            clearPendingOpponentReplyRequest({clearStaleIssue:true});
-            pushRuntimeCriticalIssue("restricted_opponent_reply_missing_runtime_authority");
-            setTrainerPhase("error");
-            setFeedback("The runtime-backed opponent reply was legal in the catalog but could not be applied in the current position.");
-            setBrain(p=>({...p,book:"complete",source:"restricted_runtime_reply_apply_failed",lichess:"ready"}));
-            return;
-          }
-          clearPendingOpponentReplyRequest({clearStaleIssue:true});
-          chosen={san:applied.san,uci:applied.uci,fen:applied.fen,playPct:restrictedOpponentReplyAuthority.opponentReplyAuthorityCandidatePlayPct};
-          source=`Runtime book reply (${restrictedOpponentReplyAuthority.opponentReplyAuthoritySource})`;
-          variationDebug={
-            ...variationDebug,
-            fallbackUsed:false,
-            opponentVariationApplied:false,
-            opponentVariationReason:"runtime_book_reply_selected",
-            selectedOpponentBranchKey:`${positionKey}::${applied.uci}`,
-            candidateOpponentBranches:runtimeBookRestrictedCandidates.map((candidate)=>({
-              branchKey:`${positionKey}::${candidate.uci}`,
-              uci:candidate.uci,
-              san:candidate.san,
-              baseWeight:Number(candidate.totalGames ?? 1),
-              adjustedWeight:Number(candidate.playPct ?? 0),
-              source:String(candidate.sourceDetail ?? candidate.sources ?? "runtime_book"),
-              safetyStatus:"runtime_book",
-              selectionScore:Number(candidate.rank ?? candidate.totalGames ?? 0),
-            })),
-            blockedThirdRepeatBranches:[],
-          };
-        }else if(restrictedOpponentReplyAuthority.kind==="blocked"){
-          clearPendingOpponentReplyRequest({clearStaleIssue:true});
-          pushRuntimeCriticalIssue("restricted_opponent_reply_missing_runtime_authority");
-          setTrainerPhase("error");
-          setFeedback("No runtime-backed opponent reply is available for this frame. Select another line or reopen the opening.");
-          setBrain(p=>({...p,book:"complete",source:"restricted_opponent_reply_blocked",lichess:"ready"}));
-          return;
-        }else{
-          clearPendingOpponentReplyRequest({clearStaleIssue:true});
-          pushRuntimeCriticalIssue("restricted_opponent_reply_missing_runtime_authority");
-          setTrainerPhase("error");
-          setFeedback("No runtime-backed opponent reply is available for this frame. Select another line or reopen the opening.");
-          setBrain(p=>({...p,book:"complete",source:"restricted_opponent_reply_blocked",lichess:"ready"}));
-          return;
-        }
       }else{
-        const explorer=await loadExplorer(current.fen());
-        const valid=currentOpponentBookOptions.map(book=>{const match=explorer.find(m=>m.uci===book.uci);return{...book,weight:match?.total??1,pct:match?.pct??0,branchKey:`${positionKey}::${book.uci}`}});
-        const decision=selectOpponentCandidateWithVariation({
-          context:variationContext,
-          memory,
-          candidates:valid.map((candidate)=>({
-            uci:candidate.uci,
-            san:candidate.san,
-            branchKey:candidate.branchKey,
-            weight:candidate.weight,
-            legal:true,
-            supported:true,
-            engineSafe:true,
-            severeBlunder:false,
-            source:"opening_branch",
-            pct:candidate.pct,
-          })),
-        });
-        const weighted=decision?valid.find((candidate)=>candidate.branchKey===decision.selected.branchKey)??valid[0]:pickWeighted(valid);
-        variationDebug=decision?{...decision}:variationDebug;
-        chosen={san:weighted.san,uci:weighted.uci,fen:weighted.resultingFen,playPct:weighted.pct>0?weighted.pct/100:null};
-        source=weighted.pct?`Lichess-weighted opening branch (${weighted.pct}%)`:"Saved opening branch";
+        clearPendingOpponentReplyRequest({clearStaleIssue:true});
+        if(currentSelectedLineAuthority.kind==="complete"){
+          setTrainerPhase("ready_for_user");
+          setFeedback("Line complete. Continue from here, or train the line again.");
+          setBrain(p=>({...p,book:"complete",source:"selected_runtime_line_complete",lichess:"ready"}));
+          return;
+        }
+        pushRuntimeCriticalIssue("restricted_opponent_reply_missing_runtime_authority");
+        setTrainerPhase("error");
+        setFeedback("No selected runtime-line opponent reply is available for this frame. Select another line or reopen the opening.");
+        setBrain(p=>({...p,book:"complete",source:currentSelectedLineAuthority.reason,lichess:"ready"}));
+        return;
       }
     }else{
       const legalMovesVerbose=current.moves({verbose:true}) as any[];
@@ -5914,7 +5968,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     clearRuntimeCriticalIssue("stale_opponent_reply_commit");
     clearRuntimeCriticalIssue("restricted_opponent_reply_missing_runtime_authority");
     clearRuntimeCriticalIssue("restricted_initial_black_opponent_handoff_illegal");
-    setLastMove(chosen.uci);setLastMoveSan(chosen.san);setLastMoveColor(opponentColor);setMoveHistory(prev=>[...prev,chosen.san]);setSelectedSquare(null);setShowAnswer(false);setOpponentCue(boardSettings.showOpponentCue?{expiresAt:Date.now()+2500,title:`Opponent: ${chosen.san}`,message:"Brief opponent cue. Your selected user-side view stays visible after this fades.",lines:[{from:chosen.uci.slice(0,2),to:chosen.uci.slice(2,4),kind:"opponent",label:chosen.san}],cues:[{square:chosen.uci.slice(2,4),kind:"opponent"}],committed:true,fen:normalizeFen(chosen.fen)}:null);setFeedback(buildOpponentReplyFeedback({san:chosen.san,playPct:chosen.playPct,variationApplied:variationDebug.opponentVariationApplied,blockedThirdRepeatBranches:variationDebug.blockedThirdRepeatBranches}));maybeShowProjectiveTacticsAfterMove({nextFen:chosen.fen,lastMoveUci:chosen.uci,movedColor:opponentColor});setBrain(p=>({...p,source,lichess:source.includes("Lichess")?"active":p.lichess,note:variationNote}))
+    setLastMove(chosen.uci);setLastMoveSan(chosen.san);setLastMoveColor(opponentColor);setMoveHistory(prev=>[...prev,chosen.san]);setMoveHistoryUci(prev=>[...prev,chosen.uci]);setSelectedSquare(null);setShowAnswer(false);setOpponentCue(boardSettings.showOpponentCue?{expiresAt:Date.now()+2500,title:`Opponent: ${chosen.san}`,message:"Brief opponent cue. Your selected user-side view stays visible after this fades.",lines:[{from:chosen.uci.slice(0,2),to:chosen.uci.slice(2,4),kind:"opponent",label:chosen.san}],cues:[{square:chosen.uci.slice(2,4),kind:"opponent"}],committed:true,fen:normalizeFen(chosen.fen)}:null);setFeedback(buildOpponentReplyFeedback({san:chosen.san,playPct:chosen.playPct,variationApplied:variationDebug.opponentVariationApplied,blockedThirdRepeatBranches:variationDebug.blockedThirdRepeatBranches}));maybeShowProjectiveTacticsAfterMove({nextFen:chosen.fen,lastMoveUci:chosen.uci,movedColor:opponentColor});setBrain(p=>({...p,source,lichess:source.includes("Lichess")?"active":p.lichess,note:variationNote}))
   }
   function handleTrainerViewChange(nextTrainerView:TrainerView){
     if(nextTrainerView===trainerView)return;
@@ -6193,13 +6247,26 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     const nextHasNextUserMove=nextExactSelectedLineNodes.length?nextExactSelectedLineNodes.some((node)=>node.continuations.some((move)=>move.color===userColor)):"unknown";
     const nextExplicitCuratedTerminalNode=nextExactSelectedLineNodes.some((node)=>node.terminal&&node.sideToMove===nextGame.turn());
     const nextRuntimePlayKeyBefore=buildRuntimePlayKeyBeforeFromSanHistory([...moveHistory,legal.san])??null;
-    const nextRuntimeLineCurrentPly=moveHistory.length+1;
-    const nextSelectedLineConfirmedComplete=isSelectedRuntimeLineComplete({
-      selectedRuntimeLinePlyLength,
-      currentPly:nextRuntimeLineCurrentPly,
-      resolverLineComplete:nextLineCompleteConfirmed,
-      exactNodeHasChildren:nextExactNodeHasChildren,
+    const nextRuntimeLineCurrentPly=moveHistoryUci.length+1;
+    const nextRestrictedRuntimeLineAuthority=resolveRestrictedRuntimeLineAuthority({
+      trainingMode:runtimeBackedRestrictedLineActive?"restricted":"continuation",
+      selectedRuntimeLineId,
+      selectedRuntimeLineKey,
+      selectedPlaySequenceUci:selectedRuntimeLinePlaySequenceUci,
+      committedUciHistory:[...moveHistoryUci,playedUci],
+      startingFen:initialFen,
+      currentFen:nextFen,
+      userColor,
+      sessionId:runtimeTrainingSessionId,
     });
+    const nextSelectedLineConfirmedComplete=runtimeBackedRestrictedLineActive
+      ? nextRestrictedRuntimeLineAuthority.kind==="complete"
+      : isSelectedRuntimeLineComplete({
+        selectedRuntimeLinePlyLength,
+        currentPly:nextRuntimeLineCurrentPly,
+        resolverLineComplete:nextLineCompleteConfirmed,
+        exactNodeHasChildren:nextExactNodeHasChildren,
+      });
     const nextRestrictedRuntimeBookExhaustedOnOpponentTurnAfterUserMove=Boolean(
       trainingMode==="restricted"&&
       !userExplicitlyEnteredContinuation&&
@@ -6278,6 +6345,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     setLastMoveSan(legal.san);
     setLastMoveColor(userColor);
     setMoveHistory(prev=>[...prev,legal.san]);
+    setMoveHistoryUci(prev=>[...prev,playedUci]);
     setOpponentCue(null);
     setOpponentVariationDebug(null);
     setShowAnswer(false);
@@ -6294,7 +6362,15 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     setFeedback(trainingMode==="restricted"?`Correct: ${legal.san}.`:`Played ${legal.san}. Move will be evaluated.`);
     maybeShowProjectiveTacticsAfterMove({nextFen,lastMoveUci:playedUci,movedColor:userColor});
     if(needsOpponentReply){
-      scheduleOpponentReply({mode:trainingMode,delayMs:350,baseFen:nextFen});
+      scheduleOpponentReply({
+        mode:trainingMode,
+        delayMs:350,
+        baseFen:nextFen,
+        restrictedRuntimeLineSnapshot:buildRestrictedRuntimeLineRequestSnapshot({
+          authority:nextRestrictedRuntimeLineAuthority,
+          baseFen:nextFen,
+        }),
+      });
     }
     setProgress(prev=>{
       const next={...prev.mistakes};
@@ -6326,8 +6402,8 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     if(!pendingPromotion)return;
     void attemptMove(pendingPromotion.from,pendingPromotion.to,promotionPiece);
   }
-  function practiceMistake(m:Mistake){const rep=repertoires.find(r=>r.id===m.repertoireId);clearProjectiveTacticOverlay("reset");if(rep)setSelectedRepertoireId(resolveStage2CanonicalOpeningId(rep.id)??rep.id);setFen(m.fen);resetHistory(m.fen);setReviewingFen(normalizeFen(m.fen));setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Review this opening position. Play the expected move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);resetBranchAndContinuationState();setMoveHistory([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setActiveTab("train");bumpRuntimeFrame()}
-  function createCustomRepertoire(){const moves=newLineText.replace(/\d+\./g," ").replace(/\s+/g," ").trim().split(" ").filter(Boolean);if(!moves.length)return;const test=new Chess();for(const move of moves){try{if(!test.move(move)){setFeedback(`Could not parse move: ${move}`);return}}catch{setFeedback(`Could not parse move: ${move}`);return}}const rep:Repertoire={id:`custom-${Date.now()}`,name:newRepName.trim()||"My Custom Repertoire",color:newRepColor,description:"Custom line saved on this device.",lines:[moves],custom:true};clearProjectiveTacticOverlay("opening_switch");setCustomRepertoires(prev=>[...prev,rep]);setSelectedRepertoireId(rep.id);setShowAddLine(false);const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setTrainingMode("restricted");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setFeedback("Custom repertoire saved. Restricted training is active.");setActiveTab("train");bumpRuntimeFrame()}
+  function practiceMistake(m:Mistake){const rep=repertoires.find(r=>r.id===m.repertoireId);clearProjectiveTacticOverlay("reset");if(rep)setSelectedRepertoireId(resolveStage2CanonicalOpeningId(rep.id)??rep.id);setFen(m.fen);resetHistory(m.fen);setReviewingFen(normalizeFen(m.fen));setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Review this opening position. Play the expected move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);resetBranchAndContinuationState();setMoveHistory([]);setMoveHistoryUci([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setActiveTab("train");bumpRuntimeFrame()}
+  function createCustomRepertoire(){const moves=newLineText.replace(/\d+\./g," ").replace(/\s+/g," ").trim().split(" ").filter(Boolean);if(!moves.length)return;const test=new Chess();for(const move of moves){try{if(!test.move(move)){setFeedback(`Could not parse move: ${move}`);return}}catch{setFeedback(`Could not parse move: ${move}`);return}}const rep:Repertoire={id:`custom-${Date.now()}`,name:newRepName.trim()||"My Custom Repertoire",color:newRepColor,description:"Custom line saved on this device.",lines:[moves],custom:true};clearProjectiveTacticOverlay("opening_switch");setCustomRepertoires(prev=>[...prev,rep]);setSelectedRepertoireId(rep.id);setShowAddLine(false);const startFen=new Chess().fen();setFen(startFen);resetHistory(startFen);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setMoveHistory([]);setMoveHistoryUci([]);setTrainingMode("restricted");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setFeedback("Custom repertoire saved. Restricted training is active.");setActiveTab("train");bumpRuntimeFrame()}
   const squareStyles:Record<string,CSSProperties>={};
   if(lastMove&&lastMove.length>=4){
     squareStyles[lastMove.slice(0,2)]={boxShadow:"inset 0 0 0 999px rgba(255,255,255,.12), inset 0 0 22px rgba(255,255,255,.5)"};
@@ -7252,7 +7328,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
         </div>
         {blundrDebugEnabled && activeBoard && enabledViews.length>0 && <div className="mb-3 grid gap-2" style={{gridTemplateColumns:`repeat(${enabledViews.length}, minmax(0,1fr))`}}>{enabledViews.map(v=><button key={v} onClick={()=>setActiveBoardView(v)} className={classNames("rounded-full px-4 py-2 text-sm font-black capitalize",safeBoardView===v?"bg-green-700 text-white shadow-sm":"bg-white text-stone-500 ring-1 ring-stone-200")}>{v}</button>)}</div>}
         <TapChessboard game={game} orientation={repertoire.color} selectedSquare={selectedSquare} squareStyles={squareStyles} lines={projectiveTacticsVisualPriorityActive?[]:boardLinesToRender} transientLines={transientLinesToRender} projectiveTacticVisuals={projectiveTacticDisplay.visuals} projectiveTacticsFading={projectiveTacticsFading} projectiveTacticShowLines={projectiveTacticDisplay.showLines} projectiveTacticShowLabels={projectiveTacticDisplay.showLabels} onSquareTap={handleSquareTap} evaluation={evaluationDisplay} settings={boardSettings} captured={captured} userColor={userColor} animationName={visualAnimationName} adaptiveOpeningIdentity={adaptiveOpeningIdentity} pendingPromotion={pendingPromotion} onPromotionSelect={handlePromotionPieceSelection} onPromotionCancel={cancelPromotionSelection}/>
-        <HistoryControls index={historyIndex} total={positionHistory.length} onBack={()=>jumpHistory(-1)} onForward={()=>jumpHistory(1)}/>
+        <HistoryControls index={historyIndex} total={positionHistory.length} lessonProgress={trainingMode==="restricted"?selectedRuntimeLineLearnerProgress:null} onBack={()=>jumpHistory(-1)} onForward={()=>jumpHistory(1)}/>
       </div>
       {showDetails&&<div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm"><div className="font-black text-stone-800">Coach Debug</div><div className="mt-2">coachMode: {coachDecision.mode}</div><div>coachAction: {coachDecision.action}</div><div>coachUtteranceId: {coachDecision.utteranceId??"none"}</div><div>coachUtteranceFamily: {coachDecision.utteranceFamily??"none"}</div><div>coachVariationReason: {String((coachDecision.debug as any)?.coachVariationReason??"n/a")}</div><div>coachHintStrength: {String((coachDecision.debug as any)?.coachHintStrength??"none")}</div><div>coachRevealRisk: {coachDecision.revealRisk}</div><div>coachGivesAnswer: {coachDecision.givesAnswer?"true":"false"}</div><div>coachButtons: {displayedCoachDecision.buttons.join(", ")||"none"}</div><div>coachShouldMarkReviewWorthy: {coachDecision.shouldMarkReviewWorthy?"true":"false"}</div><div>coachSuppressedReason: {coachDecision.suppressedReason??"none"}</div><div>coachFrameMatchesBoard: {coachContextResult.context?.recipeFrameMatchesBoard?"true":"false"}</div><div>coachFenMatchesBoard: {coachContextResult.context?.recipeFenMatchesBoard?"true":"false"}</div><div>recentCoachUtteranceIds: {coachUtteranceMemory.slice(-5).map((entry:any)=>entry.utteranceId).join(", ")||"none"}</div><div>coachSafetyWarnings: {JSON.stringify((coachDecision.debug as any)?.coachSafetyWarnings??[])}</div><div>coachReviewMarked: {coachReviewMarked?"true":"false"}</div><div>selectedOpportunity: {String((coachDecision.debug as any)?.selectedOpportunity??liveCoachState?.selected?.opportunity??"none")}</div><div>selectedIntent: {String((coachDecision.debug as any)?.selectedIntent??liveCoachState?.selected?.intent??"none")}</div><div>exactMoveAllowed: {coachContextResult.context?.exactMoveAllowed?"true":"false"}</div><div>claimTypes: {coachDecision.claimTypes.join(", ")||"none"}</div><div>blockedClaims: {String((coachDecision.debug as any)?.blockedClaims??"none")}</div><div>silenceReason: {String((coachDecision.debug as any)?.silenceReason??liveCoachState?.debug?.silenceReason??"none")}</div><div>branchTransitionSurfaceRendered: {branchTransitionSurface?.render?"true":"false"}</div><div>branchTransitionReason: {branchTransitionSurface?.reason??"none"}</div><div>continueFromHereAvailable: {branchTransitionSurface?.render?"true":"false"}</div><div>continueFromHereClicked: {continueFromHereClicked?"true":"false"}</div><div>coachSurfaceOwner: {coachSurfacePolicy.owner}</div><div>allowLegacyTrainingCard: {coachSurfacePolicy.allowLegacyTrainingCard?"true":"false"}</div><div>allowMoveImpactCard: {coachSurfacePolicy.allowMoveImpactCard?"true":"false"}</div><div>allowNextMoveText: {coachSurfacePolicy.allowNextMoveText?"true":"false"}</div><div>legacyCueSuppressedReason: {coachSurfacePolicy.reason}</div><div>moveImpactPresenterReason: {moveImpactPresentation.reason}</div></div>}
       {!v28SurfaceActive&&bookComplete&&<div className="rounded-3xl border border-green-200 bg-green-50 p-4 shadow-sm"><h2 className="text-lg font-black text-green-900">Line complete</h2><p className="mt-2 text-sm leading-6 text-green-800">You finished this training line. Continue from this position or train the line again.</p><div className="mt-4 grid grid-cols-2 gap-3"><button onClick={continueFromHere} className="rounded-2xl bg-green-700 px-4 py-3 font-black text-white shadow-sm">Continue Line</button><button onClick={resetBoard} className="rounded-2xl bg-white px-4 py-3 font-black text-green-800 shadow-sm">Train Again</button></div></div>}
@@ -7423,7 +7499,15 @@ function EvalBar({evaluation}:{evaluation:TrainerEvaluationDisplay}){
 function temporalGateColor(line:ActiveLine,transient:boolean){if(transient||line.kind==="opponent")return{primary:"#b884ff",secondary:"#d2b0ff",danger:"#f0e5ff",soft:"rgba(184,132,255,.14)"};if(line.kind==="defense")return{primary:"#21b8a6",secondary:"#84e8dd",danger:"#d8faf4",soft:"rgba(33,184,166,.14)"};if(line.kind==="attack")return{primary:"#ff7a59",secondary:"#ffc26a",danger:"#ffe3b0",soft:"rgba(255,122,89,.14)"};return{primary:"#5e7eff",secondary:"#9cb7ff",danger:"#dce6ff",soft:"rgba(94,126,255,.14)"}}
 function BoardLines({lines,centerFor,transient}:{lines:ActiveLine[];centerFor:(s:string)=>{x:number;y:number};transient:boolean}){const visible=lines.filter(l=>isValidSquare(l.from)&&isValidSquare(l.to)).slice(0,transient?1:2);if(!visible.length)return null;return <svg className="pointer-events-none absolute inset-0 z-20 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none"><defs>{visible.map((l,i)=>{const c=temporalGateColor(l,transient);return <linearGradient key={i} id={`tg-${transient?"t":"p"}-${i}`} x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor={c.primary} stopOpacity=".22"/><stop offset="54%" stopColor={c.secondary} stopOpacity=".92"/><stop offset="100%" stopColor={c.primary} stopOpacity=".76"/></linearGradient>})}</defs>{visible.map((l,i)=>{const f=centerFor(l.from),t=centerFor(l.to),c=temporalGateColor(l,transient);const knight=isKnightGeometry(l.from,l.to);const corner={x:t.x,y:f.y};const d=knight?`M ${f.x} ${f.y} L ${corner.x} ${corner.y} L ${t.x} ${t.y}`:`M ${f.x} ${f.y} Q ${(f.x+t.x)/2} ${(f.y+t.y)/2-3.2} ${t.x} ${t.y}`;const points=`${f.x},${f.y} ${corner.x},${corner.y} ${t.x},${t.y}`;return <g key={`${l.from}-${l.to}-${i}`} className={transient?"blundr-opponent-line":"blundr-intent-line"}><circle cx={f.x} cy={f.y} r="4.0" fill={c.soft} opacity=".95"/><circle cx={f.x} cy={f.y} r="3.15" fill="none" stroke={c.primary} strokeWidth=".72" opacity=".9"/><circle cx={t.x} cy={t.y} r="6.1" fill={c.soft} opacity=".95"/><circle cx={t.x} cy={t.y} r="4.7" fill="none" stroke={c.primary} strokeWidth=".82" opacity=".96"/><circle cx={t.x} cy={t.y} r="2.15" fill={c.primary} opacity=".22"/>{knight?<><polyline points={points} fill="none" stroke={c.soft} strokeWidth={transient?"2.4":"2.15"} strokeLinecap="round" strokeLinejoin="round" opacity=".9"/><polyline points={points} fill="none" stroke={`url(#tg-${transient?"t":"p"}-${i})`} strokeWidth={transient?"1.2":"1.02"} strokeLinecap="round" strokeLinejoin="round"/></>:<><path d={d} fill="none" stroke={c.soft} strokeWidth={transient?"2.3":"2.0"} strokeLinecap="round" opacity=".9"/><path d={d} fill="none" stroke={`url(#tg-${transient?"t":"p"}-${i})`} strokeWidth={transient?"1.12":".98"} strokeLinecap="round"/></>}</g>})}</svg>}
 
-function HistoryControls({index,total,onBack,onForward}:{index:number;total:number;onBack:()=>void;onForward:()=>void}){return <div className="mt-3 flex items-center justify-between rounded-2xl bg-stone-50 px-3 py-2 text-xs font-black text-stone-500"><button disabled={index<=0} onClick={onBack} className="rounded-full bg-white px-3 py-2 text-stone-700 shadow-sm disabled:opacity-30">← Back</button><span>{total<=1?"Start position":`Move review ${index}/${total-1}`}</span><button disabled={index>=total-1} onClick={onForward} className="rounded-full bg-white px-3 py-2 text-stone-700 shadow-sm disabled:opacity-30">Forward →</button></div>}
+function HistoryControls({index,total,lessonProgress,onBack,onForward}:{index:number;total:number;lessonProgress?:RestrictedRuntimeLineProgress|null;onBack:()=>void;onForward:()=>void}){
+  const reviewing=index<total-1;
+  const label=reviewing
+    ? `Position ${index}/${total-1}`
+    : lessonProgress&&lessonProgress.totalLearnerMoves>0
+      ? `Lesson ${lessonProgress.completedLearnerMoves}/${lessonProgress.totalLearnerMoves}`
+      : "Start position";
+  return <div className="mt-3 flex items-center justify-between rounded-2xl bg-stone-50 px-3 py-2 text-xs font-black text-stone-500"><button disabled={index<=0} onClick={onBack} className="rounded-full bg-white px-3 py-2 text-stone-700 shadow-sm disabled:opacity-30">← Back</button><span>{label}</span><button disabled={index>=total-1} onClick={onForward} className="rounded-full bg-white px-3 py-2 text-stone-700 shadow-sm disabled:opacity-30">Forward →</button></div>
+}
 function GameEndCard({title,message,onRestart}:{title:string;message:string;onRestart:()=>void}){return <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-center shadow-sm"><div className="text-xs font-black uppercase tracking-wide text-amber-700">Game concluded</div><h2 className="mt-1 text-2xl font-black text-amber-950">{title}</h2><p className="mt-2 text-sm leading-6 text-amber-800">{message}</p><button onClick={onRestart} className="mt-4 w-full rounded-2xl bg-amber-600 px-4 py-3 font-black text-white shadow-sm">Restart</button></div>}
 
 function SettingsPanel({settings,setSettings,rating,ratingBands,onRatingFilterChange,onClose}:{settings:BoardSettings;setSettings:(s:BoardSettings)=>void;rating:Stage2RatingBand;ratingBands:readonly Stage2RatingBand[];onRatingFilterChange:(value:string)=>void;onClose:()=>void}){
