@@ -17,6 +17,7 @@ create table if not exists public.blundr_reward_transactions_v2 (
   randomness_key_version text,
   created_at timestamptz not null default now(),
   unique (user_id, idempotency_key),
+  constraint blundr_reward_transactions_v2_id_user_unique unique (id, user_id),
   constraint blundr_reward_transactions_v2_kind_check check (
     transaction_kind in ('reward_grant', 'inventory_unlock')
   ),
@@ -35,7 +36,7 @@ create table if not exists public.blundr_reward_transactions_v2 (
 -- miss when the server secret is unavailable.
 create table if not exists public.blundr_reward_grants_v2 (
   id uuid primary key default gen_random_uuid(),
-  transaction_id uuid not null references public.blundr_reward_transactions_v2(id) on delete restrict,
+  transaction_id uuid not null,
   user_id uuid not null references auth.users(id) on delete cascade,
   grant_key text not null,
   grant_type text not null,
@@ -45,6 +46,10 @@ create table if not exists public.blundr_reward_grants_v2 (
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   unique (transaction_id, grant_key),
+  constraint blundr_reward_grants_v2_transaction_owner_fk
+    foreign key (transaction_id, user_id)
+    references public.blundr_reward_transactions_v2(id, user_id)
+    on delete cascade,
   constraint blundr_reward_grants_v2_type_check check (
     grant_type in ('routine_points', 'opening_fragment', 'choice_token', 'epic_points')
   ),
@@ -77,7 +82,7 @@ create table if not exists public.blundr_reward_inventory_v2 (
 -- there is no server-selected fallback opening.
 create table if not exists public.blundr_reward_inventory_events_v2 (
   id uuid primary key default gen_random_uuid(),
-  transaction_id uuid not null references public.blundr_reward_transactions_v2(id) on delete restrict,
+  transaction_id uuid not null,
   user_id uuid not null references auth.users(id) on delete cascade,
   event_key text not null,
   event_kind text not null,
@@ -88,6 +93,10 @@ create table if not exists public.blundr_reward_inventory_events_v2 (
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   unique (transaction_id, event_key),
+  constraint blundr_reward_inventory_events_v2_transaction_owner_fk
+    foreign key (transaction_id, user_id)
+    references public.blundr_reward_transactions_v2(id, user_id)
+    on delete cascade,
   constraint blundr_reward_inventory_events_v2_kind_check check (
     event_kind in ('grant', 'spend', 'unlock')
     and inventory_kind in ('opening_fragment', 'choice_token')
@@ -108,7 +117,7 @@ create table if not exists public.blundr_reward_inventory_events_v2 (
 -- acknowledgement remain separate durable facts.
 create table if not exists public.blundr_reward_presentations_v2 (
   id uuid primary key default gen_random_uuid(),
-  transaction_id uuid not null references public.blundr_reward_transactions_v2(id) on delete restrict,
+  transaction_id uuid not null,
   user_id uuid not null references auth.users(id) on delete cascade,
   presentation_key text not null,
   presentation_kind text not null,
@@ -124,6 +133,10 @@ create table if not exists public.blundr_reward_presentations_v2 (
   updated_at timestamptz not null default now(),
   unique (transaction_id),
   unique (user_id, presentation_key),
+  constraint blundr_reward_presentations_v2_transaction_owner_fk
+    foreign key (transaction_id, user_id)
+    references public.blundr_reward_transactions_v2(id, user_id)
+    on delete cascade,
   constraint blundr_reward_presentations_v2_kind_check check (
     presentation_kind in ('toast', 'modal', 'sheet')
   ),
