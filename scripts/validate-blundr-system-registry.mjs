@@ -93,11 +93,34 @@ for (const id of ["MINIGAME-PROCEDURAL-001", "MINIGAME-DEEP-001"]) {
   const entry = entryById.get(id);
   assert.ok(entry, `Missing ${id} contract`);
   assert.equal(entry.contractVersion, "2");
+  assert.deepEqual(entry.featureFlags, []);
   assert.ok(
     entry.blockers.some((blocker) => /deprecated and disabled/.test(blocker)),
     `${id}: Daily deprecation must be recorded`,
   );
 }
+
+for (const id of [
+  "TRAIN-MAIA-001",
+  "REVIEW-SRS-001",
+  "IMPORT-001",
+  "OBSERVABILITY-001",
+]) {
+  const entry = entryById.get(id);
+  assert.ok(entry, `Missing ${id} production release contract`);
+  assert.equal(entry.contractVersion, "2", `${id}: contract must be revised`);
+  assert.ok(
+    entry.status === "partial" || entry.status === "blocked",
+    `${id}: must remain partial or blocked`,
+  );
+  assert.ok(entry.blockers.length, `${id}: unimplemented scope needs blockers`);
+}
+
+const uiShell = entryById.get("UI-SHELL-001");
+assert.ok(uiShell, "Missing UI-SHELL-001 production release contract");
+assert.equal(uiShell.contractVersion, "1");
+assert.equal(uiShell.status, "partial");
+assert.ok(uiShell.blockers.length, "UI-SHELL-001 needs blockers");
 
 console.log(
   `Blundr system registry valid: ${registry.entries.length} unique feature contracts.`,

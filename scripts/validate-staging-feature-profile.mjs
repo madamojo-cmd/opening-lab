@@ -1,4 +1,4 @@
-import { readFile, readdir } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 
 const PROFILE_PATHS = [
   "release/feature-profiles/staging-3.99.json",
@@ -8,6 +8,7 @@ const DEPRECATED_DAILY_CAPABILITIES = [
   "daily_deep_minigames",
   "daily_mixed_test",
 ];
+const CUMULATIVE_PR01_MIGRATION_HEAD = "20260805130000";
 const profiles = await Promise.all(
   PROFILE_PATHS.map(async (profilePath) => ({
     path: profilePath,
@@ -19,9 +20,6 @@ const runtimeSource = await readFile(
   "lib/blundr/trainingRuntime/trainingRuntimeSchema.ts",
   "utf8",
 );
-const migrations = (await readdir("supabase/migrations"))
-  .filter((file) => file.endsWith(".sql"))
-  .sort();
 
 function requireValue(condition, message) {
   if (!condition) throw new Error(message);
@@ -37,7 +35,6 @@ const canonicalFlags = [...flagBlock.matchAll(/^\s{2}([a-z0-9_]+): false,/gm)]
 const runtimePackageId = runtimeSource.match(
   /TRAINING_RUNTIME_PACKAGE_ID\s*=\s*\n?\s*"([^"]+)"/,
 )?.[1];
-const migrationHead = migrations.at(-1)?.split("_")[0];
 
 for (const { path, value: profile } of profiles) {
   const profileFlags = Object.keys(profile.featureFlags ?? {}).sort();
@@ -58,8 +55,8 @@ for (const { path, value: profile } of profiles) {
     `${prefix} feature flags must be explicit booleans.`,
   );
   requireValue(
-    profile.migrationHead === migrationHead,
-    `${prefix} feature profile migration head does not match the repository.`,
+    profile.migrationHead === CUMULATIVE_PR01_MIGRATION_HEAD,
+    `${prefix} feature profile must target the cumulative PR-01 migration head.`,
   );
   requireValue(
     profile.runtimePackageId === runtimePackageId,
@@ -110,5 +107,5 @@ for (const { path, value: profile } of profiles) {
 }
 
 console.log(
-  `Verified ${profiles.length} failure-closed feature profiles: ${canonicalFlags.length} flags, migration ${migrationHead}, runtime ${runtimePackageId}.`,
+  `Verified ${profiles.length} failure-closed feature profiles: ${canonicalFlags.length} flags, cumulative PR-01 migration ${CUMULATIVE_PR01_MIGRATION_HEAD}, runtime ${runtimePackageId}.`,
 );
