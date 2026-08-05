@@ -6,7 +6,7 @@ Last updated: 2026-08-05 UTC
 
 - Accepted baseline SHA: `3944da6472d0439b2087ce1e4648ffa6ea69f85e`
 - Current accepted cumulative release SHA: `c7d4e9e091daecfb19e9933af174bcc6e73a5a7e`
-- Active PR-01 integration head before this record update: `71456d8ad5076fd0a969ab854c4f4ec071ce29c4`
+- PR-01 source candidate proven by both remote database journeys: `8f4c0e15220b794a93dd962998b576e42a4fc940`
 - Release branch: `release/blundr-production-3.99`
 - Accepted PRs: PR #2, PR-00 Restricted Trainer authority; PR #3, deterministic release verification sharding
 - Active implementation PR: PR-01 contracts, flags, additive migrations, RPC shells, and verification hardening
@@ -23,7 +23,7 @@ Last updated: 2026-08-05 UTC
 
 - Migration head: `20260805130000_blundr_rewards_inventory_presentations_v2.sql`
 - Migration count: 23
-- New migrations applied: none; clean apply and prior-head upgrade remain Level 2 gates
+- Journey A proved a real zero-to-23 apply; Journey B proved a real seven-to-21 preparation followed by the ordered two-migration PR-01 upgrade to 23.
 - Feature-profile state: staging and production schema-v2 profiles committed; both failure-closed and all three new controls disabled
 - `BLUNDR_FEATURE_DAILY_ADAPTIVE_V2`: contract implemented; disabled
 - `BLUNDR_REWARDS_V2_ENABLED`: contract implemented; disabled
@@ -65,7 +65,6 @@ The missing CSV references must not be regenerated, substituted, or committed in
 
 ## Known preexisting gaps
 
-- Strengthened migration verification remains static and does not prove clean apply or prior-head upgrade; the new live PR-01 matrix has not run against a database with both new migrations applied.
 - Current bundle audit does not enforce numeric route or JavaScript budgets.
 - Numeric route and JavaScript bundle budgets remain pending release-infrastructure hardening.
 - Exact-SHA staging J01-J24 evidence does not exist.
@@ -80,12 +79,13 @@ The missing CSV references must not be regenerated, substituted, or committed in
 
 - GitHub Environment `blundr-disposable-rls` exposes all required secret names for the fresh reference, upgrade reference, authority-test reference, disposable role, Supabase access, database connection, and User A/User B tests; values are never logged. The workflow fails closed unless the role value is exactly `disposable`.
 - Management-API preflight rejects staging/production metadata, requires distinct fresh/upgrade references, and requires the authority-test reference to equal the upgrade reference before mutation.
-- Journey A result: pending exact-head CI; required start is empty and required result is 23 migrations at `20260805130000`.
-- Journey A attempt at exact SHA `190a96084dee66649db4f4625da3e0374243e9f6` stopped before dry-run or push because the pinned CLI requires `--output-format json`; the focused parser correction is committed locally and not pushed while Journey B is unsafe.
-- Journey B result: human-blocked before link/dry-run/push because the Management API project name matched the forbidden staging/production marker. The environment must provide a different authorized disposable upgrade project at the real seven-migration state. Its test reference must match the upgrade reference.
-- Authority-matrix result: pending exact-head CI; no skipped remote test is accepted.
-- No database mutation, migration repair, staging action, or production action occurred in failed workflow runs `31044701158` and `31048670051`.
-- Release impact: PR-01 remains active until both journeys, the complete authority matrix, exact-head Level 2 CI, and independent review pass.
+- Journey A result: passed at exact source candidate `8f4c0e15220b794a93dd962998b576e42a4fc940` in workflow `31054536301`; start 0, dry-run exactly 23 ordered repository migrations, end count 23/head `20260805130000`, followed by the non-skippable fresh authority matrix.
+- Journey B result: passed at the same exact source candidate; start 7/head `20260715`, real ordered execution prepared 21/head `20260804130000`, dry-run then contained only migrations `20260805120000` and `20260805130000`, and the end was 23/head `20260805130000`.
+- Preservation result: deterministic legacy fixtures and the sanitized pre-upgrade snapshot verified after upgrade; existing ownership, learning history, schedules, balances, grants, and reward history survived, while unresolved rows remained explicit and no expected move, Mastery, fragment, token, or reward was fabricated.
+- Authority matrices: fresh 2/2 passed and upgraded 2/2 passed, zero skipped. Coverage includes signed-out denial, User A/User B isolation, service-authority boundaries, reward child ownership, deletion cascades, first-attempt spoof resistance, and immutable deterministic backfill reports.
+- Remaining Level 2 jobs at workflow `31054536301`: static/registry, component/integration, chess content, unit shards 1/4 through 4/4, production build, bundle audit, browser tests, and the required release summary all passed.
+- No migration repair or manual history marking was used. No staging or production database was targeted.
+- PR-01 remains active only until the record-only candidate update, exact-head Level 2 aggregate, and final independent review pass.
 
 ## Human-only blockers
 
@@ -105,7 +105,7 @@ The missing CSV references must not be regenerated, substituted, or committed in
 
 ## Next release gate
 
-1. Finish PR-01 Level 2 clean-apply, upgrade-path, RLS/privilege, flags-off compatibility, and focused verification.
+1. Finish the record-only exact-head PR-01 Level 2 aggregate and final independent review, then merge PR #4.
 2. Keep Gate 1 evidence partial until the original protected CSV files are verified.
 3. Accept PR-01 only after independent review and exact cumulative test evidence, then open PR-02/PR-03 domain implementations.
 
@@ -115,6 +115,7 @@ The missing CSV references must not be regenerated, substituted, or committed in
 - Level 2 internal PR gate: format/lint/typecheck plus affected unit, component, integration, migration, RLS, build, and browser gates.
 - Level 3 complete clean release gate: every command in the authoritative execution plan; CI may replace serial unit execution only when all four deterministic shards are required and pass.
 - Complete runs are scheduled at Checkpoint B after PR-04, Checkpoint C after PR-06, Checkpoint D after PR-07, and once for any source-changing exact-SHA staging repair.
+- PR-01 used Level 2 verification only; Level 3 was not run. The next scheduled Level 3 remains Checkpoint B after cumulative integration through PR-04.
 - An earlier Level 3 run is required for changes to broad authorities, including test discovery and CI sharding.
 
 ### Checkpoint A baseline
