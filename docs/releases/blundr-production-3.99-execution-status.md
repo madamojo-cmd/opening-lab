@@ -72,6 +72,13 @@ The missing CSV references must not be regenerated, substituted, or committed in
 ## Regressions
 
 - New regressions: none known at the accepted PR-00 head.
+- PR-01 review defects corrected before acceptance: reward child cross-user ownership, account-deletion cascade safety, legacy first-attempt spoofing, and mutable migration backfill reports.
+
+## Environmental blockers
+
+- The configured disposable remote RLS database has not applied migrations `20260805120000` and `20260805130000`; the PR-01 matrix now fails closed when that schema is absent.
+- A local Supabase fresh-apply attempt was blocked while pulling the isolated stack because Docker storage exhausted at `/var/lib/docker`; no migration was applied and no staging or production system was touched.
+- Release impact: PR-01 remains active and cannot pass Level 2 until clean apply, prior-head upgrade, account deletion, and the signed-out/User A/User B/service-role matrix run against an isolated database containing both migrations.
 
 ## Human-only blockers
 
