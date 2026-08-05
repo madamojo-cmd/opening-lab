@@ -6,7 +6,7 @@ Last updated: 2026-08-05 UTC
 
 - Accepted baseline SHA: `3944da6472d0439b2087ce1e4648ffa6ea69f85e`
 - Current accepted cumulative release SHA: `c7d4e9e091daecfb19e9933af174bcc6e73a5a7e`
-- Active PR-01 integration head before this record update: `d92ccc4e`
+- Active PR-01 integration head before this record update: `644423f2a84cb121bb050f66c1eada381834ef8c`
 - Release branch: `release/blundr-production-3.99`
 - Accepted PRs: PR #2, PR-00 Restricted Trainer authority; PR #3, deterministic release verification sharding
 - Active implementation PR: PR-01 contracts, flags, additive migrations, RPC shells, and verification hardening
@@ -17,7 +17,7 @@ Last updated: 2026-08-05 UTC
 
 - Lead release worktree: `/workspaces/opening-lab/.worktrees/blundr-production-3.99`
 - Shared checkout `/workspaces/opening-lab` is dirty on an unrelated branch and is not authorized for release mutations.
-- PR-01 worktrees: `/tmp/blundr-pr01-registry`, `/tmp/blundr-pr01-learning-daily`, `/tmp/blundr-pr01-rewards`, `/tmp/blundr-pr01-tests`, and `/tmp/blundr-pr01-review`.
+- PR-01 worktrees: `/tmp/blundr-pr01-registry`, `/tmp/blundr-pr01-learning-daily`, `/tmp/blundr-pr01-rewards`, `/tmp/blundr-pr01-tests`, `/tmp/blundr-pr01-review`, and `/tmp/blundr-pr01-remote-db-tests`.
 
 ## Database and feature controls
 
@@ -60,6 +60,8 @@ The missing CSV references must not be regenerated, substituted, or committed in
 - Focused Restricted Trainer/runtime tests: passed
 - TypeScript typecheck: passed
 - Patch review: accepted after initial Black handoff stale-authority repair
+- PR-01 focused static gates: migration ancestry/authority verification, registry, profiles, flags, manifest, typecheck, format, lint, and diff checks passed before the remote-database gate changes.
+- PR-01 remote CI now requires an exact 21-migration disposable baseline before mutation, performs dry-run/push without logging target details, verifies 23 migrations afterward, and runs a non-skippable authority matrix.
 
 ## Known preexisting gaps
 
@@ -74,11 +76,13 @@ The missing CSV references must not be regenerated, substituted, or committed in
 - New regressions: none known at the accepted PR-00 head.
 - PR-01 review defects corrected before acceptance: reward child cross-user ownership, account-deletion cascade safety, legacy first-attempt spoofing, and mutable migration backfill reports.
 
-## Environmental blockers
+## Remote database blockers
 
-- The configured disposable remote RLS database has not applied migrations `20260805120000` and `20260805130000`; the PR-01 matrix now fails closed when that schema is absent.
-- A local Supabase fresh-apply attempt was blocked while pulling the isolated stack because Docker storage exhausted at `/var/lib/docker`; no migration was applied and no staging or production system was touched.
-- Release impact: PR-01 remains active and cannot pass Level 2 until clean apply, prior-head upgrade, account deletion, and the signed-out/User A/User B/service-role matrix run against an isolated database containing both migrations.
+- Missing secret: `BLUNDR_RLS_FRESH_PROJECT_REF`. No second disposable Supabase project exists under the configured account, so Journey A cannot begin without human project/billing authority.
+- Missing secret: `BLUNDR_RLS_UPGRADE_PROJECT_REF`. The only generic configured project reference is confirmed disposable and not staging/production, but its read-only migration history contains 7 migrations through `20260715`, not the required prior 21 through `20260804130000`; it is ineligible for Journey B and was not mutated.
+- Required CI environment secrets still need configuration under `blundr-disposable-rls`: `BLUNDR_RLS_TEST_PROJECT_REF` and `BLUNDR_RLS_TEST_ENVIRONMENT_ROLE=disposable`, plus the already defined access, database, anon, service-role, and User A/User B credentials.
+- No remote link dry-run, push, migration repair, authority mutation, staging action, or production action was performed after the history mismatch was found.
+- Release impact: PR-01 remains active and cannot pass Level 2 until both the fresh-install and exact prior-21 upgrade journeys complete against separate eligible disposable projects.
 
 ## Human-only blockers
 
