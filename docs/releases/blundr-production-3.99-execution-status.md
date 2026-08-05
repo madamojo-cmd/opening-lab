@@ -6,7 +6,7 @@ Last updated: 2026-08-05 UTC
 
 - Accepted baseline SHA: `3944da6472d0439b2087ce1e4648ffa6ea69f85e`
 - Current accepted cumulative release SHA: `c7d4e9e091daecfb19e9933af174bcc6e73a5a7e`
-- Active PR-01 integration head before this record update: `045e1b88f7d709474e420ae0133a0b7887167534`
+- Active PR-01 integration head before this record update: `71456d8ad5076fd0a969ab854c4f4ec071ce29c4`
 - Release branch: `release/blundr-production-3.99`
 - Accepted PRs: PR #2, PR-00 Restricted Trainer authority; PR #3, deterministic release verification sharding
 - Active implementation PR: PR-01 contracts, flags, additive migrations, RPC shells, and verification hardening
@@ -81,9 +81,10 @@ The missing CSV references must not be regenerated, substituted, or committed in
 - GitHub Environment `blundr-disposable-rls` exposes all required secret names for the fresh reference, upgrade reference, authority-test reference, disposable role, Supabase access, database connection, and User A/User B tests; values are never logged. The workflow fails closed unless the role value is exactly `disposable`.
 - Management-API preflight rejects staging/production metadata, requires distinct fresh/upgrade references, and requires the authority-test reference to equal the upgrade reference before mutation.
 - Journey A result: pending exact-head CI; required start is empty and required result is 23 migrations at `20260805130000`.
-- Journey B result: pending exact-head CI; required preparation is the real migrations 8-21 from the existing seven-migration disposable state, followed only by migrations 22-23 to reach 23 at `20260805130000`.
+- Journey A attempt at exact SHA `190a96084dee66649db4f4625da3e0374243e9f6` stopped before dry-run or push because the pinned CLI requires `--output-format json`; the focused parser correction is committed locally and not pushed while Journey B is unsafe.
+- Journey B result: human-blocked before link/dry-run/push because the Management API project name matched the forbidden staging/production marker. The environment must provide a different authorized disposable upgrade project at the real seven-migration state. Its test reference must match the upgrade reference.
 - Authority-matrix result: pending exact-head CI; no skipped remote test is accepted.
-- No migration repair, staging action, or production action is authorized by this gate.
+- No database mutation, migration repair, staging action, or production action occurred in failed workflow runs `31044701158` and `31048670051`.
 - Release impact: PR-01 remains active until both journeys, the complete authority matrix, exact-head Level 2 CI, and independent review pass.
 
 ## Human-only blockers
