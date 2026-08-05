@@ -41,6 +41,10 @@ assert.match(
 );
 assert.match(
   workflow,
+  /BLUNDR_RLS_TEST_URL\|BLUNDR_RLS_TEST_ANON_KEY\|BLUNDR_RLS_TEST_SERVICE_ROLE_KEY\)[\s\S]*?export "\$generated_name=\$generated_value"[\s\S]*?done < "\$GITHUB_ENV"/,
+);
+assert.match(
+  workflow,
   /BLUNDR_RLS_TEST_PROJECT_REF="\$BLUNDR_RLS_FRESH_PROJECT_REF" node --preserve-symlinks --import tsx tests\/security\/pr01MigrationAuthority\.integration\.test\.ts/,
 );
 assert.equal((workflow.match(/supabase@2\.111\.0/g) ?? []).length, 4);

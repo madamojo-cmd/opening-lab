@@ -343,10 +343,13 @@ async function assertRewardsAndCascade(
   assert.equal(inserted.error, null);
   assert.ok(inserted.data?.id);
   const transactionId = inserted.data.id;
-  assert.deepEqual(
-    (await anonymous.from("blundr_reward_transactions_v2").select("user_id"))
-      .data,
-    [],
+  const anonymousTransactionRead = await anonymous
+    .from("blundr_reward_transactions_v2")
+    .select("user_id");
+  assert.ok(
+    anonymousTransactionRead.error ||
+      anonymousTransactionRead.data?.length === 0,
+    "signed-out reward transaction reads must error or return no rows",
   );
   assert.equal(
     (
