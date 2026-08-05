@@ -6,7 +6,7 @@ Last updated: 2026-08-05 UTC
 
 - Accepted baseline SHA: `3944da6472d0439b2087ce1e4648ffa6ea69f85e`
 - Current accepted cumulative release SHA: `c7d4e9e091daecfb19e9933af174bcc6e73a5a7e`
-- Active PR-01 integration head before this record update: `644423f2a84cb121bb050f66c1eada381834ef8c`
+- Active PR-01 integration head before this record update: `045e1b88f7d709474e420ae0133a0b7887167534`
 - Release branch: `release/blundr-production-3.99`
 - Accepted PRs: PR #2, PR-00 Restricted Trainer authority; PR #3, deterministic release verification sharding
 - Active implementation PR: PR-01 contracts, flags, additive migrations, RPC shells, and verification hardening
@@ -17,7 +17,7 @@ Last updated: 2026-08-05 UTC
 
 - Lead release worktree: `/workspaces/opening-lab/.worktrees/blundr-production-3.99`
 - Shared checkout `/workspaces/opening-lab` is dirty on an unrelated branch and is not authorized for release mutations.
-- PR-01 worktrees: `/tmp/blundr-pr01-registry`, `/tmp/blundr-pr01-learning-daily`, `/tmp/blundr-pr01-rewards`, `/tmp/blundr-pr01-tests`, `/tmp/blundr-pr01-review`, and `/tmp/blundr-pr01-remote-db-tests`.
+- PR-01 worktrees: `/tmp/blundr-pr01-registry`, `/tmp/blundr-pr01-learning-daily`, `/tmp/blundr-pr01-rewards`, `/tmp/blundr-pr01-tests`, `/tmp/blundr-pr01-review`, `/tmp/blundr-pr01-preservation-matrix`, and `/tmp/blundr-pr01-journey-workflow`.
 
 ## Database and feature controls
 
@@ -61,7 +61,7 @@ The missing CSV references must not be regenerated, substituted, or committed in
 - TypeScript typecheck: passed
 - Patch review: accepted after initial Black handoff stale-authority repair
 - PR-01 focused static gates: migration ancestry/authority verification, registry, profiles, flags, manifest, typecheck, format, lint, and diff checks passed before the remote-database gate changes.
-- PR-01 remote CI now requires an exact 21-migration disposable baseline before mutation, performs dry-run/push without logging target details, verifies 23 migrations afterward, and runs a non-skippable authority matrix.
+- PR-01 remote CI now runs distinct fresh and upgrade jobs in `blundr-disposable-rls`, validates the exact sanitized dry-run migration sets, prepares the authorized seven-migration upgrade project to the real prior-21 head without repair, verifies 23 migrations afterward, and runs a non-skippable symmetric authority matrix.
 
 ## Known preexisting gaps
 
@@ -76,13 +76,15 @@ The missing CSV references must not be regenerated, substituted, or committed in
 - New regressions: none known at the accepted PR-00 head.
 - PR-01 review defects corrected before acceptance: reward child cross-user ownership, account-deletion cascade safety, legacy first-attempt spoofing, and mutable migration backfill reports.
 
-## Remote database blockers
+## Remote database acceptance
 
-- Missing secret: `BLUNDR_RLS_FRESH_PROJECT_REF`. No second disposable Supabase project exists under the configured account, so Journey A cannot begin without human project/billing authority.
-- Missing secret: `BLUNDR_RLS_UPGRADE_PROJECT_REF`. The only generic configured project reference is confirmed disposable and not staging/production, but its read-only migration history contains 7 migrations through `20260715`, not the required prior 21 through `20260804130000`; it is ineligible for Journey B and was not mutated.
-- Required CI environment secrets still need configuration under `blundr-disposable-rls`: `BLUNDR_RLS_TEST_PROJECT_REF` and `BLUNDR_RLS_TEST_ENVIRONMENT_ROLE=disposable`, plus the already defined access, database, anon, service-role, and User A/User B credentials.
-- No remote link dry-run, push, migration repair, authority mutation, staging action, or production action was performed after the history mismatch was found.
-- Release impact: PR-01 remains active and cannot pass Level 2 until both the fresh-install and exact prior-21 upgrade journeys complete against separate eligible disposable projects.
+- GitHub Environment `blundr-disposable-rls` exposes all required secret names for the fresh reference, upgrade reference, authority-test reference, disposable role, Supabase access, database connection, and User A/User B tests; values are never logged. The workflow fails closed unless the role value is exactly `disposable`.
+- Management-API preflight rejects staging/production metadata, requires distinct fresh/upgrade references, and requires the authority-test reference to equal the upgrade reference before mutation.
+- Journey A result: pending exact-head CI; required start is empty and required result is 23 migrations at `20260805130000`.
+- Journey B result: pending exact-head CI; required preparation is the real migrations 8-21 from the existing seven-migration disposable state, followed only by migrations 22-23 to reach 23 at `20260805130000`.
+- Authority-matrix result: pending exact-head CI; no skipped remote test is accepted.
+- No migration repair, staging action, or production action is authorized by this gate.
+- Release impact: PR-01 remains active until both journeys, the complete authority matrix, exact-head Level 2 CI, and independent review pass.
 
 ## Human-only blockers
 
