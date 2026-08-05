@@ -354,6 +354,24 @@ create table if not exists public.blundr_learning_daily_backfill_reports (
 alter table public.blundr_learning_daily_backfill_reports enable row level security;
 revoke all on public.blundr_learning_daily_backfill_reports from public, anon, authenticated;
 
+create or replace function public.blundr_learning_daily_backfill_reports_reject_mutation()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  raise exception 'blundr_learning_daily_backfill_reports rows are immutable'
+    using errcode = '55000';
+end;
+$$;
+
+create trigger blundr_learning_daily_backfill_reports_immutable
+before update or delete on public.blundr_learning_daily_backfill_reports
+for each row execute function public.blundr_learning_daily_backfill_reports_reject_mutation();
+
+revoke all on function public.blundr_learning_daily_backfill_reports_reject_mutation()
+  from public, anon, authenticated;
+
 insert into public.blundr_learning_daily_backfill_reports (
   migration_id, domain, resolved_count, unresolved_count, details
 )

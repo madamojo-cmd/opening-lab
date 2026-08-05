@@ -201,6 +201,22 @@ async function assertBackfillReport(
     assert.ok(row.resolved_count >= 0 && row.unresolved_count >= 0);
     assert.equal(typeof row.details, "object");
   }
+  const serviceUpdate = await service
+    .from("blundr_learning_daily_backfill_reports")
+    .update({ details: { fabricated: true } })
+    .eq("migration_id", "20260805120000_blundr_learning_daily_authority_v2");
+  assert.ok(
+    serviceUpdate.error,
+    "service role must not rewrite migration reports",
+  );
+  const serviceDelete = await service
+    .from("blundr_learning_daily_backfill_reports")
+    .delete()
+    .eq("migration_id", "20260805120000_blundr_learning_daily_authority_v2");
+  assert.ok(
+    serviceDelete.error,
+    "service role must not delete migration reports",
+  );
   for (const [actor, client] of [
     ["anonymous", anonymous],
     ["user A", userA],
