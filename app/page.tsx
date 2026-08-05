@@ -4517,7 +4517,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
         baseFen:input.baseFen??fenRef.current??fen,
       })
       : null);
-    if(input.mode==="restricted"&&!input.initialRestrictedOpponentMoveUci&&!restrictedRuntimeLineSnapshot){
+    if(input.mode==="restricted"&&!restrictedRuntimeLineSnapshot){
       clearPendingOpponentReplyRequest({clearStaleIssue:true});
       pushRuntimeCriticalIssue("restricted_opponent_reply_missing_runtime_authority");
       return null;
@@ -5562,7 +5562,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
         authority:currentSelectedLineAuthority,
         baseFen:current.fen(),
       });
-      if(!initialRestrictedOpponentMoveUci&&isStaleRestrictedRuntimeLineRequest({
+      if(isStaleRestrictedRuntimeLineRequest({
         request:request.restrictedRuntimeLineSnapshot,
         current:currentRestrictedSnapshot,
       })){

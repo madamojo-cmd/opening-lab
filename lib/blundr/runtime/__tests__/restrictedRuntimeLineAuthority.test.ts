@@ -159,6 +159,15 @@ export function testRestrictedRuntimeLineAuthorityStaleRequests(): void {
     request: snapshot,
     current: snapshot ? { ...snapshot, cursor: snapshot.cursor + 1 } : null,
   }), true);
+  assert.equal(isStaleRestrictedRuntimeLineRequest({
+    request: snapshot,
+    current: snapshot ? { ...snapshot, selectedRuntimeLineKey: "replacement-line-key" } : null,
+  }), true);
+  assert.equal(isStaleRestrictedRuntimeLineRequest({
+    request: snapshot,
+    current: snapshot ? { ...snapshot, expectedOpponentUci: "d2d4" } : null,
+  }), true);
+  assert.equal(isStaleRestrictedRuntimeLineRequest({ request: null, current: snapshot }), true);
 }
 
 export function testRestrictedRuntimeLineAuthorityCompletion(): void {
