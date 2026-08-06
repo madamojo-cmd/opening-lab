@@ -21,6 +21,7 @@ export async function appendLearningEventV2(input: {
   now: string;
   access: OpeningAccessSnapshot;
   explanation?: string;
+  playedMoveUci?: string | null;
 }): Promise<{ status: "inserted" | "duplicate"; eventId: string }> {
   const eventId = createDeterministicIdentity("learning-event", [
     input.userId,
@@ -90,6 +91,7 @@ export async function appendLearningEventV2(input: {
     canonical_fen: input.position.canonicalFen,
     opening_id: input.position.openingId,
     expected_move_uci: input.position.expectedMoveUci,
+    played_move_uci: input.playedMoveUci ?? null,
     repertoire_side: input.position.repertoireSide,
     move_order_key: input.position.moveOrderKey,
     source: input.source === "imported_game" ? "imported_game" : input.source,
@@ -110,6 +112,8 @@ export async function appendLearningEventV2(input: {
       input.sessionId,
       input.position.positionKey,
       input.position.expectedMoveUci ?? "",
+      input.playedMoveUci ?? "",
+      input.taxonomy,
       String(input.correct),
       exposureId ?? "",
     ]),

@@ -96,6 +96,7 @@ export async function POST(request: Request) {
       taxonomy,
       position: { ...position, repertoireSide: side },
       correct,
+      playedMoveUci: body.playedMoveUci ?? null,
       now: authority.occurredAt,
       access: snapshot,
     });
