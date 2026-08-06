@@ -49,7 +49,7 @@ const DAILY_COMPOSER_VERSION = "daily-board-first-v3";
 async function dailyLearningEvent(input: {
   userId: string; sessionId: string; attemptId: string; card: ProductionDailyPrivateCard;
   fen: string; correct: boolean; firstAttempt: boolean; now: string; runtimePackageId: string;
-}): Record<string, unknown> | null {
+}): Promise<Record<string, unknown> | null> {
   if (!input.firstAttempt) return null;
   const exposureId = `daily:${input.sessionId}:${input.card.cardFingerprint}`;
   const client = createBlundrSupabaseAdminClient();
@@ -888,8 +888,6 @@ export async function applyDailyAction(input: {
     ]);
     const persisted = await repository.commitAction({
       attemptId,
-      sessionId: input.sessionId,
-      userId: input.user.userId,
       cardFingerprint: input.cardFingerprint,
       firstAttempt: !current.firstAttemptRecorded && input.action !== "retry",
       attemptKind: input.action,
@@ -984,12 +982,15 @@ export async function applyDailyAction(input: {
         input.cardFingerprint,
         input.action,
       ]),
-    sessionId: input.sessionId,
-    userId: input.user.userId,
     cardFingerprint: input.cardFingerprint,
     firstAttempt: !firstAttemptAlreadyRecorded && input.action !== "retry",
     attemptKind: input.action,
-    outcome,
+    outcome:
+      outcome === "reveal"
+        ? "revealed"
+        : outcome === "retry"
+          ? "skipped"
+          : outcome,
     answer: input.action === "answer" ? input.answer : undefined,
     session: next,
     expectedVersion: input.expectedVersion,
