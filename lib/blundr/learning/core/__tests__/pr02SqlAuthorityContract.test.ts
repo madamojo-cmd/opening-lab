@@ -83,10 +83,10 @@ test("Daily policy and projection contracts retain explicit no-fabrication bound
 });
 
 test("route derives correctness and scheduling from server authority", () => {
-  assert.match(learningRoute, /playedMoveUci === verified\.expectedMoveUci/);
+  assert.match(learningRoute, /resolveLearningAttemptAuthority\(\{ expectedMoveUci: verified\.expectedMoveUci, playedMoveUci: body\.playedMoveUci/);
   assert.match(learningRoute, /const receiptTime = new Date\(\)\.toISOString\(\)/);
   assert.doesNotMatch(learningRoute, /body\.createdAt \?\?/);
-  assert.match(learningRoute, /const isReveal = body\.type === "cue_revealed"/);
+  assert.match(learningRoute, /requestedType: body\.type/);
 });
 
 test("exposure retries cannot reproject and Daily omits first-attempt input", () => {
