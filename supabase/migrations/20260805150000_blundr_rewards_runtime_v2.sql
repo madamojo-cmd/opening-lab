@@ -254,6 +254,8 @@ returns jsonb language plpgsql security definer set search_path=public as $$
 declare v_row public.blundr_reward_presentations_v2%rowtype;
 begin
   if p_user_id is null or nullif(btrim(p_claimed_by),'') is null or p_lease_seconds not between 10 and 300 then raise exception 'invalid_reward_presentation_claim'; end if;
+  perform pg_advisory_xact_lock(hashtextextended(p_user_id::text, 404));
+  if exists(select 1 from public.blundr_reward_presentations_v2 where user_id=p_user_id and acknowledged_at is null and dismissed_at is null and lease_expires_at >= now()) then return null; end if;
   select * into v_row from public.blundr_reward_presentations_v2 where user_id=p_user_id and acknowledged_at is null and dismissed_at is null and (lease_expires_at is null or lease_expires_at < now()) order by priority desc,created_at for update skip locked limit 1;
   if not found then return null; end if;
   update public.blundr_reward_presentations_v2 set claimed_by=p_claimed_by,claimed_at=now(),lease_expires_at=now()+make_interval(secs=>p_lease_seconds) where id=v_row.id returning * into v_row;

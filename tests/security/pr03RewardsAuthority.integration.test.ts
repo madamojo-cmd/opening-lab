@@ -240,7 +240,7 @@ async function main() {
       },
     );
     assert.equal(otherClaim.error, null);
-    assert.notEqual(otherClaim.data?.id, claim.data.id);
+    assert.equal(otherClaim.data, null);
     assert.ok(
       (
         await userB.rpc("blundr_mark_reward_presentation_v2", {
@@ -280,6 +280,14 @@ async function main() {
       .single();
     assert.equal(acknowledged.error, null);
     assert.ok(acknowledged.data?.acknowledged_at);
+    const nextClaim = await service.rpc("blundr_claim_reward_presentation_v2", {
+      p_user_id: userAId,
+      p_claimed_by: `other-${scope}`,
+      p_lease_seconds: 60,
+    });
+    assert.equal(nextClaim.error, null);
+    assert.ok(nextClaim.data?.id);
+    assert.notEqual(nextClaim.data.id, claim.data.id);
 
     const seedTx = await service
       .from("blundr_reward_transactions_v2")
