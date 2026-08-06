@@ -6,7 +6,7 @@ import type { DailyDeck } from "./dailyActivityTypes";
 
 export function validateDailyDeck(deck: DailyDeck): string[] {
   const errors: string[] = [];
-  if (deck.cards.length > 5) errors.push("deck_exceeds_five_cards");
+  if (!deck.cards.length) errors.push("deck_empty");
   const positions = new Set(deck.cards.map((card) => card.positionKey));
   if (positions.size !== deck.cards.length)
     errors.push("duplicate_canonical_position");

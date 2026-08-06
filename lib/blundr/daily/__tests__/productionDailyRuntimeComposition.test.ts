@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { Chess } from "chess.js";
 
@@ -25,15 +26,15 @@ test("runtime sequence reconstruction accepts canonical comma and whitespace del
   assert.equal(runtimeSequenceToFen(comma), expected.fen());
 });
 
-test("production selection returns exactly five board cards and excludes choices", () => {
+test("production selection preserves a move recall and supports server-selected stack sizes", () => {
   const cards = [
-    ["recall", "p1", "move", 9],
+    ["daily_move_recall", "p1", "move", 9],
     ["choice", "p2", "choice", 100],
     ["repair", "p2", "move", 8],
     ["continuation", "p3", "move", 7],
-    ["recall", "p4", "move", 6],
+    ["daily_move_recall", "p4", "move", 6],
     ["repair", "p5", "move", 5],
-    ["recall", "p6", "move", 4],
+    ["daily_move_recall", "p6", "move", 4],
   ].map(([activityId, positionKey, interaction, priority]) => ({
     publicCard: {
       activityId: String(activityId),
@@ -43,16 +44,33 @@ test("production selection returns exactly five board cards and excludes choices
     priority: Number(priority),
     stableKey: `${activityId}:${positionKey}`,
   }));
-  const selected = selectProductionDailyBoardCards(cards);
-  assert.equal(selected.length, 5);
-  assert.ok(selected.every((card) => card.publicCard.interaction === "move"));
-  assert.equal(
-    new Set(selected.map((card) => card.publicCard.positionKey)).size,
-    5,
-  );
+  for (const limit of [3, 4, 5]) {
+    const selected = selectProductionDailyBoardCards(cards, limit);
+    assert.equal(selected.length, limit);
+    assert.equal(selected[0]?.publicCard.activityId, "daily_move_recall");
+    assert.equal(
+      new Set(selected.map((card) => card.publicCard.positionKey)).size,
+      limit,
+    );
+  }
 });
 
-test("production selection fails closed when five board positions do not exist", () => {
+test("production selection accepts choice tasks and supports stacks larger than five", () => {
+  const cards = Array.from({ length: 12 }, (_, index) => ({
+    publicCard: {
+      activityId: index === 0 ? "daily_move_recall" : "daily_candidate_choice",
+      positionKey: `p${index}`,
+      interaction: index % 2 ? ("choice" as const) : ("move" as const),
+    },
+    priority: 12 - index,
+    stableKey: `card-${index}`,
+  }));
+  const selected = selectProductionDailyBoardCards(cards, 12);
+  assert.equal(selected.length, 12);
+  assert.ok(selected.some((card) => card.publicCard.interaction === "choice"));
+});
+
+test("production selection fails closed when verified unlocked runtime fallback is insufficient", () => {
   assert.throws(
     () =>
       selectProductionDailyBoardCards(
@@ -65,7 +83,62 @@ test("production selection fails closed when five board positions do not exist",
           priority: 1,
           stableKey: String(index),
         })),
+        5,
       ),
-    /daily_board_deck_incomplete/,
+    /daily_runtime_fallback_insufficient/,
   );
+});
+
+function sourcedCards(personalized: number, fallback: number) {
+  return [
+    ...Array.from({ length: personalized }, (_, index) => ({
+      publicCard: {
+        activityId: index === 0 ? "daily_move_recall" : "daily_plan_recall",
+        positionKey: `evidence-${index}`,
+        interaction: "move" as const,
+      },
+      priority: 100 - index,
+      stableKey: `evidence-${index}`,
+      source: "personalized" as const,
+    })),
+    ...Array.from({ length: fallback }, (_, index) => ({
+      publicCard: {
+        activityId: personalized === 0 && index === 0
+          ? "daily_move_recall"
+          : "daily_candidate_choice",
+        positionKey: `runtime-${index}`,
+        interaction: index % 2 ? ("choice" as const) : ("move" as const),
+      },
+      priority: 1,
+      stableKey: `runtime-${index}`,
+      source: "unlocked_runtime" as const,
+    })),
+  ];
+}
+
+test("a no-history user receives one unified stack from verified unlocked runtime", () => {
+  const selected = selectProductionDailyBoardCards(sourcedCards(0, 8), 5);
+  assert.equal(selected.length, 5);
+  assert.ok(selected.every((card) => card.source === "unlocked_runtime"));
+});
+
+test("personalized evidence is selected before unlocked-runtime fallback", () => {
+  const selected = selectProductionDailyBoardCards(sourcedCards(2, 8), 5);
+  assert.equal(selected.length, 5);
+  assert.equal(selected.filter((card) => card.source === "personalized").length, 2);
+  assert.equal(selected.filter((card) => card.source === "unlocked_runtime").length, 3);
+});
+
+test("a fully evidence-backed stack does not consume fallback content", () => {
+  const selected = selectProductionDailyBoardCards(sourcedCards(8, 8), 5);
+  assert.ok(selected.every((card) => card.source === "personalized"));
+});
+
+test("production composer contains no mixed minigame or fabricated mistake path", () => {
+  const source = readFileSync(
+    new URL("../productionDailyService.server.ts", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(source, /buildPunishmentActivity|daily_mixed_test|daily_repair_line/);
+  assert.doesNotMatch(source, /kind:\s*["']mini_game["']/);
 });

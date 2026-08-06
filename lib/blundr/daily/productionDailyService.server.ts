@@ -30,7 +30,6 @@ import { buildCandidateSet } from "./activities/candidateChoice/candidateSetBuil
 import { buildPlanRecall } from "./activities/planRecall/planQuestionBuilder";
 import { approvedPlanEvidence } from "./activities/planRecall/approvedPlanAdapter";
 import { buildContinuationChallenge } from "./activities/continuationChallenge/continuationChallengeBuilder";
-import { buildPunishmentActivity } from "./activities/punishTheMistake/punishmentBuilder";
 import { buildTranspositionActivity } from "./activities/samePositionDifferentRoute/transpositionActivityBuilder";
 import { replayRoute } from "./activities/samePositionDifferentRoute/transpositionGroupBuilder";
 import { legalMoves } from "./activities/activityUtils";
@@ -42,6 +41,7 @@ import { readDueReviewKeys } from "./productionReviewRepository.server";
 import type { DailyReservationIdentity } from "./productionDailyTypes";
 import { runtimeSequenceToFen } from "./runtimeSequence";
 import { selectProductionDailyBoardCards } from "./productionDailyDeckSelection";
+import { resolveServerDailyTaskCount } from "./core/adaptiveDailyPolicy";
 
 // Request-time Daily selection uses only verified runtime data. Bound the
 // amount of chess reconstruction per reservation so a large runtime package
@@ -190,8 +190,6 @@ function dailyProfileVersion(
       "daily_plan_recall",
       "daily_same_position_different_route",
       "daily_continuation_challenge",
-      "daily_punish_the_mistake",
-      "daily_mixed_test",
     ].filter((flag) => flags[flag as keyof typeof flags]),
   ].join(",");
 }
@@ -442,7 +440,14 @@ async function buildReservation(
         snapshot,
         position,
         moves,
-        priority: weaknessScores.get(position.positionKey) ?? 0.1,
+        // Personalized evidence is ordered ahead of runtime fallback, but a
+        // newly unlocked repertoire remains a truthful, playable Daily.
+        priority:
+          weaknessScores.get(position.positionKey) ??
+          (priorityPositions.has(`${node.openingId}:${node.playKey}`) ||
+          priorityOpenings.has(node.openingId)
+            ? 0.5
+            : 0.1),
       };
     })
     .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
@@ -480,9 +485,11 @@ async function buildReservation(
       playKey: entry.node.playKey,
       side: entry.side,
       why:
-        entry.priority > 0.1
+        entry.priority > 0.5
           ? "This position is prioritized from a verified weakness projection."
-          : "This position comes from an unlocked, verified opening line.",
+          : entry.priority > 0.1
+            ? "This position is prioritized from your authoritative review evidence."
+            : "This position comes from an unlocked, verified opening line.",
       interaction: options?.length ? "choice" : "move",
       options,
       steps: privateSteps?.map(
@@ -526,15 +533,6 @@ async function buildReservation(
       "Play the approved move for this exact position.",
       [primary.moveUci],
       "This move keeps the approved opening plan on track.",
-    );
-
-    addCard(
-      entry,
-      "daily_repair_line",
-      "Repair the line",
-      "Restore the verified line by playing the missing move.",
-      [primary.moveUci],
-      "This move repairs the line using the checksum-pinned runtime position.",
     );
 
     if (featureFlags.daily_plan_recall && labels.length >= 2) {
@@ -691,43 +689,6 @@ async function buildReservation(
           privateSteps,
         );
     }
-
-    if (
-      child &&
-      childMove &&
-      secondMove &&
-      labels.length >= 2 &&
-      privateSteps &&
-      featureFlags.daily_punish_the_mistake
-    ) {
-      const built = buildPunishmentActivity({
-        openingId: entry.node.openingId,
-        side: entry.side,
-        positionKey: entry.position.positionKey,
-        fen: entry.fen,
-        mistakeMove: labels[1].moveUci,
-        bestResponses: [primary.moveUci],
-        continuation: [childMove.moveUci, secondMove.moveUci],
-        sourceId: entry.node.nodeId,
-        source: "continuation",
-        access: entry.snapshot,
-        evidenceVerified: true,
-        explanation:
-          "The verified reply restores the opening plan after the deviation.",
-      });
-      if (built.ok)
-        addCard(
-          entry,
-          built.activityId,
-          "Punish the mistake",
-          "Find the verified response to the deviation.",
-          [primary.moveUci],
-          built.solution.explanation,
-          undefined,
-          undefined,
-          privateSteps,
-        );
-    }
   }
 
   if (featureFlags.daily_same_position_different_route) {
@@ -782,59 +743,10 @@ async function buildReservation(
     }
   }
 
-  if (featureFlags.daily_mixed_test) {
-    const mixedSourceCards = cards
-      .filter(
-        (card) =>
-          card.publicCard.activityId !== "daily_move_recall" &&
-          card.publicCard.activityId !== "daily_mixed_test",
-      )
-      .sort(
-        (a, b) =>
-          b.priority - a.priority || a.stableKey.localeCompare(b.stableKey),
-      )
-      .filter(
-        (card, index, all) =>
-          all.findIndex(
-            (candidate) =>
-              candidate.publicCard.activityId === card.publicCard.activityId,
-          ) === index,
-      );
-    if (mixedSourceCards.length >= 3) {
-      const first = mixedSourceCards[0];
-      const baseEntry = runtimeCandidates.find(
-        (entry) => entry.position.positionKey === first.publicCard.positionKey,
-      );
-      if (baseEntry) {
-        const privateSteps = mixedSourceCards.slice(0, 5).map(
-          (card, stepIndex) =>
-            ({
-              stepIndex,
-              positionFen: card.publicCard.positionFen,
-              prompt: card.publicCard.prompt,
-              side: card.publicCard.side,
-              options: card.publicCard.options,
-              acceptedMoves: card.privateCard.acceptedMoves,
-              acceptedAnswers: card.privateCard.acceptedAnswers,
-              explanation: card.privateCard.explanation,
-            }) satisfies ProductionDailyPrivateStep,
-        );
-        addCard(
-          baseEntry,
-          "daily_mixed_test",
-          "Mixed Test",
-          "Complete the verified no-hint item block.",
-          privateSteps[0].acceptedMoves,
-          "This block combines independently verified Daily items.",
-          undefined,
-          undefined,
-          privateSteps,
-        );
-      }
-    }
-  }
-
-  const selected = selectProductionDailyBoardCards(cards, 5);
+  if (!eligibleNodes.length)
+    throw new Error("daily_opening_selection_required");
+  const taskCount = resolveServerDailyTaskCount({});
+  const selected = selectProductionDailyBoardCards(cards, taskCount);
   const deck = buildDeterministicDailyDeck({
     userId: user.userId,
     dateKey,
@@ -848,7 +760,7 @@ async function buildReservation(
       stableKey,
       cardFingerprint: publicCard.cardFingerprint,
     })),
-    limit: 5,
+    limit: taskCount,
   });
   const privateById = new Map(
     selected.map((entry) => [
@@ -934,8 +846,7 @@ export async function applyDailyAction(input: {
         version: input.expectedVersion,
       }),
   );
-  if (actionStepIndex === undefined)
-    throw new Error("daily_action_id_invalid");
+  if (actionStepIndex === undefined) throw new Error("daily_action_id_invalid");
   const isReplay = input.expectedVersion !== session.version;
   const now = input.now ?? new Date().toISOString();
   if (privateCard.privateSteps?.length) {
@@ -1004,10 +915,9 @@ export async function applyDailyAction(input: {
     const persisted = await repository.commitAction({
       attemptId,
       cardFingerprint: input.cardFingerprint,
-      firstAttempt:
-        isReplay
-          ? input.action !== "retry"
-          : !current.firstAttemptRecorded && input.action !== "retry",
+      firstAttempt: isReplay
+        ? input.action !== "retry"
+        : !current.firstAttemptRecorded && input.action !== "retry",
       attemptKind: input.action,
       outcome:
         input.action === "reveal"
@@ -1028,11 +938,10 @@ export async function applyDailyAction(input: {
         card: privateCard,
         fen: step.positionFen,
         correct: answerCorrect,
-        firstAttempt:
-          isReplay
-            ? input.action === "answer" || input.action === "reveal"
-            : !current.firstAttemptRecorded &&
-              (input.action === "answer" || input.action === "reveal"),
+        firstAttempt: isReplay
+          ? input.action === "answer" || input.action === "reveal"
+          : !current.firstAttemptRecorded &&
+            (input.action === "answer" || input.action === "reveal"),
         now,
         runtimePackageId: session.reservationIdentity.runtimePackageId,
         evidenceType: input.action === "reveal" ? "reveal" : "answer",
@@ -1133,10 +1042,9 @@ export async function applyDailyAction(input: {
   const persisted = await repository.commitAction({
     attemptId: input.actionId,
     cardFingerprint: input.cardFingerprint,
-    firstAttempt:
-      isReplay
-        ? input.action !== "retry"
-        : !firstAttemptAlreadyRecorded && input.action !== "retry",
+    firstAttempt: isReplay
+      ? input.action !== "retry"
+      : !firstAttemptAlreadyRecorded && input.action !== "retry",
     attemptKind: input.action,
     outcome:
       outcome === "reveal"
@@ -1156,11 +1064,10 @@ export async function applyDailyAction(input: {
       card: privateCard,
       fen: privateCard.positionFen,
       correct,
-      firstAttempt:
-        isReplay
-          ? input.action === "answer" || input.action === "reveal"
-          : !firstAttemptAlreadyRecorded &&
-            (input.action === "answer" || input.action === "reveal"),
+      firstAttempt: isReplay
+        ? input.action === "answer" || input.action === "reveal"
+        : !firstAttemptAlreadyRecorded &&
+          (input.action === "answer" || input.action === "reveal"),
       now,
       runtimePackageId: session.reservationIdentity.runtimePackageId,
       evidenceType:
