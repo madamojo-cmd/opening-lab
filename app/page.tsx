@@ -39,6 +39,7 @@ import { RepertoireUnlockProgress } from "@/components/repertoire/RepertoireUnlo
 import { ProgressDashboard } from "@/components/progress/ProgressDashboard";
 import { ReviewHub } from "@/components/review/ReviewHub";
 import {
+  AuthoritativeLearningEventGate,
   createLearningSessionId,
   persistLearningEventRemotely,
   recordLearningEvent,
@@ -1357,6 +1358,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
   const [moveHistoryUci,setMoveHistoryUci]=useState<string[]>([]);
   const [progress,setProgress]=useState<Progress>(DEFAULT_PROGRESS);
   const [showAnswer,setShowAnswer]=useState(false);
+  const [trainerPersistencePending,setTrainerPersistencePending]=useState(false);
   const [reviewingFen,setReviewingFen]=useState<string|null>(null);
   const [activeBoard,setActiveBoard]=useState(true);
   const [activeBoardView,setActiveBoardView]=useState<ActiveBoardView>("plan");
@@ -1486,6 +1488,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
   const visualRequestSeq=useRef(0);
   const moveQualityCacheRef=useRef<Map<string,MoveQualityResult>>(new Map());
   const learningSessionIdRef=useRef<string>(trainingSessionId);
+  const trainerLearningPersistenceGateRef=useRef(new AuthoritativeLearningEventGate());
   const positionStartedAtRef=useRef<number>(Date.now());
   const lastMoveQualityEventKeyRef=useRef<string>("");
   const lastTeachingCueEventKeyRef=useRef<string>("");
@@ -3937,12 +3940,12 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     if(button==="hint"){const after={...before,hintShown:true,coachInteraction:"hint"};setCoachHintRequestCount((count)=>count+1);setCoachInteraction("hint");recordDebugAction({action:button,normalizedAction:"hint",before,after,result:"handled"});return;}
     if((button as any)==="hide_more"){const after={...before,coachInteraction:"hide",showMoreShown:false};setShowMoreShown(false);setCoachInteraction("hide");recordDebugAction({action:String(button),normalizedAction:"hide_more",before,after,result:"handled"});return;}
     if(button==="show_more" || (button as any)==="show_more"){const after={...before,showMoreShown:true,coachInteraction:"show_plan"};setShowMoreShown(true);setCoachInteraction("show_plan");recordDebugAction({action:button,normalizedAction:"show_more",before,after,result:"handled",reason:"plain_show_more_escalation_to_full_content"});return;}
-    if((button as any)==="reveal_target"){const after={...before,answerShown:true,showAnswer:true,coachInteraction:"answer"};setCoachInteraction("answer");setCoachReviewMarked(true);setShowAnswer(true);recordDebugAction({action:String(button),normalizedAction:"reveal_target",before,after,result:"handled"});handleReveal();return;}
-    if(button==="answer"){const after={...before,answerShown:true,showAnswer:true,coachInteraction:"answer"};setCoachInteraction("answer");setCoachReviewMarked(true);recordDebugAction({action:button,normalizedAction:"answer",before,after,result:"handled"});handleReveal();return;}
+    if((button as any)==="reveal_target"){const after={...before,answerShown:true,showAnswer:true,coachInteraction:"answer"};recordDebugAction({action:String(button),normalizedAction:"reveal_target",before,after,result:"handled"});void handleReveal();return;}
+    if(button==="answer"){const after={...before,answerShown:true,showAnswer:true,coachInteraction:"answer"};recordDebugAction({action:button,normalizedAction:"answer",before,after,result:"handled"});void handleReveal();return;}
     if(button==="why"){const after={...before,coachInteraction:"why"};setCoachInteraction("why");recordDebugAction({action:button,normalizedAction:"why",before,after,result:"handled"});return;}
     if(button==="show_plan"){const after={...before,coachInteraction:"show_plan"};setCoachInteraction("show_plan");recordDebugAction({action:button,normalizedAction:"show_plan",before,after,result:"handled"});return;}
     if(button==="analyze_idea"){const after={...before,coachInteraction:"analyze_idea"};setCoachInteraction("analyze_idea");recordDebugAction({action:button,normalizedAction:"analyze_idea",before,after,result:"handled",reason:(bookComplete||trainingMode==="continuation")&&isUserTurn?"analysis_requested":"state_only"});if((bookComplete||trainingMode==="continuation")&&isUserTurn)void runBrain("coach_analyze",{skipGpt:true});return;}
-    if(button==="show_move"){if(!coachDecision?.exactMoveAllowed){recordDebugAction({action:button,normalizedAction:"show_move",before,after:before,result:"blocked",reason:"exact_move_not_allowed"});return;}const after={...before,answerShown:true,showAnswer:true,coachInteraction:"show_move"};setCoachInteraction("show_move");setCoachReviewMarked(true);setShowAnswer(true);recordDebugAction({action:button,normalizedAction:"show_move",before,after,result:"handled"});return;}
+    if(button==="show_move"){if(!coachDecision?.exactMoveAllowed){recordDebugAction({action:button,normalizedAction:"show_move",before,after:before,result:"blocked",reason:"exact_move_not_allowed"});return;}const after={...before,answerShown:true,showAnswer:true,coachInteraction:"show_move"};recordDebugAction({action:button,normalizedAction:"show_move",before,after,result:"handled"});void handleReveal();return;}
     recordDebugAction({action:String(button),normalizedAction:"none",before,after:before,result:"ignored",reason:"unknown_button"});
     setCoachInteraction("none");
   }
@@ -4294,8 +4297,8 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       return next;
     });
   }
-  function trackLearningEvent(input:Partial<LearningEvent>&Pick<LearningEvent,"type"|"source">){
-    const event=recordLearningEvent({
+  function createTrackedLearningEvent(input:Partial<LearningEvent>&Pick<LearningEvent,"type"|"source">){
+    return recordLearningEvent({
       sessionId:learningSessionIdRef.current,
       source:input.source,
       type:input.type,
@@ -4309,12 +4312,24 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       moveQualityUserStatus,
       ...input,
     });
+  }
+  function trackLearningEvent(input:Partial<LearningEvent>&Pick<LearningEvent,"type"|"source">){
+    const event=createTrackedLearningEvent(input);
     if(shouldPersistRemoteLearningEvent(event)){
       void persistLearningEventRemotely(event).catch(()=>{
         setFeedback("Your move was not credited because secure progress storage is unavailable. Check your connection and try again.");
         pushRuntimeCriticalIssue("learning_event_persistence_unavailable");
       });
     }
+  }
+  async function persistTrainerOutcome(key:string,input:Partial<LearningEvent>&Pick<LearningEvent,"type"|"source">){
+    setTrainerPersistencePending(true);
+    const result=await trainerLearningPersistenceGateRef.current.persist(key,()=>createTrackedLearningEvent(input),persistLearningEventRemotely);
+    if(result.status==="in_flight"){setFeedback("Saving this training result. Please wait.");return false;}
+    setTrainerPersistencePending(false);
+    if(result.status!=="accepted"){setFeedback("Your move was not credited because secure progress storage is unavailable. Check your connection and try again.");pushRuntimeCriticalIssue("learning_event_persistence_unavailable");return false;}
+    clearRuntimeCriticalIssue("learning_event_persistence_unavailable");
+    return true;
   }
   function pushMaiaTimelineEvent(input:{
     event:MaiaTimelineEvent["event"];
@@ -5980,7 +5995,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       metadata:{nextTrainerView},
     });
   }
-  function handleReveal(){
+  async function handleReveal(){
     const before=currentDebugActionState();
     if(!phaseActionGate.revealButtonVisible){
       recordDebugAction({action:"reveal_next_move",normalizedAction:"reveal_next_move",before,after:before,result:"blocked",reason:coachHiddenForFrame?"coach_hidden":phaseActionGate.blockedReason??"no_revealable_move",extra:{revealBlockedBecauseCoachHidden:coachHiddenForFrame,revealTargetUci:instructionTarget?.uci??null,revealTargetSource:instructionTarget?"instruction_target":"none"}});
@@ -5991,15 +6006,12 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       return;
     }
     const after={...before,answerShown:true,showAnswer:true,coachInteraction:coachInteraction==="none"?"answer":coachInteraction};
+    const persisted=await persistTrainerOutcome(`${trainerFrameId}:${normalizeFen(fen)}:cue_revealed:${instructionTarget?.uci??"none"}`,{type:"cue_revealed",source:"train",expectedMoveSan:instructionTarget?.san,expectedMoveUci:instructionTarget?.uci});
+    if(!persisted)return;
     if(coachHiddenForFrame)setCoachHiddenFrameId(null);
+    setCoachInteraction("answer");setCoachReviewMarked(true);
     setShowAnswer(true);
     recordDebugAction({action:"reveal_next_move",normalizedAction:"reveal_next_move",before,after,result:"handled",reason:"manual_reveal_button",extra:{revealTargetUci:instructionTarget?.uci??null,revealTargetSource:instructionTarget?"instruction_target":"none"}});
-    trackLearningEvent({
-      type:"cue_revealed",
-      source:"train",
-      expectedMoveSan:instructionTarget?.san,
-      expectedMoveUci:instructionTarget?.uci,
-    });
     void runBrain("reveal");
   }
   function continueVsBot(){
@@ -6059,6 +6071,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
   }
   function logMistake(positionFen:string,expected:string,played:string){const k=normalizeFen(positionFen);setProgress(prev=>{const old=prev.mistakes[k];return{...prev,attempts:prev.attempts+1,incorrect:prev.incorrect+1,streak:0,mistakes:{...prev.mistakes,[k]:{fen:positionFen,expectedMove:expected,playedMove:played,count:old?old.count+1:1,opening:repertoire.name,repertoireId:repertoire.id}}}})}
   async function attemptMove(from:string,to:string,promotionPiece?:PromotionPiece | null){
+    if(trainerPersistencePending){setFeedback("Saving this training result. Please wait.");return;}
     const current=new Chess(fen);
     const beforeFen=fen;
     const currentKey=normalizeFen(current.fen());
@@ -6197,6 +6210,8 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       const correct=expectedUserOptions.some(m=>m.uci===playedUci);
       if(!correct){
         const expected=expectedMove?.san??"No saved move";
+        const persisted=await persistTrainerOutcome(`${trainerFrameId}:${normalizeFen(beforeFen)}:move_incorrect:${playedUci}`,{type:"move_incorrect",source:"train",fen:beforeFen,expectedMoveSan:expectedMove?.san,expectedMoveUci:expectedMove?.uci,playedMoveSan:legal.san,playedMoveUci:playedUci,correct:false,timeToMoveMs});
+        if(!persisted){setSelectedSquare(from);return;}
         logMistake(beforeFen,expected,legal.san);
         setShowAnswer(true);
         setCoachReviewMarked(true);
@@ -6207,20 +6222,11 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
         }else{
           setFeedback(`Not quite. ${legal.san} is legal, but this drill is looking for the saved line move.`);
         }
-        trackLearningEvent({
-          type:"move_incorrect",
-          source:"train",
-          fen:beforeFen,
-          expectedMoveSan:expectedMove?.san,
-          expectedMoveUci:expectedMove?.uci,
-          playedMoveSan:legal.san,
-          playedMoveUci:playedUci,
-          correct:false,
-          timeToMoveMs,
-        });
         return;
       }
     }
+    const persisted=await persistTrainerOutcome(`${trainerFrameId}:${normalizeFen(beforeFen)}:move_correct:${playedUci}`,{type:"move_correct",source:"train",fen:beforeFen,expectedMoveSan:expectedMove?.san,expectedMoveUci:expectedMove?.uci,playedMoveSan:legal.san,playedMoveUci:playedUci,correct:true,timeToMoveMs});
+    if(!persisted){setSelectedSquare(from);return;}
     const nextFen=current.fen();
     const nextGame=new Chess(nextFen);
     const nextIsUserTurn=nextGame.turn()===userColor;
@@ -6379,17 +6385,6 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
         else next[reviewingFen]={...next[reviewingFen],count:next[reviewingFen].count-1};
       }
       return{...prev,attempts:prev.attempts+1,correct:prev.correct+1,streak:prev.streak+1,trainedPositions:{...prev.trainedPositions,[currentKey]:true},mistakes:next};
-    });
-    trackLearningEvent({
-      type:"move_correct",
-      source:"train",
-      fen:beforeFen,
-      expectedMoveSan:expectedMove?.san,
-      expectedMoveUci:expectedMove?.uci,
-      playedMoveSan:legal.san,
-      playedMoveUci:playedUci,
-      correct:true,
-      timeToMoveMs,
     });
     setReviewingFen(null);
   }

@@ -48,6 +48,77 @@ export type LearningEvent = {
   metadata?: Record<string, string | number | boolean | null | undefined>;
 };
 
+export type RemoteLearningEventReceipt = {
+  status: "persisted" | "duplicate" | "not_required" | "signed_out";
+  response?: { status?: string; eventId?: string };
+};
+
+export type AuthoritativeLearningEventGateResult = {
+  status: "accepted" | "in_flight" | "failed" | "already_accepted";
+  event: LearningEvent;
+  receipt?: RemoteLearningEventReceipt;
+};
+
+type PendingAuthoritativeLearningEvent = {
+  event: LearningEvent;
+  inFlight: Promise<AuthoritativeLearningEventGateResult> | null;
+  accepted: boolean;
+  receipt?: RemoteLearningEventReceipt;
+};
+
+// Trainer actions must not advance their local frame until the authenticated
+// event service accepts the exact event identity. This tiny bounded cache also
+// lets a retry reuse the original idempotency key after a transport failure.
+export class AuthoritativeLearningEventGate {
+  private readonly entries = new Map<
+    string,
+    PendingAuthoritativeLearningEvent
+  >();
+
+  constructor(private readonly limit = 64) {}
+
+  async persist(
+    key: string,
+    createEvent: () => LearningEvent,
+    submit: (event: LearningEvent) => Promise<RemoteLearningEventReceipt>,
+  ): Promise<AuthoritativeLearningEventGateResult> {
+    let entry = this.entries.get(key);
+    if (!entry) {
+      entry = { event: createEvent(), inFlight: null, accepted: false };
+      this.entries.set(key, entry);
+      while (this.entries.size > this.limit) {
+        const oldest = this.entries.keys().next().value;
+        if (!oldest) break;
+        this.entries.delete(oldest);
+      }
+    }
+    if (entry.accepted)
+      return {
+        status: "already_accepted",
+        event: entry.event,
+        receipt: entry.receipt,
+      };
+    if (entry.inFlight) return { status: "in_flight", event: entry.event };
+
+    entry.inFlight = (async () => {
+      try {
+        const receipt = await submit(entry!.event);
+        entry!.receipt = receipt;
+        if (receipt.status === "persisted" || receipt.status === "duplicate") {
+          entry!.accepted = true;
+          return { status: "accepted", event: entry!.event, receipt };
+        }
+        return { status: "failed", event: entry!.event, receipt };
+      } catch {
+        return { status: "failed", event: entry!.event };
+      } finally {
+        entry!.inFlight = null;
+      }
+    })();
+    return entry.inFlight;
+  }
+}
+
 const LOCAL_KEY = "blundr.learningEvents.v1";
 const LOCAL_LEARNING_EVENT_LIMIT = 500;
 
@@ -133,21 +204,28 @@ export function recordLearningEvent(
 
 export async function persistLearningEventRemotely(
   event: LearningEvent,
-): Promise<"persisted" | "not_required" | "signed_out"> {
-  if (!shouldPersistRemoteLearningEvent(event)) return "not_required";
-  if (typeof window === "undefined") return "not_required";
+): Promise<RemoteLearningEventReceipt> {
+  if (!shouldPersistRemoteLearningEvent(event))
+    return { status: "not_required" };
+  if (typeof window === "undefined") return { status: "not_required" };
   const [{ getOnboardingAuthSession }, { authenticatedApiFetch }] =
     await Promise.all([
       import("../onboarding/onboardingAuth"),
       import("../api/authenticatedApiClient"),
     ]);
   const session = await getOnboardingAuthSession();
-  if (!session?.accessToken) return "signed_out";
-  await authenticatedApiFetch("/api/blundr/learning/events", {
+  if (!session?.accessToken) return { status: "signed_out" };
+  const response = await authenticatedApiFetch<{
+    status?: string;
+    eventId?: string;
+  }>("/api/blundr/learning/events", {
     method: "POST",
     body: JSON.stringify(buildRemoteLearningEventPayload(event)),
   });
-  return "persisted";
+  return {
+    status: response?.status === "duplicate" ? "duplicate" : "persisted",
+    response,
+  };
 }
 
 export function getLocalLearningEvents(): LearningEvent[] {
