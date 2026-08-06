@@ -140,6 +140,13 @@ async function dailyLearningEvent(
   return {
     ...event,
     content_version: input.runtimePackageId,
+    // The shared FSRS projector accepts an answer identity separate from the
+    // optional chess move. Non-move Daily tasks retain their opaque answer
+    // here while played_move_uci remains null.
+    answer_evidence: {
+      ...((event.answer_evidence as Record<string, unknown> | undefined) ?? {}),
+      submittedAnswer: input.submittedAnswer ?? null,
+    },
     task_evidence: dailyTaskEvidence(input),
   };
 }
