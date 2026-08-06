@@ -215,6 +215,7 @@ export class ProductionDailyRepository {
     attemptKind: "answer" | "reveal" | "retry";
     outcome: "correct" | "incorrect" | "revealed" | "skipped";
     answer?: unknown;
+    learningEvent?: unknown;
   }): Promise<"inserted" | "duplicate" | "conflict"> {
     const client = requireProductionPersistence(
       createBlundrSupabaseAdminClient(),
@@ -238,6 +239,7 @@ export class ProductionDailyRepository {
         learning_exposure_id: input.firstAttempt
           ? `daily:${input.session.sessionId}:${input.cardFingerprint}`
           : null,
+        learning_event: input.learningEvent ?? null,
       },
     });
     if (result.error) {

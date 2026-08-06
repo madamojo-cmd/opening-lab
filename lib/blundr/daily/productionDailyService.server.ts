@@ -21,7 +21,7 @@ import type {
   ProductionDailyPublicSession,
   ProductionDailySession,
 } from "./productionDailyTypes";
-import { appendLearningEventV2 } from "@/lib/blundr/learning/core/learningEventService.server";
+import { buildLearningProjection } from "@/lib/blundr/learning/core/learningProjection";
 import { RepertoireOpeningAccessRepository } from "@/lib/blundr/openingAccess/openingAccessRepository";
 import { getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
 import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
@@ -36,7 +36,6 @@ import { replayRoute } from "./activities/samePositionDifferentRoute/transpositi
 import { legalMoves } from "./activities/activityUtils";
 import { toPublicDailySession } from "./productionDailyProjection";
 import { readDueReviewKeys } from "./productionReviewRepository.server";
-import { upsertReviewState } from "./productionReviewRepository.server";
 import type { DailyReservationIdentity } from "./productionDailyTypes";
 import { runtimeSequenceToFen } from "./runtimeSequence";
 import { selectProductionDailyBoardCards } from "./productionDailyDeckSelection";
@@ -46,6 +45,26 @@ import { selectProductionDailyBoardCards } from "./productionDailyDeckSelection"
 // cannot turn an empty or newly unlocked account into an unbounded request.
 const MAX_RUNTIME_CANDIDATES_PER_RESERVATION = 600;
 const DAILY_COMPOSER_VERSION = "daily-board-first-v3";
+
+function dailyLearningEvent(input: {
+  userId: string; sessionId: string; attemptId: string; card: ProductionDailyPrivateCard;
+  fen: string; correct: boolean; firstAttempt: boolean; now: string; runtimePackageId: string;
+}): Record<string, unknown> | null {
+  if (!input.firstAttempt) return null;
+  const exposureId = `daily:${input.sessionId}:${input.card.cardFingerprint}`;
+  const projection = buildLearningProjection({ source: "daily", firstAttempt: true, exposureId, correct: input.correct, occurredAt: input.now, previousFsrs: null, previousMastery: null });
+  if (projection.evidenceKind !== "recall_attempt") return null;
+  return {
+    event_id: createDeterministicIdentity("learning-event", [input.userId, input.attemptId]),
+    user_id: input.userId, idempotency_key: createDeterministicIdentity("learning-attempt", [input.userId, input.attemptId, true]),
+    schema_version: "2026-07-13.v1", session_id: input.sessionId, attempt_id: input.attemptId, occurred_at: input.now,
+    taxonomy: "daily_answered", position_key: input.card.positionKey, canonical_fen: input.fen, opening_id: input.card.openingId,
+    expected_move_uci: input.card.acceptedMoves[0] ?? null, repertoire_side: input.card.side, move_order_key: input.card.playKey,
+    source: "daily", first_attempt: true, finding: input.correct ? null : { category: "opening_move", explanation: input.card.explanation },
+    content_version: input.runtimePackageId, classifier_version: "weakness-classifier-v1", evidence_kind: projection.evidenceKind,
+    exposure_id: exposureId, evidence_version: "blundr-learning-evidence-v2", correct: input.correct, access_decision: "active", fsrs: projection.fsrs, mastery: projection.mastery,
+  };
+}
 
 function dailyProfileVersion(
   flags: ReturnType<typeof getServerFeatureFlags>,
@@ -872,58 +891,9 @@ export async function applyDailyAction(input: {
       answer: input.action === "answer" ? input.answer : undefined,
       session: next,
       expectedVersion: input.expectedVersion,
+      learningEvent: dailyLearningEvent({ userId: input.user.userId, sessionId: input.sessionId, attemptId, card: privateCard, fen: step.positionFen, correct: answerCorrect, firstAttempt: !current.firstAttemptRecorded && input.action === "answer", now, runtimePackageId: session.reservationIdentity.runtimePackageId }),
     });
     if (persisted === "conflict") throw new Error("daily_session_conflict");
-    if (input.action !== "retry" || current.firstAttemptRecorded)
-      await appendLearningEventV2({
-        userId: input.user.userId,
-        sessionId: input.sessionId,
-        attemptId,
-        source: "daily",
-        taxonomy:
-          input.action === "reveal"
-            ? "daily_revealed"
-            : input.action === "retry"
-              ? "daily_retried"
-              : "daily_answered",
-        position: {
-          positionKey: privateCard.positionKey,
-          canonicalFen: step.positionFen,
-          openingId: privateCard.openingId,
-          expectedMoveUci: step.acceptedMoves[0] ?? null,
-          repertoireSide: privateCard.side,
-          moveOrderKey: privateCard.playKey,
-          runtimePackageVersion: session.reservationIdentity.runtimePackageId,
-        },
-        correct: answerCorrect,
-        firstAttempt: !current.firstAttemptRecorded && input.action !== "retry",
-        now,
-        access: {
-          openingId: privateCard.openingId,
-          repertoireSide: privateCard.side,
-          decision: "active",
-          checkedAt: now,
-          authorityVersion: "repertoire-unlock-v1",
-          expiresAt: new Date(Date.parse(now) + 300000).toISOString(),
-        },
-        explanation: step.explanation,
-      });
-    if (input.action !== "retry")
-      await upsertReviewState({
-        userId: input.user.userId,
-        openingId: privateCard.openingId,
-        playKey: privateCard.playKey,
-        dueAt: new Date(
-          Date.parse(now) + (answerCorrect ? 86400000 : 300000),
-        ).toISOString(),
-        attemptId,
-        outcome: answerCorrect
-          ? "correct"
-          : input.action === "reveal"
-            ? "revealed"
-            : "incorrect",
-        srsState: { intervalDays: answerCorrect ? 1 : 0 },
-      });
     return {
       session: next,
       presentation: {
@@ -1010,38 +980,9 @@ export async function applyDailyAction(input: {
     answer: input.action === "answer" ? input.answer : undefined,
     session: next,
     expectedVersion: input.expectedVersion,
+    learningEvent: dailyLearningEvent({ userId: input.user.userId, sessionId: input.sessionId, attemptId: reduced.state.attempts.at(-1)?.attemptId ?? input.cardFingerprint, card: privateCard, fen: privateCard.positionFen, correct, firstAttempt: !firstAttemptAlreadyRecorded && input.action === "answer", now, runtimePackageId: session.reservationIdentity.runtimePackageId }),
   });
   if (persisted === "conflict") throw new Error("daily_session_conflict");
-  if (!firstAttemptAlreadyRecorded && input.action !== "retry")
-    await appendLearningEventV2({
-      userId: input.user.userId,
-      sessionId: input.sessionId,
-      attemptId:
-        reduced.state.attempts.at(-1)?.attemptId ?? input.cardFingerprint,
-      source: "daily",
-      taxonomy: input.action === "reveal" ? "daily_revealed" : "daily_answered",
-      position: {
-        positionKey: privateCard.positionKey,
-        canonicalFen: privateCard.positionFen,
-        openingId: privateCard.openingId,
-        expectedMoveUci: privateCard.acceptedMoves[0] ?? null,
-        repertoireSide: privateCard.side,
-        moveOrderKey: privateCard.playKey,
-        runtimePackageVersion: session.reservationIdentity.runtimePackageId,
-      },
-      correct,
-      firstAttempt: true,
-      now,
-      access: {
-        openingId: privateCard.openingId,
-        repertoireSide: privateCard.side,
-        decision: "active",
-        checkedAt: now,
-        authorityVersion: "repertoire-unlock-v1",
-        expiresAt: new Date(Date.parse(now) + 300000).toISOString(),
-      },
-      explanation: privateCard.explanation,
-    });
   return {
     session: next,
     presentation: reduced.presentation,
