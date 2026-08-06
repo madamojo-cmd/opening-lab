@@ -7,6 +7,7 @@ export type AuthenticatedApiErrorCode =
   | "feature_disabled"
   | "activity_unsupported"
   | "verified_content_unavailable"
+  | "daily_opening_selection_required"
   | "persistence_unavailable"
   | "session_expired"
   | "retryable_provider_error"
@@ -38,6 +39,7 @@ function mapErrorCode(
     if (code === "feature_disabled") return code;
     if (code === "activity_unsupported") return code;
     if (code === "verified_content_unavailable") return code;
+    if (code === "daily_opening_selection_required") return code;
     if (code.includes("persistence")) return "persistence_unavailable";
     if (code === "account_not_found" || code === "invalid_provider")
       return "permanent_provider_error";

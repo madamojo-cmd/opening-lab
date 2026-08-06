@@ -10,9 +10,7 @@ import {
 import { DailyBlundrBoard } from "@/components/daily/DailyBlundrBoard";
 import { DailyBlundrCardFeedback } from "@/components/daily/DailyBlundrCardFeedback";
 import type { DailyBlundrBoardMoveAttempt } from "@/lib/blundr/daily/dailyBlundrPlayerTypes";
-import type {
-  ProductionDailyPublicSession,
-} from "@/lib/blundr/daily/productionDailyTypes";
+import type { ProductionDailyPublicSession } from "@/lib/blundr/daily/productionDailyTypes";
 import { recordBlundrTaskCompleted } from "@/lib/blundr/daily-rings/dailyRingGameplayEvents";
 import {
   getLocalAccountCurrentUserId,
@@ -42,6 +40,7 @@ export function ProductionDailyBlundrScreen() {
     message: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [recoveryHref, setRecoveryHref] = useState<string | null>(null);
   const [completionSyncFailed, setCompletionSyncFailed] = useState(false);
   const [completionSyncAttempt, setCompletionSyncAttempt] = useState(0);
 
@@ -53,15 +52,24 @@ export function ProductionDailyBlundrScreen() {
       );
       setSession(response.session);
       setError(null);
+      setRecoveryHref(null);
     } catch (nextError) {
-      setError(
+      const openingSelectionRequired =
         nextError instanceof AuthenticatedApiError &&
-          nextError.code === "authentication_required"
-          ? "Sign in to receive your personalized Daily Blundr deck."
+        nextError.code === "daily_opening_selection_required";
+      setError(
+        openingSelectionRequired
+          ? "Choose a starter pack or unlock an opening before starting Daily Blundr."
           : nextError instanceof AuthenticatedApiError &&
-              nextError.code === "feature_disabled"
-            ? "Personalized Daily is not enabled for this staging environment yet."
-            : "Daily Blundr could not load right now.",
+              nextError.code === "authentication_required"
+            ? "Sign in to receive your personalized Daily Blundr deck."
+            : nextError instanceof AuthenticatedApiError &&
+                nextError.code === "feature_disabled"
+              ? "Personalized Daily is not enabled for this staging environment yet."
+              : "Daily Blundr could not load right now.",
+      );
+      setRecoveryHref(
+        openingSelectionRequired ? "/onboarding/starter-pack" : null,
       );
     }
   }, []);
@@ -81,6 +89,13 @@ export function ProductionDailyBlundrScreen() {
       ) ?? null
     );
   }, [session]);
+  const currentTaskNumber = useMemo(() => {
+    if (!session || !currentCard) return null;
+    const index = session.publicCards.findIndex(
+      (card) => card.cardFingerprint === currentCard.cardFingerprint,
+    );
+    return index >= 0 ? index + 1 : null;
+  }, [currentCard, session]);
 
   useEffect(() => {
     if (currentCard) return;
@@ -218,7 +233,14 @@ export function ProductionDailyBlundrScreen() {
             >
               {error}
             </p>
-            {completionSyncFailed ? (
+            {recoveryHref ? (
+              <Link
+                href={recoveryHref}
+                className="mt-4 inline-flex rounded-2xl bg-stone-950 px-4 py-3 text-sm font-black text-white"
+              >
+                Choose openings
+              </Link>
+            ) : completionSyncFailed ? (
               <button
                 type="button"
                 onClick={() => {
@@ -261,6 +283,11 @@ export function ProductionDailyBlundrScreen() {
               <div className="text-xs font-black uppercase tracking-[0.18em] text-green-300">
                 {currentCard.activityId.replaceAll("_", " ")}
               </div>
+              {currentTaskNumber ? (
+                <div className="mt-2 text-xs font-bold text-stone-400">
+                  Task {currentTaskNumber} of {session.publicCards.length}
+                </div>
+              ) : null}
               <h2 className="mt-2 text-xl font-black">{currentCard.title}</h2>
               <p className="mt-2 text-sm leading-6 text-stone-300">
                 {currentCard.prompt}

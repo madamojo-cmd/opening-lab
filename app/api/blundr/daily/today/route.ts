@@ -34,12 +34,13 @@ export async function GET(request: Request) {
       session: publicDailySession(session),
     });
   } catch (error) {
+    const code =
+      error instanceof Error ? error.message : "persistence_unavailable";
     return NextResponse.json(
       {
-        error:
-          error instanceof Error ? error.message : "persistence_unavailable",
+        error: code,
       },
-      { status: 503 },
+      { status: code === "daily_opening_selection_required" ? 409 : 503 },
     );
   }
 }
