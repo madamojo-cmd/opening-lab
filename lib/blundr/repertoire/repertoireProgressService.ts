@@ -1,5 +1,6 @@
 import { BLUNDR_ANALYTICS_EVENTS } from "../analytics/blundrAnalyticsEvents";
 import { trackBlundrAnalyticsEvent } from "../analytics/blundrAnalyticsService";
+import { getBlundrStorageModeSetting } from "../backend/backendEnv";
 import {
   getLocalAccountCurrentUserId,
   getLocalRepertoirePointEvents,
@@ -13,6 +14,7 @@ import {
 } from "../accounts/localAccountStorage";
 import type { StarterPackId, UserRepertoire } from "../accounts/accountTypes";
 import { getOnboardingAuthSession } from "../onboarding/onboardingAuth";
+import { BLUNDR_LOCAL_DEMO_USER_ID } from "../persistence/persistenceKeys";
 import {
   getDefaultStarterPack,
   getStarterPackById,
@@ -123,6 +125,20 @@ function resolveUserId(input?: string | null): string {
   const normalized = normalizeText(input);
   if (normalized) return normalized;
   return setLocalAccountCurrentUserId(getLocalAccountCurrentUserId());
+}
+
+/**
+ * Repertoire points and point-funded unlocks were legacy browser writers.
+ * They remain available only for the explicit local-demo identity outside
+ * production. Authenticated accounts receive their balances and unlocks from
+ * Rewards v2; this service must never become an offline fallback writer.
+ */
+function mayUseLegacyLocalRepertoireMutation(userId: string): boolean {
+  return (
+    process.env.NODE_ENV !== "production" &&
+    getBlundrStorageModeSetting() === "local_demo" &&
+    normalizeText(userId) === BLUNDR_LOCAL_DEMO_USER_ID
+  );
 }
 
 function resolveStarterPackId(
@@ -418,6 +434,15 @@ export async function earnAndPersistRepertoirePoints(
     allOpeningIds: input.allOpeningIds,
     now: input.now,
   });
+  if (!mayUseLegacyLocalRepertoireMutation(userId)) {
+    return {
+      ok: false,
+      code: "reward_authority_required",
+      message:
+        "Repertoire points are awarded only after an authoritative Rewards v2 completion.",
+      progress: current,
+    };
+  }
   const event = createRepertoirePointEvent({
     userId,
     source: input.source,
@@ -461,103 +486,12 @@ export async function unlockAndPersistOpening(
     allOpeningIds: input.allOpeningIds,
     now: input.now,
   });
-  const session = await getOnboardingAuthSession().catch(() => null);
-  if (session?.accessToken) {
-    try {
-      const response = await fetch("/api/blundr/repertoire/unlock", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${session.accessToken}`,
-        },
-        cache: "no-store",
-        body: JSON.stringify({
-          openingId: input.openingId,
-          idempotencyKey: `${userId}:${input.openingId}:unlock`,
-        }),
-      });
-      const payload = (await response.json().catch(() => null)) as {
-        data?: {
-          openingId: string;
-          pointsSpent?: number;
-          unlockIndex?: number;
-          availablePoints: number;
-          lifetimePoints?: number;
-          spentPoints?: number;
-          unlockedOpeningIds: string[];
-          lockedOpeningIds?: string[];
-          eventId?: string;
-          updatedAt?: string;
-        };
-        error?: unknown;
-        message?: unknown;
-      } | null;
-      if (!response.ok || !payload?.data) {
-        const rawCode = normalizeText(payload?.error);
-        const code = rawCode.includes("insufficient_points")
-          ? "insufficient_points"
-          : rawCode.includes("opening_not_locked")
-            ? "opening_not_locked"
-            : "unlock_persistence_unavailable";
-        return {
-          ok: false,
-          code,
-          message:
-            normalizeText(payload?.message) ||
-            "The opening was not unlocked because the change could not be saved.",
-        };
-      }
-      const data = payload.data;
-      const createdAt = normalizeText(data.updatedAt) || input.now || nowIso();
-      const event: RepertoireUnlockEvent = {
-        id:
-          normalizeText(data.eventId) || `${userId}:${input.openingId}:unlock`,
-        userId,
-        openingId: input.openingId,
-        pointsSpent: Math.max(0, Number(data.pointsSpent) || 0),
-        unlockIndex: Math.max(1, Number(data.unlockIndex) || 1),
-        createdAt,
-      };
-      const saved = await saveRepertoireProgress(
-        {
-          ...current,
-          unlockedOpeningIds: data.unlockedOpeningIds,
-          lockedOpeningIds:
-            data.lockedOpeningIds ??
-            current.lockedOpeningIds.filter((id) => id !== input.openingId),
-          availablePoints: Math.max(0, Number(data.availablePoints) || 0),
-          lifetimePoints: Math.max(
-            current.lifetimePoints,
-            Number(data.lifetimePoints) || 0,
-          ),
-          spentPoints: Math.max(
-            current.spentPoints,
-            Number(data.spentPoints) || 0,
-          ),
-          unlockEvents: current.unlockEvents.some(
-            (item) => item.id === event.id,
-          )
-            ? current.unlockEvents
-            : [...current.unlockEvents, event],
-          updatedAt: createdAt,
-        },
-        { syncRemote: false },
-      );
-      return { ok: true, progress: saved, event };
-    } catch {
-      return {
-        ok: false,
-        code: "unlock_persistence_unavailable",
-        message:
-          "The opening was not unlocked because the server could not be reached.",
-      };
-    }
-  }
-  if (process.env.NODE_ENV === "production") {
+  if (!mayUseLegacyLocalRepertoireMutation(userId)) {
     return {
       ok: false,
       code: "authentication_required",
-      message: "Sign in again before unlocking an opening.",
+      message:
+        "This legacy point unlock is unavailable for accounts. Use the authoritative Rewards inventory.",
     };
   }
   const result = unlockOpening(current, input.openingId);

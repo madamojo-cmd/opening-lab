@@ -1,8 +1,22 @@
 import assert from "node:assert/strict";
 
-import { createDefaultDailyRetentionProgress, createDefaultTrainingProfile } from "../../accounts/accountDefaults";
-import { getLocalAccountCurrentUserId, getLocalDailyRetentionProgress, getLocalTrainingProfile, resetLocalAccountState, setLocalAccountCurrentUserId, upsertLocalDailyRetentionProgress, upsertLocalTrainingProfile } from "../../accounts/localAccountStorage";
-import { completeDailyRingActivity, loadDailyRingSnapshot } from "../dailyRingService";
+import {
+  createDefaultDailyRetentionProgress,
+  createDefaultTrainingProfile,
+} from "../../accounts/accountDefaults";
+import {
+  getLocalAccountCurrentUserId,
+  getLocalDailyRetentionProgress,
+  getLocalTrainingProfile,
+  resetLocalAccountState,
+  setLocalAccountCurrentUserId,
+  upsertLocalDailyRetentionProgress,
+  upsertLocalTrainingProfile,
+} from "../../accounts/localAccountStorage";
+import {
+  completeDailyRingActivity,
+  loadDailyRingSnapshot,
+} from "../dailyRingService";
 import { getDailyBlundrDateKey } from "../../daily/dailyBlundrStorage";
 import { loadRepertoireProgress } from "../../repertoire/repertoireProgressService";
 
@@ -15,7 +29,7 @@ class MemoryStorage implements Storage {
     this.store.clear();
   }
   getItem(key: string): string | null {
-    return this.store.has(key) ? this.store.get(key) ?? null : null;
+    return this.store.has(key) ? (this.store.get(key) ?? null) : null;
   }
   key(index: number): string | null {
     return Array.from(this.store.keys())[index] ?? null;
@@ -43,8 +57,10 @@ function installLocalStorageMock(): () => void {
 
 async function main(): Promise<void> {
   const restore = installLocalStorageMock();
+  const previousStorageMode = process.env.NEXT_PUBLIC_BLUNDR_STORAGE_MODE;
+  process.env.NEXT_PUBLIC_BLUNDR_STORAGE_MODE = "local_demo";
   try {
-    const userId = "daily-ring-user";
+    const userId = "local-demo-user";
     const now = "2026-07-06T09:00:00.000Z";
     const localDate = getDailyBlundrDateKey();
     resetLocalAccountState(userId);
@@ -57,11 +73,16 @@ async function main(): Promise<void> {
       updatedAt: now,
     });
     upsertLocalDailyRetentionProgress(
-      createDefaultDailyRetentionProgress(userId, localDate, {
-        dailyTempoGoal: 2,
-        dailyBatteryGoal: 1,
-        dailyBlundrGoal: 1,
-      }, now),
+      createDefaultDailyRetentionProgress(
+        userId,
+        localDate,
+        {
+          dailyTempoGoal: 2,
+          dailyBatteryGoal: 1,
+          dailyBlundrGoal: 1,
+        },
+        now,
+      ),
     );
 
     const before = loadDailyRingSnapshot({ userId, localDate });
@@ -85,12 +106,22 @@ async function main(): Promise<void> {
     if (!first.ok) throw new Error(first.message);
     assert.equal(first.activityAlreadyApplied, false);
     assert.equal(first.dayRecord.dailyTempo.progress > 0, true);
-    assert.equal(first.dayRecord.activityEventIds.includes(first.activityEvent.id), true);
+    assert.equal(
+      first.dayRecord.activityEventIds.includes(first.activityEvent.id),
+      true,
+    );
     assert.equal(getLocalAccountCurrentUserId(), userId);
-    assert.equal(getLocalDailyRetentionProgress(userId, localDate)?.rings.dailyTempo.progress, first.dayRecord.dailyTempo.progress);
+    assert.equal(
+      getLocalDailyRetentionProgress(userId, localDate)?.rings.dailyTempo
+        .progress,
+      first.dayRecord.dailyTempo.progress,
+    );
 
     const after = loadDailyRingSnapshot({ userId, localDate });
-    assert.equal(after.dayRecord.dailyTempo.progress, first.dayRecord.dailyTempo.progress);
+    assert.equal(
+      after.dayRecord.dailyTempo.progress,
+      first.dayRecord.dailyTempo.progress,
+    );
 
     const duplicate = await completeDailyRingActivity({
       userId,
@@ -108,15 +139,24 @@ async function main(): Promise<void> {
     assert.equal(duplicate.ok, true);
     if (!duplicate.ok) throw new Error(duplicate.message);
     assert.equal(duplicate.activityAlreadyApplied, true);
-    assert.equal(loadDailyRingSnapshot({ userId, localDate }).dayRecord.dailyTempo.progress, after.dayRecord.dailyTempo.progress);
+    assert.equal(
+      loadDailyRingSnapshot({ userId, localDate }).dayRecord.dailyTempo
+        .progress,
+      after.dayRecord.dailyTempo.progress,
+    );
   } finally {
+    if (previousStorageMode === undefined) {
+      delete process.env.NEXT_PUBLIC_BLUNDR_STORAGE_MODE;
+    } else {
+      process.env.NEXT_PUBLIC_BLUNDR_STORAGE_MODE = previousStorageMode;
+    }
     restore();
     resetLocalAccountState(userIdFromTest());
   }
 }
 
 function userIdFromTest(): string {
-  return "daily-ring-user";
+  return "local-demo-user";
 }
 
 (async () => {

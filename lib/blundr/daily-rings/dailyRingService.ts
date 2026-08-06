@@ -9,6 +9,8 @@ import {
   upsertLocalDailyRetentionProgress,
   upsertLocalStreakRecord,
 } from "../accounts/localAccountStorage";
+import { BLUNDR_LOCAL_DEMO_USER_ID } from "../persistence/persistenceKeys";
+import { getBlundrStorageModeSetting } from "../backend/backendEnv";
 import type {
   DailyRetentionProgress,
   StreakRecord,
@@ -72,6 +74,21 @@ function sum(values: readonly number[]): number {
   return values.reduce(
     (total, value) => total + Math.max(0, Number(value) || 0),
     0,
+  );
+}
+
+/**
+ * The legacy local completion simulation is deliberately narrower than the
+ * account storage fallback.  A missing/expired browser session must never
+ * turn a production account into a local rewards writer just because a dev
+ * build happens to be running.  It is retained only for the named local-demo
+ * identity and only when local demo was explicitly selected outside prod.
+ */
+function mayUseLocalDemoRewardSimulation(userId: string): boolean {
+  return (
+    process.env.NODE_ENV !== "production" &&
+    getBlundrStorageModeSetting() === "local_demo" &&
+    normalizeText(userId) === BLUNDR_LOCAL_DEMO_USER_ID
   );
 }
 
@@ -313,7 +330,9 @@ async function applyActivityCompletionRemotely(input: {
 > {
   const session = await getOnboardingAuthSession().catch(() => null);
   if (!session?.accessToken) {
-    if (process.env.NODE_ENV !== "production") return { mode: "local" };
+    if (mayUseLocalDemoRewardSimulation(input.activity.userId)) {
+      return { mode: "local" };
+    }
     return {
       mode: "failed",
       code: "authentication_required",
@@ -506,7 +525,6 @@ export function loadDailyRingSnapshot(
   const streakRecord = existingStreak
     ? toStreakProgressRecord(existingStreak)
     : createDefaultStreakRecord(userId);
-  syncDailyRingSnapshotLocally(dayRecord, streakRecord, profile ?? undefined);
   const summary = getDailyRingSummary(dayRecord);
   const toSnapshotItem = (ringId: DailyRingId) => {
     const item = summary.find((entry) => entry.ringId === ringId);
