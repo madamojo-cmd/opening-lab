@@ -5,7 +5,7 @@ begin;
 
 create or replace function public.blundr_project_learning_evidence_v2(p_user_id uuid, p_event jsonb)
 returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
-declare v_event_id text := p_event->>'event_id'; v_inserted boolean := false;
+declare v_event_id text := p_event->>'event_id'; v_inserted boolean := false; v_review_version integer;
 begin
   if p_user_id is null or p_event is null or v_event_id is null
     or p_event->>'user_id' <> p_user_id::text then
@@ -19,6 +19,15 @@ begin
   end if;
   if p_event->>'evidence_kind' = 'recall_attempt' and coalesce((p_event->>'first_attempt')::boolean, false) and nullif(p_event->>'exposure_id','') is null then
     raise exception using errcode = '22023', message = 'first_recall_requires_exposure';
+  end if;
+  if p_event->>'evidence_kind' = 'recall_attempt' then
+    select review_state_version into v_review_version
+    from public.blundr_review_states
+    where user_id=p_user_id and opening_id=p_event->>'opening_id' and play_key=p_event->>'move_order_key'
+    for update;
+    if coalesce(v_review_version, 0) <> coalesce((p_event->>'expected_review_state_version')::integer, 0) then
+      raise exception using errcode='40001',message='learning_review_state_conflict';
+    end if;
   end if;
   insert into public.blundr_learning_events (
     event_id,user_id,idempotency_key,schema_version,session_id,attempt_id,occurred_at,taxonomy,position_key,canonical_fen,opening_id,expected_move_uci,repertoire_side,move_order_key,source,first_attempt,finding,content_version,classifier_version,evidence_kind,exposure_id,played_move_uci,evidence_version,projection_version,projected_at

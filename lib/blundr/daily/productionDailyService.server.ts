@@ -63,6 +63,7 @@ function dailyLearningEvent(input: {
     source: "daily", first_attempt: true, finding: input.correct ? null : { category: "opening_move", explanation: input.card.explanation },
     content_version: input.runtimePackageId, classifier_version: "weakness-classifier-v1", evidence_kind: projection.evidenceKind,
     exposure_id: exposureId, evidence_version: "blundr-learning-evidence-v2", correct: input.correct, access_decision: "active", fsrs: projection.fsrs, mastery: projection.mastery,
+    expected_review_state_version: 0,
   };
 }
 
