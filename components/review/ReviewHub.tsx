@@ -17,6 +17,7 @@ import {
 } from "@/lib/blundr/daily/miniGames/dailyMiniGameRegistry";
 import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 import { ReviewTabDailyBlundrPanel } from "@/components/daily/ReviewTabDailyBlundrPanel";
+import { AuthoritativeReviewQueue } from "@/components/review/AuthoritativeReviewQueue";
 
 type ReviewHubProps = {
   embedded?: boolean;
@@ -100,6 +101,8 @@ export function ReviewHub({
           </div>
         </header>
       ) : null}
+
+      <AuthoritativeReviewQueue />
 
       <ReviewTabDailyBlundrPanel />
 
