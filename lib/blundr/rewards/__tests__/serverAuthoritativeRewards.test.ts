@@ -78,6 +78,11 @@ test("v2 rewards use one atomic writer, an inventory ledger, and leased presenta
   assert.match(v2Migration, /blundr_reconcile_reward_inventory_v2/i);
   assert.match(v2Migration, /opening_not_locked/i);
   assert.match(v2Migration, /insufficient_inventory/i);
+  assert.match(v2Migration, /blundr_daily_retention_progress/i);
+  assert.match(v2Migration, /blundr_streak_records/i);
+  assert.match(v2Migration, /activity_event_ids/i);
+  assert.match(v2Migration, /v_all_closed_this_action/i);
+  assert.doesNotMatch(v2Migration, /blundr_apply_activity_completion\(/i);
 });
 
 test("legacy client-authored reward and repertoire writes are disabled", () => {

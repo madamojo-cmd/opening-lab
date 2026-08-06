@@ -41,6 +41,24 @@ declare
   v_randomness_available boolean := false;
   v_grant_id uuid;
   v_envelope jsonb;
+  v_profile public.blundr_user_profiles%rowtype;
+  v_day public.blundr_daily_retention_progress%rowtype;
+  v_streak public.blundr_streak_records%rowtype;
+  v_local_date date := current_date;
+  v_ring text;
+  v_ring_before boolean;
+  v_ring_after boolean;
+  v_all_before boolean;
+  v_all_after boolean;
+  v_all_closed_this_action boolean := false;
+  v_xp integer;
+  v_streak_points integer := 0;
+  v_streak_xp integer := 0;
+  v_current_streak integer := 0;
+  v_longest_streak integer := 0;
+  v_total_full_days integer := 0;
+  v_last_date date;
+  v_event_id text;
 begin
   if p_user_id is null or nullif(btrim(p_completion_id), '') is null
     or p_source not in ('opening_run_completed','continuation_completed','daily_blundr_deck_completed')
@@ -67,10 +85,37 @@ begin
     and e.source in ('train','review') and e.occurred_at >= now() - interval '36 hours') then
     raise exception 'completion_evidence_unverified';
   end if;
-  if not exists (select 1 from public.blundr_user_profiles where user_id=p_user_id) then
-    raise exception 'account_not_ready';
-  end if;
-  v_points := case p_source when 'opening_run_completed' then 1 when 'continuation_completed' then 2 else 5 end;
+  select * into v_profile from public.blundr_user_profiles where user_id=p_user_id;
+  if not found then raise exception 'account_not_ready'; end if;
+  -- Compatibility projection for the active rings/streak/points readers. This
+  -- is in the v2 transaction; it never calls the legacy reward writer.
+  insert into public.blundr_user_repertoires(user_id,selected_starter_pack_id,unlocked_opening_ids,locked_opening_ids,opening_unlock_points,updated_at)
+  values(p_user_id,v_profile.selected_starter_pack_id,'{}','{}',0,now()) on conflict(user_id) do nothing;
+  insert into public.blundr_daily_retention_progress(user_id,local_date,daily_tempo_goal,daily_battery_goal,daily_blundr_goal,updated_at)
+  values(p_user_id,v_local_date,greatest(1,v_profile.daily_tempo_goal),greatest(1,v_profile.daily_battery_goal),greatest(1,v_profile.daily_blundr_goal),now()) on conflict(user_id,local_date) do nothing;
+  insert into public.blundr_streak_records(user_id,current_streak,longest_streak,total_all_rings_closed_days,last_completed_local_date,updated_at)
+  values(p_user_id,0,0,0,null,now()) on conflict(user_id) do nothing;
+  select * into v_day from public.blundr_daily_retention_progress where user_id=p_user_id and local_date=v_local_date for update;
+  v_event_id := encode(digest(p_user_id::text || ':' || p_completion_id || ':' || p_source,'sha256'),'hex');
+  if v_event_id = any(coalesce(v_day.activity_event_ids,'{}')) then raise exception 'completion_identity_conflict'; end if;
+  v_all_before := v_day.all_rings_closed;
+  if p_source='opening_run_completed' then v_ring:='daily_tempo'; v_points:=1; v_xp:=10; v_ring_before:=v_day.daily_tempo_completed; v_day.daily_tempo_progress:=v_day.daily_tempo_progress+1; v_ring_after:=v_day.daily_tempo_progress>=v_day.daily_tempo_goal; v_day.daily_tempo_completed:=v_ring_after; if v_ring_after then v_day.daily_tempo_completed_at:=coalesce(v_day.daily_tempo_completed_at,now()); end if;
+  elsif p_source='continuation_completed' then v_ring:='daily_battery'; v_points:=2; v_xp:=20; v_ring_before:=v_day.daily_battery_completed; v_day.daily_battery_progress:=v_day.daily_battery_progress+1; v_ring_after:=v_day.daily_battery_progress>=v_day.daily_battery_goal; v_day.daily_battery_completed:=v_ring_after; if v_ring_after then v_day.daily_battery_completed_at:=coalesce(v_day.daily_battery_completed_at,now()); end if;
+  else v_ring:='daily_blundr'; v_points:=5; v_xp:=50; v_ring_before:=v_day.daily_blundr_completed; v_day.daily_blundr_progress:=v_day.daily_blundr_progress+1; v_ring_after:=v_day.daily_blundr_progress>=v_day.daily_blundr_goal; v_day.daily_blundr_completed:=v_ring_after; if v_ring_after then v_day.daily_blundr_completed_at:=coalesce(v_day.daily_blundr_completed_at,now()); end if; end if;
+  v_all_after:=v_day.daily_tempo_completed and v_day.daily_battery_completed and v_day.daily_blundr_completed;
+  v_all_closed_this_action:=v_all_after and not v_all_before;
+  if v_all_closed_this_action then
+    v_day.all_rings_closed:=true; v_day.all_rings_closed_at:=coalesce(v_day.all_rings_closed_at,now()); v_day.completed_at:=coalesce(v_day.completed_at,now());
+    select * into v_streak from public.blundr_streak_records where user_id=p_user_id for update;
+    v_last_date:=v_streak.last_completed_local_date;
+    v_current_streak:=case when v_last_date is null or v_last_date<v_local_date-1 then 1 when v_last_date=v_local_date-1 then v_streak.current_streak+1 else greatest(1,v_streak.current_streak) end;
+    v_longest_streak:=greatest(v_streak.longest_streak,v_current_streak); v_total_full_days:=v_streak.total_all_rings_closed_days+case when v_last_date is distinct from v_local_date then 1 else 0 end;
+    if v_last_date is distinct from v_local_date and v_current_streak=7 then v_streak_points:=35; v_streak_xp:=250; elsif v_last_date is distinct from v_local_date and v_current_streak=30 then v_streak_points:=150; v_streak_xp:=1000; end if;
+    update public.blundr_streak_records set current_streak=v_current_streak,longest_streak=v_longest_streak,total_all_rings_closed_days=v_total_full_days,last_completed_local_date=case when last_completed_local_date is null then v_local_date else greatest(last_completed_local_date,v_local_date) end,updated_at=now() where user_id=p_user_id;
+  else select current_streak,longest_streak,total_all_rings_closed_days,last_completed_local_date into v_current_streak,v_longest_streak,v_total_full_days,v_last_date from public.blundr_streak_records where user_id=p_user_id; end if;
+  v_points:=v_points+v_streak_points; v_xp:=v_xp+v_streak_xp;
+  v_day.activity_event_ids:=array_append(v_day.activity_event_ids,v_event_id); v_day.xp_earned:=v_day.xp_earned+v_xp; v_day.opening_points_earned:=v_day.opening_points_earned+v_points; v_day.streak_eligible:=v_day.all_rings_closed; v_day.updated_at:=now();
+  update public.blundr_daily_retention_progress set daily_tempo_progress=v_day.daily_tempo_progress,daily_tempo_completed=v_day.daily_tempo_completed,daily_tempo_completed_at=v_day.daily_tempo_completed_at,daily_battery_progress=v_day.daily_battery_progress,daily_battery_completed=v_day.daily_battery_completed,daily_battery_completed_at=v_day.daily_battery_completed_at,daily_blundr_progress=v_day.daily_blundr_progress,daily_blundr_completed=v_day.daily_blundr_completed,daily_blundr_completed_at=v_day.daily_blundr_completed_at,all_rings_closed=v_day.all_rings_closed,all_rings_closed_at=v_day.all_rings_closed_at,activity_event_ids=v_day.activity_event_ids,xp_earned=v_day.xp_earned,opening_points_earned=v_day.opening_points_earned,streak_eligible=v_day.streak_eligible,completed_at=v_day.completed_at,updated_at=v_day.updated_at where id=v_day.id;
   v_quantity := v_points;
   v_random := public.blundr_rewards_v2_hmac_random(p_user_id::text || ':' || p_completion_id || ':' || p_policy_version);
   v_randomness_available := v_random is not null and nullif(btrim(coalesce(p_randomness_key_version,'')), '') is not null;
@@ -89,6 +134,8 @@ begin
   returning id into v_grant_id;
   insert into public.blundr_repertoire_point_events (id,user_id,source,points,daily_session_id)
   values ('reward-v2:' || v_tx.id::text,p_user_id,p_source,v_points,p_evidence_id);
+  insert into public.blundr_xp_events(id,user_id,source,xp,local_date,completion_id,created_at)
+  values('reward-v2-xp:' || v_tx.id::text,p_user_id,p_source,v_xp,v_local_date,p_completion_id,now());
   update public.blundr_user_repertoires set opening_unlock_points=opening_unlock_points+v_points,updated_at=now()
     where user_id=p_user_id;
   if v_bonus_type is not null then
@@ -105,8 +152,7 @@ begin
     'randomEvaluation',case when v_randomness_available then 'evaluated' else 'unavailable' end);
   insert into public.blundr_reward_presentations_v2(transaction_id,user_id,presentation_key,presentation_kind,priority,envelope,policy_version)
   values(v_tx.id,p_user_id,'completion:' || p_completion_id,'toast',50,v_envelope,p_policy_version);
-  return jsonb_build_object('duplicate',false,'transactionId',v_tx.id,'grantId',v_grant_id,'grantType','routine_points','quantity',v_quantity,'randomBonusType',v_bonus_type,
-    'randomEvaluation',case when v_randomness_available then 'evaluated' else 'unavailable' end);
+  return jsonb_build_object('duplicate',false,'transactionId',v_tx.id,'grantId',v_grant_id,'grantType','routine_points','quantity',v_quantity,'randomBonusType',v_bonus_type,'localDate',v_local_date,'ringClosedThisAction',v_ring_after and not v_ring_before,'allRingsClosedThisAction',v_all_closed_this_action,'repertoirePointsAwarded',v_points,'rewardPointsAwarded',0,'xpAwarded',v_xp,'availablePoints',(select opening_unlock_points from public.blundr_user_repertoires where user_id=p_user_id),'lifetimePoints',(select coalesce(sum(points),0) from public.blundr_repertoire_point_events where user_id=p_user_id),'spentPoints',(select coalesce(sum(points_spent),0) from public.blundr_repertoire_unlock_events where user_id=p_user_id),'dayRecord',jsonb_build_object('userId',p_user_id,'localDate',v_local_date,'dailyTempo',jsonb_build_object('ringId','daily_tempo','progress',v_day.daily_tempo_progress,'goal',v_day.daily_tempo_goal,'closed',v_day.daily_tempo_completed,'closedAt',v_day.daily_tempo_completed_at),'dailyBattery',jsonb_build_object('ringId','daily_battery','progress',v_day.daily_battery_progress,'goal',v_day.daily_battery_goal,'closed',v_day.daily_battery_completed,'closedAt',v_day.daily_battery_completed_at),'dailyBlundr',jsonb_build_object('ringId','daily_blundr','progress',v_day.daily_blundr_progress,'goal',v_day.daily_blundr_goal,'closed',v_day.daily_blundr_completed,'closedAt',v_day.daily_blundr_completed_at),'allRingsClosed',v_day.all_rings_closed,'allRingsClosedAt',v_day.all_rings_closed_at,'xpEarnedToday',v_day.xp_earned,'repertoirePointsEarnedToday',v_day.opening_points_earned,'activityEventIds',to_jsonb(v_day.activity_event_ids),'updatedAt',v_day.updated_at),'streakRecord',jsonb_build_object('userId',p_user_id,'currentStreakDays',v_current_streak,'longestStreakDays',v_longest_streak,'totalAllRingsClosedDays',v_total_full_days,'lastCompletedLocalDate',v_last_date,'updatedAt',now()),'rewardGrants','[]'::jsonb,'tempoCacheState','closed','randomEvaluation',case when v_randomness_available then 'evaluated' else 'unavailable' end);
 end;
 $$;
 
