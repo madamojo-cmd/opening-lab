@@ -88,6 +88,9 @@ test("v2 rewards use one atomic writer, an inventory ledger, and leased presenta
   );
   assert.match(v2Migration, /-v_cost,p_opening_id,p_policy_version/i);
   assert.match(v2Migration, /inventory_idempotency_conflict/i);
+  assert.match(v2Migration, /returning id into v_bonus_grant_id/i);
+  assert.match(v2Migration, /grantId',v_bonus_grant_id/i);
+  assert.match(v2Migration, /v_last_date := v_local_date/i);
   assert.match(v2Migration, /blundr_daily_retention_progress/i);
   assert.match(v2Migration, /blundr_streak_records/i);
   assert.match(v2Migration, /activity_event_ids/i);

@@ -12,7 +12,20 @@ function failure(error: unknown): RewardAuthorityFailure {
     (error as { message?: unknown } | null)?.message ??
       "reward_persistence_unavailable",
   );
-  return { ok: false, code: message || "reward_persistence_unavailable" };
+  const stable = [
+    "completion_evidence_unverified",
+    "completion_time_zone_unavailable",
+    "account_not_ready",
+    "insufficient_inventory",
+    "opening_not_locked",
+    "inventory_idempotency_conflict",
+    "reward_idempotency_conflict",
+    "reward_presentation_lease_not_owned",
+  ];
+  return {
+    ok: false,
+    code: stable.includes(message) ? message : "reward_persistence_unavailable",
+  };
 }
 
 function adminOrFailure() {

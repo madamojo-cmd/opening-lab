@@ -40,6 +40,7 @@ declare
   v_bonus_type text;
   v_randomness_available boolean := false;
   v_grant_id uuid;
+  v_bonus_grant_id uuid;
   v_envelope jsonb;
   v_profile public.blundr_user_profiles%rowtype;
   v_day public.blundr_daily_retention_progress%rowtype;
@@ -132,6 +133,7 @@ begin
     v_longest_streak:=greatest(v_streak.longest_streak,v_current_streak); v_total_full_days:=v_streak.total_all_rings_closed_days+case when v_last_date is distinct from v_local_date then 1 else 0 end;
     if v_last_date is distinct from v_local_date and v_current_streak=7 then v_streak_points:=35; v_streak_xp:=250; elsif v_last_date is distinct from v_local_date and v_current_streak=30 then v_streak_points:=150; v_streak_xp:=1000; end if;
     update public.blundr_streak_records set current_streak=v_current_streak,longest_streak=v_longest_streak,total_all_rings_closed_days=v_total_full_days,last_completed_local_date=case when last_completed_local_date is null then v_local_date else greatest(last_completed_local_date,v_local_date) end,updated_at=now() where user_id=p_user_id;
+    v_last_date := v_local_date;
   else select current_streak,longest_streak,total_all_rings_closed_days,last_completed_local_date into v_current_streak,v_longest_streak,v_total_full_days,v_last_date from public.blundr_streak_records where user_id=p_user_id; end if;
   v_points:=v_points+v_streak_points; v_xp:=v_xp+v_streak_xp;
   v_day.activity_event_ids:=array_append(v_day.activity_event_ids,v_event_id); v_day.xp_earned:=v_day.xp_earned+v_xp; v_day.opening_points_earned:=v_day.opening_points_earned+v_points; v_day.streak_eligible:=v_day.all_rings_closed; v_day.updated_at:=now();
@@ -161,12 +163,12 @@ begin
   if v_bonus_type is not null then
     insert into public.blundr_reward_grants_v2 (transaction_id,user_id,grant_key,grant_type,quantity,policy_version,randomness_key_version,metadata)
     values (v_tx.id,p_user_id,'random:' || v_completion_id,v_bonus_type,1,p_policy_version,p_randomness_key_version,
-      jsonb_build_object('hmac',true,'completionId',v_completion_id));
+      jsonb_build_object('hmac',true,'completionId',v_completion_id)) returning id into v_bonus_grant_id;
     insert into public.blundr_reward_inventory_v2(user_id,inventory_kind,quantity,version)
     values(p_user_id,v_bonus_type,1,1)
     on conflict(user_id,inventory_kind) do update set quantity=public.blundr_reward_inventory_v2.quantity+excluded.quantity, version=public.blundr_reward_inventory_v2.version+1;
     insert into public.blundr_reward_inventory_events_v2(transaction_id,user_id,event_key,event_kind,inventory_kind,quantity_delta,policy_version,metadata)
-    values(v_tx.id,p_user_id,'grant:' || v_grant_id,'grant',v_bonus_type,1,p_policy_version,jsonb_build_object('grantId',v_grant_id));
+    values(v_tx.id,p_user_id,'grant:' || v_bonus_grant_id,'grant',v_bonus_type,1,p_policy_version,jsonb_build_object('grantId',v_bonus_grant_id));
   end if;
   v_envelope := jsonb_build_object('transactionId',v_tx.id,'grantId',v_grant_id,'grantType','routine_points','quantity',v_quantity,'randomBonusType',v_bonus_type,
     'randomEvaluation',case when v_randomness_available then 'evaluated' else 'unavailable' end);
