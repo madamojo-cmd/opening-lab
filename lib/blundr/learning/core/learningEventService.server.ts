@@ -39,14 +39,14 @@ export async function appendLearningEventV2(input: {
   const [review, mastery] = await Promise.all([
     client
       .from("blundr_review_states")
-      .select("srs_state")
+      .select("srs_state,review_state_version")
       .eq("user_id", input.userId)
       .eq("opening_id", input.position.openingId)
       .eq("play_key", input.position.moveOrderKey)
       .maybeSingle(),
     client
       .from("blundr_node_mastery")
-      .select("recall_attempt_count,correct_recall_count,lapse_count")
+      .select("recall_attempt_count,correct_recall_count,lapse_count,mastery_state_version")
       .eq("user_id", input.userId)
       .eq("position_key", input.position.positionKey)
       .maybeSingle(),
@@ -115,6 +115,8 @@ export async function appendLearningEventV2(input: {
     ]),
     correct: input.correct,
     access_decision: input.access.decision,
+    expected_review_state_version: Number(review.data?.review_state_version ?? 0),
+    expected_mastery_state_version: Number(mastery.data?.mastery_state_version ?? 0),
     ...(projection.evidenceKind === "recall_attempt"
       ? { fsrs: projection.fsrs, mastery: projection.mastery }
       : {}),

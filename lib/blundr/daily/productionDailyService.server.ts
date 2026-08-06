@@ -343,7 +343,9 @@ async function buildReservation(
         .in("status", ["queued", "added_today"])
         .lte("requested_for", dateKey),
     ]);
-    if (!projectionResult.error) {
+    if (projectionResult.error || priorityResult.error)
+      throw new Error("daily_priority_projection_unavailable");
+    {
       for (const projection of projectionResult.data ?? []) {
         const score = Number(projection.score);
         if (Number.isFinite(score) && score > 0)
@@ -354,9 +356,8 @@ async function buildReservation(
           );
       }
     }
-    if (!priorityResult.error)
-      for (const priority of priorityResult.data ?? [])
-        priorityOpenings.add(String(priority.opening_id));
+    for (const priority of priorityResult.data ?? [])
+      priorityOpenings.add(String(priority.opening_id));
   }
   const eligibleNodes = runtime.nodes.filter((node) => {
     const availability = getStage2OpeningAvailability(node.openingId);

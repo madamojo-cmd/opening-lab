@@ -72,7 +72,7 @@ declare v_deck text := p_reservation->>'deck_id'; v_session text := p_reservatio
 begin
   if p_user_id is null or p_local_date is null or p_reservation is null or v_deck is null or v_session is null then raise exception using errcode='22023',message='invalid_daily_reservation_request'; end if;
   insert into public.blundr_daily_decks (deck_id,user_id,local_date,deck_fingerprint,public_cards,server_cards,content_version,composer_version,runtime_package_id,profile_version,access_policy_id,access_policy_version,time_zone,reservation_state,reserved_at)
-  values (v_deck,p_user_id,p_local_date,p_reservation->>'deck_fingerprint',p_reservation->'public_cards',p_reservation->'server_cards',p_reservation->>'content_version',p_reservation->>'composer_version',p_reservation->>'runtime_package_id',p_reservation->>'profile_version',p_reservation->>'access_policy_id',p_reservation->>'access_policy_version',p_reservation->>'time_zone','reserved',now()) on conflict (user_id,local_date) do nothing;
+  values (v_deck,p_user_id,p_local_date,p_reservation->>'deck_fingerprint',p_reservation->'public_cards',p_reservation->'server_cards',p_reservation->>'content_version',p_reservation->>'composer_version',p_reservation->>'runtime_package_id',p_reservation->>'profile_version',p_reservation->>'access_policy_id',p_reservation->>'access_policy_version',p_reservation->>'time_zone','active',now()) on conflict (user_id,local_date) do nothing;
   select deck_id,deck_fingerprint into v_existing,v_existing_fingerprint from public.blundr_daily_decks where user_id=p_user_id and local_date=p_local_date;
   if v_existing <> v_deck then raise exception using errcode='23505',message='daily_reservation_conflict'; end if;
   if v_existing_fingerprint <> p_reservation->>'deck_fingerprint' then raise exception using errcode='23505',message='daily_reservation_payload_conflict'; end if;
@@ -92,7 +92,7 @@ begin
   if v_version is null then raise exception using errcode='42501',message='daily_session_not_found'; end if;
   select deck.server_cards into v_cards from public.blundr_daily_sessions session join public.blundr_daily_decks deck on deck.deck_id=session.deck_id and deck.user_id=session.user_id where session.session_id=p_session_id and session.user_id=p_user_id;
   if not exists (select 1 from jsonb_array_elements(v_cards) card where card->>'cardFingerprint'=p_action->>'card_fingerprint') then raise exception using errcode='22023',message='daily_card_not_reserved'; end if;
-  select attempt_id,card_fingerprint,outcome,answer,learning_exposure_id into v_prior from public.blundr_daily_attempts where user_id=p_user_id and session_id=p_session_id and action_id=p_action->>'action_id';
+  select attempt_id,card_fingerprint,step_id,attempt_kind,outcome,answer,learning_exposure_id into v_prior from public.blundr_daily_attempts where user_id=p_user_id and session_id=p_session_id and action_id=p_action->>'action_id';
   if found then
     select completed_at into v_completed_at from public.blundr_daily_sessions where session_id=p_session_id and user_id=p_user_id;
     if v_prior.card_fingerprint=p_action->>'card_fingerprint' and v_prior.step_id=p_action->>'step_id' and v_prior.attempt_kind=p_action->>'attempt_kind' and v_prior.outcome=p_action->>'outcome' and coalesce(v_prior.answer,'null'::jsonb)=coalesce(p_action->'answer','null'::jsonb) and coalesce(v_prior.learning_exposure_id,'')=coalesce(p_action->>'learning_exposure_id','') then return jsonb_build_object('status','duplicate','version',v_version,'completionId',case when v_completed_at is null then null else 'daily-completion:' || p_session_id end); end if;
@@ -101,7 +101,7 @@ begin
   if p_action->>'step_id' <> p_action->>'card_fingerprint' then raise exception using errcode='22023',message='daily_step_not_reserved'; end if;
   if v_version <> (p_action->>'expected_version')::int then raise exception using errcode='40001',message='daily_session_conflict'; end if;
   select not exists(select 1 from public.blundr_daily_attempts where user_id=p_user_id and session_id=p_session_id and step_id=p_action->>'step_id' and first_attempt) into v_first;
-  insert into public.blundr_daily_attempts (attempt_id,session_id,user_id,card_fingerprint,first_attempt,attempt_kind,outcome,answer,action_id,step_id,action_version,learning_exposure_id) values (p_action->>'attempt_id',p_session_id,p_user_id,p_action->>'card_fingerprint',v_first,p_action->>'attempt_kind',p_action->>'outcome',p_action->'answer',p_action->>'action_id',p_action->>'step_id',1,case when v_first then p_action->>'learning_exposure_id' else null end);
+  insert into public.blundr_daily_attempts (attempt_id,session_id,user_id,card_fingerprint,first_attempt,attempt_kind,outcome,answer,action_id,step_id,session_state_version,learning_exposure_id) values (p_action->>'attempt_id',p_session_id,p_user_id,p_action->>'card_fingerprint',v_first,p_action->>'attempt_kind',p_action->>'outcome',p_action->'answer',p_action->>'action_id',p_action->>'step_id',1,case when v_first then p_action->>'learning_exposure_id' else null end);
   v_next := p_action->'next_state';
   update public.blundr_daily_sessions set state=jsonb_set(v_next,'{status}','"in_progress"'::jsonb,true),state_version=v_version+1,updated_at=now() where session_id=p_session_id and user_id=p_user_id;
   -- The caller supplies only an evidence payload built from the private,
