@@ -103,9 +103,10 @@ function sourcedCards(personalized: number, fallback: number) {
     })),
     ...Array.from({ length: fallback }, (_, index) => ({
       publicCard: {
-        activityId: personalized === 0 && index === 0
-          ? "daily_move_recall"
-          : "daily_candidate_choice",
+        activityId:
+          personalized === 0 && index === 0
+            ? "daily_move_recall"
+            : "daily_candidate_choice",
         positionKey: `runtime-${index}`,
         interaction: index % 2 ? ("choice" as const) : ("move" as const),
       },
@@ -125,8 +126,14 @@ test("a no-history user receives one unified stack from verified unlocked runtim
 test("personalized evidence is selected before unlocked-runtime fallback", () => {
   const selected = selectProductionDailyBoardCards(sourcedCards(2, 8), 5);
   assert.equal(selected.length, 5);
-  assert.equal(selected.filter((card) => card.source === "personalized").length, 2);
-  assert.equal(selected.filter((card) => card.source === "unlocked_runtime").length, 3);
+  assert.equal(
+    selected.filter((card) => card.source === "personalized").length,
+    2,
+  );
+  assert.equal(
+    selected.filter((card) => card.source === "unlocked_runtime").length,
+    3,
+  );
 });
 
 test("a fully evidence-backed stack does not consume fallback content", () => {
@@ -139,6 +146,9 @@ test("production composer contains no mixed minigame or fabricated mistake path"
     new URL("../productionDailyService.server.ts", import.meta.url),
     "utf8",
   );
-  assert.doesNotMatch(source, /buildPunishmentActivity|daily_mixed_test|daily_repair_line/);
+  assert.doesNotMatch(
+    source,
+    /buildPunishmentActivity|daily_mixed_test|daily_repair_line/,
+  );
   assert.doesNotMatch(source, /kind:\s*["']mini_game["']/);
 });
