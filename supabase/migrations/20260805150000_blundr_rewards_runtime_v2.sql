@@ -36,6 +36,7 @@ declare
   v_tx public.blundr_reward_transactions_v2%rowtype;
   v_points integer;
   v_random numeric;
+  v_all_rings_random numeric;
   v_rarity_random numeric;
   v_amount_random numeric;
   v_quantity integer;
@@ -150,9 +151,10 @@ begin
   update public.blundr_daily_retention_progress set daily_tempo_progress=v_day.daily_tempo_progress,daily_tempo_completed=v_day.daily_tempo_completed,daily_tempo_completed_at=v_day.daily_tempo_completed_at,daily_battery_progress=v_day.daily_battery_progress,daily_battery_completed=v_day.daily_battery_completed,daily_battery_completed_at=v_day.daily_battery_completed_at,daily_blundr_progress=v_day.daily_blundr_progress,daily_blundr_completed=v_day.daily_blundr_completed,daily_blundr_completed_at=v_day.daily_blundr_completed_at,all_rings_closed=v_day.all_rings_closed,all_rings_closed_at=v_day.all_rings_closed_at,activity_event_ids=v_day.activity_event_ids,xp_earned=v_day.xp_earned,opening_points_earned=v_day.opening_points_earned,streak_eligible=v_day.streak_eligible,completed_at=v_day.completed_at,updated_at=v_day.updated_at where id=v_day.id;
   v_quantity := v_points;
   v_random := public.blundr_rewards_v2_hmac_random(p_user_id::text || ':' || v_completion_id || ':trigger:' || p_policy_version);
+  v_all_rings_random := public.blundr_rewards_v2_hmac_random(p_user_id::text || ':' || v_completion_id || ':all-rings-trigger:' || p_policy_version);
   v_rarity_random := public.blundr_rewards_v2_hmac_random(p_user_id::text || ':' || v_completion_id || ':rarity:' || p_policy_version);
   v_amount_random := public.blundr_rewards_v2_hmac_random(p_user_id::text || ':' || v_completion_id || ':common-amount:' || p_policy_version);
-  v_randomness_available := v_random is not null and v_rarity_random is not null and v_amount_random is not null and nullif(btrim(coalesce(p_randomness_key_version,'')), '') is not null;
+  v_randomness_available := v_random is not null and v_all_rings_random is not null and v_rarity_random is not null and v_amount_random is not null and nullif(btrim(coalesce(p_randomness_key_version,'')), '') is not null;
   if v_randomness_available then
     insert into public.blundr_reward_history(user_id,updated_at) values(p_user_id,now()) on conflict(user_id) do nothing;
     select all_rings_days_since_random_reward into v_pity_count from public.blundr_reward_history where user_id=p_user_id for update;
@@ -160,7 +162,7 @@ begin
     elsif v_all_closed_this_action and v_current_streak>0 and v_current_streak%7=0 then v_reward_trigger:='weekly_cache'; v_reward_mode:='guaranteed_cache'; v_should_reward:=true;
     elsif v_all_closed_this_action and v_pity_count>=14 then v_reward_trigger:='all_rings_closed'; v_reward_mode:='pity_bonus'; v_should_reward:=true;
     elsif v_all_closed_this_action and v_total_full_days>0 and v_total_full_days%3=0 and v_random < .12 then v_reward_trigger:='three_all_rings_completions'; v_reward_mode:='random_bonus'; v_should_reward:=true;
-    elsif v_all_closed_this_action then v_reward_trigger:='all_rings_closed'; v_reward_mode:='random_bonus'; v_should_reward:=(v_random < .08);
+    elsif v_all_closed_this_action then v_reward_trigger:='all_rings_closed'; v_reward_mode:='random_bonus'; v_should_reward:=(v_all_rings_random < .08);
     else v_reward_trigger:=case v_ring when 'daily_tempo' then 'daily_tempo_ring_closed' when 'daily_battery' then 'daily_battery_ring_closed' else 'daily_blundr_ring_closed' end; v_reward_mode:='random_bonus'; v_should_reward:=(v_ring_after and not v_ring_before and v_random < case when v_ring='daily_blundr' then .02 else .01 end); end if;
     v_reward_roll_id := 'reward-roll-v2:' || encode(digest(p_user_id::text || ':' || v_completion_id || ':' || v_reward_trigger,'sha256'),'hex');
     if v_should_reward then

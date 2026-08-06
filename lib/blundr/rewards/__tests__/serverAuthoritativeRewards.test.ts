@@ -92,6 +92,7 @@ test("v2 rewards use one atomic writer, an inventory ledger, and leased presenta
   assert.match(v2Migration, /blundr_reward_history/i);
   assert.match(v2Migration, /monthly_cache/i);
   assert.match(v2Migration, /weekly_cache/i);
+  assert.match(v2Migration, /:all-rings-trigger:/i);
   assert.match(v2Migration, /v_reward_rarity:='common'/i);
   assert.match(v2Migration, /v_reward_rarity:='uncommon'/i);
   assert.match(v2Migration, /v_reward_rarity:='rare'/i);
