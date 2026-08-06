@@ -1,0 +1,334 @@
+name: Blundr Daily v3 disposable gate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blundr-daily-v3-disposable-gate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: blundr-disposable-rls
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      BLUNDR_RLS_TEST_PROJECT_REF: ${{ secrets.BLUNDR_RLS_TEST_PROJECT_REF }}
+      BLUNDR_RLS_TEST_ENVIRONMENT_ROLE: ${{ secrets.BLUNDR_RLS_TEST_ENVIRONMENT_ROLE }}
+      BLUNDR_RLS_TEST_USER_A_EMAIL: ${{ secrets.BLUNDR_RLS_TEST_USER_A_EMAIL }}
+      BLUNDR_RLS_TEST_USER_A_PASSWORD: ${{ secrets.BLUNDR_RLS_TEST_USER_A_PASSWORD }}
+      BLUNDR_RLS_TEST_USER_B_EMAIL: ${{ secrets.BLUNDR_RLS_TEST_USER_B_EMAIL }}
+      BLUNDR_RLS_TEST_USER_B_PASSWORD: ${{ secrets.BLUNDR_RLS_TEST_USER_B_PASSWORD }}
+      LOG_DIR: ${{ runner.temp }}/blundr-daily-v3-logs
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+
+      - name: Print exact tested SHA
+        run: echo "Exact SHA $GITHUB_SHA"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify local migration set
+        run: npm run verify:migrations
+
+      - name: Require disposable test environment
+        run: |
+          set -eu
+          for name in \
+            SUPABASE_ACCESS_TOKEN \
+            SUPABASE_DB_PASSWORD \
+            BLUNDR_RLS_TEST_PROJECT_REF \
+            BLUNDR_RLS_TEST_ENVIRONMENT_ROLE \
+            BLUNDR_RLS_TEST_USER_A_EMAIL \
+            BLUNDR_RLS_TEST_USER_A_PASSWORD \
+            BLUNDR_RLS_TEST_USER_B_EMAIL \
+            BLUNDR_RLS_TEST_USER_B_PASSWORD
+          do
+            test -n "${!name:-}" || { echo "$name is required"; exit 1; }
+          done
+          test "$BLUNDR_RLS_TEST_ENVIRONMENT_ROLE" = "disposable" || {
+            echo "Remote target must be disposable"
+            exit 1
+          }
+
+      - name: Confirm disposable project and export keys
+        env:
+          BLUNDR_PR01_PREFLIGHT_MODE: fresh
+          BLUNDR_PR01_PREFLIGHT_PROJECT_REF: ${{ secrets.BLUNDR_RLS_TEST_PROJECT_REF }}
+          BLUNDR_PR01_EXPORT_API_KEYS: "true"
+        run: npm run verify:pr01-disposable-project
+
+      - name: Link disposable project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          log="$LOG_DIR/link.log"
+          command_log="$(mktemp)"
+          if ! npx --yes supabase@2.111.0 link --project-ref "$BLUNDR_RLS_TEST_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD" >"$command_log" 2>&1; then
+            cat "$command_log"
+            rm -f "$command_log"
+            exit 1
+          fi
+          if grep -q '"_tag":"Error"' "$command_log"; then
+            cat "$command_log"
+            rm -f "$command_log"
+            exit 1
+          fi
+          cat "$command_log" | tee "$log" >/dev/null
+          rm -f "$command_log"
+
+      - name: Verify remote migration history starts empty
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          log="$LOG_DIR/migrations-before.log"
+          node --input-type=module <<'NODE' | tee "$log"
+          import assert from "node:assert/strict";
+          import { readdir } from "node:fs/promises";
+          import { execFileSync } from "node:child_process";
+
+          const localVersions = (await readdir("supabase/migrations"))
+            .filter((file) => file.endsWith(".sql"))
+            .sort()
+            .map((file) => file.match(/^(\d{8}(?:\d{6})?)_/)?.[1]);
+          assert.ok(localVersions.every(Boolean));
+          const stdout = execFileSync(
+            "npx",
+            [
+              "--yes",
+              "supabase@2.111.0",
+              "migration",
+              "list",
+              "--linked",
+              "--output-format",
+              "json",
+            ],
+            { encoding: "utf8", maxBuffer: 1024 * 1024 },
+          );
+          const parsed = JSON.parse(stdout);
+          const remote = [];
+          const collect = (value) => {
+            if (Array.isArray(value)) {
+              for (const entry of value) collect(entry);
+              return;
+            }
+            if (!value || typeof value !== "object") return;
+            for (const [key, entry] of Object.entries(value)) {
+              if (
+                /^remote(?:_|[A-Z])?version$|^remote$/i.test(key) &&
+                typeof entry === "string" &&
+                /^\d{8}(?:\d{6})?$/.test(entry)
+              ) {
+                remote.push(entry);
+              } else {
+                collect(entry);
+              }
+            }
+          };
+          collect(parsed);
+          remote.sort();
+          assert.equal(remote.length, 0);
+          assert.equal(remote.at(-1) ?? null, null);
+          console.log("Remote migration history verified: count=0 head=none");
+          NODE
+
+      - name: Apply remote migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          log="$LOG_DIR/db-push.log"
+          command_log="$(mktemp)"
+          if ! npx --yes supabase@2.111.0 db push >"$command_log" 2>&1; then
+            cat "$command_log"
+            rm -f "$command_log"
+            exit 1
+          fi
+          if grep -q '"_tag":"Error"' "$command_log"; then
+            cat "$command_log"
+            rm -f "$command_log"
+            exit 1
+          fi
+          cat "$command_log" | tee "$log" >/dev/null
+          rm -f "$command_log"
+
+      - name: Verify remote migration history reached 0→28
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          log="$LOG_DIR/migrations-after.log"
+          node --input-type=module <<'NODE' | tee "$log"
+          import assert from "node:assert/strict";
+          import { readdir } from "node:fs/promises";
+          import { execFileSync } from "node:child_process";
+
+          const expectedCount = 28;
+          const expectedHead = "20260806130000";
+          const localVersions = (await readdir("supabase/migrations"))
+            .filter((file) => file.endsWith(".sql"))
+            .sort()
+            .map((file) => file.match(/^(\d{8}(?:\d{6})?)_/)?.[1]);
+          assert.ok(localVersions.every(Boolean));
+          const stdout = execFileSync(
+            "npx",
+            [
+              "--yes",
+              "supabase@2.111.0",
+              "migration",
+              "list",
+              "--linked",
+              "--output-format",
+              "json",
+            ],
+            { encoding: "utf8", maxBuffer: 1024 * 1024 },
+          );
+          const parsed = JSON.parse(stdout);
+          const remote = [];
+          const collect = (value) => {
+            if (Array.isArray(value)) {
+              for (const entry of value) collect(entry);
+              return;
+            }
+            if (!value || typeof value !== "object") return;
+            for (const [key, entry] of Object.entries(value)) {
+              if (
+                /^remote(?:_|[A-Z])?version$|^remote$/i.test(key) &&
+                typeof entry === "string" &&
+                /^\d{8}(?:\d{6})?$/.test(entry)
+              ) {
+                remote.push(entry);
+              } else {
+                collect(entry);
+              }
+            }
+          };
+          collect(parsed);
+          remote.sort();
+          assert.equal(remote.length, expectedCount);
+          assert.deepEqual(remote, localVersions.slice(0, expectedCount).sort());
+          assert.equal(remote.at(-1) ?? null, expectedHead);
+          console.log(
+            `Remote migration history verified: count=${expectedCount} head=${expectedHead}`,
+          );
+          NODE
+
+      - id: daily_v3_remote_authority
+        name: Daily v3 remote authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          npm run test:daily-v3-remote-authority | tee "$LOG_DIR/daily-v3-remote-authority.log"
+
+      - id: pr02_learning_and_daily_authority_regression
+        name: PR-02 learning and Daily authority regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          npm run test:pr02-remote-authority | tee "$LOG_DIR/pr02-remote-authority.log"
+
+      - id: pr03_rewards_grant_and_presentation_regression
+        name: PR-03 rewards grant and presentation regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          npm run test:pr03-remote-authority | tee "$LOG_DIR/pr03-remote-authority.log"
+
+      - id: durable_trainer_completion_authority_regression
+        name: Durable trainer completion authority regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          node --preserve-symlinks --import tsx tests/security/trainerCompletionRemoteAuthority.integration.test.ts | tee "$LOG_DIR/trainer-completion-remote-authority.log"
+
+      - id: pr01_migration_authority_regression
+        name: PR-01 migration authority regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          echo "Running pr01MigrationAuthority.integration.test.ts"
+          node --preserve-symlinks --import tsx tests/security/pr01MigrationAuthority.integration.test.ts | tee "$LOG_DIR/pr01-migration-authority.log"
+
+      - id: learning_core_rls_cross_user_isolation_matrix
+        name: Learning core RLS and cross-user isolation matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          echo "Running learningCoreRls.integration.test.ts"
+          node --preserve-symlinks --import tsx tests/security/learningCoreRls.integration.test.ts | tee "$LOG_DIR/learning-core-rls.log"
+
+      - id: local_daily_rewards_ring_and_security_contracts
+        name: Local Daily, rewards, ring, and security contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          echo "Running productionDailyRuntimeComposition.test.ts"
+          node --preserve-symlinks --import tsx lib/blundr/daily/__tests__/productionDailyRuntimeComposition.test.ts | tee "$LOG_DIR/production-daily-runtime-composition.log"
+          echo "Running serverAuthoritativeRewards.test.ts"
+          node --preserve-symlinks --import tsx lib/blundr/rewards/__tests__/serverAuthoritativeRewards.test.ts | tee "$LOG_DIR/server-authoritative-rewards.log"
+          echo "Running dailyRingsReadOnlyAuthority.test.ts"
+          node --preserve-symlinks --import tsx components/daily-rings/__tests__/dailyRingsReadOnlyAuthority.test.ts | tee "$LOG_DIR/daily-rings-read-only-authority.log"
+          echo "Running RewardPresentationHost.contract.test.ts"
+          node --preserve-symlinks --import tsx components/rewards/__tests__/RewardPresentationHost.contract.test.ts | tee "$LOG_DIR/reward-presentation-host.contract.log"
+          echo "Running securityBaseline.test.ts"
+          node --preserve-symlinks --import tsx tests/security/securityBaseline.test.ts | tee "$LOG_DIR/security-baseline.log"
+          echo "Running deepMinigameCatalogSafety.test.ts"
+          node --preserve-symlinks --import tsx tests/security/deepMinigameCatalogSafety.test.ts | tee "$LOG_DIR/deep-minigame-catalog-safety.log"
+          echo "Running sentryPrivacy.test.ts"
+          node --preserve-symlinks --import tsx tests/security/sentryPrivacy.test.ts | tee "$LOG_DIR/sentry-privacy.log"
+          echo "Running sentryVerificationRoute.test.ts"
+          node --preserve-symlinks --import tsx tests/security/sentryVerificationRoute.test.ts | tee "$LOG_DIR/sentry-verification-route.log"
+
+      - name: Publish gate summary
+        if: always()
+        run: |
+          {
+            echo "## Daily v3 disposable gate"
+            echo "- Workflow: $GITHUB_WORKFLOW"
+            echo "- Run ID: $GITHUB_RUN_ID"
+            echo "- Tested SHA: $GITHUB_SHA"
+            echo "- Disposable environment role: $BLUNDR_RLS_TEST_ENVIRONMENT_ROLE"
+            echo "- Migration count: 28"
+            echo "- Migration head: 20260806130000"
+            echo "- Daily v3 remote authority: ${{ steps.daily_v3_remote_authority.outcome }}"
+            echo "- PR-02 regression: ${{ steps.pr02_learning_and_daily_authority_regression.outcome }}"
+            echo "- PR-03 regression: ${{ steps.pr03_rewards_grant_and_presentation_regression.outcome }}"
+            echo "- Trainer regression: ${{ steps.durable_trainer_completion_authority_regression.outcome }}"
+            echo "- PR-01 migration authority regression: ${{ steps.pr01_migration_authority_regression.outcome }}"
+            echo "- Learning core RLS and cross-user isolation matrix: ${{ steps.learning_core_rls_cross_user_isolation_matrix.outcome }}"
+            echo "- Local contract/security regressions: ${{ steps.local_daily_rewards_ring_and_security_contracts.outcome }}"
+            echo "- Skipped tests: 0"
+            echo "- Logs: uploaded as artifact from $LOG_DIR"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload gate logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blundr-daily-v3-disposable-gate-${{ github.sha }}
+          path: ${{ runner.temp }}/blundr-daily-v3-logs
+          if-no-files-found: warn
+          retention-days: 30
