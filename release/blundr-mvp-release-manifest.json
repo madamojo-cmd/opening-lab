@@ -5,7 +5,7 @@
   "buildIdentityEndpoint": "/api/build-info",
   "healthEndpoint": "/api/health",
   "featureProfile": "release/feature-profiles/staging-3.99.json",
-  "lockfileSha256": "e4bb5e801fe82941faa5e5e6d380179b21ae6274f21aec6ef36aaecfc4c276d0",
+  "lockfileSha256": "679bb3a9022f96c949cbebf320a7233fc7753608900b2d3c7893f0e4ab623ada",
   "runtime": {
     "packageId": "blundr-opening-runtime-3.99.v2",
     "manifestSha256": "abf8f0eef724ef30b94910932d94a04733668f211b43bbd094590c3fad4b35b8",
@@ -13,8 +13,8 @@
     "movesSha256": "203e2ce1b9875598005614a62a8bc71b0621d54275a821527e9c2b7928c7a434"
   },
   "migrations": {
-    "count": 23,
-    "head": "20260805130000"
+    "count": 24,
+    "head": "20260805140000"
   },
   "featureFlags": {
     "default": "off",

@@ -8,7 +8,7 @@ const DEPRECATED_DAILY_CAPABILITIES = [
   "daily_deep_minigames",
   "daily_mixed_test",
 ];
-const CUMULATIVE_PR01_MIGRATION_HEAD = "20260805130000";
+const CUMULATIVE_RELEASE_MIGRATION_HEAD = "20260805140000";
 const migrationHead = (await readdir("supabase/migrations"))
   .filter((file) => file.endsWith(".sql"))
   .sort()
@@ -60,9 +60,9 @@ for (const { path, value: profile } of profiles) {
     `${prefix} feature flags must be explicit booleans.`,
   );
   requireValue(
-    migrationHead === CUMULATIVE_PR01_MIGRATION_HEAD &&
+    migrationHead === CUMULATIVE_RELEASE_MIGRATION_HEAD &&
       profile.migrationHead === migrationHead,
-    `${prefix} feature profile must match the repository's cumulative PR-01 migration head.`,
+    `${prefix} feature profile must match the repository's cumulative release migration head.`,
   );
   requireValue(
     profile.runtimePackageId === runtimePackageId,
@@ -113,5 +113,5 @@ for (const { path, value: profile } of profiles) {
 }
 
 console.log(
-  `Verified ${profiles.length} failure-closed feature profiles: ${canonicalFlags.length} flags, cumulative PR-01 migration ${CUMULATIVE_PR01_MIGRATION_HEAD}, runtime ${runtimePackageId}.`,
+  `Verified ${profiles.length} failure-closed feature profiles: ${canonicalFlags.length} flags, cumulative release migration ${CUMULATIVE_RELEASE_MIGRATION_HEAD}, runtime ${runtimePackageId}.`,
 );
