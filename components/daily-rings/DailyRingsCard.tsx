@@ -6,13 +6,16 @@ import { ChevronRight, Flame, RefreshCw, Sparkles, Target } from "lucide-react";
 
 import { BLUNDR_ANALYTICS_EVENTS } from "@/lib/blundr/analytics/blundrAnalyticsEvents";
 import { trackBlundrAnalyticsEvent } from "@/lib/blundr/analytics/blundrAnalyticsService";
+import { authenticatedApiFetch } from "@/lib/blundr/api/authenticatedApiClient";
+import { getBlundrStorageModeSetting } from "@/lib/blundr/backend/backendEnv";
 import { createDefaultDailyRingDay } from "@/lib/blundr/daily-rings/dailyRingProgress";
+import { getLocalDateKey } from "@/lib/blundr/daily-rings/dailyRingDate";
 import { getLocalAccountCurrentUserId } from "@/lib/blundr/accounts/localAccountStorage";
 import { BLUNDR_LOCAL_DEMO_USER_ID } from "@/lib/blundr/persistence/persistenceKeys";
+import type { BlundrProgressSummary } from "@/lib/blundr/progress/progressTypes";
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
 import { formatProgressPercentage, formatRepertoirePoints } from "@/lib/blundr/presentation/userFacingNumbers";
 import { getDailyRingSnapshotSummary, loadDailyRingSnapshot } from "@/lib/blundr/daily-rings/dailyRingService";
-import { reconcileDailyBlundrRingCompletionForToday } from "@/lib/blundr/daily-rings/dailyRingBlundrReconciliation";
 import { BLUNDR_DAILY_RING_REFRESH_EVENT } from "@/lib/blundr/daily-rings/dailyRingRefreshSignal";
 import type { DailyRingCompletionResultLike, DailyRingSnapshot } from "@/lib/blundr/daily-rings/dailyRingTypes";
 import { createDefaultStreakRecord } from "@/lib/blundr/streaks/streakService";
@@ -110,20 +113,55 @@ function buildLoadingDailyRingSnapshot(): DailyRingSnapshot {
   };
 }
 
+function isNamedLocalDemo(userId: string): boolean {
+  return process.env.NODE_ENV !== "production" && getBlundrStorageModeSetting() === "local_demo" && userId === BLUNDR_LOCAL_DEMO_USER_ID;
+}
+
+function toAuthoritativeDailyRingSnapshot(summary: BlundrProgressSummary): DailyRingSnapshot {
+  const ring = (ringId: "daily_tempo" | "daily_battery" | "daily_blundr") => summary.today.rings.find((item) => item.ringId === ringId) ?? { ringId, label: ringId, progress: 0, goal: 1, percent: 0, closed: false };
+  const tempo = ring("daily_tempo");
+  const battery = ring("daily_battery");
+  const blundr = ring("daily_blundr");
+  return {
+    userId: summary.userId,
+    localDate: summary.todayDateKey,
+    dayRecord: {
+      userId: summary.userId, localDate: summary.todayDateKey,
+      dailyTempo: { ringId: "daily_tempo", progress: tempo.progress, goal: tempo.goal, closed: tempo.closed },
+      dailyBattery: { ringId: "daily_battery", progress: battery.progress, goal: battery.goal, closed: battery.closed },
+      dailyBlundr: { ringId: "daily_blundr", progress: blundr.progress, goal: blundr.goal, closed: blundr.closed },
+      allRingsClosed: summary.today.allRingsClosed, xpEarnedToday: 0, repertoirePointsEarnedToday: 0, activityEventIds: [], createdAt: summary.generatedAt, updatedAt: summary.generatedAt,
+    },
+    streakRecord: { userId: summary.userId, currentStreakDays: summary.streak.currentDays, longestStreakDays: summary.streak.bestDays, totalAllRingsClosedDays: summary.streak.totalAllRingsClosedDays, updatedAt: summary.generatedAt },
+    tempo: { current: tempo.progress, target: tempo.goal, percent: tempo.percent, complete: tempo.closed },
+    battery: { current: battery.progress, target: battery.goal, percent: battery.percent, complete: battery.closed },
+    blundr: { current: blundr.progress, target: blundr.goal, percent: blundr.percent, complete: blundr.closed },
+    allComplete: summary.today.allRingsClosed,
+    updatedAt: summary.generatedAt,
+  };
+}
+
 export function DailyRingsCard({ repertoireProgress, refreshKey, completionResult, onStartTraining, dailyBlundrHref = "/daily", className }: DailyRingsCardProps) {
   const [snapshot, setSnapshot] = useState<DailyRingSnapshot>(() => buildLoadingDailyRingSnapshot());
+  const [projectionUnavailable, setProjectionUnavailable] = useState(false);
   const trackedViewKeyRef = useRef<string | null>(null);
   const isPlaceholderSnapshot = snapshot.userId === BLUNDR_LOCAL_DEMO_USER_ID && snapshot.localDate === PLACEHOLDER_LOCAL_DATE && snapshot.updatedAt === PLACEHOLDER_ISO;
   const successfulCompletion = completionResult?.ok === true ? completionResult : null;
 
   async function refreshSnapshot() {
     const userId = getLocalAccountCurrentUserId();
-    try {
-      await reconcileDailyBlundrRingCompletionForToday({ userId });
-    } catch {
-      // Keep showing the current local snapshot if reconciliation fails.
+    if (isNamedLocalDemo(userId)) {
+      setProjectionUnavailable(false);
+      setSnapshot(loadDailyRingSnapshot({ userId }));
+      return;
     }
-    setSnapshot(loadDailyRingSnapshot({ userId }));
+    try {
+      const response = await authenticatedApiFetch<{ ok: true; data: BlundrProgressSummary }>(`/api/blundr/progress/summary?localDate=${encodeURIComponent(getLocalDateKey())}`, { cache: "no-store" });
+      setSnapshot(toAuthoritativeDailyRingSnapshot(response.data));
+      setProjectionUnavailable(false);
+    } catch {
+      setProjectionUnavailable(true);
+    }
   }
 
   useEffect(() => {
@@ -195,6 +233,7 @@ export function DailyRingsCard({ repertoireProgress, refreshKey, completionResul
       </div>
 
       <div className="mt-4 grid gap-3">
+        {projectionUnavailable ? <p className="rounded-2xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">Daily rings are temporarily unavailable. Retry to refresh them.</p> : null}
         {completionResult ? <DailyRingCompletionBanner result={completionResult} /> : null}
         {successfulCompletion?.rewardGrants?.length ? (
           <TempoCacheCard
