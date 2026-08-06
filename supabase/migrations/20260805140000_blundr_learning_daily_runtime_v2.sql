@@ -22,6 +22,11 @@ begin
   if p_event->>'evidence_kind' = 'recall_attempt' and coalesce((p_event->>'first_attempt')::boolean, false) and nullif(p_event->>'exposure_id','') is null then
     raise exception using errcode = '22023', message = 'first_recall_requires_exposure';
   end if;
+  select jsonb_build_object('authority_fingerprint',authority_fingerprint) into v_existing from public.blundr_learning_events where event_id=v_event_id or (user_id=p_user_id and idempotency_key=p_event->>'idempotency_key') limit 1;
+  if v_existing is not null then
+    if v_existing->>'authority_fingerprint' = p_event->>'authority_fingerprint' then return jsonb_build_object('status','duplicate','eventId',v_event_id); end if;
+    raise exception using errcode='23505',message='learning_event_idempotency_conflict';
+  end if;
   if p_event->>'evidence_kind' = 'recall_attempt' then
     perform pg_advisory_xact_lock(hashtext(p_user_id::text || ':' || coalesce(p_event->>'exposure_id','')));
     select not exists(select 1 from public.blundr_learning_events where user_id=p_user_id and exposure_id=p_event->>'exposure_id' and evidence_kind='recall_attempt' and first_attempt) into v_first_recall;
