@@ -100,6 +100,10 @@ test("v2 rewards use one atomic writer, an inventory ledger, and leased presenta
   assert.match(v2Migration, /:rarity:/i);
   assert.match(v2Migration, /:common-amount:/i);
   assert.match(v2Migration, /reward-v2-bonus:/i);
+  assert.match(v2Migration, /v_random < \.12/i);
+  assert.match(v2Migration, /v_rarity_random < 0\.72/i);
+  assert.match(v2Migration, /v_rarity_random < 0\.92/i);
+  assert.match(v2Migration, /'reward_bonus',v_reward_amount/i);
   assert.match(v2Migration, /returning id into v_bonus_grant_id/i);
   assert.match(v2Migration, /grantId',v_bonus_grant_id/i);
   assert.match(v2Migration, /v_last_date := v_local_date/i);

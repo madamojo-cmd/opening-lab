@@ -159,18 +159,18 @@ begin
     if v_all_closed_this_action and v_current_streak>0 and v_current_streak%30=0 then v_reward_trigger:='monthly_cache'; v_reward_mode:='guaranteed_cache'; v_should_reward:=true;
     elsif v_all_closed_this_action and v_current_streak>0 and v_current_streak%7=0 then v_reward_trigger:='weekly_cache'; v_reward_mode:='guaranteed_cache'; v_should_reward:=true;
     elsif v_all_closed_this_action and v_pity_count>=14 then v_reward_trigger:='all_rings_closed'; v_reward_mode:='pity_bonus'; v_should_reward:=true;
-    elsif v_all_closed_this_action and v_total_full_days>0 and v_total_full_days%3=0 then v_reward_trigger:='three_all_rings_completions'; v_reward_mode:='random_bonus'; v_should_reward:=(v_random < .12);
+    elsif v_all_closed_this_action and v_total_full_days>0 and v_total_full_days%3=0 and v_random < .12 then v_reward_trigger:='three_all_rings_completions'; v_reward_mode:='random_bonus'; v_should_reward:=true;
     elsif v_all_closed_this_action then v_reward_trigger:='all_rings_closed'; v_reward_mode:='random_bonus'; v_should_reward:=(v_random < .08);
     else v_reward_trigger:=case v_ring when 'daily_tempo' then 'daily_tempo_ring_closed' when 'daily_battery' then 'daily_battery_ring_closed' else 'daily_blundr_ring_closed' end; v_reward_mode:='random_bonus'; v_should_reward:=(v_ring_after and not v_ring_before and v_random < case when v_ring='daily_blundr' then .02 else .01 end); end if;
     v_reward_roll_id := 'reward-roll-v2:' || encode(digest(p_user_id::text || ':' || v_completion_id || ':' || v_reward_trigger,'sha256'),'hex');
     if v_should_reward then
-      if v_reward_mode='pity_bonus' or v_rarity_random < 0.70 then v_reward_rarity:='common'; v_reward_amount:=case when v_amount_random < .5 then 5 else 10 end;
-      elsif v_rarity_random < 0.90 then v_reward_rarity:='uncommon'; v_reward_amount:=1; v_bonus_type:='opening_fragment';
+      if v_reward_mode='pity_bonus' or v_rarity_random < 0.72 then v_reward_rarity:='common'; v_reward_amount:=case when v_amount_random < .5 then 5 else 10 end;
+      elsif v_rarity_random < 0.92 then v_reward_rarity:='uncommon'; v_reward_amount:=1; v_bonus_type:='opening_fragment';
       elsif v_rarity_random < 0.99 then v_reward_rarity:='rare'; v_reward_amount:=1; v_bonus_type:='choice_token';
       else v_reward_rarity:='epic'; v_reward_amount:=100; end if;
     end if;
     insert into public.blundr_reward_rolls(id,user_id,trigger,rolled_at,did_reward,reward_json,seed) values(v_reward_roll_id,p_user_id,v_reward_trigger,now(),v_should_reward,case when v_should_reward then jsonb_build_object('id',v_reward_roll_id || ':' || v_reward_rarity,'rarity',v_reward_rarity,'rewardType',coalesce(v_bonus_type,'unlock_points'),'amount',v_reward_amount) else null end,v_reward_roll_id) on conflict(id) do nothing;
-    update public.blundr_reward_history set random_bonus_pity_counter=case when v_should_reward then 0 when v_all_closed_this_action then v_pity_count+1 else v_pity_count end,all_rings_days_since_random_reward=case when v_should_reward then 0 when v_all_closed_this_action then v_pity_count+1 else v_pity_count end,last_random_bonus_at=case when v_should_reward then now() else last_random_bonus_at end,last_random_reward_local_date=case when v_should_reward then v_local_date::text else last_random_reward_local_date end,last_pity_guarantee_local_date=case when v_reward_mode='pity_bonus' then v_local_date::text else last_pity_guarantee_local_date end,applied_reward_ids=case when v_should_reward then array_append(applied_reward_ids,v_reward_roll_id || ':' || v_reward_rarity) else applied_reward_ids end,updated_at=now() where user_id=p_user_id;
+    update public.blundr_reward_history set random_bonus_pity_counter=case when v_reward_mode in ('random_bonus','pity_bonus') and v_should_reward then 0 when v_all_closed_this_action then v_pity_count+1 else v_pity_count end,all_rings_days_since_random_reward=case when v_reward_mode in ('random_bonus','pity_bonus') and v_should_reward then 0 when v_all_closed_this_action then v_pity_count+1 else v_pity_count end,last_random_bonus_at=case when v_reward_mode in ('random_bonus','pity_bonus') and v_should_reward then now() else last_random_bonus_at end,last_random_reward_local_date=case when v_reward_mode in ('random_bonus','pity_bonus') and v_should_reward then v_local_date::text else last_random_reward_local_date end,last_pity_guarantee_local_date=case when v_reward_mode='pity_bonus' then v_local_date::text else last_pity_guarantee_local_date end,applied_reward_ids=case when v_should_reward then array_append(applied_reward_ids,v_reward_roll_id || ':' || v_reward_rarity) else applied_reward_ids end,updated_at=now() where user_id=p_user_id;
   end if;
   insert into public.blundr_reward_transactions_v2 (user_id,idempotency_key,transaction_kind,completion_id,source,policy_version,randomness_key_version)
   values (p_user_id,v_idempotency_key,'reward_grant',v_completion_id,p_source,p_policy_version,
@@ -199,12 +199,12 @@ begin
   elsif v_should_reward then
     insert into public.blundr_reward_grants_v2(transaction_id,user_id,grant_key,grant_type,quantity,policy_version,randomness_key_version,metadata)
     values(v_tx.id,p_user_id,'random-points:' || v_completion_id,case when v_reward_rarity='epic' then 'epic_points' else 'routine_points' end,v_reward_amount,p_policy_version,p_randomness_key_version,jsonb_build_object('rewardRollId',v_reward_roll_id)) returning id into v_bonus_grant_id;
-    insert into public.blundr_repertoire_point_events(id,user_id,source,points,daily_session_id) values('reward-v2-bonus:' || v_bonus_grant_id::text,p_user_id,'manual_dev_adjustment',v_reward_amount,p_evidence_id);
+    insert into public.blundr_repertoire_point_events(id,user_id,source,points,daily_session_id) values('reward-v2-bonus:' || v_bonus_grant_id::text,p_user_id,'reward_bonus',v_reward_amount,p_evidence_id);
     update public.blundr_user_repertoires set opening_unlock_points=opening_unlock_points+v_reward_amount,updated_at=now() where user_id=p_user_id;
     update public.blundr_daily_retention_progress set opening_points_earned=opening_points_earned+v_reward_amount,updated_at=now() where id=v_day.id;
     v_reward_grants := jsonb_build_array(jsonb_build_object('id',v_bonus_grant_id,'rewardId',v_reward_roll_id || ':' || v_reward_rarity,'rewardRollId',v_reward_roll_id,'rarity',v_reward_rarity,'rewardType','unlock_points','amount',v_reward_amount,'grantMode',v_reward_mode,'createdAt',now()));
   end if;
-  v_envelope := jsonb_build_object('transactionId',v_tx.id,'grantId',v_grant_id,'grantType','routine_points','quantity',v_quantity,'randomBonusType',v_bonus_type,
+  v_envelope := jsonb_build_object('transactionId',v_tx.id,'grantId',v_grant_id,'grantType','routine_points','quantity',v_quantity,'randomBonusType',v_bonus_type,'rewardGrants',v_reward_grants,'rarity',v_reward_rarity,'amount',v_reward_amount,
     'randomEvaluation',case when v_randomness_available then 'evaluated' else 'unavailable' end);
   insert into public.blundr_reward_presentations_v2(transaction_id,user_id,presentation_key,presentation_kind,priority,envelope,policy_version)
   values(v_tx.id,p_user_id,'completion:' || v_completion_id,'toast',50,v_envelope,p_policy_version);
