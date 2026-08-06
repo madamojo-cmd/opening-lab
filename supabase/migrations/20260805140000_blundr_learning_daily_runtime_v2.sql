@@ -89,20 +89,24 @@ end; $$;
 -- persisted only after the server has evaluated the private reservation.
 create or replace function public.blundr_commit_daily_action_v2(p_user_id uuid, p_session_id text, p_action jsonb)
 returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
-declare v_version int; v_next jsonb; v_projection jsonb; v_completion_id text; v_cards jsonb; v_prior record; v_first boolean; v_total integer; v_completed integer; v_completed_at timestamptz;
+declare v_version int; v_current_state jsonb; v_next jsonb; v_projection jsonb; v_completion_id text; v_cards jsonb; v_card jsonb; v_prior record; v_first boolean; v_total integer; v_completed integer; v_completed_at timestamptz; v_step_index integer; v_expected_step integer; v_step_count integer;
 begin
   if p_user_id is null or p_session_id is null or p_action is null or nullif(p_action->>'action_id','') is null then raise exception using errcode='22023',message='invalid_daily_action_request'; end if;
-  select state_version into v_version from public.blundr_daily_sessions where session_id=p_session_id and user_id=p_user_id for update;
+  select state_version,state into v_version,v_current_state from public.blundr_daily_sessions where session_id=p_session_id and user_id=p_user_id for update;
   if v_version is null then raise exception using errcode='42501',message='daily_session_not_found'; end if;
   select deck.server_cards into v_cards from public.blundr_daily_sessions session join public.blundr_daily_decks deck on deck.deck_id=session.deck_id and deck.user_id=session.user_id where session.session_id=p_session_id and session.user_id=p_user_id;
-  if not exists (select 1 from jsonb_array_elements(v_cards) card where card->>'cardFingerprint'=p_action->>'card_fingerprint') then raise exception using errcode='22023',message='daily_card_not_reserved'; end if;
+  select card into v_card from jsonb_array_elements(v_cards) card where card->>'cardFingerprint'=p_action->>'card_fingerprint';
+  if v_card is null then raise exception using errcode='22023',message='daily_card_not_reserved'; end if;
   select attempt_id,card_fingerprint,step_id,attempt_kind,outcome,answer,learning_exposure_id into v_prior from public.blundr_daily_attempts where user_id=p_user_id and session_id=p_session_id and action_id=p_action->>'action_id';
   if found then
     select completed_at into v_completed_at from public.blundr_daily_sessions where session_id=p_session_id and user_id=p_user_id;
     if v_prior.card_fingerprint=p_action->>'card_fingerprint' and v_prior.step_id=p_action->>'step_id' and v_prior.attempt_kind=p_action->>'attempt_kind' and v_prior.outcome=p_action->>'outcome' and coalesce(v_prior.answer,'null'::jsonb)=coalesce(p_action->'answer','null'::jsonb) and coalesce(v_prior.learning_exposure_id,'')=coalesce(p_action->>'learning_exposure_id','') then return jsonb_build_object('status','duplicate','version',v_version,'completionId',case when v_completed_at is null then null else 'daily-completion:' || p_session_id end); end if;
     raise exception using errcode='23505',message='daily_action_idempotency_conflict';
   end if;
-  if p_action->>'step_id' <> p_action->>'card_fingerprint' then raise exception using errcode='22023',message='daily_step_not_reserved'; end if;
+  begin v_step_index := (p_action->>'step_index')::integer; exception when others then raise exception using errcode='22023',message='daily_step_not_reserved'; end;
+  v_expected_step := coalesce((v_current_state #>> array['activityProgress',p_action->>'card_fingerprint','stepIndex'])::integer,0);
+  v_step_count := case when jsonb_typeof(v_card->'privateSteps')='array' then jsonb_array_length(v_card->'privateSteps') else 1 end;
+  if v_step_index <> v_expected_step or v_step_index < 0 or v_step_index >= v_step_count or p_action->>'step_id' <> (p_action->>'card_fingerprint' || ':' || v_step_index::text) then raise exception using errcode='22023',message='daily_step_not_reserved'; end if;
   if v_version <> (p_action->>'expected_version')::int then raise exception using errcode='40001',message='daily_session_conflict'; end if;
   select not exists(select 1 from public.blundr_daily_attempts where user_id=p_user_id and session_id=p_session_id and step_id=p_action->>'step_id' and first_attempt) into v_first;
   insert into public.blundr_daily_attempts (attempt_id,session_id,user_id,card_fingerprint,first_attempt,attempt_kind,outcome,answer,action_id,step_id,session_state_version,learning_exposure_id) values (p_action->>'attempt_id',p_session_id,p_user_id,p_action->>'card_fingerprint',v_first,p_action->>'attempt_kind',p_action->>'outcome',p_action->'answer',p_action->>'action_id',p_action->>'step_id',1,case when v_first then p_action->>'learning_exposure_id' else null end);
@@ -115,7 +119,7 @@ begin
     v_projection := public.blundr_project_learning_evidence_v2(p_user_id, p_action->'learning_event');
   end if;
   select jsonb_array_length(v_cards) into v_total;
-  select count(distinct attempt.card_fingerprint) into v_completed from public.blundr_daily_attempts attempt where user_id=p_user_id and session_id=p_session_id and outcome='correct' and (not exists(select 1 from jsonb_array_elements(v_cards) card where card->>'cardFingerprint'=attempt.card_fingerprint and card ? 'privateSteps') or attempt.step_id=attempt.card_fingerprint);
+  select count(*) into v_completed from jsonb_array_elements(v_cards) card where exists(select 1 from public.blundr_daily_attempts attempt where attempt.user_id=p_user_id and attempt.session_id=p_session_id and attempt.card_fingerprint=card->>'cardFingerprint' and attempt.outcome='correct' and attempt.step_id=(card->>'cardFingerprint' || ':' || (case when jsonb_typeof(card->'privateSteps')='array' then jsonb_array_length(card->'privateSteps')-1 else 0 end)::text));
   if v_completed >= v_total then
     update public.blundr_daily_sessions set completed_at=coalesce(completed_at,now()),state=jsonb_set(state,'{status}','"completed"'::jsonb,true) where session_id=p_session_id and user_id=p_user_id;
     v_completion_id := 'daily-completion:' || p_session_id;

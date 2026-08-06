@@ -214,6 +214,7 @@ export class ProductionDailyRepository {
     firstAttempt: boolean;
     attemptKind: "answer" | "reveal" | "retry";
     outcome: "correct" | "incorrect" | "revealed" | "skipped";
+    stepIndex: number;
     answer?: unknown;
     learningEvent?: unknown;
   }): Promise<"inserted" | "duplicate" | "conflict"> {
@@ -232,7 +233,8 @@ export class ProductionDailyRepository {
         attempt_kind: input.attemptKind,
         outcome: input.outcome,
         answer: input.answer ?? null,
-        step_id: input.cardFingerprint,
+        step_id: `${input.cardFingerprint}:${input.stepIndex}`,
+        step_index: input.stepIndex,
         expected_version: input.expectedVersion,
         next_state: input.session.state,
         completed_at: input.session.completedAt,

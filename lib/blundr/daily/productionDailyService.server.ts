@@ -973,6 +973,7 @@ export async function applyDailyAction(input: {
             : answerCorrect
               ? "correct"
               : "incorrect",
+      stepIndex: current.stepIndex,
       answer: input.action === "answer" ? input.answer : undefined,
       session: next,
       expectedVersion: input.expectedVersion,
@@ -1076,6 +1077,7 @@ export async function applyDailyAction(input: {
         : outcome === "retry"
           ? "skipped"
           : outcome,
+    stepIndex: 0,
     answer: input.action === "answer" ? input.answer : undefined,
     session: next,
     expectedVersion: input.expectedVersion,
