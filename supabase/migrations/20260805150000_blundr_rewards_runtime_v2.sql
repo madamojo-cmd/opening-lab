@@ -2,6 +2,9 @@
 -- this migration replaces its deliberately fail-closed RPC shells.
 begin;
 
+alter table public.blundr_reward_presentations_v2
+  add column if not exists dismissed_at timestamptz;
+
 -- A missing server secret is not a losing roll.  Routine rewards can still be
 -- committed, but random evaluation is reported as unavailable and no random
 -- grant/history mutation is fabricated.
@@ -142,7 +145,7 @@ returns jsonb language plpgsql security definer set search_path=public as $$
 declare v_row public.blundr_reward_presentations_v2%rowtype;
 begin
   if p_user_id is null or nullif(btrim(p_claimed_by),'') is null or p_lease_seconds not between 10 and 300 then raise exception 'invalid_reward_presentation_claim'; end if;
-  select * into v_row from public.blundr_reward_presentations_v2 where user_id=p_user_id and acknowledged_at is null and (lease_expires_at is null or lease_expires_at < now()) order by priority desc,created_at for update skip locked limit 1;
+  select * into v_row from public.blundr_reward_presentations_v2 where user_id=p_user_id and acknowledged_at is null and dismissed_at is null and (lease_expires_at is null or lease_expires_at < now()) order by priority desc,created_at for update skip locked limit 1;
   if not found then return null; end if;
   update public.blundr_reward_presentations_v2 set claimed_by=p_claimed_by,claimed_at=now(),lease_expires_at=now()+make_interval(secs=>p_lease_seconds) where id=v_row.id returning * into v_row;
   return jsonb_build_object('id',v_row.id,'envelope',v_row.envelope,'leaseExpiresAt',v_row.lease_expires_at);
@@ -153,15 +156,21 @@ create or replace function public.blundr_mark_reward_presentation_v2(p_user_id u
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare v_row public.blundr_reward_presentations_v2%rowtype;
 begin
-  if p_user_id is null or p_presentation_id is null or nullif(btrim(p_claimed_by),'') is null or p_action not in ('rendered','acknowledged') then raise exception 'invalid_reward_presentation_action'; end if;
-  update public.blundr_reward_presentations_v2 set first_rendered_at=case when p_action='rendered' then coalesce(first_rendered_at,now()) else first_rendered_at end, acknowledged_at=case when p_action='acknowledged' then coalesce(acknowledged_at,now()) else acknowledged_at end,
-    claimed_by=case when p_action='acknowledged' then null else claimed_by end,claimed_at=case when p_action='acknowledged' then null else claimed_at end,lease_expires_at=case when p_action='acknowledged' then null else lease_expires_at end
+  if p_user_id is null or p_presentation_id is null or nullif(btrim(p_claimed_by),'') is null or p_action not in ('rendered','acknowledged','dismissed') then raise exception 'invalid_reward_presentation_action'; end if;
+  update public.blundr_reward_presentations_v2 set first_rendered_at=case when p_action='rendered' then coalesce(first_rendered_at,now()) else first_rendered_at end, acknowledged_at=case when p_action='acknowledged' then coalesce(acknowledged_at,now()) else acknowledged_at end, dismissed_at=case when p_action='dismissed' then coalesce(dismissed_at,now()) else dismissed_at end,
+    claimed_by=case when p_action in ('acknowledged','dismissed') then null else claimed_by end,claimed_at=case when p_action in ('acknowledged','dismissed') then null else claimed_at end,lease_expires_at=case when p_action in ('acknowledged','dismissed') then null else lease_expires_at end
   where id=p_presentation_id and user_id=p_user_id and claimed_by=p_claimed_by and lease_expires_at >= now() returning * into v_row;
   if not found then raise exception 'reward_presentation_lease_not_owned'; end if;
   return jsonb_build_object('id',v_row.id,'action',p_action);
 end;
 $$;
 
-revoke all on function public.blundr_rewards_v2_hmac_random(text), public.blundr_apply_reward_transaction_v2(uuid,text,text,text,text,text,text), public.blundr_spend_inventory_and_unlock_v2(uuid,text,text,text,text), public.blundr_claim_reward_presentation_v2(uuid,text,integer), public.blundr_mark_reward_presentation_v2(uuid,uuid,text,text) from public, anon, authenticated;
-grant execute on function public.blundr_apply_reward_transaction_v2(uuid,text,text,text,text,text,text), public.blundr_spend_inventory_and_unlock_v2(uuid,text,text,text,text), public.blundr_claim_reward_presentation_v2(uuid,text,integer), public.blundr_mark_reward_presentation_v2(uuid,uuid,text,text) to service_role;
+create or replace function public.blundr_reconcile_reward_inventory_v2(p_user_id uuid)
+returns jsonb language sql security definer set search_path=public as $$
+  select coalesce(jsonb_agg(jsonb_build_object('inventoryKind',kind,'ledgerQuantity',ledger_quantity,'balanceQuantity',balance_quantity,'matches',ledger_quantity=balance_quantity) order by kind),'[]'::jsonb)
+  from (select coalesce(i.inventory_kind,e.inventory_kind) kind,coalesce(sum(e.quantity_delta),0) ledger_quantity,coalesce(max(i.quantity),0) balance_quantity from public.blundr_reward_inventory_v2 i full join public.blundr_reward_inventory_events_v2 e on e.user_id=i.user_id and e.inventory_kind=i.inventory_kind where coalesce(i.user_id,e.user_id)=p_user_id group by coalesce(i.inventory_kind,e.inventory_kind)) rows;
+$$;
+
+revoke all on function public.blundr_rewards_v2_hmac_random(text), public.blundr_apply_reward_transaction_v2(uuid,text,text,text,text,text,text), public.blundr_spend_inventory_and_unlock_v2(uuid,text,text,text,text), public.blundr_claim_reward_presentation_v2(uuid,text,integer), public.blundr_mark_reward_presentation_v2(uuid,uuid,text,text), public.blundr_reconcile_reward_inventory_v2(uuid) from public, anon, authenticated;
+grant execute on function public.blundr_apply_reward_transaction_v2(uuid,text,text,text,text,text,text), public.blundr_spend_inventory_and_unlock_v2(uuid,text,text,text,text), public.blundr_claim_reward_presentation_v2(uuid,text,integer), public.blundr_mark_reward_presentation_v2(uuid,uuid,text,text), public.blundr_reconcile_reward_inventory_v2(uuid) to service_role;
 commit;

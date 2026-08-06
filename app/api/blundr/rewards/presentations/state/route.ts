@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   if (
     !presentationId ||
     !claimedBy ||
-    !["rendered", "acknowledged"].includes(action)
+    !["rendered", "acknowledged", "dismissed"].includes(action)
   )
     return NextResponse.json(
       { error: "invalid_reward_presentation_action" },
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     userId: user.userId,
     presentationId,
     claimedBy,
-    action: action as "rendered" | "acknowledged",
+    action: action as "rendered" | "acknowledged" | "dismissed",
   });
   return "code" in result
     ? NextResponse.json({ error: result.code }, { status: 409 })

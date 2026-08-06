@@ -74,6 +74,8 @@ test("v2 rewards use one atomic writer, an inventory ledger, and leased presenta
   );
   assert.match(v2Migration, /for update skip locked/i);
   assert.match(v2Migration, /reward_presentation_lease_not_owned/i);
+  assert.match(v2Migration, /dismissed_at/i);
+  assert.match(v2Migration, /blundr_reconcile_reward_inventory_v2/i);
   assert.match(v2Migration, /opening_not_locked/i);
   assert.match(v2Migration, /insufficient_inventory/i);
 });

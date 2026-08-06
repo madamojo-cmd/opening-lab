@@ -98,7 +98,7 @@ export async function markRewardPresentation(input: {
   userId: string;
   presentationId: string;
   claimedBy: string;
-  action: "rendered" | "acknowledged";
+  action: "rendered" | "acknowledged" | "dismissed";
 }) {
   const client = adminOrFailure();
   if (!client.ok) return { ok: false, code: client.code };
@@ -114,4 +114,14 @@ export async function markRewardPresentation(input: {
   return error || !data
     ? failure(error)
     : { ok: true as const, data: data as Record<string, unknown> };
+}
+
+export async function reconcileRewardInventory(userId: string) {
+  const client = adminOrFailure();
+  if (!client.ok) return { ok: false, code: client.code };
+  const { data, error } = await client.admin.rpc(
+    "blundr_reconcile_reward_inventory_v2",
+    { p_user_id: userId },
+  );
+  return error ? failure(error) : { ok: true as const, data };
 }
