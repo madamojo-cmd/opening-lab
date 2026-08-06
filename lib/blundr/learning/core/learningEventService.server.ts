@@ -22,7 +22,20 @@ export async function appendLearningEventV2(input: {
   access: OpeningAccessSnapshot;
   explanation?: string;
   playedMoveUci?: string | null;
-}): Promise<{ status: "inserted" | "duplicate"; eventId: string }> {
+  reviewEvidence?: {
+    evidenceType: "answer" | "reveal" | "skip" | "timeout";
+    requestedRating?: "again" | "hard" | "good" | "easy" | null;
+    hinted?: boolean;
+    elapsedMs?: number | null;
+    retry?: boolean;
+  };
+}): Promise<{
+  status: "inserted" | "duplicate";
+  eventId: string;
+  reviewRating?: "again" | "hard" | "good" | "easy";
+  reviewProjection?: unknown;
+  dueAt?: string;
+}> {
   const eventId = createDeterministicIdentity("learning-event", [
     input.userId,
     input.attemptId,
@@ -47,7 +60,9 @@ export async function appendLearningEventV2(input: {
       .maybeSingle(),
     client
       .from("blundr_node_mastery")
-      .select("recall_attempt_count,correct_recall_count,lapse_count,mastery_state_version")
+      .select(
+        "recall_attempt_count,correct_recall_count,lapse_count,mastery_state_version",
+      )
       .eq("user_id", input.userId)
       .eq("position_key", input.position.positionKey)
       .maybeSingle(),
@@ -71,6 +86,9 @@ export async function appendLearningEventV2(input: {
     exposureId,
     correct: input.correct,
     occurredAt: input.now,
+    hinted: input.reviewEvidence?.hinted ?? input.taxonomy === "cue_revealed",
+    elapsedMs: input.reviewEvidence?.elapsedMs ?? null,
+    requestedRating: input.reviewEvidence?.requestedRating ?? null,
     previousFsrs: (review.data?.srs_state as never) ?? null,
     previousMastery: mastery.data
       ? {
@@ -118,11 +136,45 @@ export async function appendLearningEventV2(input: {
       input.taxonomy,
       String(input.correct),
       exposureId ?? "",
+      projection.evidenceKind === "recall_attempt"
+        ? projection.fsrs.rating
+        : "unrated",
+      input.reviewEvidence?.evidenceType ?? "answer",
+      String(input.reviewEvidence?.hinted ?? false),
+      String(input.reviewEvidence?.elapsedMs ?? ""),
     ]),
     correct: input.correct,
+    review_rating:
+      projection.evidenceKind === "recall_attempt"
+        ? projection.fsrs.rating
+        : null,
+    answer_evidence: {
+      evidenceType:
+        input.reviewEvidence?.evidenceType ??
+        (input.taxonomy === "cue_revealed" ? "reveal" : "answer"),
+      submittedAnswer: input.playedMoveUci ?? null,
+      expectedAnswerIdentity: input.position.expectedMoveUci ?? null,
+      correct: input.correct,
+      firstAttempt: projection.firstAttempt,
+      retry: input.reviewEvidence?.retry ?? false,
+      revealOccurred:
+        input.taxonomy === "cue_revealed" ||
+        input.reviewEvidence?.evidenceType === "reveal",
+      hinted: input.reviewEvidence?.hinted ?? false,
+      elapsedMs: input.reviewEvidence?.elapsedMs ?? null,
+      priorReps: Number(
+        (review.data?.srs_state as { reps?: unknown } | null)?.reps ?? 0,
+      ),
+      taskId: input.attemptId,
+      reservationId: input.sessionId,
+    },
     access_decision: input.access.decision,
-    expected_review_state_version: Number(review.data?.review_state_version ?? 0),
-    expected_mastery_state_version: Number(mastery.data?.mastery_state_version ?? 0),
+    expected_review_state_version: Number(
+      review.data?.review_state_version ?? 0,
+    ),
+    expected_mastery_state_version: Number(
+      mastery.data?.mastery_state_version ?? 0,
+    ),
     ...(projection.evidenceKind === "recall_attempt"
       ? { fsrs: projection.fsrs, mastery: projection.mastery }
       : {}),
@@ -139,5 +191,21 @@ export async function appendLearningEventV2(input: {
     status,
     access: input.access.decision,
   });
-  return { status, eventId };
+  const reviewRating = inserted.data?.reviewRating;
+  return {
+    status,
+    eventId,
+    ...(reviewRating === "again" ||
+    reviewRating === "hard" ||
+    reviewRating === "good" ||
+    reviewRating === "easy"
+      ? { reviewRating }
+      : {}),
+    ...(inserted.data?.reviewProjection !== undefined
+      ? { reviewProjection: inserted.data.reviewProjection }
+      : {}),
+    ...(typeof inserted.data?.dueAt === "string"
+      ? { dueAt: inserted.data.dueAt }
+      : {}),
+  };
 }

@@ -102,3 +102,18 @@ test("exposure retries cannot reproject and Daily omits first-attempt input", ()
   assert.match(migration, /not v_first_recall/);
   assert.doesNotMatch(dailyWriter, /first_attempt: true/);
 });
+
+test("SQL persists and validates the complete authoritative rating evidence", () => {
+  for (const contract of [
+    "answer_evidence jsonb",
+    "review_rating text",
+    "review_projection jsonb",
+    "invalid_review_rating",
+    "review_rating_contradicts_evidence",
+    "review_rating_contradicts_reveal",
+    "easy_rating_not_authorized",
+    "p_event#>>'{fsrs,rating}' is distinct from p_event->>'review_rating'",
+    "'reviewRating',p_event->>'review_rating'",
+  ])
+    assert.match(migration, new RegExp(contract.replace(/[()]/g, "\\$&"), "i"));
+});

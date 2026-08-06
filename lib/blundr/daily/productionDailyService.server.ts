@@ -56,6 +56,8 @@ async function dailyLearningEvent(input: {
   firstAttempt: boolean;
   now: string;
   runtimePackageId: string;
+  evidenceType: "answer" | "reveal" | "skip";
+  submittedAnswer?: string | null;
 }): Promise<Record<string, unknown> | null> {
   if (!input.firstAttempt) return null;
   const exposureId = `daily:${input.sessionId}:${input.card.cardFingerprint}`;
@@ -91,6 +93,8 @@ async function dailyLearningEvent(input: {
     correct: input.correct,
     occurredAt: input.now,
     previousFsrs: (review.data?.srs_state as never) ?? null,
+    hinted: input.evidenceType === "reveal",
+    elapsedMs: null,
     previousMastery: mastery.data
       ? {
           recallAttemptCount: Number(mastery.data.recall_attempt_count ?? 0),
@@ -132,6 +136,23 @@ async function dailyLearningEvent(input: {
     exposure_id: exposureId,
     evidence_version: "blundr-learning-evidence-v2",
     correct: input.correct,
+    review_rating: projection.fsrs.rating,
+    answer_evidence: {
+      evidenceType: input.evidenceType,
+      submittedAnswer: input.submittedAnswer ?? null,
+      expectedAnswerIdentity: input.card.acceptedMoves[0] ?? null,
+      correct: input.correct,
+      firstAttempt: true,
+      retry: false,
+      revealOccurred: input.evidenceType === "reveal",
+      hinted: input.evidenceType === "reveal",
+      elapsedMs: null,
+      priorReps: Number(
+        (review.data?.srs_state as { reps?: unknown } | null)?.reps ?? 0,
+      ),
+      taskId: input.attemptId,
+      reservationId: input.sessionId,
+    },
     access_decision: "active",
     fsrs: projection.fsrs,
     mastery: projection.mastery,
@@ -148,6 +169,9 @@ async function dailyLearningEvent(input: {
       input.card.acceptedMoves[0] ?? "",
       String(input.correct),
       exposureId,
+      projection.fsrs.rating,
+      input.evidenceType,
+      input.submittedAnswer ?? "",
     ]),
   };
 }
@@ -954,13 +978,15 @@ export async function applyDailyAction(input: {
           ? (session.completedAt ?? now)
           : session.completedAt,
     };
-    const attemptId = input.actionId ?? createDeterministicIdentity("daily-step-attempt", [
-      input.sessionId,
-      input.cardFingerprint,
-      current.stepIndex,
-      input.action,
-      input.answer ?? "",
-    ]);
+    const attemptId =
+      input.actionId ??
+      createDeterministicIdentity("daily-step-attempt", [
+        input.sessionId,
+        input.cardFingerprint,
+        current.stepIndex,
+        input.action,
+        input.answer ?? "",
+      ]);
     const persisted = await repository.commitAction({
       attemptId,
       cardFingerprint: input.cardFingerprint,
@@ -990,6 +1016,8 @@ export async function applyDailyAction(input: {
           (input.action === "answer" || input.action === "reveal"),
         now,
         runtimePackageId: session.reservationIdentity.runtimePackageId,
+        evidenceType: input.action === "reveal" ? "reveal" : "answer",
+        submittedAnswer: input.action === "answer" ? input.answer : null,
       }),
     });
     if (persisted === "conflict") throw new Error("daily_session_conflict");
@@ -1064,7 +1092,8 @@ export async function applyDailyAction(input: {
   };
   const persisted = await repository.commitAction({
     attemptId:
-      input.actionId ?? reduced.state.attempts.at(-1)?.attemptId ??
+      input.actionId ??
+      reduced.state.attempts.at(-1)?.attemptId ??
       createDeterministicIdentity("daily-noop", [
         input.sessionId,
         input.cardFingerprint,
@@ -1096,6 +1125,13 @@ export async function applyDailyAction(input: {
         (input.action === "answer" || input.action === "reveal"),
       now,
       runtimePackageId: session.reservationIdentity.runtimePackageId,
+      evidenceType:
+        input.action === "reveal"
+          ? "reveal"
+          : input.action === "retry"
+            ? "skip"
+            : "answer",
+      submittedAnswer: input.action === "answer" ? input.answer : null,
     }),
   });
   if (persisted === "conflict") throw new Error("daily_session_conflict");

@@ -4,6 +4,15 @@
 begin;
 
 alter table public.blundr_learning_events add column if not exists authority_fingerprint text;
+alter table public.blundr_learning_events
+  add column if not exists answer_evidence jsonb,
+  add column if not exists review_rating text,
+  add column if not exists review_projection jsonb;
+alter table public.blundr_learning_events
+  drop constraint if exists blundr_learning_events_review_rating_check;
+alter table public.blundr_learning_events
+  add constraint blundr_learning_events_review_rating_check
+  check (review_rating is null or review_rating in ('again','hard','good','easy'));
 
 create or replace function public.blundr_project_learning_evidence_v2(p_user_id uuid, p_event jsonb)
 returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
@@ -22,40 +31,73 @@ begin
   if p_event->>'evidence_kind' = 'recall_attempt' and coalesce((p_event->>'first_attempt')::boolean, false) and nullif(p_event->>'exposure_id','') is null then
     raise exception using errcode = '22023', message = 'first_recall_requires_exposure';
   end if;
-  select jsonb_build_object('authority_fingerprint',authority_fingerprint) into v_existing from public.blundr_learning_events where event_id=v_event_id or (user_id=p_user_id and idempotency_key=p_event->>'idempotency_key') limit 1;
+  if p_event->>'evidence_kind' = 'recall_attempt' then
+    if coalesce(p_event->>'review_rating','') not in ('again','hard','good','easy')
+      or p_event#>>'{fsrs,rating}' is distinct from p_event->>'review_rating'
+      or jsonb_typeof(p_event->'answer_evidence') is distinct from 'object'
+      or coalesce((p_event#>>'{answer_evidence,correct}')::boolean,false) is distinct from coalesce((p_event->>'correct')::boolean,false)
+      or p_event#>>'{answer_evidence,expectedAnswerIdentity}' is distinct from p_event->>'expected_move_uci' then
+      raise exception using errcode='22023',message='invalid_review_rating';
+    end if;
+    if not coalesce((p_event->>'correct')::boolean,false)
+      and p_event->>'review_rating' <> 'again' then
+      raise exception using errcode='22023',message='review_rating_contradicts_evidence';
+    end if;
+    if coalesce((p_event#>>'{answer_evidence,revealOccurred}')::boolean,false)
+      and (p_event->>'review_rating' <> 'again' or p_event#>>'{answer_evidence,submittedAnswer}' is not null) then
+      raise exception using errcode='22023',message='review_rating_contradicts_reveal';
+    end if;
+    if p_event->>'review_rating' in ('hard','good','easy') and (
+      not coalesce((p_event->>'correct')::boolean,false)
+      or p_event#>>'{answer_evidence,evidenceType}' <> 'answer'
+      or p_event#>>'{answer_evidence,submittedAnswer}' is null
+    ) then raise exception using errcode='22023',message='review_rating_requires_answer'; end if;
+    if p_event->>'review_rating' = 'easy' and (
+      coalesce((p_event#>>'{answer_evidence,hinted}')::boolean,false)
+      or coalesce((p_event#>>'{answer_evidence,priorReps}')::integer,0) < 8
+      or coalesce((p_event#>>'{answer_evidence,elapsedMs}')::integer,2147483647) > 5000
+    ) then raise exception using errcode='22023',message='easy_rating_not_authorized'; end if;
+  end if;
+  select jsonb_build_object('authority_fingerprint',authority_fingerprint,'review_rating',review_rating,'review_projection',review_projection) into v_existing from public.blundr_learning_events where event_id=v_event_id or (user_id=p_user_id and idempotency_key=p_event->>'idempotency_key') limit 1;
   if v_existing is not null then
-    if v_existing->>'authority_fingerprint' = p_event->>'authority_fingerprint' then return jsonb_build_object('status','duplicate','eventId',v_event_id); end if;
+    if v_existing->>'authority_fingerprint' = p_event->>'authority_fingerprint' then return jsonb_build_object('status','duplicate','eventId',v_event_id,'reviewRating',v_existing->>'review_rating','reviewProjection',v_existing->'review_projection'); end if;
     raise exception using errcode='23505',message='learning_event_idempotency_conflict';
   end if;
   if p_event->>'evidence_kind' = 'recall_attempt' then
     perform pg_advisory_xact_lock(hashtext(p_user_id::text || ':' || coalesce(p_event->>'exposure_id','')));
     select not exists(select 1 from public.blundr_learning_events where user_id=p_user_id and exposure_id=p_event->>'exposure_id' and evidence_kind='recall_attempt' and first_attempt) into v_first_recall;
     p_event := jsonb_set(p_event,'{first_attempt}',to_jsonb(v_first_recall));
-    select review_state_version into v_review_version
-    from public.blundr_review_states
-    where user_id=p_user_id and opening_id=p_event->>'opening_id' and play_key=p_event->>'move_order_key'
-    for update;
-    if coalesce(v_review_version, 0) <> coalesce((p_event->>'expected_review_state_version')::integer, 0) then
-      raise exception using errcode='40001',message='learning_review_state_conflict';
-    end if;
-    select mastery_state_version into v_mastery_version from public.blundr_node_mastery where user_id=p_user_id and position_key=p_event->>'position_key' for update;
-    if coalesce(v_mastery_version, 0) <> coalesce((p_event->>'expected_mastery_state_version')::integer, 0) then
-      raise exception using errcode='40001',message='learning_mastery_state_conflict';
+    p_event := jsonb_set(p_event,'{answer_evidence,firstAttempt}',to_jsonb(v_first_recall),true);
+    if not v_first_recall then
+      p_event := jsonb_set(p_event,'{review_rating}','null'::jsonb);
+      p_event := p_event - 'fsrs' - 'mastery';
+    else
+      select review_state_version into v_review_version
+      from public.blundr_review_states
+      where user_id=p_user_id and opening_id=p_event->>'opening_id' and play_key=p_event->>'move_order_key'
+      for update;
+      if coalesce(v_review_version, 0) <> coalesce((p_event->>'expected_review_state_version')::integer, 0) then
+        raise exception using errcode='40001',message='learning_review_state_conflict';
+      end if;
+      select mastery_state_version into v_mastery_version from public.blundr_node_mastery where user_id=p_user_id and position_key=p_event->>'position_key' for update;
+      if coalesce(v_mastery_version, 0) <> coalesce((p_event->>'expected_mastery_state_version')::integer, 0) then
+        raise exception using errcode='40001',message='learning_mastery_state_conflict';
+      end if;
     end if;
   end if;
   select jsonb_build_object('authority_fingerprint',authority_fingerprint,'user_id',user_id,'position_key',position_key,'expected_move_uci',expected_move_uci,'source',source,'exposure_id',exposure_id,'first_attempt',first_attempt) into v_existing from public.blundr_learning_events where event_id=v_event_id or (user_id=p_user_id and idempotency_key=p_event->>'idempotency_key') limit 1;
   if v_existing is not null then
-    if v_existing->>'authority_fingerprint' = p_event->>'authority_fingerprint' then return jsonb_build_object('status','duplicate','eventId',v_event_id); end if;
+    if v_existing->>'authority_fingerprint' = p_event->>'authority_fingerprint' then return jsonb_build_object('status','duplicate','eventId',v_event_id,'reviewRating',v_existing->>'review_rating','reviewProjection',v_existing->'review_projection'); end if;
     raise exception using errcode='23505',message='learning_event_idempotency_conflict';
   end if;
   insert into public.blundr_learning_events (
-    event_id,user_id,idempotency_key,schema_version,session_id,attempt_id,occurred_at,taxonomy,position_key,canonical_fen,opening_id,expected_move_uci,repertoire_side,move_order_key,source,first_attempt,finding,content_version,classifier_version,evidence_kind,exposure_id,played_move_uci,evidence_version,projection_version,projected_at,authority_fingerprint
+    event_id,user_id,idempotency_key,schema_version,session_id,attempt_id,occurred_at,taxonomy,position_key,canonical_fen,opening_id,expected_move_uci,repertoire_side,move_order_key,source,first_attempt,finding,content_version,classifier_version,evidence_kind,exposure_id,played_move_uci,evidence_version,projection_version,projected_at,authority_fingerprint,answer_evidence,review_rating,review_projection
   ) values (
-    v_event_id,p_user_id,p_event->>'idempotency_key',p_event->>'schema_version',p_event->>'session_id',p_event->>'attempt_id',(p_event->>'occurred_at')::timestamptz,p_event->>'taxonomy',p_event->>'position_key',p_event->>'canonical_fen',p_event->>'opening_id',p_event->>'expected_move_uci',p_event->>'repertoire_side',p_event->>'move_order_key',p_event->>'source',coalesce((p_event->>'first_attempt')::boolean,false),p_event->'finding',p_event->>'content_version',p_event->>'classifier_version',p_event->>'evidence_kind',nullif(p_event->>'exposure_id',''),p_event->>'played_move_uci',p_event->>'evidence_version','blundr-fsrs-v1',now(),p_event->>'authority_fingerprint'
+    v_event_id,p_user_id,p_event->>'idempotency_key',p_event->>'schema_version',p_event->>'session_id',p_event->>'attempt_id',(p_event->>'occurred_at')::timestamptz,p_event->>'taxonomy',p_event->>'position_key',p_event->>'canonical_fen',p_event->>'opening_id',p_event->>'expected_move_uci',p_event->>'repertoire_side',p_event->>'move_order_key',p_event->>'source',coalesce((p_event->>'first_attempt')::boolean,false),p_event->'finding',p_event->>'content_version',p_event->>'classifier_version',p_event->>'evidence_kind',nullif(p_event->>'exposure_id',''),p_event->>'played_move_uci',p_event->>'evidence_version','blundr-fsrs-v1',now(),p_event->>'authority_fingerprint',p_event->'answer_evidence',p_event->>'review_rating',p_event->'fsrs'
   ) on conflict do nothing returning true into v_inserted;
   if not coalesce(v_inserted,false) then
-    select jsonb_build_object('authority_fingerprint',authority_fingerprint) into v_existing from public.blundr_learning_events where event_id=v_event_id or (user_id=p_user_id and idempotency_key=p_event->>'idempotency_key') limit 1;
-    if v_existing->>'authority_fingerprint' = p_event->>'authority_fingerprint' then return jsonb_build_object('status','duplicate','eventId',v_event_id); end if;
+    select jsonb_build_object('authority_fingerprint',authority_fingerprint,'review_rating',review_rating,'review_projection',review_projection) into v_existing from public.blundr_learning_events where event_id=v_event_id or (user_id=p_user_id and idempotency_key=p_event->>'idempotency_key') limit 1;
+    if v_existing->>'authority_fingerprint' = p_event->>'authority_fingerprint' then return jsonb_build_object('status','duplicate','eventId',v_event_id,'reviewRating',v_existing->>'review_rating','reviewProjection',v_existing->'review_projection'); end if;
     raise exception using errcode='23505',message='learning_event_idempotency_conflict';
   end if;
   if p_event->>'evidence_kind' <> 'recall_attempt' or not v_first_recall then return jsonb_build_object('status','inserted','eventId',v_event_id,'projected',false); end if;
@@ -70,7 +112,7 @@ begin
     values (p_user_id,p_event->>'position_key',p_event->>'opening_id',p_event->>'move_order_key','opening_move',.7,.65,coalesce(p_event#>>'{finding,explanation}','The approved move was missed.'),'recall_move',p_event->>'access_decision',array[v_event_id],now(),'active',1,now(),now(),1,1,v_event_id)
     on conflict (user_id,position_key,category) do update set score=greatest(blundr_weakness_projection.score,excluded.score),source_event_ids=array_append(blundr_weakness_projection.source_event_ids,v_event_id),updated_at=excluded.updated_at,lifecycle_state='active',lifecycle_version=blundr_weakness_projection.lifecycle_version+1,last_evidence_at=excluded.last_evidence_at,evidence_count=blundr_weakness_projection.evidence_count+1,lapse_count=blundr_weakness_projection.lapse_count+1,last_recall_event_id=v_event_id;
   end if;
-  return jsonb_build_object('status','inserted','eventId',v_event_id);
+  return jsonb_build_object('status','inserted','eventId',v_event_id,'reviewRating',p_event->>'review_rating','reviewProjection',p_event->'fsrs','dueAt',p_event#>>'{fsrs,dueAt}','reviewStateVersion',coalesce(v_review_version,0)+1,'masteryStateVersion',coalesce(v_mastery_version,0)+1);
 end; $$;
 
 -- A one-winner date reservation: the unique deck identity is the concurrency

@@ -50,3 +50,31 @@ test("incorrect recall increments a weak mastery projection with v1 FSRS", () =>
   assert.equal(projection.mastery.state, "weak");
   assert.equal(projection.mastery.lapseCount, 1);
 });
+
+test("reveal persists Again while a retry cannot replace first recall", () => {
+  const reveal = buildLearningProjection({
+    source: "daily",
+    firstAttempt: true,
+    exposureId: "daily:session:card",
+    correct: false,
+    hinted: true,
+    occurredAt: "2026-08-05T12:00:00.000Z",
+    previousFsrs: null,
+    previousMastery: null,
+  });
+  assert.equal(reveal.evidenceKind, "recall_attempt");
+  if (reveal.evidenceKind === "recall_attempt")
+    assert.equal(reveal.fsrs.rating, "again");
+  assert.deepEqual(
+    buildLearningProjection({
+      source: "daily",
+      firstAttempt: false,
+      exposureId: "daily:session:card",
+      correct: true,
+      occurredAt: "2026-08-05T12:00:10.000Z",
+      previousFsrs: null,
+      previousMastery: null,
+    }),
+    { evidenceKind: "system_observation", firstAttempt: false },
+  );
+});

@@ -16,6 +16,7 @@ import {
  */
 export const BLUNDR_FSRS_ALGORITHM_VERSION = "blundr-fsrs-v1";
 export const BLUNDR_FSRS_DESIRED_RETENTION = 0.9;
+export type BlundrReviewRating = "again" | "hard" | "good" | "easy";
 
 export type BlundrFsrsCard = Pick<
   Card,
@@ -44,17 +45,27 @@ export function selectBlundrFsrsRating(input: {
   hinted: boolean;
   elapsedMs: number | null;
   priorReps: number;
-}): "again" | "hard" | "good" | "easy" {
-  if (!input.correct) return "again";
-  if (input.hinted || (input.elapsedMs !== null && input.elapsedMs > 20_000))
-    return "hard";
-  if (
-    input.priorReps >= 8 &&
-    input.elapsedMs !== null &&
-    input.elapsedMs <= 5_000
-  )
-    return "easy";
-  return "good";
+  requestedRating?: BlundrReviewRating | null;
+}): BlundrReviewRating {
+  const derived: BlundrReviewRating = !input.correct
+    ? "again"
+    : input.hinted || (input.elapsedMs !== null && input.elapsedMs > 20_000)
+      ? "hard"
+      : input.priorReps >= 8 &&
+          input.elapsedMs !== null &&
+          input.elapsedMs <= 5_000
+        ? "easy"
+        : "good";
+  if (!input.requestedRating) return derived;
+  const rank: Record<BlundrReviewRating, number> = {
+    again: 0,
+    hard: 1,
+    good: 2,
+    easy: 3,
+  };
+  if (rank[input.requestedRating] > rank[derived])
+    throw new Error("review_rating_contradicts_evidence");
+  return input.requestedRating;
 }
 
 const scheduler = fsrs({
@@ -88,6 +99,7 @@ export function gradeBlundrRecall(input: {
   occurredAt: string;
   hinted?: boolean;
   elapsedMs?: number | null;
+  requestedRating?: BlundrReviewRating | null;
 }): {
   card: StoredBlundrFsrsCard;
   dueAt: string;
@@ -101,6 +113,7 @@ export function gradeBlundrRecall(input: {
     hinted: input.hinted ?? false,
     elapsedMs: input.elapsedMs ?? null,
     priorReps: input.previous?.reps ?? 0,
+    requestedRating: input.requestedRating,
   });
   const grade =
     selected === "again"
@@ -110,11 +123,7 @@ export function gradeBlundrRecall(input: {
         : selected === "easy"
           ? Rating.Easy
           : Rating.Good;
-  const result = scheduler.next(
-    toCard(input.previous, now),
-    now,
-    grade,
-  );
+  const result = scheduler.next(toCard(input.previous, now), now, grade);
   const card = storeCard(result.card);
   return {
     card,

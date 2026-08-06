@@ -31,6 +31,7 @@ export async function POST(request: Request) {
     moveOrderKey?: string;
     expectedMoveUci?: string;
     playedMoveUci?: string;
+    rating?: unknown;
   } | null;
   const eventId = resolveLearningEventAttemptId(body);
   if (!eventId || !body?.sessionId || !body.fen || !body.type)
@@ -38,6 +39,23 @@ export async function POST(request: Request) {
       { error: "invalid_learning_event" },
       { status: 400 },
     );
+  if (
+    body.rating != null &&
+    body.rating !== "again" &&
+    body.rating !== "hard" &&
+    body.rating !== "good" &&
+    body.rating !== "easy"
+  )
+    return NextResponse.json(
+      { error: "invalid_review_rating" },
+      { status: 400 },
+    );
+  const requestedRating = (body.rating ?? null) as
+    | "again"
+    | "hard"
+    | "good"
+    | "easy"
+    | null;
   const receiptTime = new Date().toISOString();
   let taxonomy:
     | "move_attempted"
@@ -99,6 +117,14 @@ export async function POST(request: Request) {
       playedMoveUci: body.playedMoveUci ?? null,
       now: authority.occurredAt,
       access: snapshot,
+      reviewEvidence: {
+        evidenceType: taxonomy === "cue_revealed" ? "reveal" : "answer",
+        requestedRating,
+        // Client timing cannot establish Easy. PR-04 may call the trusted
+        // service contract with server-measured elapsed time.
+        elapsedMs: null,
+        hinted: taxonomy === "cue_revealed",
+      },
     });
     await emitBlundrOperationalEvent("learning_event_accepted", {
       status: result.status,
