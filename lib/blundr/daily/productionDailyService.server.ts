@@ -21,7 +21,7 @@ import type {
   ProductionDailyPublicSession,
   ProductionDailySession,
 } from "./productionDailyTypes";
-import { appendLearningEventV2 } from "@/lib/blundr/learning/core/learningEventService.server";
+import { buildLearningProjection } from "@/lib/blundr/learning/core/learningProjection";
 import { RepertoireOpeningAccessRepository } from "@/lib/blundr/openingAccess/openingAccessRepository";
 import { getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
 import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
@@ -36,7 +36,6 @@ import { replayRoute } from "./activities/samePositionDifferentRoute/transpositi
 import { legalMoves } from "./activities/activityUtils";
 import { toPublicDailySession } from "./productionDailyProjection";
 import { readDueReviewKeys } from "./productionReviewRepository.server";
-import { upsertReviewState } from "./productionReviewRepository.server";
 import type { DailyReservationIdentity } from "./productionDailyTypes";
 import { runtimeSequenceToFen } from "./runtimeSequence";
 import { selectProductionDailyBoardCards } from "./productionDailyDeckSelection";
@@ -46,6 +45,137 @@ import { selectProductionDailyBoardCards } from "./productionDailyDeckSelection"
 // cannot turn an empty or newly unlocked account into an unbounded request.
 const MAX_RUNTIME_CANDIDATES_PER_RESERVATION = 600;
 const DAILY_COMPOSER_VERSION = "daily-board-first-v3";
+
+async function dailyLearningEvent(input: {
+  userId: string;
+  sessionId: string;
+  attemptId: string;
+  card: ProductionDailyPrivateCard;
+  fen: string;
+  correct: boolean;
+  firstAttempt: boolean;
+  now: string;
+  runtimePackageId: string;
+  evidenceType: "answer" | "reveal" | "skip";
+  submittedAnswer?: string | null;
+  elapsedMs: number;
+}): Promise<Record<string, unknown> | null> {
+  if (!input.firstAttempt) return null;
+  const exposureId = `daily:${input.sessionId}:${input.card.cardFingerprint}`;
+  const client = createBlundrSupabaseAdminClient();
+  const [review, mastery] = client
+    ? await Promise.all([
+        client
+          .from("blundr_review_states")
+          .select("srs_state,review_state_version")
+          .eq("user_id", input.userId)
+          .eq("opening_id", input.card.openingId)
+          .eq("play_key", input.card.playKey)
+          .maybeSingle(),
+        client
+          .from("blundr_node_mastery")
+          .select(
+            "recall_attempt_count,correct_recall_count,lapse_count,mastery_state_version",
+          )
+          .eq("user_id", input.userId)
+          .eq("position_key", input.card.positionKey)
+          .maybeSingle(),
+      ])
+    : [
+        { data: null, error: null },
+        { data: null, error: null },
+      ];
+  if (review.error || mastery.error)
+    throw new Error("daily_projection_state_read_unavailable");
+  const projection = buildLearningProjection({
+    source: "daily",
+    firstAttempt: true,
+    exposureId,
+    correct: input.correct,
+    occurredAt: input.now,
+    previousFsrs: (review.data?.srs_state as never) ?? null,
+    hinted: input.evidenceType === "reveal",
+    elapsedMs: input.elapsedMs,
+    previousMastery: mastery.data
+      ? {
+          recallAttemptCount: Number(mastery.data.recall_attempt_count ?? 0),
+          correctRecallCount: Number(mastery.data.correct_recall_count ?? 0),
+          lapseCount: Number(mastery.data.lapse_count ?? 0),
+        }
+      : null,
+  });
+  if (projection.evidenceKind !== "recall_attempt") return null;
+  return {
+    event_id: createDeterministicIdentity("learning-event", [
+      input.userId,
+      input.attemptId,
+    ]),
+    user_id: input.userId,
+    idempotency_key: createDeterministicIdentity("learning-attempt", [
+      input.userId,
+      input.attemptId,
+      true,
+    ]),
+    schema_version: "2026-07-13.v1",
+    session_id: input.sessionId,
+    attempt_id: input.attemptId,
+    occurred_at: input.now,
+    taxonomy: "daily_answered",
+    position_key: input.card.positionKey,
+    canonical_fen: input.fen,
+    opening_id: input.card.openingId,
+    expected_move_uci: input.card.acceptedMoves[0] ?? null,
+    repertoire_side: input.card.side,
+    move_order_key: input.card.playKey,
+    source: "daily",
+    finding: input.correct
+      ? null
+      : { category: "opening_move", explanation: input.card.explanation },
+    content_version: input.runtimePackageId,
+    classifier_version: "weakness-classifier-v1",
+    evidence_kind: projection.evidenceKind,
+    exposure_id: exposureId,
+    evidence_version: "blundr-learning-evidence-v2",
+    correct: input.correct,
+    review_rating: projection.fsrs.rating,
+    answer_evidence: {
+      evidenceType: input.evidenceType,
+      submittedAnswer: input.submittedAnswer ?? null,
+      expectedAnswerIdentity: input.card.acceptedMoves[0] ?? null,
+      correct: input.correct,
+      firstAttempt: true,
+      retry: false,
+      revealOccurred: input.evidenceType === "reveal",
+      hinted: input.evidenceType === "reveal",
+      elapsedMs: input.elapsedMs,
+      priorReps: Number(
+        (review.data?.srs_state as { reps?: unknown } | null)?.reps ?? 0,
+      ),
+      taskId: input.attemptId,
+      reservationId: input.sessionId,
+    },
+    access_decision: "active",
+    fsrs: projection.fsrs,
+    mastery: projection.mastery,
+    expected_review_state_version: Number(
+      review.data?.review_state_version ?? 0,
+    ),
+    expected_mastery_state_version: Number(
+      mastery.data?.mastery_state_version ?? 0,
+    ),
+    authority_fingerprint: createDeterministicIdentity("learning-authority", [
+      input.userId,
+      input.sessionId,
+      input.card.positionKey,
+      input.card.acceptedMoves[0] ?? "",
+      String(input.correct),
+      exposureId,
+      projection.fsrs.rating,
+      input.evidenceType,
+      input.submittedAnswer ?? "",
+    ]),
+  };
+}
 
 function dailyProfileVersion(
   flags: ReturnType<typeof getServerFeatureFlags>,
@@ -238,7 +368,9 @@ async function buildReservation(
         .in("status", ["queued", "added_today"])
         .lte("requested_for", dateKey),
     ]);
-    if (!projectionResult.error) {
+    if (projectionResult.error || priorityResult.error)
+      throw new Error("daily_priority_projection_unavailable");
+    {
       for (const projection of projectionResult.data ?? []) {
         const score = Number(projection.score);
         if (Number.isFinite(score) && score > 0)
@@ -249,9 +381,8 @@ async function buildReservation(
           );
       }
     }
-    if (!priorityResult.error)
-      for (const priority of priorityResult.data ?? [])
-        priorityOpenings.add(String(priority.opening_id));
+    for (const priority of priorityResult.data ?? [])
+      priorityOpenings.add(String(priority.opening_id));
   }
   const eligibleNodes = runtime.nodes.filter((node) => {
     const availability = getStage2OpeningAvailability(node.openingId);
@@ -776,6 +907,7 @@ export async function applyDailyAction(input: {
   action: "answer" | "reveal" | "retry";
   answer?: string;
   expectedVersion: number;
+  actionId?: string;
   now?: string;
 }) {
   const repository = new ProductionDailyRepository();
@@ -846,18 +978,19 @@ export async function applyDailyAction(input: {
         completedState.status === "completed"
           ? (session.completedAt ?? now)
           : session.completedAt,
+      updatedAt: now,
     };
-    const attemptId = createDeterministicIdentity("daily-step-attempt", [
-      input.sessionId,
-      input.cardFingerprint,
-      current.stepIndex,
-      input.action,
-      input.answer ?? "",
-    ]);
-    await repository.appendAttempt({
+    const attemptId =
+      input.actionId ??
+      createDeterministicIdentity("daily-step-attempt", [
+        input.sessionId,
+        input.cardFingerprint,
+        current.stepIndex,
+        input.action,
+        input.answer ?? "",
+      ]);
+    const persisted = await repository.commitAction({
       attemptId,
-      sessionId: input.sessionId,
-      userId: input.user.userId,
       cardFingerprint: input.cardFingerprint,
       firstAttempt: !current.firstAttemptRecorded && input.action !== "retry",
       attemptKind: input.action,
@@ -869,60 +1002,31 @@ export async function applyDailyAction(input: {
             : answerCorrect
               ? "correct"
               : "incorrect",
+      stepIndex: current.stepIndex,
       answer: input.action === "answer" ? input.answer : undefined,
-    });
-    if (input.action !== "retry" || current.firstAttemptRecorded)
-      await appendLearningEventV2({
+      session: next,
+      expectedVersion: input.expectedVersion,
+      learningEvent: await dailyLearningEvent({
         userId: input.user.userId,
         sessionId: input.sessionId,
         attemptId,
-        source: "daily",
-        taxonomy:
-          input.action === "reveal"
-            ? "daily_revealed"
-            : input.action === "retry"
-              ? "daily_retried"
-              : "daily_answered",
-        position: {
-          positionKey: privateCard.positionKey,
-          canonicalFen: step.positionFen,
-          openingId: privateCard.openingId,
-          expectedMoveUci: step.acceptedMoves[0] ?? null,
-          repertoireSide: privateCard.side,
-          moveOrderKey: privateCard.playKey,
-          runtimePackageVersion: session.reservationIdentity.runtimePackageId,
-        },
+        card: privateCard,
+        fen: step.positionFen,
         correct: answerCorrect,
-        firstAttempt: !current.firstAttemptRecorded && input.action !== "retry",
+        firstAttempt:
+          !current.firstAttemptRecorded &&
+          (input.action === "answer" || input.action === "reveal"),
         now,
-        access: {
-          openingId: privateCard.openingId,
-          repertoireSide: privateCard.side,
-          decision: "active",
-          checkedAt: now,
-          authorityVersion: "repertoire-unlock-v1",
-          expiresAt: new Date(Date.parse(now) + 300000).toISOString(),
-        },
-        explanation: step.explanation,
-      });
-    if (input.action !== "retry")
-      await upsertReviewState({
-        userId: input.user.userId,
-        openingId: privateCard.openingId,
-        playKey: privateCard.playKey,
-        dueAt: new Date(
-          Date.parse(now) + (answerCorrect ? 86400000 : 300000),
-        ).toISOString(),
-        attemptId,
-        outcome: answerCorrect
-          ? "correct"
-          : input.action === "reveal"
-            ? "revealed"
-            : "incorrect",
-        srsState: { intervalDays: answerCorrect ? 1 : 0 },
-      });
-    if ((await repository.update(next, input.expectedVersion)) === "conflict")
-      throw new Error("daily_session_conflict");
+        runtimePackageId: session.reservationIdentity.runtimePackageId,
+        evidenceType: input.action === "reveal" ? "reveal" : "answer",
+        submittedAnswer: input.action === "answer" ? input.answer : null,
+        elapsedMs: Math.max(
+          0,
+          Date.parse(now) - Date.parse(session.updatedAt ?? now),
+        ),
+      }),
+    });
+    if (persisted === "conflict") throw new Error("daily_session_conflict");
     return {
       session: next,
       presentation: {
@@ -991,55 +1095,57 @@ export async function applyDailyAction(input: {
       reduced.state.status === "completed"
         ? (session.completedAt ?? now)
         : session.completedAt,
+    updatedAt: now,
   };
-  await repository.appendAttempt({
+  const persisted = await repository.commitAction({
     attemptId:
+      input.actionId ??
       reduced.state.attempts.at(-1)?.attemptId ??
       createDeterministicIdentity("daily-noop", [
         input.sessionId,
         input.cardFingerprint,
         input.action,
       ]),
-    sessionId: input.sessionId,
-    userId: input.user.userId,
     cardFingerprint: input.cardFingerprint,
     firstAttempt: !firstAttemptAlreadyRecorded && input.action !== "retry",
     attemptKind: input.action,
-    outcome,
+    outcome:
+      outcome === "reveal"
+        ? "revealed"
+        : outcome === "retry"
+          ? "skipped"
+          : outcome,
+    stepIndex: 0,
     answer: input.action === "answer" ? input.answer : undefined,
-  });
-  if (!firstAttemptAlreadyRecorded && input.action !== "retry")
-    await appendLearningEventV2({
+    session: next,
+    expectedVersion: input.expectedVersion,
+    learningEvent: await dailyLearningEvent({
       userId: input.user.userId,
       sessionId: input.sessionId,
       attemptId:
         reduced.state.attempts.at(-1)?.attemptId ?? input.cardFingerprint,
-      source: "daily",
-      taxonomy: input.action === "reveal" ? "daily_revealed" : "daily_answered",
-      position: {
-        positionKey: privateCard.positionKey,
-        canonicalFen: privateCard.positionFen,
-        openingId: privateCard.openingId,
-        expectedMoveUci: privateCard.acceptedMoves[0] ?? null,
-        repertoireSide: privateCard.side,
-        moveOrderKey: privateCard.playKey,
-        runtimePackageVersion: session.reservationIdentity.runtimePackageId,
-      },
+      card: privateCard,
+      fen: privateCard.positionFen,
       correct,
-      firstAttempt: true,
+      firstAttempt:
+        !firstAttemptAlreadyRecorded &&
+        (input.action === "answer" || input.action === "reveal"),
       now,
-      access: {
-        openingId: privateCard.openingId,
-        repertoireSide: privateCard.side,
-        decision: "active",
-        checkedAt: now,
-        authorityVersion: "repertoire-unlock-v1",
-        expiresAt: new Date(Date.parse(now) + 300000).toISOString(),
-      },
-      explanation: privateCard.explanation,
-    });
-  if ((await repository.update(next, input.expectedVersion)) === "conflict")
-    throw new Error("daily_session_conflict");
+      runtimePackageId: session.reservationIdentity.runtimePackageId,
+      evidenceType:
+        input.action === "reveal"
+          ? "reveal"
+          : input.action === "retry"
+            ? "skip"
+            : "answer",
+      submittedAnswer: input.action === "answer" ? input.answer : null,
+      elapsedMs: Math.max(
+        0,
+        Date.parse(now) - Date.parse(session.updatedAt ?? now),
+      ),
+    }),
+  });
+  if (persisted === "conflict") throw new Error("daily_session_conflict");
   return {
     session: next,
     presentation: reduced.presentation,

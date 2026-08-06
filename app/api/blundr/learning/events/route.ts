@@ -8,6 +8,7 @@ import { appendLearningEventV2 } from "@/lib/blundr/learning/core/learningEventS
 import { getOpeningSide } from "@/lib/blundr/repertoire/repertoireOpeningPool";
 import { resolveVerifiedRuntimeLearningPosition } from "@/lib/blundr/learning/core/runtimeLearningPosition.server";
 import { resolveLearningEventAttemptId } from "@/lib/blundr/learning/core/learningEventRequest";
+import { resolveLearningAttemptAuthority } from "@/lib/blundr/learning/core/learningAttemptAuthority";
 import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTelemetry.server";
 
 export const dynamic = "force-dynamic";
@@ -37,14 +38,12 @@ export async function POST(request: Request) {
       { error: "invalid_learning_event" },
       { status: 400 },
     );
-  const taxonomy =
-    body.type === "move_correct"
-      ? "move_correct"
-      : body.type === "move_incorrect"
-        ? "move_incorrect"
-        : body.type === "cue_revealed"
-          ? "cue_revealed"
-          : "move_attempted";
+  const receiptTime = new Date().toISOString();
+  let taxonomy:
+    | "move_attempted"
+    | "move_correct"
+    | "move_incorrect"
+    | "cue_revealed" = "move_attempted";
   try {
     const verified = await resolveVerifiedRuntimeLearningPosition({
       openingId: body.openingId ?? null,
@@ -55,13 +54,23 @@ export async function POST(request: Request) {
     if (!verified) {
       await emitBlundrOperationalEvent("learning_event_rejected", {
         reason: "runtime_position_unverified",
-        taxonomy,
+        taxonomy: "unverified",
       });
       return NextResponse.json(
         { error: "runtime_position_unverified" },
         { status: 422 },
       );
     }
+    const authority = resolveLearningAttemptAuthority({
+      expectedMoveUci: verified.expectedMoveUci,
+      playedMoveUci: body.playedMoveUci,
+      requestedType: body.type,
+      serverNow: receiptTime,
+    });
+    if ("error" in authority)
+      return NextResponse.json({ error: authority.error }, { status: 400 });
+    taxonomy = authority.taxonomy;
+    const correct = authority.correct;
     const side =
       getOpeningSide(verified.openingId) === "black" ? "black" : "white";
     const position = createPositionIdentity({
@@ -86,11 +95,17 @@ export async function POST(request: Request) {
       source: "train",
       taxonomy,
       position: { ...position, repertoireSide: side },
-      correct: taxonomy === "move_correct",
-      firstAttempt:
-        taxonomy === "move_correct" || taxonomy === "move_incorrect",
-      now: body.createdAt ?? new Date().toISOString(),
+      correct,
+      playedMoveUci: body.playedMoveUci ?? null,
+      now: authority.occurredAt,
       access: snapshot,
+      reviewEvidence: {
+        evidenceType: taxonomy === "cue_revealed" ? "reveal" : "answer",
+        // Client timing cannot establish Easy. PR-04 may call the trusted
+        // service contract with server-measured elapsed time.
+        elapsedMs: null,
+        hinted: taxonomy === "cue_revealed",
+      },
     });
     await emitBlundrOperationalEvent("learning_event_accepted", {
       status: result.status,

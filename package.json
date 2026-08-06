@@ -46,6 +46,8 @@
     "pr01:upgrade-preservation:verify": "BLUNDR_PR01_PRESERVATION_MODE=verify node scripts/pr01-preservation.mjs",
     "pr01:upgrade-preservation:cleanup": "BLUNDR_PR01_PRESERVATION_MODE=cleanup node scripts/pr01-preservation.mjs",
     "verify:pr01-remote-migration-history": "node scripts/verify-pr01-remote-migration-history.mjs",
+    "verify:remote-migration-history": "node scripts/verify-remote-migration-history.mjs",
+    "test:pr02-remote-authority": "node --preserve-symlinks --import tsx tests/security/pr02LearningDailyAuthority.integration.test.ts",
     "verify:pr01-disposable-project": "node scripts/pr01-disposable-project-preflight.mjs",
     "test:pr01-disposable-project": "node scripts/pr01-disposable-project-preflight.test.mjs",
     "test:pr01-journey-workflow": "node scripts/pr01-journey-workflow-static.test.mjs",
@@ -75,7 +77,8 @@
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "stockfish": "18.0.7",
-    "tailwindcss": "4.3.0"
+    "tailwindcss": "4.3.0",
+    "ts-fsrs": "^5.4.1"
   },
   "devDependencies": {
     "@playwright/test": "1.55.1",

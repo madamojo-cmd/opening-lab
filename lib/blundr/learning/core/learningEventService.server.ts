@@ -7,8 +7,7 @@ import {
   type OpeningAccessSnapshot,
   type PositionIdentity,
 } from "@/lib/blundr/contracts";
-import { reduceNodeMastery } from "./nodeMasteryReducer";
-import { shouldCreateWeaknessProjection } from "./weaknessProjectionPolicy";
+import { buildLearningProjection } from "./learningProjection";
 import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTelemetry.server";
 
 export async function appendLearningEventV2(input: {
@@ -19,11 +18,23 @@ export async function appendLearningEventV2(input: {
   taxonomy: LearningEventV2["taxonomy"];
   position: PositionIdentity;
   correct: boolean;
-  firstAttempt: boolean;
   now: string;
   access: OpeningAccessSnapshot;
   explanation?: string;
-}): Promise<{ status: "inserted" | "duplicate"; eventId: string }> {
+  playedMoveUci?: string | null;
+  reviewEvidence?: {
+    evidenceType: "answer" | "reveal" | "skip" | "timeout";
+    hinted?: boolean;
+    elapsedMs?: number | null;
+    retry?: boolean;
+  };
+}): Promise<{
+  status: "inserted" | "duplicate";
+  eventId: string;
+  reviewRating?: "again" | "hard" | "good" | "easy";
+  reviewProjection?: unknown;
+  dueAt?: string;
+}> {
   const eventId = createDeterministicIdentity("learning-event", [
     input.userId,
     input.attemptId,
@@ -31,13 +42,60 @@ export async function appendLearningEventV2(input: {
   const idempotencyKey = createDeterministicIdentity("learning-attempt", [
     input.userId,
     input.attemptId,
-    input.firstAttempt,
+    input.taxonomy,
   ]);
   const client = createBlundrSupabaseAdminClient();
   if (!client) {
     if (process.env.NODE_ENV === "test") return { status: "inserted", eventId };
     throw new Error("learning_event_persistence_unavailable");
   }
+  const [review, mastery] = await Promise.all([
+    client
+      .from("blundr_review_states")
+      .select("srs_state,review_state_version")
+      .eq("user_id", input.userId)
+      .eq("opening_id", input.position.openingId)
+      .eq("play_key", input.position.moveOrderKey)
+      .maybeSingle(),
+    client
+      .from("blundr_node_mastery")
+      .select(
+        "recall_attempt_count,correct_recall_count,lapse_count,mastery_state_version",
+      )
+      .eq("user_id", input.userId)
+      .eq("position_key", input.position.positionKey)
+      .maybeSingle(),
+  ]);
+  if (review.error || mastery.error)
+    throw new Error("learning_projection_read_unavailable");
+  const recallAttempt =
+    input.taxonomy === "move_correct" ||
+    input.taxonomy === "move_incorrect" ||
+    input.taxonomy === "cue_revealed";
+  const exposureId = recallAttempt
+    ? createDeterministicIdentity("learning-exposure", [
+        input.userId,
+        input.sessionId,
+        input.position.positionKey,
+      ])
+    : null;
+  const projection = buildLearningProjection({
+    source: input.source,
+    firstAttempt: recallAttempt,
+    exposureId,
+    correct: input.correct,
+    occurredAt: input.now,
+    hinted: input.reviewEvidence?.hinted ?? input.taxonomy === "cue_revealed",
+    elapsedMs: input.reviewEvidence?.elapsedMs ?? null,
+    previousFsrs: (review.data?.srs_state as never) ?? null,
+    previousMastery: mastery.data
+      ? {
+          recallAttemptCount: Number(mastery.data.recall_attempt_count ?? 0),
+          correctRecallCount: Number(mastery.data.correct_recall_count ?? 0),
+          lapseCount: Number(mastery.data.lapse_count ?? 0),
+        }
+      : null,
+  });
   const event = {
     event_id: eventId,
     user_id: input.userId,
@@ -51,10 +109,11 @@ export async function appendLearningEventV2(input: {
     canonical_fen: input.position.canonicalFen,
     opening_id: input.position.openingId,
     expected_move_uci: input.position.expectedMoveUci,
+    played_move_uci: input.playedMoveUci ?? null,
     repertoire_side: input.position.repertoireSide,
     move_order_key: input.position.moveOrderKey,
     source: input.source === "imported_game" ? "imported_game" : input.source,
-    first_attempt: input.firstAttempt,
+    first_attempt: projection.firstAttempt,
     finding: input.correct
       ? null
       : {
@@ -63,101 +122,88 @@ export async function appendLearningEventV2(input: {
         },
     content_version: "stage2-approved-content-v1",
     classifier_version: "weakness-classifier-v1",
-  };
-  const inserted = await client.from("blundr_learning_events").insert(event);
-  if (inserted.error && inserted.error.code !== "23505")
-    throw new Error("learning_event_persistence_unavailable");
-  const status = inserted.error?.code === "23505" ? "duplicate" : "inserted";
-  const previous = await client
-    .from("blundr_node_mastery")
-    .select("*")
-    .eq("user_id", input.userId)
-    .eq("position_key", input.position.positionKey)
-    .maybeSingle();
-  if (previous.error) throw new Error("node_mastery_read_unavailable");
-  const mastery = reduceNodeMastery(
-    previous.data
-      ? {
-          positionKey: input.position.positionKey,
-          userId: input.userId,
-          attempts: Number(previous.data.attempts ?? 0),
-          firstAttemptAt: previous.data.first_attempt_at,
-          firstAttemptResult: previous.data.first_attempt_result,
-          confidence: Number(previous.data.confidence ?? 0),
-          updatedAt: String(previous.data.updated_at ?? input.now),
-          access: input.access.decision,
-        }
-      : null,
-    {
-      schemaVersion: "2026-07-13.v1",
-      eventId: eventId as LearningEventV2["eventId"],
-      attemptId: input.attemptId as LearningEventV2["attemptId"],
-      sessionId: input.sessionId as LearningEventV2["sessionId"],
-      userId: input.userId,
-      occurredAt: input.now,
-      taxonomy: input.taxonomy,
-      position: input.position,
-      finding: null,
-      firstAttempt: input.firstAttempt,
-      idempotencyKey,
-      source: input.source,
-      contentVersion: "stage2-approved-content-v1",
-      classifierVersion: "weakness-classifier-v1",
-      migrationMarker: null,
-      deletedAt: null,
+    evidence_kind: projection.evidenceKind,
+    exposure_id: exposureId,
+    evidence_version: "blundr-learning-evidence-v2",
+    authority_fingerprint: createDeterministicIdentity("learning-authority", [
+      input.userId,
+      input.sessionId,
+      input.position.positionKey,
+      input.position.expectedMoveUci ?? "",
+      input.playedMoveUci ?? "",
+      input.taxonomy,
+      String(input.correct),
+      exposureId ?? "",
+      projection.evidenceKind === "recall_attempt"
+        ? projection.fsrs.rating
+        : "unrated",
+      input.reviewEvidence?.evidenceType ?? "answer",
+      String(input.reviewEvidence?.hinted ?? false),
+      String(input.reviewEvidence?.elapsedMs ?? ""),
+    ]),
+    correct: input.correct,
+    review_rating:
+      projection.evidenceKind === "recall_attempt"
+        ? projection.fsrs.rating
+        : null,
+    answer_evidence: {
+      evidenceType:
+        input.reviewEvidence?.evidenceType ??
+        (input.taxonomy === "cue_revealed" ? "reveal" : "answer"),
+      submittedAnswer: input.playedMoveUci ?? null,
+      expectedAnswerIdentity: input.position.expectedMoveUci ?? null,
+      correct: input.correct,
+      firstAttempt: projection.firstAttempt,
+      retry: input.reviewEvidence?.retry ?? false,
+      revealOccurred:
+        input.taxonomy === "cue_revealed" ||
+        input.reviewEvidence?.evidenceType === "reveal",
+      hinted: input.reviewEvidence?.hinted ?? false,
+      elapsedMs: input.reviewEvidence?.elapsedMs ?? null,
+      priorReps: Number(
+        (review.data?.srs_state as { reps?: unknown } | null)?.reps ?? 0,
+      ),
+      taskId: input.attemptId,
+      reservationId: input.sessionId,
     },
-    input.access,
-  );
-  // A duplicate immutable event has already contributed to an existing
-  // mastery row. If a prior projection attempt stopped after the event insert,
-  // the missing row is repaired without advancing an existing row twice.
-  if (mastery.changed && (status === "inserted" || !previous.data)) {
-    const savedMastery = await client.from("blundr_node_mastery").upsert(
-      {
-        user_id: input.userId,
-        position_key: input.position.positionKey,
-        opening_id: input.position.openingId,
-        play_key: input.position.moveOrderKey,
-        attempts: mastery.state.attempts,
-        first_attempt_at: mastery.state.firstAttemptAt,
-        first_attempt_result: mastery.state.firstAttemptResult,
-        confidence: mastery.state.confidence,
-        access_decision: mastery.state.access,
-        updated_at: input.now,
-      },
-      { onConflict: "user_id,position_key" },
-    );
-    if (savedMastery.error)
-      throw new Error("node_mastery_persistence_unavailable");
-    await emitBlundrOperationalEvent("mastery_projected", {
-      status,
-      attempts: mastery.state.attempts,
-      access: mastery.state.access,
-    });
-  }
-  const createsWeakness = shouldCreateWeaknessProjection(input);
-  if (createsWeakness) {
-    const savedWeakness = await client
-      .from("blundr_weakness_projection")
-      .upsert(
-        {
-          user_id: input.userId,
-          position_key: input.position.positionKey,
-          opening_id: input.position.openingId,
-          play_key: input.position.moveOrderKey,
-          category: "opening_move",
-          score: 0.7,
-          confidence: 0.65,
-          explanation: input.explanation ?? "The approved move was missed.",
-          recommended_daily_intervention: "recall_move",
-          access_decision: input.access.decision,
-          source_event_ids: [eventId],
-          updated_at: input.now,
-        },
-        { onConflict: "user_id,position_key,category" },
-      );
-    if (savedWeakness.error)
-      throw new Error("weakness_projection_persistence_unavailable");
-  }
-  return { status, eventId };
+    access_decision: input.access.decision,
+    expected_review_state_version: Number(
+      review.data?.review_state_version ?? 0,
+    ),
+    expected_mastery_state_version: Number(
+      mastery.data?.mastery_state_version ?? 0,
+    ),
+    ...(projection.evidenceKind === "recall_attempt"
+      ? { fsrs: projection.fsrs, mastery: projection.mastery }
+      : {}),
+  };
+  const inserted = await client.rpc("blundr_project_learning_evidence_v2", {
+    p_user_id: input.userId,
+    p_event: event,
+  });
+  if (inserted.error) throw new Error("learning_event_persistence_unavailable");
+  const status = inserted.data?.status;
+  if (status !== "inserted" && status !== "duplicate")
+    throw new Error("learning_event_persistence_unavailable");
+  await emitBlundrOperationalEvent("mastery_projected", {
+    status,
+    access: input.access.decision,
+  });
+  const reviewRating = inserted.data?.reviewRating;
+  return {
+    status,
+    eventId,
+    ...(reviewRating === "again" ||
+    reviewRating === "hard" ||
+    reviewRating === "good" ||
+    reviewRating === "easy"
+      ? { reviewRating }
+      : {}),
+    ...(inserted.data?.reviewProjection !== undefined
+      ? { reviewProjection: inserted.data.reviewProjection }
+      : {}),
+    ...(typeof inserted.data?.dueAt === "string"
+      ? { dueAt: inserted.data.dueAt }
+      : {}),
+  };
 }

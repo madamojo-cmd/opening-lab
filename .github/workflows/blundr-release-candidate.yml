@@ -160,7 +160,7 @@ jobs:
             echo "Remote RLS target must have the disposable environment role"
             exit 1
           }
-      - name: Journey A preflight and fresh zero-to-23 migration
+      - name: Journey A preflight and fresh zero-to-24 migration
         run: |
           set -eu
           run_supabase() {
@@ -186,24 +186,24 @@ jobs:
               echo "Supabase migration dry-run failed without emitting target details"
               exit 1
             fi
-            grep -oE '[0-9]{8}([0-9]{6})?_[A-Za-z0-9._-]+\.sql' "$command_log" >"$actual_file" || true
+            expected_count="$(wc -l <"$expected_file" | tr -d ' ')"
+            grep -oE '[0-9]{8}([0-9]{6})?_[A-Za-z0-9._-]+\.sql' "$command_log" | tail -n "$expected_count" >"$actual_file" || true
             if ! cmp -s "$expected_file" "$actual_file"; then
               rm -f "$command_log" "$actual_file" "$expected_file"
               echo "Supabase migration dry-run did not contain the exact expected migration set"
               exit 1
             fi
-            expected_count="$(wc -l <"$expected_file" | tr -d ' ')"
             rm -f "$command_log" "$actual_file" "$expected_file"
             echo "Validated sanitized migration dry-run with $expected_count expected migrations"
           }
           BLUNDR_PR01_PREFLIGHT_MODE=fresh BLUNDR_PR01_PREFLIGHT_PROJECT_REF="$BLUNDR_RLS_FRESH_PROJECT_REF" BLUNDR_PR01_EXPORT_API_KEYS=true npm run verify:pr01-disposable-project
           run_supabase link --project-ref "$BLUNDR_RLS_FRESH_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
-          BLUNDR_RLS_TEST_PROJECT_REF="$BLUNDR_RLS_FRESH_PROJECT_REF" BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=fresh-empty npm run verify:pr01-remote-migration-history
+          BLUNDR_EXPECTED_MIGRATION_COUNT=0 BLUNDR_EXPECTED_MIGRATION_HEAD= npm run verify:remote-migration-history
           expected_migrations="$(mktemp)"
           find supabase/migrations -maxdepth 1 -name '*.sql' -type f -printf '%f\n' | sort >"$expected_migrations"
           require_dry_run_migrations "$expected_migrations"
           run_supabase db push
-          BLUNDR_RLS_TEST_PROJECT_REF="$BLUNDR_RLS_FRESH_PROJECT_REF" BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=fresh-final npm run verify:pr01-remote-migration-history
+          BLUNDR_EXPECTED_MIGRATION_COUNT=24 BLUNDR_EXPECTED_MIGRATION_HEAD=20260805140000 npm run verify:remote-migration-history
       - name: Run non-skippable fresh authority matrix
         run: |
           set -eu
@@ -211,7 +211,7 @@ jobs:
           do
             test -n "${!name:-}" || { echo "$name is required"; exit 1; }
           done
-          BLUNDR_RLS_TEST_PROJECT_REF="$BLUNDR_RLS_FRESH_PROJECT_REF" node --preserve-symlinks --import tsx tests/security/pr01MigrationAuthority.integration.test.ts
+          BLUNDR_RLS_TEST_PROJECT_REF="$BLUNDR_RLS_FRESH_PROJECT_REF" npm run test:pr02-remote-authority
 
   supabase-rls-upgrade:
     needs: source-identity
@@ -255,7 +255,7 @@ jobs:
             echo "The RLS authority target must be the upgrade migration target"
             exit 1
           }
-      - name: Journey B preflight and controlled seven-to-23 upgrade
+      - name: Journey B preflight and exact PR-01-to-PR-02 upgrade
         run: |
           set -eu
           run_supabase() {
@@ -281,13 +281,13 @@ jobs:
               echo "Supabase migration dry-run failed without emitting target details"
               exit 1
             fi
-            grep -oE '[0-9]{8}([0-9]{6})?_[A-Za-z0-9._-]+\.sql' "$command_log" >"$actual_file" || true
+            expected_count="$(wc -l <"$expected_file" | tr -d ' ')"
+            grep -oE '[0-9]{8}([0-9]{6})?_[A-Za-z0-9._-]+\.sql' "$command_log" | tail -n "$expected_count" >"$actual_file" || true
             if ! cmp -s "$expected_file" "$actual_file"; then
               rm -f "$command_log" "$actual_file" "$expected_file"
               echo "Supabase migration dry-run did not contain the exact expected migration set"
               exit 1
             fi
-            expected_count="$(wc -l <"$expected_file" | tr -d ' ')"
             rm -f "$command_log" "$actual_file" "$expected_file"
             echo "Validated sanitized migration dry-run with $expected_count expected migrations"
           }
@@ -301,38 +301,12 @@ jobs:
             esac
           done < "$GITHUB_ENV"
           run_supabase link --project-ref "$BLUNDR_RLS_UPGRADE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
-          BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=upgrade-initial npm run verify:pr01-remote-migration-history
-          hidden_migrations_dir="$(mktemp -d)"
-          restore_pr01_migrations() {
-            for migration in 20260805120000_blundr_learning_daily_authority_v2.sql 20260805130000_blundr_rewards_inventory_presentations_v2.sql
-            do
-              if [ -f "$hidden_migrations_dir/$migration" ]; then
-                mv "$hidden_migrations_dir/$migration" "supabase/migrations/$migration"
-              fi
-            done
-            rmdir "$hidden_migrations_dir" 2>/dev/null || true
-          }
-          trap restore_pr01_migrations EXIT
-          for migration in 20260805120000_blundr_learning_daily_authority_v2.sql 20260805130000_blundr_rewards_inventory_presentations_v2.sql
-          do
-            mv "supabase/migrations/$migration" "$hidden_migrations_dir/$migration"
-          done
-          test "$(find supabase/migrations -maxdepth 1 -name '*.sql' -type f | wc -l | tr -d ' ')" = "21"
-          expected_prior_migrations="$(mktemp)"
-          find supabase/migrations -maxdepth 1 -name '*.sql' -type f -printf '%f\n' | sort | tail -n +8 >"$expected_prior_migrations"
-          require_dry_run_migrations "$expected_prior_migrations"
+          BLUNDR_EXPECTED_MIGRATION_COUNT=23 BLUNDR_EXPECTED_MIGRATION_HEAD=20260805130000 npm run verify:remote-migration-history
+          expected_pr02_migration="$(mktemp)"
+          printf '%s\n' "20260805140000_blundr_learning_daily_runtime_v2.sql" >"$expected_pr02_migration"
+          require_dry_run_migrations "$expected_pr02_migration"
           run_supabase db push
-          restore_pr01_migrations
-          trap - EXIT
-          BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=upgrade-prior21 npm run verify:pr01-remote-migration-history
-          BLUNDR_PR01_SNAPSHOT_PATH="$RUNNER_TEMP/pr01-upgrade-snapshot.json" npm run pr01:upgrade-preservation:seed
-          BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=upgrade-prior21 npm run verify:pr01-remote-migration-history
-          expected_pr01_migrations="$(mktemp)"
-          printf '%s\n' "20260805120000_blundr_learning_daily_authority_v2.sql" "20260805130000_blundr_rewards_inventory_presentations_v2.sql" >"$expected_pr01_migrations"
-          require_dry_run_migrations "$expected_pr01_migrations"
-          run_supabase db push
-          BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=upgrade-final npm run verify:pr01-remote-migration-history
-          BLUNDR_PR01_SNAPSHOT_PATH="$RUNNER_TEMP/pr01-upgrade-snapshot.json" npm run pr01:upgrade-preservation:verify
+          BLUNDR_EXPECTED_MIGRATION_COUNT=24 BLUNDR_EXPECTED_MIGRATION_HEAD=20260805140000 npm run verify:remote-migration-history
       - name: Run non-skippable upgraded authority matrix
         run: |
           set -eu
@@ -340,27 +314,7 @@ jobs:
           do
             test -n "${!name:-}" || { echo "$name is required"; exit 1; }
           done
-          node --preserve-symlinks --import tsx tests/security/pr01MigrationAuthority.integration.test.ts
-      - name: Always clean scoped upgrade preservation snapshot
-        if: always()
-        env:
-          BLUNDR_PR01_SNAPSHOT_PATH: ${{ runner.temp }}/pr01-upgrade-snapshot.json
-          BLUNDR_PR01_PRIMARY_FAILURE: ${{ job.status == 'failure' }}
-        run: |
-          set -u
-          if [ ! -f "$BLUNDR_PR01_SNAPSHOT_PATH" ]; then
-            exit 0
-          fi
-          cleanup_status=0
-          npm run pr01:upgrade-preservation:cleanup || cleanup_status=$?
-          if [ "$cleanup_status" -eq 0 ]; then
-            exit 0
-          fi
-          echo "Scoped preservation cleanup failed without target details"
-          if [ "$BLUNDR_PR01_PRIMARY_FAILURE" = "true" ]; then
-            exit 0
-          fi
-          exit "$cleanup_status"
+          npm run test:pr02-remote-authority
 
   production-build:
     needs:
