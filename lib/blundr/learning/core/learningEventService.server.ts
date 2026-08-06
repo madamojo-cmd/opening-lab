@@ -139,7 +139,7 @@ export async function prepareLearningEventV2(input: {
       input.reviewEvidence?.evidenceType ?? "answer",
       String(input.reviewEvidence?.hinted ?? false),
       String(input.reviewEvidence?.elapsedMs ?? ""),
-      input.requestedRating ?? "derived",
+      ...(input.requestedRating ? [input.requestedRating] : []),
     ]),
     correct: input.correct,
     review_rating:

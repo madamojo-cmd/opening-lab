@@ -9,6 +9,13 @@ const sql = readFileSync(
   ),
   "utf8",
 );
+const learningService = readFileSync(
+  resolve(
+    import.meta.dirname,
+    "../../learning/core/learningEventService.server.ts",
+  ),
+  "utf8",
+);
 test("Review mutation is service-only and keeps v3 rating/projector atomic", () => {
   assert.match(sql, /blundr_review_attempts/);
   assert.match(sql, /blundr_project_learning_evidence_v3/);
@@ -24,4 +31,14 @@ test("Review mutation is service-only and keeps v3 rating/projector atomic", () 
   assert.match(sql, /to service_role/);
   assert.match(sql, /review_rating_idempotency_conflict/);
   assert.match(sql, /review_item_not_reserved/);
+  assert.match(sql, /unique \(user_id, rating_idempotency_id\)/);
+  assert.doesNotMatch(sql, /rating_idempotency_id text unique/);
+});
+
+test("Review extensions preserve legacy v2 authority fingerprints", () => {
+  assert.match(
+    learningService,
+    /\.\.\.\(input\.requestedRating \? \[input\.requestedRating\] : \[\]\)/,
+  );
+  assert.doesNotMatch(learningService, /requestedRating \?\? "derived"/);
 });
