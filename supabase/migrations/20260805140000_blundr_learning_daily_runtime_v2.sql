@@ -3,9 +3,11 @@
 -- versioned result with the immutable evidence that produced it.
 begin;
 
+alter table public.blundr_learning_events add column if not exists authority_fingerprint text;
+
 create or replace function public.blundr_project_learning_evidence_v2(p_user_id uuid, p_event jsonb)
 returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
-declare v_event_id text := p_event->>'event_id'; v_inserted boolean := false; v_review_version integer; v_mastery_version integer;
+declare v_event_id text := p_event->>'event_id'; v_inserted boolean := false; v_review_version integer; v_mastery_version integer; v_existing jsonb;
 begin
   if p_user_id is null or p_event is null or v_event_id is null
     or p_event->>'user_id' <> p_user_id::text then
@@ -33,10 +35,15 @@ begin
       raise exception using errcode='40001',message='learning_mastery_state_conflict';
     end if;
   end if;
+  select jsonb_build_object('authority_fingerprint',authority_fingerprint,'user_id',user_id,'position_key',position_key,'expected_move_uci',expected_move_uci,'source',source,'exposure_id',exposure_id,'first_attempt',first_attempt) into v_existing from public.blundr_learning_events where event_id=v_event_id or (user_id=p_user_id and idempotency_key=p_event->>'idempotency_key') limit 1;
+  if v_existing is not null then
+    if v_existing->>'authority_fingerprint' = p_event->>'authority_fingerprint' then return jsonb_build_object('status','duplicate','eventId',v_event_id); end if;
+    raise exception using errcode='23505',message='learning_event_idempotency_conflict';
+  end if;
   insert into public.blundr_learning_events (
-    event_id,user_id,idempotency_key,schema_version,session_id,attempt_id,occurred_at,taxonomy,position_key,canonical_fen,opening_id,expected_move_uci,repertoire_side,move_order_key,source,first_attempt,finding,content_version,classifier_version,evidence_kind,exposure_id,played_move_uci,evidence_version,projection_version,projected_at
+    event_id,user_id,idempotency_key,schema_version,session_id,attempt_id,occurred_at,taxonomy,position_key,canonical_fen,opening_id,expected_move_uci,repertoire_side,move_order_key,source,first_attempt,finding,content_version,classifier_version,evidence_kind,exposure_id,played_move_uci,evidence_version,projection_version,projected_at,authority_fingerprint
   ) values (
-    v_event_id,p_user_id,p_event->>'idempotency_key',p_event->>'schema_version',p_event->>'session_id',p_event->>'attempt_id',(p_event->>'occurred_at')::timestamptz,p_event->>'taxonomy',p_event->>'position_key',p_event->>'canonical_fen',p_event->>'opening_id',p_event->>'expected_move_uci',p_event->>'repertoire_side',p_event->>'move_order_key',p_event->>'source',coalesce((p_event->>'first_attempt')::boolean,false),p_event->'finding',p_event->>'content_version',p_event->>'classifier_version',p_event->>'evidence_kind',nullif(p_event->>'exposure_id',''),p_event->>'played_move_uci',p_event->>'evidence_version','blundr-fsrs-v1',now()
+    v_event_id,p_user_id,p_event->>'idempotency_key',p_event->>'schema_version',p_event->>'session_id',p_event->>'attempt_id',(p_event->>'occurred_at')::timestamptz,p_event->>'taxonomy',p_event->>'position_key',p_event->>'canonical_fen',p_event->>'opening_id',p_event->>'expected_move_uci',p_event->>'repertoire_side',p_event->>'move_order_key',p_event->>'source',coalesce((p_event->>'first_attempt')::boolean,false),p_event->'finding',p_event->>'content_version',p_event->>'classifier_version',p_event->>'evidence_kind',nullif(p_event->>'exposure_id',''),p_event->>'played_move_uci',p_event->>'evidence_version','blundr-fsrs-v1',now(),p_event->>'authority_fingerprint'
   ) on conflict do nothing returning true into v_inserted;
   if not coalesce(v_inserted,false) then return jsonb_build_object('status','duplicate','eventId',v_event_id); end if;
   if p_event->>'evidence_kind' <> 'recall_attempt' then return jsonb_build_object('status','inserted','eventId',v_event_id); end if;
