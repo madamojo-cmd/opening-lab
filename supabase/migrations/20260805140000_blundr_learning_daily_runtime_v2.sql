@@ -60,7 +60,7 @@ end; $$;
 -- persisted only after the server has evaluated the private reservation.
 create or replace function public.blundr_commit_daily_action_v2(p_user_id uuid, p_session_id text, p_action jsonb)
 returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
-declare v_version int; v_next jsonb;
+declare v_version int; v_next jsonb; v_projection jsonb; v_completion_id text;
 begin
   if p_user_id is null or p_session_id is null or p_action is null or nullif(p_action->>'action_id','') is null then raise exception using errcode='22023',message='invalid_daily_action_request'; end if;
   select state_version into v_version from public.blundr_daily_sessions where session_id=p_session_id and user_id=p_user_id for update;
@@ -70,7 +70,14 @@ begin
   insert into public.blundr_daily_attempts (attempt_id,session_id,user_id,card_fingerprint,first_attempt,attempt_kind,outcome,answer,action_id,step_id,action_version,learning_exposure_id) values (p_action->>'attempt_id',p_session_id,p_user_id,p_action->>'card_fingerprint',coalesce((p_action->>'first_attempt')::boolean,false),p_action->>'attempt_kind',p_action->>'outcome',p_action->'answer',p_action->>'action_id',p_action->>'step_id',1,p_action->>'learning_exposure_id');
   v_next := p_action->'next_state';
   update public.blundr_daily_sessions set state=v_next,state_version=v_version+1,updated_at=now(),completed_at=case when p_action->>'completed_at' is null then completed_at else (p_action->>'completed_at')::timestamptz end where session_id=p_session_id and user_id=p_user_id;
-  return jsonb_build_object('status','inserted','version',v_version+1);
+  -- The caller supplies only an evidence payload built from the private,
+  -- owned reservation. This nested function call shares this transaction: an
+  -- invalid projection rolls back the attempt and session-version update.
+  if p_action ? 'learning_event' and p_action->'learning_event' is not null then
+    v_projection := public.blundr_project_learning_evidence_v2(p_user_id, p_action->'learning_event');
+  end if;
+  v_completion_id := 'daily-completion:' || p_session_id || ':' || (p_action->>'card_fingerprint');
+  return jsonb_build_object('status','inserted','version',v_version+1,'completionId',v_completion_id,'projection',v_projection);
 end; $$;
 
 revoke all on function public.blundr_project_learning_evidence_v2(uuid,jsonb), public.blundr_reserve_daily_v2(uuid,date,jsonb), public.blundr_commit_daily_action_v2(uuid,text,jsonb) from public, anon, authenticated;
