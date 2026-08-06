@@ -175,27 +175,32 @@ create or replace function public.blundr_spend_inventory_and_unlock_v2(
 ) returns jsonb
 language plpgsql security definer set search_path = public
 as $$
-declare v_tx public.blundr_reward_transactions_v2%rowtype; v_inventory public.blundr_reward_inventory_v2%rowtype;
+declare v_tx public.blundr_reward_transactions_v2%rowtype; v_inventory public.blundr_reward_inventory_v2%rowtype; v_cost integer;
 begin
   if p_user_id is null or nullif(btrim(p_opening_id),'') is null or p_inventory_kind not in ('opening_fragment','choice_token')
     or nullif(btrim(p_idempotency_key),'') is null or nullif(btrim(p_policy_version),'') is null then raise exception 'invalid_inventory_unlock_request'; end if;
   perform pg_advisory_xact_lock(hashtextextended(p_user_id::text, 403));
+  v_cost := case p_inventory_kind when 'opening_fragment' then 3 else 1 end;
   select * into v_tx from public.blundr_reward_transactions_v2 where user_id=p_user_id and idempotency_key=p_idempotency_key;
-  if found then return jsonb_build_object('duplicate',true,'transactionId',v_tx.id,'openingId',p_opening_id); end if;
+  if found then
+    if v_tx.policy_version is distinct from p_policy_version or not exists(select 1 from public.blundr_reward_inventory_events_v2 e where e.transaction_id=v_tx.id and e.user_id=p_user_id and e.event_kind='spend' and e.opening_id=p_opening_id and e.inventory_kind=p_inventory_kind and e.quantity_delta=-v_cost) then raise exception 'inventory_idempotency_conflict'; end if;
+    return jsonb_build_object('duplicate',true,'transactionId',v_tx.id,'openingId',p_opening_id,'cost',v_cost);
+  end if;
   if not exists (select 1 from public.blundr_user_repertoires r where r.user_id=p_user_id and p_opening_id=any(r.locked_opening_ids)) then raise exception 'opening_not_locked'; end if;
   select * into v_inventory from public.blundr_reward_inventory_v2 where user_id=p_user_id and inventory_kind=p_inventory_kind for update;
-  if not found or v_inventory.quantity < 1 then raise exception 'insufficient_inventory'; end if;
+  if not found or v_inventory.quantity < v_cost then raise exception 'insufficient_inventory'; end if;
   insert into public.blundr_reward_transactions_v2(user_id,idempotency_key,transaction_kind,source,policy_version)
   values(p_user_id,p_idempotency_key,'inventory_unlock','inventory_unlock',p_policy_version) returning * into v_tx;
-  update public.blundr_reward_inventory_v2 set quantity=quantity-1,version=version+1 where user_id=p_user_id and inventory_kind=p_inventory_kind;
+  update public.blundr_reward_inventory_v2 set quantity=quantity-v_cost,version=version+1 where user_id=p_user_id and inventory_kind=p_inventory_kind and quantity>=v_cost;
+  if not found then raise exception 'insufficient_inventory'; end if;
   insert into public.blundr_reward_inventory_events_v2(transaction_id,user_id,event_key,event_kind,inventory_kind,quantity_delta,opening_id,policy_version)
-  values(v_tx.id,p_user_id,'spend:' || p_opening_id,'spend',p_inventory_kind,-1,p_opening_id,p_policy_version),
+  values(v_tx.id,p_user_id,'spend:' || p_opening_id,'spend',p_inventory_kind,-v_cost,p_opening_id,p_policy_version),
         (v_tx.id,p_user_id,'unlock:' || p_opening_id,'unlock',p_inventory_kind,0,p_opening_id,p_policy_version);
   update public.blundr_user_repertoires set unlocked_opening_ids=array_append(unlocked_opening_ids,p_opening_id),locked_opening_ids=array_remove(locked_opening_ids,p_opening_id),updated_at=now()
     where user_id=p_user_id;
   insert into public.blundr_reward_presentations_v2(transaction_id,user_id,presentation_key,presentation_kind,priority,envelope,policy_version)
   values(v_tx.id,p_user_id,'unlock:' || p_opening_id || ':' || p_idempotency_key,'modal',80,jsonb_build_object('openingId',p_opening_id,'inventoryKind',p_inventory_kind),p_policy_version);
-  return jsonb_build_object('duplicate',false,'transactionId',v_tx.id,'openingId',p_opening_id);
+  return jsonb_build_object('duplicate',false,'transactionId',v_tx.id,'openingId',p_opening_id,'cost',v_cost);
 end;
 $$;
 

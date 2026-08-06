@@ -78,6 +78,10 @@ test("v2 rewards use one atomic writer, an inventory ledger, and leased presenta
   assert.match(v2Migration, /blundr_reconcile_reward_inventory_v2/i);
   assert.match(v2Migration, /opening_not_locked/i);
   assert.match(v2Migration, /insufficient_inventory/i);
+  assert.match(v2Migration, /case p_inventory_kind when 'opening_fragment' then 3 else 1 end/i);
+  assert.match(v2Migration, /set quantity=quantity-v_cost,version=version\+1[^;]*quantity>=v_cost/i);
+  assert.match(v2Migration, /-v_cost,p_opening_id,p_policy_version/i);
+  assert.match(v2Migration, /inventory_idempotency_conflict/i);
   assert.match(v2Migration, /blundr_daily_retention_progress/i);
   assert.match(v2Migration, /blundr_streak_records/i);
   assert.match(v2Migration, /activity_event_ids/i);
