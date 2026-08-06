@@ -44,7 +44,10 @@ declare
   v_profile public.blundr_user_profiles%rowtype;
   v_day public.blundr_daily_retention_progress%rowtype;
   v_streak public.blundr_streak_records%rowtype;
-  v_local_date date := current_date;
+  v_local_date date;
+  v_evidence_identity text;
+  v_evidence_occurred_at timestamptz;
+  v_expected_completion_id text;
   v_ring text;
   v_ring_before boolean;
   v_ring_after boolean;
@@ -67,26 +70,33 @@ begin
     raise exception 'invalid_reward_transaction_request';
   end if;
   perform pg_advisory_xact_lock(hashtextextended(p_user_id::text, 403));
-  select * into v_tx from public.blundr_reward_transactions_v2
-    where user_id = p_user_id and idempotency_key = p_idempotency_key;
-  if found then
-    return jsonb_build_object('duplicate', true, 'transactionId', v_tx.id,
-      'randomEvaluation', case when v_tx.randomness_key_version is null then 'unavailable' else 'evaluated' end);
-  end if;
   -- Owned completion evidence is checked before any durable grant is created.
   if p_source = 'daily_blundr_deck_completed' then
-    if not exists (select 1 from public.blundr_daily_sessions s where s.user_id=p_user_id
-      and s.session_id=p_evidence_id and s.completed_at is not null
-      and coalesce(s.state->>'status','')='completed') then
+    select s.session_id,d.local_date into v_evidence_identity,v_local_date
+    from public.blundr_daily_sessions s join public.blundr_daily_decks d on d.deck_id=s.deck_id and d.user_id=s.user_id
+    where s.user_id=p_user_id and s.session_id=p_evidence_id and s.completed_at is not null and coalesce(s.state->>'status','')='completed';
+    if not found then
       raise exception 'completion_evidence_unverified';
     end if;
-  elsif not exists (select 1 from public.blundr_learning_events e where e.user_id=p_user_id
-    and e.session_id=p_evidence_id and e.deleted_at is null and e.taxonomy='move_correct'
-    and e.source in ('train','review') and e.occurred_at >= now() - interval '36 hours') then
-    raise exception 'completion_evidence_unverified';
+  else
+    select e.event_id,e.occurred_at into v_evidence_identity,v_evidence_occurred_at from public.blundr_learning_events e where e.user_id=p_user_id and e.session_id=p_evidence_id and e.deleted_at is null and e.taxonomy='move_correct' and e.source in ('train','review') and e.occurred_at >= now()-interval '36 hours' order by e.occurred_at,e.event_id limit 1;
+    if not found then raise exception 'completion_evidence_unverified'; end if;
   end if;
   select * into v_profile from public.blundr_user_profiles where user_id=p_user_id;
   if not found then raise exception 'account_not_ready'; end if;
+  if p_source <> 'daily_blundr_deck_completed' then
+    if v_profile.time_zone is null or not public.blundr_is_valid_iana_time_zone(v_profile.time_zone) then raise exception 'completion_time_zone_unavailable'; end if;
+    v_local_date := (v_evidence_occurred_at at time zone v_profile.time_zone)::date;
+  end if;
+  if v_local_date is null or v_evidence_identity is null then raise exception 'completion_identity_unavailable'; end if;
+  v_expected_completion_id := 'reward-completion:' || encode(digest(p_user_id::text || ':' || p_source || ':' || v_evidence_identity || ':' || v_local_date::text,'sha256'),'hex');
+  if p_completion_id <> v_expected_completion_id then raise exception 'completion_identity_unverified'; end if;
+  select * into v_tx from public.blundr_reward_transactions_v2 where user_id=p_user_id and idempotency_key=p_idempotency_key;
+  if found then
+    if v_tx.completion_id is distinct from p_completion_id or v_tx.source is distinct from p_source or v_tx.policy_version is distinct from p_policy_version or not exists(select 1 from public.blundr_reward_grants_v2 g where g.transaction_id=v_tx.id and g.user_id=p_user_id and g.metadata->>'evidenceId'=p_evidence_id) then raise exception 'reward_idempotency_conflict'; end if;
+    return jsonb_build_object('duplicate', true, 'transactionId', v_tx.id,'randomEvaluation',case when v_tx.randomness_key_version is null then 'unavailable' else 'evaluated' end);
+  end if;
+  if exists(select 1 from public.blundr_reward_transactions_v2 where user_id=p_user_id and completion_id=p_completion_id) then raise exception 'completion_already_rewarded'; end if;
   -- Compatibility projection for the active rings/streak/points readers. This
   -- is in the v2 transaction; it never calls the legacy reward writer.
   insert into public.blundr_user_repertoires(user_id,selected_starter_pack_id,unlocked_opening_ids,locked_opening_ids,opening_unlock_points,updated_at)
