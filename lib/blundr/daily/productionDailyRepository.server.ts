@@ -29,6 +29,7 @@ function rowToSession(row: Record<string, unknown>): ProductionDailySession {
     },
     version: Number(row.state_version ?? 1),
     completedAt: row.completed_at ? String(row.completed_at) : null,
+    updatedAt: row.updated_at ? String(row.updated_at) : undefined,
   };
 }
 
@@ -44,7 +45,7 @@ export class ProductionDailyRepository {
     const result = await client
       .from("blundr_daily_decks")
       .select(
-        "deck_id,local_date,public_cards,server_cards,composer_version,runtime_package_id,profile_version,blundr_daily_sessions!inner(session_id,user_id,state,state_version,completed_at)",
+        "deck_id,local_date,public_cards,server_cards,composer_version,runtime_package_id,profile_version,blundr_daily_sessions!inner(session_id,user_id,state,state_version,completed_at,updated_at)",
       )
       .eq("user_id", userId)
       .eq("local_date", dateKey)
@@ -85,6 +86,7 @@ export class ProductionDailyRepository {
       reservationIdentity: input.reservationIdentity,
       version: 1,
       completedAt: null,
+      updatedAt: input.now,
     };
     if (!client) {
       localSessions.set(`${input.userId}:${input.dateKey}`, session);
@@ -133,7 +135,7 @@ export class ProductionDailyRepository {
     const result = await client
       .from("blundr_daily_sessions")
       .select(
-        "session_id,deck_id,user_id,state,state_version,completed_at,blundr_daily_decks!inner(local_date,public_cards,server_cards,composer_version,runtime_package_id,profile_version)",
+        "session_id,deck_id,user_id,state,state_version,completed_at,updated_at,blundr_daily_decks!inner(local_date,public_cards,server_cards,composer_version,runtime_package_id,profile_version)",
       )
       .eq("session_id", sessionId)
       .eq("user_id", userId)
@@ -168,6 +170,7 @@ export class ProductionDailyRepository {
         state: session.state,
         state_version: session.version,
         completed_at: session.completedAt,
+        updated_at: session.updatedAt,
       })
       .eq("session_id", session.sessionId)
       .eq("user_id", session.userId)

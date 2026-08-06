@@ -112,8 +112,12 @@ test("SQL persists and validates the complete authoritative rating evidence", ()
     "review_rating_contradicts_evidence",
     "review_rating_contradicts_reveal",
     "easy_rating_not_authorized",
+    "invalid_fsrs_projection",
     "p_event#>>'{fsrs,rating}' is distinct from p_event->>'review_rating'",
     "'reviewRating',p_event->>'review_rating'",
   ])
     assert.match(migration, new RegExp(contract.replace(/[()]/g, "\\$&"), "i"));
+  assert.doesNotMatch(learningRoute, /body\.rating|requestedRating/);
+  assert.match(repository, /completed_at,updated_at/);
+  assert.match(dailyWriter, /Date\.parse\(session\.updatedAt \?\? now\)/);
 });

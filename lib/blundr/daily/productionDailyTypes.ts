@@ -55,6 +55,7 @@ export type ProductionDailySession = {
   reservationIdentity: DailyReservationIdentity;
   version: number;
   completedAt: string | null;
+  updatedAt?: string;
 };
 
 export type ProductionDailyPublicSession = Omit<

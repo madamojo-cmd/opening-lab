@@ -24,7 +24,6 @@ export async function appendLearningEventV2(input: {
   playedMoveUci?: string | null;
   reviewEvidence?: {
     evidenceType: "answer" | "reveal" | "skip" | "timeout";
-    requestedRating?: "again" | "hard" | "good" | "easy" | null;
     hinted?: boolean;
     elapsedMs?: number | null;
     retry?: boolean;
@@ -88,7 +87,6 @@ export async function appendLearningEventV2(input: {
     occurredAt: input.now,
     hinted: input.reviewEvidence?.hinted ?? input.taxonomy === "cue_revealed",
     elapsedMs: input.reviewEvidence?.elapsedMs ?? null,
-    requestedRating: input.reviewEvidence?.requestedRating ?? null,
     previousFsrs: (review.data?.srs_state as never) ?? null,
     previousMastery: mastery.data
       ? {

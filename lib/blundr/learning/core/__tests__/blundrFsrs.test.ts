@@ -58,26 +58,22 @@ test("Hard, Good, and Easy remain distinct durable FSRS ratings", () => {
   assert.notEqual(easy.dueAt, good.dueAt);
 });
 
-test("an asserted rating cannot improve contradictory evidence", () => {
-  assert.throws(
-    () =>
-      gradeBlundrRecall({
-        previous: null,
-        correct: false,
-        occurredAt: "2026-08-05T12:00:00.000Z",
-        requestedRating: "easy",
-      }),
-    /review_rating_contradicts_evidence/,
+test("rating is derived from evidence rather than a client assertion", () => {
+  assert.equal(
+    gradeBlundrRecall({
+      previous: null,
+      correct: false,
+      occurredAt: "2026-08-05T12:00:00.000Z",
+    }).rating,
+    "again",
   );
-  assert.throws(
-    () =>
-      gradeBlundrRecall({
-        previous: null,
-        correct: true,
-        hinted: true,
-        occurredAt: "2026-08-05T12:00:00.000Z",
-        requestedRating: "easy",
-      }),
-    /review_rating_contradicts_evidence/,
+  assert.equal(
+    gradeBlundrRecall({
+      previous: null,
+      correct: true,
+      hinted: true,
+      occurredAt: "2026-08-05T12:00:00.000Z",
+    }).rating,
+    "hard",
   );
 });

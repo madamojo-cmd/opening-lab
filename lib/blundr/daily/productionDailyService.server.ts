@@ -58,6 +58,7 @@ async function dailyLearningEvent(input: {
   runtimePackageId: string;
   evidenceType: "answer" | "reveal" | "skip";
   submittedAnswer?: string | null;
+  elapsedMs: number;
 }): Promise<Record<string, unknown> | null> {
   if (!input.firstAttempt) return null;
   const exposureId = `daily:${input.sessionId}:${input.card.cardFingerprint}`;
@@ -94,7 +95,7 @@ async function dailyLearningEvent(input: {
     occurredAt: input.now,
     previousFsrs: (review.data?.srs_state as never) ?? null,
     hinted: input.evidenceType === "reveal",
-    elapsedMs: null,
+    elapsedMs: input.elapsedMs,
     previousMastery: mastery.data
       ? {
           recallAttemptCount: Number(mastery.data.recall_attempt_count ?? 0),
@@ -146,7 +147,7 @@ async function dailyLearningEvent(input: {
       retry: false,
       revealOccurred: input.evidenceType === "reveal",
       hinted: input.evidenceType === "reveal",
-      elapsedMs: null,
+      elapsedMs: input.elapsedMs,
       priorReps: Number(
         (review.data?.srs_state as { reps?: unknown } | null)?.reps ?? 0,
       ),
@@ -977,6 +978,7 @@ export async function applyDailyAction(input: {
         completedState.status === "completed"
           ? (session.completedAt ?? now)
           : session.completedAt,
+      updatedAt: now,
     };
     const attemptId =
       input.actionId ??
@@ -1018,6 +1020,10 @@ export async function applyDailyAction(input: {
         runtimePackageId: session.reservationIdentity.runtimePackageId,
         evidenceType: input.action === "reveal" ? "reveal" : "answer",
         submittedAnswer: input.action === "answer" ? input.answer : null,
+        elapsedMs: Math.max(
+          0,
+          Date.parse(now) - Date.parse(session.updatedAt ?? now),
+        ),
       }),
     });
     if (persisted === "conflict") throw new Error("daily_session_conflict");
@@ -1089,6 +1095,7 @@ export async function applyDailyAction(input: {
       reduced.state.status === "completed"
         ? (session.completedAt ?? now)
         : session.completedAt,
+    updatedAt: now,
   };
   const persisted = await repository.commitAction({
     attemptId:
@@ -1132,6 +1139,10 @@ export async function applyDailyAction(input: {
             ? "skip"
             : "answer",
       submittedAnswer: input.action === "answer" ? input.answer : null,
+      elapsedMs: Math.max(
+        0,
+        Date.parse(now) - Date.parse(session.updatedAt ?? now),
+      ),
     }),
   });
   if (persisted === "conflict") throw new Error("daily_session_conflict");

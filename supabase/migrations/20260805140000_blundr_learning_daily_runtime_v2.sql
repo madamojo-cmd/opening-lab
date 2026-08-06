@@ -43,6 +43,26 @@ begin
       and p_event->>'review_rating' <> 'again' then
       raise exception using errcode='22023',message='review_rating_contradicts_evidence';
     end if;
+    if p_event->>'review_rating' is distinct from (
+      case
+        when not coalesce((p_event->>'correct')::boolean,false) then 'again'
+        when coalesce((p_event#>>'{answer_evidence,hinted}')::boolean,false)
+          or coalesce((p_event#>>'{answer_evidence,elapsedMs}')::integer,0) > 20000 then 'hard'
+        when coalesce((p_event#>>'{answer_evidence,priorReps}')::integer,0) >= 8
+          and (p_event#>>'{answer_evidence,elapsedMs}') is not null
+          and (p_event#>>'{answer_evidence,elapsedMs}')::integer <= 5000 then 'easy'
+        else 'good'
+      end
+    ) then raise exception using errcode='22023',message='review_rating_contradicts_evidence'; end if;
+    if p_event#>>'{fsrs,algorithmVersion}' <> 'blundr-fsrs-v1'
+      or coalesce((p_event#>>'{fsrs,desiredRetention}')::numeric,0) <> 0.90
+      or p_event#>>'{fsrs,dueAt}' is null
+      or p_event#>>'{fsrs,card,due}' is distinct from p_event#>>'{fsrs,dueAt}'
+      or coalesce((p_event#>>'{fsrs,card,reps}')::integer,0) < 1
+      or coalesce((p_event#>>'{fsrs,card,stability}')::numeric,-1) < 0
+      or coalesce((p_event#>>'{fsrs,card,difficulty}')::numeric,-1) < 0 then
+      raise exception using errcode='22023',message='invalid_fsrs_projection';
+    end if;
     if coalesce((p_event#>>'{answer_evidence,revealOccurred}')::boolean,false)
       and (p_event->>'review_rating' <> 'again' or p_event#>>'{answer_evidence,submittedAnswer}' is not null) then
       raise exception using errcode='22023',message='review_rating_contradicts_reveal';
