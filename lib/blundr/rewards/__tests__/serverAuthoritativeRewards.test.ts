@@ -78,8 +78,14 @@ test("v2 rewards use one atomic writer, an inventory ledger, and leased presenta
   assert.match(v2Migration, /blundr_reconcile_reward_inventory_v2/i);
   assert.match(v2Migration, /opening_not_locked/i);
   assert.match(v2Migration, /insufficient_inventory/i);
-  assert.match(v2Migration, /case p_inventory_kind when 'opening_fragment' then 3 else 1 end/i);
-  assert.match(v2Migration, /set quantity=quantity-v_cost,version=version\+1[^;]*quantity>=v_cost/i);
+  assert.match(
+    v2Migration,
+    /case p_inventory_kind when 'opening_fragment' then 3 else 1 end/i,
+  );
+  assert.match(
+    v2Migration,
+    /set quantity=quantity-v_cost,version=version\+1[^;]*quantity>=v_cost/i,
+  );
   assert.match(v2Migration, /-v_cost,p_opening_id,p_policy_version/i);
   assert.match(v2Migration, /inventory_idempotency_conflict/i);
   assert.match(v2Migration, /blundr_daily_retention_progress/i);
@@ -91,7 +97,10 @@ test("v2 rewards use one atomic writer, an inventory ledger, and leased presenta
   assert.match(v2Migration, /blundr_daily_decks/i);
   assert.match(v2Migration, /v_profile\.time_zone/i);
   assert.match(v2Migration, /v_completion_id := v_expected_completion_id/i);
-  assert.match(v2Migration, /v_idempotency_key := 'reward-transaction:' \|\| v_completion_id/i);
+  assert.match(
+    v2Migration,
+    /v_idempotency_key := 'reward-transaction:' \|\| v_completion_id/i,
+  );
   assert.match(v2Migration, /reward_idempotency_conflict/i);
   assert.match(v2Migration, /completion_already_rewarded/i);
 });
