@@ -8,6 +8,7 @@ import { appendLearningEventV2 } from "@/lib/blundr/learning/core/learningEventS
 import { getOpeningSide } from "@/lib/blundr/repertoire/repertoireOpeningPool";
 import { resolveVerifiedRuntimeLearningPosition } from "@/lib/blundr/learning/core/runtimeLearningPosition.server";
 import { resolveLearningEventAttemptId } from "@/lib/blundr/learning/core/learningEventRequest";
+import { resolveLearningAttemptAuthority } from "@/lib/blundr/learning/core/learningAttemptAuthority";
 import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTelemetry.server";
 
 export const dynamic = "force-dynamic";
@@ -56,16 +57,10 @@ export async function POST(request: Request) {
         { status: 422 },
       );
     }
-    const playedMoveUci = String(body.playedMoveUci ?? "").trim();
-    const isReveal = body.type === "cue_revealed";
-    if (!isReveal && !/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(playedMoveUci))
-      return NextResponse.json({ error: "invalid_played_move" }, { status: 400 });
-    const correct = !isReveal && playedMoveUci === verified.expectedMoveUci;
-    taxonomy = isReveal
-      ? "cue_revealed"
-      : correct
-        ? "move_correct"
-        : "move_incorrect";
+    const authority = resolveLearningAttemptAuthority({ expectedMoveUci: verified.expectedMoveUci, playedMoveUci: body.playedMoveUci, requestedType: body.type, serverNow: receiptTime });
+    if (!authority.ok) return NextResponse.json({ error: authority.error }, { status: 400 });
+    taxonomy = authority.taxonomy;
+    const correct = authority.correct;
     const side =
       getOpeningSide(verified.openingId) === "black" ? "black" : "white";
     const position = createPositionIdentity({
@@ -91,7 +86,7 @@ export async function POST(request: Request) {
       taxonomy,
       position: { ...position, repertoireSide: side },
       correct,
-      now: receiptTime,
+      now: authority.occurredAt,
       access: snapshot,
     });
     await emitBlundrOperationalEvent("learning_event_accepted", {
