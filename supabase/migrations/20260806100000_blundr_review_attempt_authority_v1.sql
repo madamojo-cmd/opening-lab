@@ -14,9 +14,8 @@ create table if not exists public.blundr_review_attempts (
   actual_move_uci text, reveal_occurred boolean not null default false,
   prior_failure boolean not null default false, correct boolean,
   rated_at timestamptz, rating text check (rating is null or rating in ('again','hard','good','easy')),
-  rating_idempotency_id text, projection_event jsonb,
-  unique (user_id, review_item_id, review_state_version),
-  unique (user_id, rating_idempotency_id)
+  rating_idempotency_id text unique, projection_event jsonb,
+  unique (user_id, review_item_id, review_state_version)
 );
 alter table public.blundr_review_attempts enable row level security;
 revoke all on public.blundr_review_attempts from public, anon, authenticated;
@@ -184,8 +183,6 @@ begin
     or coalesce((p_event->>'correct')::boolean,true)
     or p_event->>'opening_id' <> v.opening_id
     or p_event->>'move_order_key' <> v.play_key
-    or p_event->>'attempt_id' <> v.attempt_id
-    or p_event->>'session_id' <> v.attempt_id
     or p_event->>'expected_move_uci' <> v.expected_move_uci
     or coalesce(p_event->>'played_move_uci','') <> coalesce(p_played_move_uci,'')
     or (p_event->>'expected_review_state_version')::integer <> v.review_state_version
@@ -207,20 +204,7 @@ begin
   if v.state <> 'awaiting_rating' or not v.correct or v.reveal_occurred or v.prior_failure then raise exception using errcode='22023',message='review_rating_contradicts_evidence'; end if;
   v_elapsed:=floor(extract(epoch from now()-v.started_at)*1000);
   if p_rating='easy' and (v.prior_reps<8 or v_elapsed>5000) then raise exception using errcode='22023',message='easy_rating_not_authorized'; end if;
-  if p_event is null or p_event->>'source' <> 'review'
-    or p_event#>>'{answer_evidence,ratingRequested}' <> 'true'
-    or p_event->>'review_rating' <> p_rating
-    or p_event->>'opening_id' <> v.opening_id
-    or p_event->>'move_order_key' <> v.play_key
-    or p_event->>'attempt_id' <> v.attempt_id
-    or p_event->>'session_id' <> v.attempt_id
-    or p_event->>'expected_move_uci' <> v.expected_move_uci
-    or p_event->>'played_move_uci' <> v.actual_move_uci
-    or not coalesce((p_event->>'correct')::boolean,false)
-    or coalesce((p_event#>>'{answer_evidence,revealOccurred}')::boolean,false)
-    or coalesce((p_event#>>'{answer_evidence,retry}')::boolean,false)
-    or (p_event->>'expected_review_state_version')::integer <> v.review_state_version
-  then raise exception using errcode='22023',message='invalid_review_projection'; end if;
+  if p_event is null or p_event->>'source' <> 'review' or p_event#>>'{answer_evidence,ratingRequested}' <> 'true' or p_event->>'review_rating' <> p_rating or p_event->>'expected_move_uci' <> v.expected_move_uci or (p_event->>'expected_review_state_version')::integer <> v.review_state_version then raise exception using errcode='22023',message='invalid_review_projection'; end if;
   v_projected:=public.blundr_project_learning_evidence_v3(p_user_id,p_event);
   update public.blundr_review_attempts set state='rated',rating=p_rating,rating_idempotency_id=p_idempotency_id,rated_at=now(),projection_event=p_event where attempt_id=v.attempt_id;
   return jsonb_build_object('status','inserted','attemptId',v.attempt_id,'rating',p_rating,'projection',v_projected);
