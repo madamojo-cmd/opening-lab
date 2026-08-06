@@ -6,29 +6,6 @@ export type ReviewAttemptState =
   | "awaiting_rating"
   | "rated";
 
-/** Public, answer-free representation returned by the Review queue API. */
-export type ReviewQueueItem = {
-  reviewItemId: string;
-  openingId: string;
-  playKey: string;
-  fen: string;
-  dueAt: string;
-  attempt: {
-    attemptId: string;
-    state: ReviewAttemptState;
-  };
-  allowedRatings: readonly ReviewRating[];
-};
-
-export type ReviewQueueResponse = {
-  items: readonly ReviewQueueItem[];
-};
-
-export type ReviewAttemptResponse = {
-  state?: ReviewAttemptState;
-  allowedRatings?: readonly ReviewRating[];
-};
-
 export function reviewItemId(input: {
   userId: string;
   openingId: string;
