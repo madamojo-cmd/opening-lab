@@ -44,6 +44,11 @@ test("PR-02 blocks spoofing, stale writes, duplicate actions, and reservation ra
     "learning_mastery_state_conflict",
     "action_id",
     "daily_session_conflict",
+    "daily_action_idempotency_conflict",
+    "daily_step_not_reserved",
+    "daily_session_reservation_conflict",
+    "jsonb_set(v_next,'{status}','\"in_progress\"'",
+    "jsonb_array_length(v_cards)",
     "on conflict (user_id,local_date) do nothing",
   ])
     assert.match(migration, new RegExp(contract.replace(/[()]/g, "\\$&"), "i"));

@@ -73,6 +73,7 @@ begin
   select deck_id,deck_fingerprint into v_existing,v_existing_fingerprint from public.blundr_daily_decks where user_id=p_user_id and local_date=p_local_date;
   if v_existing <> v_deck then raise exception using errcode='23505',message='daily_reservation_conflict'; end if;
   if v_existing_fingerprint <> p_reservation->>'deck_fingerprint' then raise exception using errcode='23505',message='daily_reservation_payload_conflict'; end if;
+  if exists(select 1 from public.blundr_daily_sessions where session_id=v_session and (deck_id<>v_deck or user_id<>p_user_id)) then raise exception using errcode='23505',message='daily_session_reservation_conflict'; end if;
   insert into public.blundr_daily_sessions (session_id,deck_id,user_id,state,state_version,reservation_generation) values (v_session,v_deck,p_user_id,p_reservation->'state',1,1) on conflict (session_id) do nothing;
   return jsonb_build_object('status','inserted','deckId',v_deck,'sessionId',v_session);
 end; $$;
@@ -81,7 +82,7 @@ end; $$;
 -- persisted only after the server has evaluated the private reservation.
 create or replace function public.blundr_commit_daily_action_v2(p_user_id uuid, p_session_id text, p_action jsonb)
 returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
-declare v_version int; v_next jsonb; v_projection jsonb; v_completion_id text; v_cards jsonb; v_prior record; v_first boolean; v_total integer; v_completed integer;
+declare v_version int; v_next jsonb; v_projection jsonb; v_completion_id text; v_cards jsonb; v_prior record; v_first boolean; v_total integer; v_completed integer; v_completed_at timestamptz;
 begin
   if p_user_id is null or p_session_id is null or p_action is null or nullif(p_action->>'action_id','') is null then raise exception using errcode='22023',message='invalid_daily_action_request'; end if;
   select state_version into v_version from public.blundr_daily_sessions where session_id=p_session_id and user_id=p_user_id for update;
@@ -90,14 +91,16 @@ begin
   if not exists (select 1 from jsonb_array_elements(v_cards) card where card->>'cardFingerprint'=p_action->>'card_fingerprint') then raise exception using errcode='22023',message='daily_card_not_reserved'; end if;
   select attempt_id,card_fingerprint,outcome,answer,learning_exposure_id into v_prior from public.blundr_daily_attempts where user_id=p_user_id and session_id=p_session_id and action_id=p_action->>'action_id';
   if found then
-    if v_prior.card_fingerprint=p_action->>'card_fingerprint' and v_prior.outcome=p_action->>'outcome' and coalesce(v_prior.answer,'null'::jsonb)=coalesce(p_action->'answer','null'::jsonb) and coalesce(v_prior.learning_exposure_id,'')=coalesce(p_action->>'learning_exposure_id','') then return jsonb_build_object('status','duplicate','version',v_version); end if;
+    select completed_at into v_completed_at from public.blundr_daily_sessions where session_id=p_session_id and user_id=p_user_id;
+    if v_prior.card_fingerprint=p_action->>'card_fingerprint' and v_prior.step_id=p_action->>'step_id' and v_prior.attempt_kind=p_action->>'attempt_kind' and v_prior.outcome=p_action->>'outcome' and coalesce(v_prior.answer,'null'::jsonb)=coalesce(p_action->'answer','null'::jsonb) and coalesce(v_prior.learning_exposure_id,'')=coalesce(p_action->>'learning_exposure_id','') then return jsonb_build_object('status','duplicate','version',v_version,'completionId',case when v_completed_at is null then null else 'daily-completion:' || p_session_id end); end if;
     raise exception using errcode='23505',message='daily_action_idempotency_conflict';
   end if;
+  if p_action->>'step_id' <> p_action->>'card_fingerprint' then raise exception using errcode='22023',message='daily_step_not_reserved'; end if;
   if v_version <> (p_action->>'expected_version')::int then raise exception using errcode='40001',message='daily_session_conflict'; end if;
   select not exists(select 1 from public.blundr_daily_attempts where user_id=p_user_id and session_id=p_session_id and step_id=p_action->>'step_id' and first_attempt) into v_first;
   insert into public.blundr_daily_attempts (attempt_id,session_id,user_id,card_fingerprint,first_attempt,attempt_kind,outcome,answer,action_id,step_id,action_version,learning_exposure_id) values (p_action->>'attempt_id',p_session_id,p_user_id,p_action->>'card_fingerprint',v_first,p_action->>'attempt_kind',p_action->>'outcome',p_action->'answer',p_action->>'action_id',p_action->>'step_id',1,case when v_first then p_action->>'learning_exposure_id' else null end);
   v_next := p_action->'next_state';
-  update public.blundr_daily_sessions set state=v_next,state_version=v_version+1,updated_at=now(),completed_at=case when p_action->>'completed_at' is null then completed_at else (p_action->>'completed_at')::timestamptz end where session_id=p_session_id and user_id=p_user_id;
+  update public.blundr_daily_sessions set state=jsonb_set(v_next,'{status}','"in_progress"'::jsonb,true),state_version=v_version+1,updated_at=now() where session_id=p_session_id and user_id=p_user_id;
   -- The caller supplies only an evidence payload built from the private,
   -- owned reservation. This nested function call shares this transaction: an
   -- invalid projection rolls back the attempt and session-version update.
@@ -107,7 +110,7 @@ begin
   select jsonb_array_length(v_cards) into v_total;
   select count(distinct card_fingerprint) into v_completed from public.blundr_daily_attempts where user_id=p_user_id and session_id=p_session_id and outcome='correct';
   if v_completed >= v_total then
-    update public.blundr_daily_sessions set completed_at=coalesce(completed_at,now()) where session_id=p_session_id and user_id=p_user_id;
+    update public.blundr_daily_sessions set completed_at=coalesce(completed_at,now()),state=jsonb_set(state,'{status}','"completed"'::jsonb,true) where session_id=p_session_id and user_id=p_user_id;
     v_completion_id := 'daily-completion:' || p_session_id;
   end if;
   return jsonb_build_object('status','inserted','version',v_version+1,'completionId',v_completion_id,'projection',v_projection);
