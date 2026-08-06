@@ -24,7 +24,7 @@ jobs:
       BLUNDR_RLS_TEST_USER_A_PASSWORD: ${{ secrets.BLUNDR_RLS_TEST_USER_A_PASSWORD }}
       BLUNDR_RLS_TEST_USER_B_EMAIL: ${{ secrets.BLUNDR_RLS_TEST_USER_B_EMAIL }}
       BLUNDR_RLS_TEST_USER_B_PASSWORD: ${{ secrets.BLUNDR_RLS_TEST_USER_B_PASSWORD }}
-      LOG_DIR: ${{ runner.temp }}/blundr-daily-v3-logs
+      LOG_DIR: ${{ github.workspace }}/.tmp/blundr-daily-v3-logs
     steps:
       - uses: actions/checkout@v4
         with:
@@ -329,6 +329,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: blundr-daily-v3-disposable-gate-${{ github.sha }}
-          path: ${{ runner.temp }}/blundr-daily-v3-logs
+          path: ${{ github.workspace }}/.tmp/blundr-daily-v3-logs
           if-no-files-found: warn
           retention-days: 30
