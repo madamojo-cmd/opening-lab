@@ -37,14 +37,8 @@ export async function POST(request: Request) {
       { error: "invalid_learning_event" },
       { status: 400 },
     );
-  const taxonomy =
-    body.type === "move_correct"
-      ? "move_correct"
-      : body.type === "move_incorrect"
-        ? "move_incorrect"
-        : body.type === "cue_revealed"
-          ? "cue_revealed"
-          : "move_attempted";
+  const receiptTime = new Date().toISOString();
+  let taxonomy: "move_attempted" | "move_correct" | "move_incorrect" | "cue_revealed" = "move_attempted";
   try {
     const verified = await resolveVerifiedRuntimeLearningPosition({
       openingId: body.openingId ?? null,
@@ -55,13 +49,23 @@ export async function POST(request: Request) {
     if (!verified) {
       await emitBlundrOperationalEvent("learning_event_rejected", {
         reason: "runtime_position_unverified",
-        taxonomy,
+        taxonomy: "unverified",
       });
       return NextResponse.json(
         { error: "runtime_position_unverified" },
         { status: 422 },
       );
     }
+    const playedMoveUci = String(body.playedMoveUci ?? "").trim();
+    const isReveal = body.type === "cue_revealed";
+    if (!isReveal && !/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(playedMoveUci))
+      return NextResponse.json({ error: "invalid_played_move" }, { status: 400 });
+    const correct = !isReveal && playedMoveUci === verified.expectedMoveUci;
+    taxonomy = isReveal
+      ? "cue_revealed"
+      : correct
+        ? "move_correct"
+        : "move_incorrect";
     const side =
       getOpeningSide(verified.openingId) === "black" ? "black" : "white";
     const position = createPositionIdentity({
@@ -86,10 +90,9 @@ export async function POST(request: Request) {
       source: "train",
       taxonomy,
       position: { ...position, repertoireSide: side },
-      correct: taxonomy === "move_correct",
-      firstAttempt:
-        taxonomy === "move_correct" || taxonomy === "move_incorrect",
-      now: body.createdAt ?? new Date().toISOString(),
+      correct,
+      firstAttempt: false,
+      now: receiptTime,
       access: snapshot,
     });
     await emitBlundrOperationalEvent("learning_event_accepted", {
