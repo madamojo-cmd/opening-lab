@@ -81,4 +81,5 @@ test("an in-flight or accepted duplicate cannot advance the same frame twice", a
   assert.equal(concurrent.status, "in_flight");
   assert.equal(accepted.status, "accepted");
   assert.equal(duplicate.status, "already_accepted");
+  assert.equal(duplicate.event.id, "event-1");
 });

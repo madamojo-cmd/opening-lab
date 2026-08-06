@@ -4327,6 +4327,10 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     const result=await trainerLearningPersistenceGateRef.current.persist(key,()=>createTrackedLearningEvent(input),persistLearningEventRemotely);
     if(result.status==="in_flight"){setFeedback("Saving this training result. Please wait.");return false;}
     setTrainerPersistencePending(false);
+    if(result.status==="already_accepted"){
+      clearRuntimeCriticalIssue("learning_event_persistence_unavailable");
+      return false;
+    }
     if(result.status!=="accepted"){setFeedback("Your move was not credited because secure progress storage is unavailable. Check your connection and try again.");pushRuntimeCriticalIssue("learning_event_persistence_unavailable");return false;}
     clearRuntimeCriticalIssue("learning_event_persistence_unavailable");
     return true;
@@ -6039,7 +6043,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       setTrainerPhase("terminal");
       setFeedback("Line complete. Restart the line or review the pattern.");
       setBrain(p=>({...p,source:"continuation terminal",book:"complete",note:"No legal continuation exists."}));
-      trackLearningEvent({type:"cue_revealed",source:"train",fen,metadata:{eventType:"continuation_terminal",lastUserMoveSan:lastMoveSan,lastUserMoveUci:lastMove,terminalReason:current.isCheckmate?.()?"checkmate":"no_legal_moves"}});
+      trackLearningEvent({type:"teaching_cue_compiled",source:"train",fen,metadata:{eventType:"continuation_terminal",lastUserMoveSan:lastMoveSan,lastUserMoveUci:lastMove,terminalReason:current.isCheckmate?.()?"checkmate":"no_legal_moves"}});
       return;
     }
     if(current.turn()!==userColor){
