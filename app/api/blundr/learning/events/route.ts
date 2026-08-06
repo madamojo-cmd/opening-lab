@@ -91,7 +91,6 @@ export async function POST(request: Request) {
       taxonomy,
       position: { ...position, repertoireSide: side },
       correct,
-      firstAttempt: false,
       now: receiptTime,
       access: snapshot,
     });

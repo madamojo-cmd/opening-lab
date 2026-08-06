@@ -42,6 +42,8 @@ test("PR-02 blocks spoofing, stale writes, duplicate actions, and reservation ra
     "for update",
     "learning_review_state_conflict",
     "learning_mastery_state_conflict",
+    "pg_advisory_xact_lock",
+    "v_first_recall",
     "action_id",
     "daily_session_conflict",
     "daily_action_idempotency_conflict",

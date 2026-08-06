@@ -18,7 +18,6 @@ export async function appendLearningEventV2(input: {
   taxonomy: LearningEventV2["taxonomy"];
   position: PositionIdentity;
   correct: boolean;
-  firstAttempt: boolean;
   now: string;
   access: OpeningAccessSnapshot;
   explanation?: string;
@@ -30,7 +29,7 @@ export async function appendLearningEventV2(input: {
   const idempotencyKey = createDeterministicIdentity("learning-attempt", [
     input.userId,
     input.attemptId,
-    input.firstAttempt,
+    input.taxonomy,
   ]);
   const client = createBlundrSupabaseAdminClient();
   if (!client) {
@@ -54,7 +53,9 @@ export async function appendLearningEventV2(input: {
   ]);
   if (review.error || mastery.error)
     throw new Error("learning_projection_read_unavailable");
-  const exposureId = input.firstAttempt
+  const recallAttempt =
+    input.taxonomy === "move_correct" || input.taxonomy === "move_incorrect";
+  const exposureId = recallAttempt
     ? createDeterministicIdentity("learning-exposure", [
         input.userId,
         input.sessionId,
@@ -63,7 +64,7 @@ export async function appendLearningEventV2(input: {
     : null;
   const projection = buildLearningProjection({
     source: input.source,
-    firstAttempt: input.firstAttempt,
+    firstAttempt: recallAttempt,
     exposureId,
     correct: input.correct,
     occurredAt: input.now,

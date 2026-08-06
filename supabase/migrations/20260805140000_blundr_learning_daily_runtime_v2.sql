@@ -7,7 +7,7 @@ alter table public.blundr_learning_events add column if not exists authority_fin
 
 create or replace function public.blundr_project_learning_evidence_v2(p_user_id uuid, p_event jsonb)
 returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
-declare v_event_id text := p_event->>'event_id'; v_inserted boolean := false; v_review_version integer; v_mastery_version integer; v_existing jsonb;
+declare v_event_id text := p_event->>'event_id'; v_inserted boolean := false; v_review_version integer; v_mastery_version integer; v_existing jsonb; v_first_recall boolean;
 begin
   if p_user_id is null or p_event is null or v_event_id is null
     or p_event->>'user_id' <> p_user_id::text then
@@ -23,6 +23,9 @@ begin
     raise exception using errcode = '22023', message = 'first_recall_requires_exposure';
   end if;
   if p_event->>'evidence_kind' = 'recall_attempt' then
+    perform pg_advisory_xact_lock(hashtext(p_user_id::text || ':' || coalesce(p_event->>'exposure_id','')));
+    select not exists(select 1 from public.blundr_learning_events where user_id=p_user_id and exposure_id=p_event->>'exposure_id' and evidence_kind='recall_attempt' and first_attempt) into v_first_recall;
+    p_event := jsonb_set(p_event,'{first_attempt}',to_jsonb(v_first_recall));
     select review_state_version into v_review_version
     from public.blundr_review_states
     where user_id=p_user_id and opening_id=p_event->>'opening_id' and play_key=p_event->>'move_order_key'
@@ -46,7 +49,7 @@ begin
     v_event_id,p_user_id,p_event->>'idempotency_key',p_event->>'schema_version',p_event->>'session_id',p_event->>'attempt_id',(p_event->>'occurred_at')::timestamptz,p_event->>'taxonomy',p_event->>'position_key',p_event->>'canonical_fen',p_event->>'opening_id',p_event->>'expected_move_uci',p_event->>'repertoire_side',p_event->>'move_order_key',p_event->>'source',coalesce((p_event->>'first_attempt')::boolean,false),p_event->'finding',p_event->>'content_version',p_event->>'classifier_version',p_event->>'evidence_kind',nullif(p_event->>'exposure_id',''),p_event->>'played_move_uci',p_event->>'evidence_version','blundr-fsrs-v1',now(),p_event->>'authority_fingerprint'
   ) on conflict do nothing returning true into v_inserted;
   if not coalesce(v_inserted,false) then return jsonb_build_object('status','duplicate','eventId',v_event_id); end if;
-  if p_event->>'evidence_kind' <> 'recall_attempt' then return jsonb_build_object('status','inserted','eventId',v_event_id); end if;
+  if p_event->>'evidence_kind' <> 'recall_attempt' or not v_first_recall then return jsonb_build_object('status','inserted','eventId',v_event_id,'projected',false); end if;
   insert into public.blundr_review_states (user_id,opening_id,play_key,due_at,srs_state,last_attempt_id,last_outcome,fsrs_algorithm_version,fsrs_state_version,fsrs_desired_retention,review_state_version,last_recall_event_id,updated_at)
   values (p_user_id,p_event->>'opening_id',p_event->>'move_order_key',(p_event#>>'{fsrs,dueAt}')::timestamptz,p_event#>'{fsrs,card}',p_event->>'attempt_id',p_event#>>'{fsrs,rating}','blundr-fsrs-v1',1,0.90,1,v_event_id,now())
   on conflict (user_id,opening_id,play_key) do update set due_at=excluded.due_at,srs_state=excluded.srs_state,last_attempt_id=excluded.last_attempt_id,last_outcome=excluded.last_outcome,fsrs_algorithm_version=excluded.fsrs_algorithm_version,fsrs_state_version=blundr_review_states.fsrs_state_version+1,fsrs_desired_retention=excluded.fsrs_desired_retention,review_state_version=blundr_review_states.review_state_version+1,last_recall_event_id=excluded.last_recall_event_id,updated_at=excluded.updated_at;
