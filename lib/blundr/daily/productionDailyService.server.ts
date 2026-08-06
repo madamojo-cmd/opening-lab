@@ -141,7 +141,14 @@ async function dailyLearningEvent(input: {
     expected_mastery_state_version: Number(
       mastery.data?.mastery_state_version ?? 0,
     ),
-    authority_fingerprint: createDeterministicIdentity("learning-authority", [input.userId, input.sessionId, input.card.positionKey, input.card.acceptedMoves[0] ?? "", String(input.correct), exposureId]),
+    authority_fingerprint: createDeterministicIdentity("learning-authority", [
+      input.userId,
+      input.sessionId,
+      input.card.positionKey,
+      input.card.acceptedMoves[0] ?? "",
+      String(input.correct),
+      exposureId,
+    ]),
   };
 }
 

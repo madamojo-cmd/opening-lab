@@ -105,7 +105,14 @@ export async function appendLearningEventV2(input: {
     evidence_kind: projection.evidenceKind,
     exposure_id: exposureId,
     evidence_version: "blundr-learning-evidence-v2",
-    authority_fingerprint: createDeterministicIdentity("learning-authority", [input.userId, input.sessionId, input.position.positionKey, input.position.expectedMoveUci ?? "", String(input.correct), exposureId ?? ""]),
+    authority_fingerprint: createDeterministicIdentity("learning-authority", [
+      input.userId,
+      input.sessionId,
+      input.position.positionKey,
+      input.position.expectedMoveUci ?? "",
+      String(input.correct),
+      exposureId ?? "",
+    ]),
     correct: input.correct,
     access_decision: input.access.decision,
     ...(projection.evidenceKind === "recall_attempt"

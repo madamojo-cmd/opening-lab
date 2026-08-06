@@ -39,7 +39,11 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   const receiptTime = new Date().toISOString();
-  let taxonomy: "move_attempted" | "move_correct" | "move_incorrect" | "cue_revealed" = "move_attempted";
+  let taxonomy:
+    | "move_attempted"
+    | "move_correct"
+    | "move_incorrect"
+    | "cue_revealed" = "move_attempted";
   try {
     const verified = await resolveVerifiedRuntimeLearningPosition({
       openingId: body.openingId ?? null,
@@ -57,8 +61,14 @@ export async function POST(request: Request) {
         { status: 422 },
       );
     }
-    const authority = resolveLearningAttemptAuthority({ expectedMoveUci: verified.expectedMoveUci, playedMoveUci: body.playedMoveUci, requestedType: body.type, serverNow: receiptTime });
-    if (!authority.ok) return NextResponse.json({ error: authority.error }, { status: 400 });
+    const authority = resolveLearningAttemptAuthority({
+      expectedMoveUci: verified.expectedMoveUci,
+      playedMoveUci: body.playedMoveUci,
+      requestedType: body.type,
+      serverNow: receiptTime,
+    });
+    if ("error" in authority)
+      return NextResponse.json({ error: authority.error }, { status: 400 });
     taxonomy = authority.taxonomy;
     const correct = authority.correct;
     const side =
