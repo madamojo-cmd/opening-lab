@@ -19,6 +19,10 @@ const repository = readFileSync(
   resolve(root, "lib/blundr/daily/productionDailyRepository.server.ts"),
   "utf8",
 );
+const learningRoute = readFileSync(
+  resolve(root, "app/api/blundr/learning/events/route.ts"),
+  "utf8",
+);
 
 test("PR-02 SQL authority is service-only and fail-closed at every mutation boundary", () => {
   for (const name of [
@@ -76,4 +80,17 @@ test("Daily policy and projection contracts retain explicit no-fabrication bound
   assert.match(dailyWriter, /expected_mastery_state_version/);
   assert.match(migration, /first_recall_requires_exposure/);
   assert.match(migration, /daily-completion:/);
+});
+
+test("route derives correctness and scheduling from server authority", () => {
+  assert.match(learningRoute, /playedMoveUci === verified\.expectedMoveUci/);
+  assert.match(learningRoute, /const receiptTime = new Date\(\)\.toISOString\(\)/);
+  assert.doesNotMatch(learningRoute, /body\.createdAt \?\?/);
+  assert.match(learningRoute, /const isReveal = body\.type === "cue_revealed"/);
+});
+
+test("exposure retries cannot reproject and Daily omits first-attempt input", () => {
+  assert.match(migration, /pg_advisory_xact_lock/);
+  assert.match(migration, /not v_first_recall/);
+  assert.doesNotMatch(dailyWriter, /first_attempt: true/);
 });

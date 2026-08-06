@@ -123,7 +123,6 @@ async function dailyLearningEvent(input: {
     repertoire_side: input.card.side,
     move_order_key: input.card.playKey,
     source: "daily",
-    first_attempt: true,
     finding: input.correct
       ? null
       : { category: "opening_move", explanation: input.card.explanation },
