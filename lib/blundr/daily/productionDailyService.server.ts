@@ -529,8 +529,8 @@ async function buildReservation(
     addCard(
       entry,
       "daily_move_recall",
-      "Opening recall",
-      "Play the approved move for this exact position.",
+      "Missing Move",
+      "Play the missing move from this verified opening position.",
       [primary.moveUci],
       "This move keeps the approved opening plan on track.",
     );
