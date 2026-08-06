@@ -165,13 +165,13 @@ create or replace function public.blundr_commit_review_attempt_v1(p_user_id uuid
 returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
 declare v public.blundr_review_attempts%rowtype; v_projected jsonb; v_correct boolean;
 begin
-  if p_user_id is null or nullif(p_item_id,'') is null or nullif(p_attempt_id,'') is null or (coalesce(p_reveal,false) = (nullif(p_played_move_uci,'') is null)) then raise exception using errcode='22023',message='invalid_review_attempt'; end if;
+  if p_user_id is null or nullif(p_item_id,'') is null or nullif(p_attempt_id,'') is null or (coalesce(p_reveal,false) <> (nullif(p_played_move_uci,'') is null)) then raise exception using errcode='22023',message='invalid_review_attempt'; end if;
   select * into v from public.blundr_review_attempts where user_id=p_user_id and review_item_id=p_item_id and attempt_id=p_attempt_id for update;
   if not found then raise exception using errcode='42501',message='review_item_not_reserved'; end if;
   if v.state <> 'awaiting_answer' then
     if coalesce(v.actual_move_uci,'')=coalesce(p_played_move_uci,'') and v.reveal_occurred=coalesce(p_reveal,false) then return jsonb_build_object('status','duplicate','attemptId',v.attempt_id,'state',v.state,'allowedRatings',case when v.state='awaiting_rating' and v.prior_reps>=8 and extract(epoch from now()-v.started_at)*1000<=5000 then jsonb_build_array('hard','good','easy') when v.state='awaiting_rating' then jsonb_build_array('hard','good') else '[]'::jsonb end); end if;
     raise exception using errcode='23505',message='review_attempt_idempotency_conflict'; end if;
-  if not exists(select 1 from public.blundr_review_states s where s.user_id=p_user_id and s.opening_id=v.opening_id and s.play_key=v.play_key and s.review_state_version=v.review_state_version and s.due_at<=now()) then raise exception using errcode='40001',message='review_reservation_stale'; end if;
+  if not exists(select 1 from public.blundr_review_states s where s.user_id=p_user_id and s.opening_id=v.opening_id and s.play_key=v.play_key and s.review_state_version=v.review_state_version and s.due_at<=now()) then raise exception using errcode='22023',message='review_reservation_stale'; end if;
   v_correct := not coalesce(p_reveal,false) and p_played_move_uci=v.expected_move_uci;
   if v_correct then
     update public.blundr_review_attempts set actual_move_uci=p_played_move_uci,correct=true,answered_at=now(),state='awaiting_rating' where attempt_id=v.attempt_id;
