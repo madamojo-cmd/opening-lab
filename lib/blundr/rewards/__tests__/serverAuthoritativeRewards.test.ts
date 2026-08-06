@@ -86,7 +86,8 @@ test("v2 rewards use one atomic writer, an inventory ledger, and leased presenta
   assert.doesNotMatch(v2Migration, /v_local_date date := current_date/i);
   assert.match(v2Migration, /blundr_daily_decks/i);
   assert.match(v2Migration, /v_profile\.time_zone/i);
-  assert.match(v2Migration, /completion_identity_unverified/i);
+  assert.match(v2Migration, /v_completion_id := v_expected_completion_id/i);
+  assert.match(v2Migration, /v_idempotency_key := 'reward-transaction:' \|\| v_completion_id/i);
   assert.match(v2Migration, /reward_idempotency_conflict/i);
   assert.match(v2Migration, /completion_already_rewarded/i);
 });
