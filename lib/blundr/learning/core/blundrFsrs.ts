@@ -31,7 +31,10 @@ export type BlundrFsrsCard = Pick<
   | "last_review"
 >;
 
-export type StoredBlundrFsrsCard = Omit<BlundrFsrsCard, "due" | "last_review"> & {
+export type StoredBlundrFsrsCard = Omit<
+  BlundrFsrsCard,
+  "due" | "last_review"
+> & {
   due: string;
   last_review: string | null;
 };
@@ -71,7 +74,8 @@ export function gradeBlundrRecall(input: {
   rating: "again" | "good";
 } {
   const now = new Date(input.occurredAt);
-  if (Number.isNaN(now.getTime())) throw new Error("invalid_recall_occurred_at");
+  if (Number.isNaN(now.getTime()))
+    throw new Error("invalid_recall_occurred_at");
   const result = scheduler.next(
     toCard(input.previous, now),
     now,

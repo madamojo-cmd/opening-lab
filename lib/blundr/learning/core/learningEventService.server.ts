@@ -114,8 +114,7 @@ export async function appendLearningEventV2(input: {
     p_user_id: input.userId,
     p_event: event,
   });
-  if (inserted.error)
-    throw new Error("learning_event_persistence_unavailable");
+  if (inserted.error) throw new Error("learning_event_persistence_unavailable");
   const status = inserted.data?.status;
   if (status !== "inserted" && status !== "duplicate")
     throw new Error("learning_event_persistence_unavailable");
