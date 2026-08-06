@@ -220,6 +220,7 @@ export class ProductionDailyRepository {
     stepIndex: number;
     answer?: unknown;
     learningEvent?: unknown;
+    dailyEvidence: unknown;
   }): Promise<"inserted" | "duplicate" | "conflict"> {
     const client = requireProductionPersistence(
       createBlundrSupabaseAdminClient(),
@@ -245,11 +246,7 @@ export class ProductionDailyRepository {
           ? `daily:${input.session.sessionId}:${input.cardFingerprint}`
           : null,
         learning_event: input.learningEvent ?? null,
-        daily_evidence:
-          input.learningEvent && typeof input.learningEvent === "object"
-            ? ((input.learningEvent as Record<string, unknown>).task_evidence ??
-              null)
-            : null,
+        daily_evidence: input.dailyEvidence,
       },
     });
     if (result.error) {

@@ -170,7 +170,7 @@ test("production Daily delegates learning projections to the shared v2 authority
 test("the active Daily browser submits only reserved actions and never owns rewards", () => {
   const screen = readFileSync(
     new URL(
-      "../../../components/daily/ProductionDailyBlundrScreen.tsx",
+      "../../../../components/daily/ProductionDailyBlundrScreen.tsx",
       import.meta.url,
     ),
     "utf8",

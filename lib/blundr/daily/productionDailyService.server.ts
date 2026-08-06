@@ -51,7 +51,7 @@ import { resolveServerDailyTaskCount } from "./core/adaptiveDailyPolicy";
 const MAX_RUNTIME_CANDIDATES_PER_RESERVATION = 600;
 const DAILY_COMPOSER_VERSION = "daily-board-first-v3";
 
-async function dailyLearningEvent(input: {
+type DailyTaskEvidenceInput = {
   userId: string;
   sessionId: string;
   attemptId: string;
@@ -65,10 +65,43 @@ async function dailyLearningEvent(input: {
   submittedAnswer?: string | null;
   elapsedMs: number;
   access: OpeningAccessSnapshot;
-}): Promise<Record<string, unknown> | null> {
-  if (!input.firstAttempt) return null;
+};
+
+function dailyTaskEvidence(input: DailyTaskEvidenceInput) {
   const expectedTaskAnswer =
     input.card.acceptedAnswers?.[0] ?? input.card.acceptedMoves[0] ?? null;
+  const isMoveTask = input.card.interaction === "move";
+  const position = createPositionIdentity({
+    canonicalFen: input.fen,
+    openingId: input.card.openingId,
+    expectedMoveUci: input.card.acceptedMoves[0] ?? "",
+    repertoireSide: input.card.side,
+    moveOrderKey: input.card.playKey,
+  });
+  return {
+    activityId: input.card.activityId,
+    taskType: input.card.activityId,
+    interaction: input.card.interaction,
+    submittedAnswerIdentity: input.submittedAnswer ?? null,
+    expectedTaskAnswerIdentity: expectedTaskAnswer,
+    correct: input.correct,
+    canonicalTarget: {
+      positionKey: position.positionKey,
+      openingId: input.card.openingId,
+      playKey: input.card.playKey,
+      expectedMoveUci: input.card.acceptedMoves[0] ?? null,
+    },
+    firstAttempt: input.firstAttempt,
+    retry: !input.firstAttempt,
+    revealOccurred: input.evidenceType === "reveal",
+    evidenceType: input.evidenceType,
+  };
+}
+
+async function dailyLearningEvent(
+  input: DailyTaskEvidenceInput,
+): Promise<Record<string, unknown> | null> {
+  if (!input.firstAttempt) return null;
   const isMoveTask = input.card.interaction === "move";
   const position = createPositionIdentity({
     canonicalFen: input.fen,
@@ -107,24 +140,7 @@ async function dailyLearningEvent(input: {
   return {
     ...event,
     content_version: input.runtimePackageId,
-    task_evidence: {
-      activityId: input.card.activityId,
-      taskType: input.card.activityId,
-      interaction: input.card.interaction,
-      submittedAnswerIdentity: input.submittedAnswer ?? null,
-      expectedTaskAnswerIdentity: expectedTaskAnswer,
-      correct: input.correct,
-      canonicalTarget: {
-        positionKey: position.positionKey,
-        openingId: input.card.openingId,
-        playKey: input.card.playKey,
-        expectedMoveUci: input.card.acceptedMoves[0] ?? null,
-      },
-      firstAttempt: true,
-      retry: false,
-      revealOccurred: input.evidenceType === "reveal",
-      evidenceType: input.evidenceType,
-    },
+    task_evidence: dailyTaskEvidence(input),
   };
 }
 
@@ -884,6 +900,38 @@ export async function applyDailyAction(input: {
       updatedAt: now,
     };
     const attemptId = input.actionId;
+    const learningInput: DailyTaskEvidenceInput = {
+      userId: input.user.userId,
+      sessionId: input.sessionId,
+      attemptId,
+      card: {
+        ...privateCard,
+        acceptedMoves: step.acceptedMoves,
+        acceptedAnswers: step.acceptedAnswers,
+        explanation: step.explanation,
+        interaction: "move",
+      },
+      fen: step.positionFen,
+      correct: answerCorrect,
+      firstAttempt: isReplay
+        ? input.action === "answer" || input.action === "reveal"
+        : !current.firstAttemptRecorded &&
+          (input.action === "answer" || input.action === "reveal"),
+      now,
+      runtimePackageId: session.reservationIdentity.runtimePackageId,
+      evidenceType:
+        input.action === "reveal"
+          ? "reveal"
+          : input.action === "retry"
+            ? "skip"
+            : "answer",
+      submittedAnswer: input.action === "answer" ? input.answer : null,
+      elapsedMs: Math.max(
+        0,
+        Date.parse(now) - Date.parse(session.updatedAt ?? now),
+      ),
+      access,
+    };
     const persisted = await repository.commitAction({
       attemptId,
       cardFingerprint: input.cardFingerprint,
@@ -903,33 +951,8 @@ export async function applyDailyAction(input: {
       answer: input.action === "answer" ? input.answer : undefined,
       session: next,
       expectedVersion: input.expectedVersion,
-      learningEvent: await dailyLearningEvent({
-        userId: input.user.userId,
-        sessionId: input.sessionId,
-        attemptId,
-        card: {
-          ...privateCard,
-          acceptedMoves: step.acceptedMoves,
-          acceptedAnswers: step.acceptedAnswers,
-          explanation: step.explanation,
-          interaction: "move",
-        },
-        fen: step.positionFen,
-        correct: answerCorrect,
-        firstAttempt: isReplay
-          ? input.action === "answer" || input.action === "reveal"
-          : !current.firstAttemptRecorded &&
-            (input.action === "answer" || input.action === "reveal"),
-        now,
-        runtimePackageId: session.reservationIdentity.runtimePackageId,
-        evidenceType: input.action === "reveal" ? "reveal" : "answer",
-        submittedAnswer: input.action === "answer" ? input.answer : null,
-        elapsedMs: Math.max(
-          0,
-          Date.parse(now) - Date.parse(session.updatedAt ?? now),
-        ),
-        access,
-      }),
+      dailyEvidence: dailyTaskEvidence(learningInput),
+      learningEvent: await dailyLearningEvent(learningInput),
     });
     if (persisted === "conflict") throw new Error("daily_session_conflict");
     if (persisted === "duplicate") {
@@ -1023,6 +1046,33 @@ export async function applyDailyAction(input: {
         : session.completedAt,
     updatedAt: now,
   };
+  const learningInput: DailyTaskEvidenceInput = {
+    userId: input.user.userId,
+    sessionId: input.sessionId,
+    attemptId:
+      reduced.state.attempts.at(-1)?.attemptId ?? input.cardFingerprint,
+    card: privateCard,
+    fen: privateCard.positionFen,
+    correct,
+    firstAttempt: isReplay
+      ? input.action === "answer" || input.action === "reveal"
+      : !firstAttemptAlreadyRecorded &&
+        (input.action === "answer" || input.action === "reveal"),
+    now,
+    runtimePackageId: session.reservationIdentity.runtimePackageId,
+    evidenceType:
+      input.action === "reveal"
+        ? "reveal"
+        : input.action === "retry"
+          ? "skip"
+          : "answer",
+    submittedAnswer: input.action === "answer" ? input.answer : null,
+    elapsedMs: Math.max(
+      0,
+      Date.parse(now) - Date.parse(session.updatedAt ?? now),
+    ),
+    access,
+  };
   const persisted = await repository.commitAction({
     attemptId: input.actionId,
     cardFingerprint: input.cardFingerprint,
@@ -1040,33 +1090,8 @@ export async function applyDailyAction(input: {
     answer: input.action === "answer" ? input.answer : undefined,
     session: next,
     expectedVersion: input.expectedVersion,
-    learningEvent: await dailyLearningEvent({
-      userId: input.user.userId,
-      sessionId: input.sessionId,
-      attemptId:
-        reduced.state.attempts.at(-1)?.attemptId ?? input.cardFingerprint,
-      card: privateCard,
-      fen: privateCard.positionFen,
-      correct,
-      firstAttempt: isReplay
-        ? input.action === "answer" || input.action === "reveal"
-        : !firstAttemptAlreadyRecorded &&
-          (input.action === "answer" || input.action === "reveal"),
-      now,
-      runtimePackageId: session.reservationIdentity.runtimePackageId,
-      evidenceType:
-        input.action === "reveal"
-          ? "reveal"
-          : input.action === "retry"
-            ? "skip"
-            : "answer",
-      submittedAnswer: input.action === "answer" ? input.answer : null,
-      elapsedMs: Math.max(
-        0,
-        Date.parse(now) - Date.parse(session.updatedAt ?? now),
-      ),
-      access,
-    }),
+    dailyEvidence: dailyTaskEvidence(learningInput),
+    learningEvent: await dailyLearningEvent(learningInput),
   });
   if (persisted === "conflict") throw new Error("daily_session_conflict");
   if (persisted === "duplicate") {
