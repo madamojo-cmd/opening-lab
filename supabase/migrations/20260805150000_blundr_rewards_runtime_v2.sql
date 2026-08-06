@@ -64,6 +64,7 @@ declare
   v_total_full_days integer := 0;
   v_last_date date;
   v_event_id text;
+  v_legacy_result jsonb;
 begin
   if p_user_id is null or nullif(btrim(p_completion_id), '') is null
     or p_source not in ('opening_run_completed','continuation_completed','daily_blundr_deck_completed')
@@ -72,7 +73,14 @@ begin
     raise exception 'invalid_reward_transaction_request';
   end if;
   perform pg_advisory_xact_lock(hashtextextended(p_user_id::text, 403));
-  -- Owned completion evidence is checked before any durable grant is created.
+  -- Preserve any immutable legacy completion as history; it already includes
+  -- reward effects and must never be re-granted by the v2 writer.
+  select result_json into v_legacy_result from public.blundr_completion_grants
+    where user_id=p_user_id and source=p_source and evidence_id=p_evidence_id
+    order by created_at desc limit 1;
+  if found then return jsonb_set(v_legacy_result,'{duplicate}','true'::jsonb,true); end if;
+  -- Daily owns a completed session. Train/review completion authority belongs
+  -- to PR-04; a correct move is deliberately not completion evidence.
   if p_source = 'daily_blundr_deck_completed' then
     select s.session_id,d.local_date into v_evidence_identity,v_local_date
     from public.blundr_daily_sessions s join public.blundr_daily_decks d on d.deck_id=s.deck_id and d.user_id=s.user_id
@@ -81,8 +89,7 @@ begin
       raise exception 'completion_evidence_unverified';
     end if;
   else
-    select e.event_id,e.occurred_at into v_evidence_identity,v_evidence_occurred_at from public.blundr_learning_events e where e.user_id=p_user_id and e.session_id=p_evidence_id and e.deleted_at is null and e.taxonomy='move_correct' and e.source in ('train','review') and e.occurred_at >= now()-interval '36 hours' order by e.occurred_at,e.event_id limit 1;
-    if not found then raise exception 'completion_evidence_unverified'; end if;
+    raise exception 'completion_evidence_unverified';
   end if;
   select * into v_profile from public.blundr_user_profiles where user_id=p_user_id;
   if not found then raise exception 'account_not_ready'; end if;
