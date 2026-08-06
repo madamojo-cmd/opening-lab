@@ -53,17 +53,17 @@ async function dailyLearningEvent(input: {
   if (!input.firstAttempt) return null;
   const exposureId = `daily:${input.sessionId}:${input.card.cardFingerprint}`;
   const client = createBlundrSupabaseAdminClient();
-  const review = client
-    ? await client
+  const [review, mastery] = client
+    ? await Promise.all([client
         .from("blundr_review_states")
         .select("srs_state,review_state_version")
         .eq("user_id", input.userId)
         .eq("opening_id", input.card.openingId)
         .eq("play_key", input.card.playKey)
-        .maybeSingle()
-    : { data: null, error: null };
-  if (review.error) throw new Error("daily_review_state_read_unavailable");
-  const projection = buildLearningProjection({ source: "daily", firstAttempt: true, exposureId, correct: input.correct, occurredAt: input.now, previousFsrs: (review.data?.srs_state as never) ?? null, previousMastery: null });
+        .maybeSingle(), client.from("blundr_node_mastery").select("recall_attempt_count,correct_recall_count,lapse_count,mastery_state_version").eq("user_id", input.userId).eq("position_key", input.card.positionKey).maybeSingle()])
+    : [{ data: null, error: null }, { data: null, error: null }];
+  if (review.error || mastery.error) throw new Error("daily_projection_state_read_unavailable");
+  const projection = buildLearningProjection({ source: "daily", firstAttempt: true, exposureId, correct: input.correct, occurredAt: input.now, previousFsrs: (review.data?.srs_state as never) ?? null, previousMastery: mastery.data ? { recallAttemptCount: Number(mastery.data.recall_attempt_count ?? 0), correctRecallCount: Number(mastery.data.correct_recall_count ?? 0), lapseCount: Number(mastery.data.lapse_count ?? 0) } : null });
   if (projection.evidenceKind !== "recall_attempt") return null;
   return {
     event_id: createDeterministicIdentity("learning-event", [input.userId, input.attemptId]),
@@ -75,6 +75,7 @@ async function dailyLearningEvent(input: {
     content_version: input.runtimePackageId, classifier_version: "weakness-classifier-v1", evidence_kind: projection.evidenceKind,
     exposure_id: exposureId, evidence_version: "blundr-learning-evidence-v2", correct: input.correct, access_decision: "active", fsrs: projection.fsrs, mastery: projection.mastery,
     expected_review_state_version: Number(review.data?.review_state_version ?? 0),
+    expected_mastery_state_version: Number(mastery.data?.mastery_state_version ?? 0),
   };
 }
 

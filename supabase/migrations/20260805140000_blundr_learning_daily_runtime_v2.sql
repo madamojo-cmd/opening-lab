@@ -5,7 +5,7 @@ begin;
 
 create or replace function public.blundr_project_learning_evidence_v2(p_user_id uuid, p_event jsonb)
 returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
-declare v_event_id text := p_event->>'event_id'; v_inserted boolean := false; v_review_version integer;
+declare v_event_id text := p_event->>'event_id'; v_inserted boolean := false; v_review_version integer; v_mastery_version integer;
 begin
   if p_user_id is null or p_event is null or v_event_id is null
     or p_event->>'user_id' <> p_user_id::text then
@@ -27,6 +27,10 @@ begin
     for update;
     if coalesce(v_review_version, 0) <> coalesce((p_event->>'expected_review_state_version')::integer, 0) then
       raise exception using errcode='40001',message='learning_review_state_conflict';
+    end if;
+    select mastery_state_version into v_mastery_version from public.blundr_node_mastery where user_id=p_user_id and position_key=p_event->>'position_key' for update;
+    if coalesce(v_mastery_version, 0) <> coalesce((p_event->>'expected_mastery_state_version')::integer, 0) then
+      raise exception using errcode='40001',message='learning_mastery_state_conflict';
     end if;
   end if;
   insert into public.blundr_learning_events (
