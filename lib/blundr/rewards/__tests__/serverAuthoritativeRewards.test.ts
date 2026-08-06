@@ -104,8 +104,14 @@ test("v2 rewards use one atomic writer, an inventory ledger, and leased presenta
   assert.match(v2Migration, /reward_idempotency_conflict/i);
   assert.match(v2Migration, /completion_already_rewarded/i);
   assert.match(v2Migration, /blundr_completion_grants/i);
-  assert.match(v2Migration, /where user_id=p_user_id and source=p_source and evidence_id=p_evidence_id/i);
-  assert.match(v2Migration, /correct move is deliberately not completion evidence/i);
+  assert.match(
+    v2Migration,
+    /where user_id=p_user_id and source=p_source and evidence_id=p_evidence_id/i,
+  );
+  assert.match(
+    v2Migration,
+    /correct move is deliberately not completion evidence/i,
+  );
   assert.doesNotMatch(v2Migration, /from public\.blundr_learning_events e/i);
 });
 
