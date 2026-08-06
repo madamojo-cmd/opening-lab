@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getCurrentBlundrUser } from "@/lib/blundr/accounts/accountSession";
-import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
+import { applyRewardCompletion } from "@/lib/blundr/rewards/rewardAuthority";
 import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTelemetry.server";
 
 export const dynamic = "force-dynamic";
@@ -22,29 +22,6 @@ function statusForDatabaseError(message: string): number {
   if (message.includes("invalid_completion")) return 400;
   if (message.includes("account_not_ready")) return 409;
   return 503;
-}
-
-async function waitForTrainerEvidence(input: {
-  admin: NonNullable<ReturnType<typeof createBlundrSupabaseAdminClient>>;
-  userId: string;
-  evidenceId: string;
-  openingId: string | null;
-}): Promise<void> {
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    let query = input.admin
-      .from("blundr_learning_events")
-      .select("event_id")
-      .eq("user_id", input.userId)
-      .eq("session_id", input.evidenceId)
-      .eq("taxonomy", "move_correct")
-      .is("deleted_at", null)
-      .limit(1);
-    if (input.openingId) query = query.eq("opening_id", input.openingId);
-    const { data } = await query;
-    if (data?.length) return;
-    if (attempt < 3)
-      await new Promise<void>((resolve) => setTimeout(resolve, 150));
-  }
 }
 
 export async function POST(request: Request) {
@@ -70,7 +47,6 @@ export async function POST(request: Request) {
   const source = text(body?.source);
   const evidenceId = text(body?.evidenceId);
   const localDate = text(body?.localDate);
-  const openingId = text(body?.openingId) || null;
   if (
     !completionId ||
     !SOURCES.has(source) ||
@@ -86,34 +62,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const admin = createBlundrSupabaseAdminClient();
-  if (!admin) {
-    return NextResponse.json(
-      {
-        error: "reward_persistence_unavailable",
-        message: "Reward persistence is unavailable.",
-      },
-      { status: 503 },
-    );
-  }
-  if (source !== "daily_blundr_deck_completed") {
-    await waitForTrainerEvidence({
-      admin,
-      userId: user.userId,
-      evidenceId,
-      openingId,
-    });
-  }
-  const { data, error } = await admin.rpc("blundr_apply_activity_completion", {
-    p_user_id: user.userId,
-    p_completion_id: completionId,
-    p_source: source,
-    p_evidence_id: evidenceId,
-    p_local_date: localDate,
-    p_opening_id: openingId,
+  const result = await applyRewardCompletion({
+    userId: user.userId,
+    completionId,
+    source,
+    evidenceId,
   });
-  if (error || !data) {
-    const message = text(error?.message) || "reward_persistence_unavailable";
+  if ("code" in result) {
+    const message = result.code;
     await emitBlundrOperationalEvent("reward_completion_rejected", {
       source,
       reason: message,
@@ -129,7 +85,7 @@ export async function POST(request: Request) {
   }
   await emitBlundrOperationalEvent("reward_completion_applied", {
     source,
-    duplicate: Boolean((data as { duplicate?: unknown }).duplicate),
+    duplicate: Boolean(result.data.duplicate),
   });
-  return NextResponse.json({ ok: true, data });
+  return NextResponse.json({ ok: true, data: result.data });
 }
