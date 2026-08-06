@@ -920,16 +920,23 @@ export async function applyDailyAction(input: {
     (card) => card.cardFingerprint === input.cardFingerprint,
   );
   if (!privateCard) throw new Error("daily_card_not_found");
-  const currentStepIndex =
-    session.state.activityProgress?.[input.cardFingerprint]?.stepIndex ?? 0;
-  const expectedActionId = productionDailyActionId({
-    sessionId: session.sessionId,
-    cardFingerprint: input.cardFingerprint,
-    stepIndex: currentStepIndex,
-    version: session.version,
-  });
-  if (input.actionId !== expectedActionId)
+  const stepCount = privateCard.privateSteps?.length ?? 1;
+  const actionStepIndex = Array.from(
+    { length: stepCount },
+    (_, stepIndex) => stepIndex,
+  ).find(
+    (stepIndex) =>
+      input.actionId ===
+      productionDailyActionId({
+        sessionId: session.sessionId,
+        cardFingerprint: input.cardFingerprint,
+        stepIndex,
+        version: input.expectedVersion,
+      }),
+  );
+  if (actionStepIndex === undefined)
     throw new Error("daily_action_id_invalid");
+  const isReplay = input.expectedVersion !== session.version;
   const now = input.now ?? new Date().toISOString();
   if (privateCard.privateSteps?.length) {
     const progress =
@@ -940,7 +947,7 @@ export async function applyDailyAction(input: {
       firstAttemptRecorded: false,
       status: "in_progress" as const,
     };
-    const step = privateCard.privateSteps[current.stepIndex];
+    const step = privateCard.privateSteps[actionStepIndex];
     if (!step) throw new Error("daily_activity_step_not_found");
     const answerCorrect = Boolean(
       input.action === "answer" &&
@@ -997,7 +1004,10 @@ export async function applyDailyAction(input: {
     const persisted = await repository.commitAction({
       attemptId,
       cardFingerprint: input.cardFingerprint,
-      firstAttempt: !current.firstAttemptRecorded && input.action !== "retry",
+      firstAttempt:
+        isReplay
+          ? input.action !== "retry"
+          : !current.firstAttemptRecorded && input.action !== "retry",
       attemptKind: input.action,
       outcome:
         input.action === "reveal"
@@ -1007,7 +1017,7 @@ export async function applyDailyAction(input: {
             : answerCorrect
               ? "correct"
               : "incorrect",
-      stepIndex: current.stepIndex,
+      stepIndex: actionStepIndex,
       answer: input.action === "answer" ? input.answer : undefined,
       session: next,
       expectedVersion: input.expectedVersion,
@@ -1019,8 +1029,10 @@ export async function applyDailyAction(input: {
         fen: step.positionFen,
         correct: answerCorrect,
         firstAttempt:
-          !current.firstAttemptRecorded &&
-          (input.action === "answer" || input.action === "reveal"),
+          isReplay
+            ? input.action === "answer" || input.action === "reveal"
+            : !current.firstAttemptRecorded &&
+              (input.action === "answer" || input.action === "reveal"),
         now,
         runtimePackageId: session.reservationIdentity.runtimePackageId,
         evidenceType: input.action === "reveal" ? "reveal" : "answer",
@@ -1032,6 +1044,22 @@ export async function applyDailyAction(input: {
       }),
     });
     if (persisted === "conflict") throw new Error("daily_session_conflict");
+    if (persisted === "duplicate") {
+      const authoritative = await repository.getOwned(
+        input.sessionId,
+        input.user.userId,
+      );
+      if (!authoritative) throw new Error("daily_session_not_found");
+      return {
+        session: authoritative,
+        presentation: {
+          state: "committed",
+          feedback: { kind: "recorded", message: "Recorded." },
+        },
+        result: "accepted",
+        correct: answerCorrect,
+      };
+    }
     return {
       session: next,
       presentation: {
@@ -1105,7 +1133,10 @@ export async function applyDailyAction(input: {
   const persisted = await repository.commitAction({
     attemptId: input.actionId,
     cardFingerprint: input.cardFingerprint,
-    firstAttempt: !firstAttemptAlreadyRecorded && input.action !== "retry",
+    firstAttempt:
+      isReplay
+        ? input.action !== "retry"
+        : !firstAttemptAlreadyRecorded && input.action !== "retry",
     attemptKind: input.action,
     outcome:
       outcome === "reveal"
@@ -1113,7 +1144,7 @@ export async function applyDailyAction(input: {
         : outcome === "retry"
           ? "skipped"
           : outcome,
-    stepIndex: 0,
+    stepIndex: actionStepIndex,
     answer: input.action === "answer" ? input.answer : undefined,
     session: next,
     expectedVersion: input.expectedVersion,
@@ -1126,8 +1157,10 @@ export async function applyDailyAction(input: {
       fen: privateCard.positionFen,
       correct,
       firstAttempt:
-        !firstAttemptAlreadyRecorded &&
-        (input.action === "answer" || input.action === "reveal"),
+        isReplay
+          ? input.action === "answer" || input.action === "reveal"
+          : !firstAttemptAlreadyRecorded &&
+            (input.action === "answer" || input.action === "reveal"),
       now,
       runtimePackageId: session.reservationIdentity.runtimePackageId,
       evidenceType:
@@ -1144,6 +1177,22 @@ export async function applyDailyAction(input: {
     }),
   });
   if (persisted === "conflict") throw new Error("daily_session_conflict");
+  if (persisted === "duplicate") {
+    const authoritative = await repository.getOwned(
+      input.sessionId,
+      input.user.userId,
+    );
+    if (!authoritative) throw new Error("daily_session_not_found");
+    return {
+      session: authoritative,
+      presentation: {
+        state: "committed",
+        feedback: { kind: "recorded", message: "Recorded." },
+      },
+      result: "accepted",
+      correct,
+    };
+  }
   return {
     session: next,
     presentation: reduced.presentation,
