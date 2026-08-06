@@ -45,7 +45,7 @@ assert.match(
 );
 assert.match(
   workflow,
-  /BLUNDR_RLS_TEST_PROJECT_REF="\$BLUNDR_RLS_FRESH_PROJECT_REF" node --preserve-symlinks --import tsx tests\/security\/pr01MigrationAuthority\.integration\.test\.ts/,
+  /BLUNDR_RLS_TEST_PROJECT_REF="\$BLUNDR_RLS_FRESH_PROJECT_REF" npm run test:pr02-remote-authority/,
 );
 assert.equal((workflow.match(/supabase@2\.111\.0/g) ?? []).length, 4);
 assert.equal(
@@ -55,7 +55,7 @@ assert.equal(
 assert.equal((workflow.match(/grep -q '\"_tag\":\"Error\"'/g) ?? []).length, 2);
 assert.match(
   workflow,
-  /grep -oE '\[0-9\]\{8\}\(\[0-9\]\{6\}\)\?_[^\n]+>"\$actual_file"/,
+  /grep -oE '\[0-9\]\{8\}\(\[0-9\]\{6\}\)\?_[^\n]+tail -n "\$expected_count" >"\$actual_file"/,
 );
 assert.doesNotMatch(workflow, /command_log" \| sort/);
 assert.equal(
@@ -81,27 +81,17 @@ assert.match(
   /supabase-rls-upgrade:[\s\S]*?BLUNDR_RLS_FRESH_PROJECT_REF:[\s\S]*?BLUNDR_RLS_UPGRADE_PROJECT_REF:[\s\S]*?BLUNDR_RLS_TEST_PROJECT_REF:/,
 );
 assertInOrder(
-  "BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=fresh-empty",
+  "BLUNDR_EXPECTED_MIGRATION_COUNT=0",
   'require_dry_run_migrations "$expected_migrations"',
   "run_supabase db push",
-  "BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=fresh-final",
+  "BLUNDR_EXPECTED_MIGRATION_COUNT=24 BLUNDR_EXPECTED_MIGRATION_HEAD=20260805140000",
 );
 assertInOrder(
-  "BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=upgrade-initial",
-  'hidden_migrations_dir="$(mktemp -d)"',
-  "trap restore_pr01_migrations EXIT",
-  'require_dry_run_migrations "$expected_prior_migrations"',
-  "BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=upgrade-prior21",
-  "npm run pr01:upgrade-preservation:seed",
-  'require_dry_run_migrations "$expected_pr01_migrations"',
-  "BLUNDR_PR01_REMOTE_MIGRATION_HISTORY_MODE=upgrade-final",
-  "npm run pr01:upgrade-preservation:verify",
+  "BLUNDR_EXPECTED_MIGRATION_COUNT=23 BLUNDR_EXPECTED_MIGRATION_HEAD=20260805130000",
+  'require_dry_run_migrations "$expected_pr02_migration"',
+  "run_supabase db push",
+  "BLUNDR_EXPECTED_MIGRATION_COUNT=24 BLUNDR_EXPECTED_MIGRATION_HEAD=20260805140000",
   "Run non-skippable upgraded authority matrix",
-  "Always clean scoped upgrade preservation snapshot",
-);
-assert.match(
-  workflow,
-  /if: always\(\)[\s\S]*?\[ ! -f "\$BLUNDR_PR01_SNAPSHOT_PATH" \][\s\S]*?npm run pr01:upgrade-preservation:cleanup/,
 );
 
-console.log("PR-01 Journey A/B workflow static assertions passed.");
+console.log("PR-02 Journey A/B workflow static assertions passed.");

@@ -58,7 +58,10 @@ test("PR-02 blocks spoofing, stale writes, duplicate actions, and reservation ra
     "daily_session_reservation_conflict",
     "jsonb_set(v_next,'{status}','\"in_progress\"'",
     "jsonb_array_length(v_cards)",
-    "on conflict (user_id,local_date) do nothing",
+    "on conflict do nothing",
+    "v_existing is distinct from v_deck",
+    "v_existing_fingerprint is distinct from p_reservation->>'deck_fingerprint'",
+    "jsonb_typeof(p_action->'learning_event') = 'object'",
   ])
     assert.match(migration, new RegExp(contract.replace(/[()]/g, "\\$&"), "i"));
 });

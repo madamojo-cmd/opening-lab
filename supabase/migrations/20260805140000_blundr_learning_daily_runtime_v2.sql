@@ -143,10 +143,10 @@ declare v_deck text := p_reservation->>'deck_id'; v_session text := p_reservatio
 begin
   if p_user_id is null or p_local_date is null or p_reservation is null or v_deck is null or v_session is null then raise exception using errcode='22023',message='invalid_daily_reservation_request'; end if;
   insert into public.blundr_daily_decks (deck_id,user_id,local_date,deck_fingerprint,public_cards,server_cards,content_version,composer_version,runtime_package_id,profile_version,access_policy_id,access_policy_version,time_zone,reservation_state,reserved_at)
-  values (v_deck,p_user_id,p_local_date,p_reservation->>'deck_fingerprint',p_reservation->'public_cards',p_reservation->'server_cards',p_reservation->>'content_version',p_reservation->>'composer_version',p_reservation->>'runtime_package_id',p_reservation->>'profile_version',p_reservation->>'access_policy_id',p_reservation->>'access_policy_version',p_reservation->>'time_zone','active',now()) on conflict (user_id,local_date) do nothing;
+  values (v_deck,p_user_id,p_local_date,p_reservation->>'deck_fingerprint',p_reservation->'public_cards',p_reservation->'server_cards',p_reservation->>'content_version',p_reservation->>'composer_version',p_reservation->>'runtime_package_id',p_reservation->>'profile_version',p_reservation->>'access_policy_id',p_reservation->>'access_policy_version',p_reservation->>'time_zone','active',now()) on conflict do nothing;
   select deck_id,deck_fingerprint into v_existing,v_existing_fingerprint from public.blundr_daily_decks where user_id=p_user_id and local_date=p_local_date;
-  if v_existing <> v_deck then raise exception using errcode='23505',message='daily_reservation_conflict'; end if;
-  if v_existing_fingerprint <> p_reservation->>'deck_fingerprint' then raise exception using errcode='23505',message='daily_reservation_payload_conflict'; end if;
+  if v_existing is distinct from v_deck then raise exception using errcode='23505',message='daily_reservation_conflict'; end if;
+  if v_existing_fingerprint is distinct from p_reservation->>'deck_fingerprint' then raise exception using errcode='23505',message='daily_reservation_payload_conflict'; end if;
   if exists(select 1 from public.blundr_daily_sessions where session_id=v_session and (deck_id<>v_deck or user_id<>p_user_id)) then raise exception using errcode='23505',message='daily_session_reservation_conflict'; end if;
   insert into public.blundr_daily_sessions (session_id,deck_id,user_id,state,state_version,reservation_generation) values (v_session,v_deck,p_user_id,p_reservation->'state',1,1) on conflict (session_id) do nothing;
   return jsonb_build_object('status','inserted','deckId',v_deck,'sessionId',v_session);
@@ -182,7 +182,7 @@ begin
   -- The caller supplies only an evidence payload built from the private,
   -- owned reservation. This nested function call shares this transaction: an
   -- invalid projection rolls back the attempt and session-version update.
-  if p_action ? 'learning_event' and p_action->'learning_event' is not null then
+  if p_action ? 'learning_event' and jsonb_typeof(p_action->'learning_event') = 'object' then
     v_projection := public.blundr_project_learning_evidence_v2(p_user_id, p_action->'learning_event');
   end if;
   select jsonb_array_length(v_cards) into v_total;
