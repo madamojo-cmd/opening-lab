@@ -85,6 +85,24 @@ test("v2 rewards use one atomic writer, an inventory ledger, and leased presenta
   assert.doesNotMatch(v2Migration, /blundr_apply_activity_completion\(/i);
 });
 
+test("v2 reward authority is account-scoped and deletion-safe by contract", () => {
+  assert.match(v2Migration, /perform pg_advisory_xact_lock/i);
+  assert.match(v2Migration, /where user_id=p_user_id/i);
+  assert.match(
+    v2Migration,
+    /where id=p_presentation_id and user_id=p_user_id/i,
+  );
+  assert.match(
+    v2Migration,
+    /revoke all on function[\s\S]*public\.blundr_apply_reward_transaction_v2[\s\S]*from public, anon, authenticated/i,
+  );
+  assert.match(v2Migration, /to service_role/i);
+  assert.match(
+    legacyMigration,
+    /references auth\.users\(id\) on delete cascade/i,
+  );
+});
+
 test("legacy client-authored reward and repertoire writes are disabled", () => {
   assert.match(legacyRewardRoute, /client_authored_rewards_disabled/);
   assert.match(legacyProgressRoute, /client_authored_repertoire_disabled/);
