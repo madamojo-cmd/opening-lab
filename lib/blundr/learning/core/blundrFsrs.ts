@@ -86,6 +86,8 @@ export function gradeBlundrRecall(input: {
   previous: StoredBlundrFsrsCard | null;
   correct: boolean;
   occurredAt: string;
+  hinted?: boolean;
+  elapsedMs?: number | null;
 }): {
   card: StoredBlundrFsrsCard;
   dueAt: string;
@@ -94,15 +96,29 @@ export function gradeBlundrRecall(input: {
   const now = new Date(input.occurredAt);
   if (Number.isNaN(now.getTime()))
     throw new Error("invalid_recall_occurred_at");
+  const selected = selectBlundrFsrsRating({
+    correct: input.correct,
+    hinted: input.hinted ?? false,
+    elapsedMs: input.elapsedMs ?? null,
+    priorReps: input.previous?.reps ?? 0,
+  });
+  const grade =
+    selected === "again"
+      ? Rating.Again
+      : selected === "hard"
+        ? Rating.Hard
+        : selected === "easy"
+          ? Rating.Easy
+          : Rating.Good;
   const result = scheduler.next(
     toCard(input.previous, now),
     now,
-    input.correct ? Rating.Good : Rating.Again,
+    grade,
   );
   const card = storeCard(result.card);
   return {
     card,
     dueAt: card.due,
-    rating: input.correct ? "good" : "again",
+    rating: selected === "again" ? "again" : "good",
   };
 }
