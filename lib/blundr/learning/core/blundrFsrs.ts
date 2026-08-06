@@ -45,7 +45,10 @@ export function selectBlundrFsrsRating(input: {
   hinted: boolean;
   elapsedMs: number | null;
   priorReps: number;
+  /** Only trusted Review authority may provide this; browser timing is never used. */
+  requestedRating?: BlundrReviewRating | null;
 }): BlundrReviewRating {
+  if (input.requestedRating) return input.requestedRating;
   const derived: BlundrReviewRating = !input.correct
     ? "again"
     : input.hinted || (input.elapsedMs !== null && input.elapsedMs > 20_000)
@@ -89,6 +92,7 @@ export function gradeBlundrRecall(input: {
   occurredAt: string;
   hinted?: boolean;
   elapsedMs?: number | null;
+  requestedRating?: BlundrReviewRating | null;
 }): {
   card: StoredBlundrFsrsCard;
   dueAt: string;
@@ -102,6 +106,7 @@ export function gradeBlundrRecall(input: {
     hinted: input.hinted ?? false,
     elapsedMs: input.elapsedMs ?? null,
     priorReps: input.previous?.reps ?? 0,
+    requestedRating: input.requestedRating,
   });
   const grade =
     selected === "again"

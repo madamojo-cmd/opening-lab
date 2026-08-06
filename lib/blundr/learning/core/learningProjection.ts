@@ -22,6 +22,7 @@ export function buildLearningProjection(input: {
   previousFsrs: StoredBlundrFsrsCard | null;
   hinted?: boolean;
   elapsedMs?: number | null;
+  requestedRating?: "again" | "hard" | "good" | "easy" | null;
   previousMastery: {
     recallAttemptCount: number;
     correctRecallCount: number;
@@ -58,6 +59,7 @@ export function buildLearningProjection(input: {
     occurredAt: input.occurredAt,
     hinted: input.hinted,
     elapsedMs: input.elapsedMs,
+    requestedRating: input.requestedRating,
   });
   const previous = input.previousMastery ?? {
     recallAttemptCount: 0,

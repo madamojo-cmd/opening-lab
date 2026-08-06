@@ -10,7 +10,7 @@ import {
 import { buildLearningProjection } from "./learningProjection";
 import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTelemetry.server";
 
-export async function appendLearningEventV2(input: {
+export async function prepareLearningEventV2(input: {
   userId: string;
   sessionId: string;
   attemptId: string;
@@ -28,13 +28,9 @@ export async function appendLearningEventV2(input: {
     elapsedMs?: number | null;
     retry?: boolean;
   };
-}): Promise<{
-  status: "inserted" | "duplicate";
-  eventId: string;
-  reviewRating?: "again" | "hard" | "good" | "easy";
-  reviewProjection?: unknown;
-  dueAt?: string;
-}> {
+  /** A requested rating is accepted only by the private Review authority. */
+  requestedRating?: "again" | "hard" | "good" | "easy";
+}): Promise<{ event: Record<string, unknown>; eventId: string }> {
   const eventId = createDeterministicIdentity("learning-event", [
     input.userId,
     input.attemptId,
@@ -44,9 +40,11 @@ export async function appendLearningEventV2(input: {
     input.attemptId,
     input.taxonomy,
   ]);
+  if (input.requestedRating && input.source !== "review")
+    throw new Error("requested_rating_requires_review");
   const client = createBlundrSupabaseAdminClient();
   if (!client) {
-    if (process.env.NODE_ENV === "test") return { status: "inserted", eventId };
+    if (process.env.NODE_ENV === "test") return { event: {}, eventId };
     throw new Error("learning_event_persistence_unavailable");
   }
   const [review, mastery] = await Promise.all([
@@ -87,6 +85,7 @@ export async function appendLearningEventV2(input: {
     occurredAt: input.now,
     hinted: input.reviewEvidence?.hinted ?? input.taxonomy === "cue_revealed",
     elapsedMs: input.reviewEvidence?.elapsedMs ?? null,
+    requestedRating: input.requestedRating,
     previousFsrs: (review.data?.srs_state as never) ?? null,
     previousMastery: mastery.data
       ? {
@@ -140,6 +139,7 @@ export async function appendLearningEventV2(input: {
       input.reviewEvidence?.evidenceType ?? "answer",
       String(input.reviewEvidence?.hinted ?? false),
       String(input.reviewEvidence?.elapsedMs ?? ""),
+      input.requestedRating ?? "derived",
     ]),
     correct: input.correct,
     review_rating:
@@ -165,6 +165,7 @@ export async function appendLearningEventV2(input: {
       ),
       taskId: input.attemptId,
       reservationId: input.sessionId,
+      ratingRequested: Boolean(input.requestedRating),
     },
     access_decision: input.access.decision,
     expected_review_state_version: Number(
@@ -177,6 +178,24 @@ export async function appendLearningEventV2(input: {
       ? { fsrs: projection.fsrs, mastery: projection.mastery }
       : {}),
   };
+  return { event, eventId };
+}
+
+export async function appendLearningEventV2(
+  input: Parameters<typeof prepareLearningEventV2>[0],
+): Promise<{
+  status: "inserted" | "duplicate";
+  eventId: string;
+  reviewRating?: "again" | "hard" | "good" | "easy";
+  reviewProjection?: unknown;
+  dueAt?: string;
+}> {
+  const { event, eventId } = await prepareLearningEventV2(input);
+  const client = createBlundrSupabaseAdminClient();
+  if (!client) {
+    if (process.env.NODE_ENV === "test") return { status: "inserted", eventId };
+    throw new Error("learning_event_persistence_unavailable");
+  }
   const inserted = await client.rpc("blundr_project_learning_evidence_v2", {
     p_user_id: input.userId,
     p_event: event,
