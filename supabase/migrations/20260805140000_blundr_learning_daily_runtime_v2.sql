@@ -48,7 +48,11 @@ begin
   ) values (
     v_event_id,p_user_id,p_event->>'idempotency_key',p_event->>'schema_version',p_event->>'session_id',p_event->>'attempt_id',(p_event->>'occurred_at')::timestamptz,p_event->>'taxonomy',p_event->>'position_key',p_event->>'canonical_fen',p_event->>'opening_id',p_event->>'expected_move_uci',p_event->>'repertoire_side',p_event->>'move_order_key',p_event->>'source',coalesce((p_event->>'first_attempt')::boolean,false),p_event->'finding',p_event->>'content_version',p_event->>'classifier_version',p_event->>'evidence_kind',nullif(p_event->>'exposure_id',''),p_event->>'played_move_uci',p_event->>'evidence_version','blundr-fsrs-v1',now(),p_event->>'authority_fingerprint'
   ) on conflict do nothing returning true into v_inserted;
-  if not coalesce(v_inserted,false) then return jsonb_build_object('status','duplicate','eventId',v_event_id); end if;
+  if not coalesce(v_inserted,false) then
+    select jsonb_build_object('authority_fingerprint',authority_fingerprint) into v_existing from public.blundr_learning_events where event_id=v_event_id or (user_id=p_user_id and idempotency_key=p_event->>'idempotency_key') limit 1;
+    if v_existing->>'authority_fingerprint' = p_event->>'authority_fingerprint' then return jsonb_build_object('status','duplicate','eventId',v_event_id); end if;
+    raise exception using errcode='23505',message='learning_event_idempotency_conflict';
+  end if;
   if p_event->>'evidence_kind' <> 'recall_attempt' or not v_first_recall then return jsonb_build_object('status','inserted','eventId',v_event_id,'projected',false); end if;
   insert into public.blundr_review_states (user_id,opening_id,play_key,due_at,srs_state,last_attempt_id,last_outcome,fsrs_algorithm_version,fsrs_state_version,fsrs_desired_retention,review_state_version,last_recall_event_id,updated_at)
   values (p_user_id,p_event->>'opening_id',p_event->>'move_order_key',(p_event#>>'{fsrs,dueAt}')::timestamptz,p_event#>'{fsrs,card}',p_event->>'attempt_id',p_event#>>'{fsrs,rating}','blundr-fsrs-v1',1,0.90,1,v_event_id,now())
@@ -111,7 +115,7 @@ begin
     v_projection := public.blundr_project_learning_evidence_v2(p_user_id, p_action->'learning_event');
   end if;
   select jsonb_array_length(v_cards) into v_total;
-  select count(distinct card_fingerprint) into v_completed from public.blundr_daily_attempts where user_id=p_user_id and session_id=p_session_id and outcome='correct';
+  select count(distinct attempt.card_fingerprint) into v_completed from public.blundr_daily_attempts attempt where user_id=p_user_id and session_id=p_session_id and outcome='correct' and (not exists(select 1 from jsonb_array_elements(v_cards) card where card->>'cardFingerprint'=attempt.card_fingerprint and card ? 'privateSteps') or attempt.step_id=attempt.card_fingerprint);
   if v_completed >= v_total then
     update public.blundr_daily_sessions set completed_at=coalesce(completed_at,now()),state=jsonb_set(state,'{status}','"completed"'::jsonb,true) where session_id=p_session_id and user_id=p_user_id;
     v_completion_id := 'daily-completion:' || p_session_id;
