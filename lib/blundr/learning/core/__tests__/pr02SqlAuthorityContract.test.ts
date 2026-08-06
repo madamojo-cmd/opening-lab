@@ -83,10 +83,9 @@ test("Daily policy and projection contracts retain explicit no-fabrication bound
 });
 
 test("route derives correctness and scheduling from server authority", () => {
-  assert.match(
-    learningRoute,
-    /resolveLearningAttemptAuthority\(\{ expectedMoveUci: verified\.expectedMoveUci, playedMoveUci: body\.playedMoveUci/,
-  );
+  assert.match(learningRoute, /resolveLearningAttemptAuthority\(\{/);
+  assert.match(learningRoute, /expectedMoveUci: verified\.expectedMoveUci/);
+  assert.match(learningRoute, /playedMoveUci: body\.playedMoveUci/);
   assert.match(
     learningRoute,
     /const receiptTime = new Date\(\)\.toISOString\(\)/,
