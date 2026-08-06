@@ -91,7 +91,7 @@ export function gradeBlundrRecall(input: {
 }): {
   card: StoredBlundrFsrsCard;
   dueAt: string;
-  rating: "again" | "good";
+  rating: "again" | "hard" | "good" | "easy";
 } {
   const now = new Date(input.occurredAt);
   if (Number.isNaN(now.getTime()))
@@ -119,6 +119,6 @@ export function gradeBlundrRecall(input: {
   return {
     card,
     dueAt: card.due,
-    rating: selected === "again" ? "again" : "good",
+    rating: selected,
   };
 }

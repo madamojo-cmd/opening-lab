@@ -986,7 +986,8 @@ export async function applyDailyAction(input: {
         fen: step.positionFen,
         correct: answerCorrect,
         firstAttempt:
-          !current.firstAttemptRecorded && input.action === "answer",
+          !current.firstAttemptRecorded &&
+          (input.action === "answer" || input.action === "reveal"),
         now,
         runtimePackageId: session.reservationIdentity.runtimePackageId,
       }),
@@ -1090,7 +1091,9 @@ export async function applyDailyAction(input: {
       card: privateCard,
       fen: privateCard.positionFen,
       correct,
-      firstAttempt: !firstAttemptAlreadyRecorded && input.action === "answer",
+      firstAttempt:
+        !firstAttemptAlreadyRecorded &&
+        (input.action === "answer" || input.action === "reveal"),
       now,
       runtimePackageId: session.reservationIdentity.runtimePackageId,
     }),
