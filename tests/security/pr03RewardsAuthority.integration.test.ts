@@ -231,16 +231,16 @@ async function main() {
     });
     assert.equal(claim.error, null);
     assert.ok(claim.data?.id);
-    assert.equal(
-      (
-        await service.rpc("blundr_claim_reward_presentation_v2", {
-          p_user_id: userAId,
-          p_claimed_by: `other-${scope}`,
-          p_lease_seconds: 60,
-        })
-      ).data?.id,
-      undefined,
+    const otherClaim = await service.rpc(
+      "blundr_claim_reward_presentation_v2",
+      {
+        p_user_id: userAId,
+        p_claimed_by: `other-${scope}`,
+        p_lease_seconds: 60,
+      },
     );
+    assert.equal(otherClaim.error, null);
+    assert.notEqual(otherClaim.data?.id, claim.data.id);
     assert.ok(
       (
         await userB.rpc("blundr_mark_reward_presentation_v2", {
@@ -273,6 +273,13 @@ async function main() {
       ).error,
       null,
     );
+    const acknowledged = await service
+      .from("blundr_reward_presentations_v2")
+      .select("id,acknowledged_at")
+      .eq("id", claim.data.id)
+      .single();
+    assert.equal(acknowledged.error, null);
+    assert.ok(acknowledged.data?.acknowledged_at);
 
     const seedTx = await service
       .from("blundr_reward_transactions_v2")
@@ -288,30 +295,26 @@ async function main() {
     assert.equal(seedTx.error, null);
     assert.equal(
       (
-        await service
-          .from("blundr_reward_inventory_v2")
-          .insert({
-            user_id: userAId,
-            inventory_kind: "opening_fragment",
-            quantity: 3,
-            version: 1,
-          })
+        await service.from("blundr_reward_inventory_v2").insert({
+          user_id: userAId,
+          inventory_kind: "opening_fragment",
+          quantity: 3,
+          version: 1,
+        })
       ).error,
       null,
     );
     assert.equal(
       (
-        await service
-          .from("blundr_reward_inventory_events_v2")
-          .insert({
-            transaction_id: seedTx.data!.id,
-            user_id: userAId,
-            event_key: `grant-${scope}`,
-            event_kind: "grant",
-            inventory_kind: "opening_fragment",
-            quantity_delta: 3,
-            policy_version: "rewards-v2-test",
-          })
+        await service.from("blundr_reward_inventory_events_v2").insert({
+          transaction_id: seedTx.data!.id,
+          user_id: userAId,
+          event_key: `grant-${scope}`,
+          event_kind: "grant",
+          inventory_kind: "opening_fragment",
+          quantity_delta: 3,
+          policy_version: "rewards-v2-test",
+        })
       ).error,
       null,
     );
