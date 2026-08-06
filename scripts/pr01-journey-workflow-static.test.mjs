@@ -45,7 +45,7 @@ assert.match(
 );
 assert.match(
   workflow,
-  /BLUNDR_RLS_TEST_PROJECT_REF="\$BLUNDR_RLS_FRESH_PROJECT_REF" npm run test:pr02-remote-authority/,
+  /BLUNDR_RLS_TEST_PROJECT_REF="\$BLUNDR_RLS_FRESH_PROJECT_REF" npm run test:pr03-remote-authority/,
 );
 assert.equal((workflow.match(/supabase@2\.111\.0/g) ?? []).length, 4);
 assert.equal(
@@ -84,14 +84,14 @@ assertInOrder(
   "BLUNDR_EXPECTED_MIGRATION_COUNT=0",
   'require_dry_run_migrations "$expected_migrations"',
   "run_supabase db push",
-  "BLUNDR_EXPECTED_MIGRATION_COUNT=24 BLUNDR_EXPECTED_MIGRATION_HEAD=20260805140000",
+  "BLUNDR_EXPECTED_MIGRATION_COUNT=25 BLUNDR_EXPECTED_MIGRATION_HEAD=20260805150000",
 );
 assertInOrder(
-  "BLUNDR_EXPECTED_MIGRATION_COUNT=23 BLUNDR_EXPECTED_MIGRATION_HEAD=20260805130000",
-  'require_dry_run_migrations "$expected_pr02_migration"',
-  "run_supabase db push",
   "BLUNDR_EXPECTED_MIGRATION_COUNT=24 BLUNDR_EXPECTED_MIGRATION_HEAD=20260805140000",
+  'require_dry_run_migrations "$expected_pr03_migration"',
+  "run_supabase db push",
+  "BLUNDR_EXPECTED_MIGRATION_COUNT=25 BLUNDR_EXPECTED_MIGRATION_HEAD=20260805150000",
   "Run non-skippable upgraded authority matrix",
 );
 
-console.log("PR-02 Journey A/B workflow static assertions passed.");
+console.log("PR-03 Journey A/B workflow static assertions passed.");
