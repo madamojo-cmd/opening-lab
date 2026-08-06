@@ -9,6 +9,7 @@ import { BLUNDR_ANALYTICS_EVENTS } from "@/lib/blundr/analytics/blundrAnalyticsE
 import { trackBlundrAnalyticsEvent } from "@/lib/blundr/analytics/blundrAnalyticsService";
 import { BLUNDR_DAILY_RING_REFRESH_EVENT } from "@/lib/blundr/daily-rings/dailyRingRefreshSignal";
 import { useOnboardingAuthSession } from "@/lib/blundr/onboarding/useOnboardingAuthSession";
+import { RewardPresentationHost } from "@/components/rewards/RewardPresentationHost";
 
 const EXEMPT_PREFIXES = [
   "/signup",
@@ -154,7 +155,12 @@ export function AuthenticatedAccountHydrationGate({
     );
   }
   if (state === "ready" && auth.status === "authenticated")
-    return <>{children}</>;
+    return (
+      <>
+        {children}
+        <RewardPresentationHost />
+      </>
+    );
   if (state === "error") {
     return (
       <main className="min-h-screen bg-stone-50 p-6">
