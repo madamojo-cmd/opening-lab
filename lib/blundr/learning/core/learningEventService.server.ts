@@ -10,7 +10,7 @@ import {
 import { buildLearningProjection } from "./learningProjection";
 import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTelemetry.server";
 
-export async function appendLearningEventV2(input: {
+export type LearningEventV2ProjectionInput = {
   userId: string;
   sessionId: string;
   attemptId: string;
@@ -28,12 +28,13 @@ export async function appendLearningEventV2(input: {
     elapsedMs?: number | null;
     retry?: boolean;
   };
-}): Promise<{
-  status: "inserted" | "duplicate";
+};
+
+export async function prepareLearningEventV2(
+  input: LearningEventV2ProjectionInput,
+): Promise<{
   eventId: string;
-  reviewRating?: "again" | "hard" | "good" | "easy";
-  reviewProjection?: unknown;
-  dueAt?: string;
+  event: Record<string, unknown>;
 }> {
   const eventId = createDeterministicIdentity("learning-event", [
     input.userId,
@@ -45,10 +46,7 @@ export async function appendLearningEventV2(input: {
     input.taxonomy,
   ]);
   const client = createBlundrSupabaseAdminClient();
-  if (!client) {
-    if (process.env.NODE_ENV === "test") return { status: "inserted", eventId };
-    throw new Error("learning_event_persistence_unavailable");
-  }
+  if (!client) throw new Error("learning_event_persistence_unavailable");
   const [review, mastery] = await Promise.all([
     client
       .from("blundr_review_states")
@@ -177,6 +175,28 @@ export async function appendLearningEventV2(input: {
       ? { fsrs: projection.fsrs, mastery: projection.mastery }
       : {}),
   };
+  return { eventId, event };
+}
+
+export async function appendLearningEventV2(
+  input: LearningEventV2ProjectionInput,
+): Promise<{
+  status: "inserted" | "duplicate";
+  eventId: string;
+  reviewRating?: "again" | "hard" | "good" | "easy";
+  reviewProjection?: unknown;
+  dueAt?: string;
+}> {
+  const eventId = createDeterministicIdentity("learning-event", [
+    input.userId,
+    input.attemptId,
+  ]);
+  const client = createBlundrSupabaseAdminClient();
+  if (!client) {
+    if (process.env.NODE_ENV === "test") return { status: "inserted", eventId };
+    throw new Error("learning_event_persistence_unavailable");
+  }
+  const { event } = await prepareLearningEventV2(input);
   const inserted = await client.rpc("blundr_project_learning_evidence_v2", {
     p_user_id: input.userId,
     p_event: event,

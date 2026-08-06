@@ -46,6 +46,12 @@ import {
   shouldPersistRemoteLearningEvent,
 } from "@/lib/blundr/learning/learningEvents";
 import type { LearningEvent } from "@/lib/blundr/learning/learningEvents";
+import {
+  clearAuthoritativeTrainerSessionResumes,
+  commitAuthoritativeTrainerAction,
+  reserveAuthoritativeTrainerSession,
+  type AuthoritativeTrainerSession,
+} from "@/lib/blundr/trainerCompletion/trainerCompletionClient";
 import { loadOpponentVariationMemory, recordOpponentChoice } from "@/lib/blundr/opponent/opponentVariationMemory";
 import { selectOpponentCandidateWithVariation } from "@/lib/blundr/opponent/opponentVariationPolicy";
 import { buildCoachContext } from "@/lib/blundr/coach/coachContextBuilder";
@@ -156,6 +162,8 @@ import { isBlundrDebugEnabled } from "@/lib/blundr/debug/trainerDebugGuards";
 import type { DebugEvent, TrainerDebugSnapshot } from "@/lib/blundr/debug/trainerDebugTypes";
 import type { UserTrainingProfile } from "@/lib/blundr/accounts/accountTypes";
 import { getLocalAccountCurrentUserId, getLocalTrainingProfile } from "@/lib/blundr/accounts/localAccountStorage";
+import { getBlundrStorageModeSetting } from "@/lib/blundr/backend/backendEnv";
+import { BLUNDR_LOCAL_DEMO_USER_ID } from "@/lib/blundr/persistence/persistenceKeys";
 import { BLUNDR_BOARD_PREFERENCES_CHANGED_EVENT } from "@/lib/blundr/board/boardPreferenceEvents";
 import { readLocalBoardPreferences, writeLocalBoardPreferences } from "@/lib/blundr/board/boardPreferenceService";
 import { shouldShowOnboarding } from "@/lib/blundr/onboarding/onboardingRouting";
@@ -1329,6 +1337,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
   const [customRepertoires,setCustomRepertoires]=useState<Repertoire[]>([]);
   const [runtimeRepertoires,setRuntimeRepertoires]=useState<Repertoire[]>(()=>buildRuntimePlaceholderRepertoires());
   const [runtimeTrainingSessionId,setRuntimeTrainingSessionId]=useState<string>(()=>createLearningSessionId());
+  const [authoritativeTrainerSession,setAuthoritativeTrainerSession]=useState<AuthoritativeTrainerSession|null>(null);
   const [selectedRepertoireId,setSelectedRepertoireId]=useState(initialSelectedRepertoireId);
   const [continuationSessionId,setContinuationSessionId]=useState<string|null>(null);
   const [recentRuntimeTrainingLineKeys,setRecentRuntimeTrainingLineKeys]=useState<string[]>([]);
@@ -1489,6 +1498,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
   const moveQualityCacheRef=useRef<Map<string,MoveQualityResult>>(new Map());
   const learningSessionIdRef=useRef<string>(trainingSessionId);
   const trainerLearningPersistenceGateRef=useRef(new AuthoritativeLearningEventGate());
+  const authoritativeTrainerSessionRef=useRef<AuthoritativeTrainerSession|null>(null);
   const positionStartedAtRef=useRef<number>(Date.now());
   const lastMoveQualityEventKeyRef=useRef<string>("");
   const lastTeachingCueEventKeyRef=useRef<string>("");
@@ -1648,6 +1658,37 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
   const selectedRuntimeLineId=selectedRuntimeTrainingLineSelection?.selectedLineId??canonicalSelectedRepertoireId;
   const selectedRuntimeLineKey=selectedRuntimeTrainingLineSelection?.selectedLineKey??selectedRuntimeLineId;
   const selectedRuntimeLinePlaySequenceUci=selectedRuntimeTrainingLineSelection?.selectedPlaySequenceUci??[];
+  useEffect(()=>{
+    const selection=selectedRuntimeTrainingLineSelection;
+    const localDemo=process.env.NODE_ENV!=="production"&&getBlundrStorageModeSetting()==="local_demo"&&getLocalAccountCurrentUserId()===BLUNDR_LOCAL_DEMO_USER_ID;
+    if(localDemo){
+      authoritativeTrainerSessionRef.current=null;
+      setAuthoritativeTrainerSession(null);
+      return;
+    }
+    if(!selection||trainingMode!=="restricted"){
+      authoritativeTrainerSessionRef.current=null;
+      setAuthoritativeTrainerSession(null);
+      return;
+    }
+    let cancelled=false;
+    authoritativeTrainerSessionRef.current=null;
+    setAuthoritativeTrainerSession(null);
+    void reserveAuthoritativeTrainerSession({
+      openingId:canonicalSelectedRepertoireId,
+      lineId:selection.selectedLineId,
+    }).then((session)=>{
+      if(cancelled)return;
+      authoritativeTrainerSessionRef.current=session;
+      setAuthoritativeTrainerSession(session);
+    }).catch(()=>{
+      if(cancelled)return;
+      authoritativeTrainerSessionRef.current=null;
+      setAuthoritativeTrainerSession(null);
+      pushRuntimeCriticalIssue("trainer_session_persistence_unavailable");
+    });
+    return()=>{cancelled=true};
+  },[canonicalSelectedRepertoireId,selectedRuntimeTrainingLineSelection?.selectedLineId,trainingMode,runtimeTrainingSessionId]);
   const selectedRuntimeLinePlyLength=selectedRuntimeLinePlaySequenceUci.length;
   const runtimeOpeningIdForFrame=useMemo(
     ()=>resolveRuntimeOpeningId(canonicalSelectedRepertoireId),
@@ -4324,7 +4365,21 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
   }
   async function persistTrainerOutcome(key:string,input:Partial<LearningEvent>&Pick<LearningEvent,"type"|"source">){
     setTrainerPersistencePending(true);
-    const result=await trainerLearningPersistenceGateRef.current.persist(key,()=>createTrackedLearningEvent(input),persistLearningEventRemotely);
+    const result=await trainerLearningPersistenceGateRef.current.persist(
+      key,
+      ()=>createTrackedLearningEvent(input),
+      async(event)=>{
+        if(trainingMode!=="restricted")return persistLearningEventRemotely(event);
+        const session=authoritativeTrainerSessionRef.current;
+        const localDemo=process.env.NODE_ENV!=="production"&&getBlundrStorageModeSetting()==="local_demo"&&getLocalAccountCurrentUserId()===BLUNDR_LOCAL_DEMO_USER_ID;
+        if(localDemo)return persistLearningEventRemotely(event);
+        if(!session||session.terminal)throw new Error("trainer_session_not_ready");
+        const committed=await commitAuthoritativeTrainerAction({session,event});
+        authoritativeTrainerSessionRef.current=committed.session;
+        setAuthoritativeTrainerSession(committed.session);
+        return committed.receipt;
+      },
+    );
     if(result.status==="in_flight"){setFeedback("Saving this training result. Please wait.");return false;}
     setTrainerPersistencePending(false);
     if(result.status==="already_accepted"){
@@ -5160,8 +5215,9 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
   useEffect(()=>{if(activeTab==="train"&&trainingMode==="restricted"&&isUserTurn&&expectedMoveResolution.shouldTransitionToContinuation&&guidedCoveragePolicy.guidedCompleteAllowed&&!bookComplete&&!game.isGameOver()){setBookComplete(true);setFeedback("Guided line complete. Continue from here against the bot, or restart the opening.");setBrain(p=>({...p,book:"complete",source:guidedCoveragePolicy.guidedCoverageState,gpt:p.gpt}))}},[activeTab,trainingMode,isUserTurn,expectedMoveResolution.shouldTransitionToContinuation,guidedCoveragePolicy.guidedCompleteAllowed,guidedCoveragePolicy.guidedCoverageState,bookComplete,fen]);
   useEffect(()=>{
     const restrictedLineCompleted=isTempoCompletionEligible({trainingMode,bookComplete,branchCompleteEligible:branchCompleteEligibleNow,terminalProof:stage2TerminalProof.proven});
-    if(activeTab!=="train"||!restrictedLineCompleted)return;
-    const completionKey=`${selectedRepertoireId}:${runtimeTrainingSessionId}:${normalizeFen(fen)}:opening_run_completed`;
+    const terminalCompletionId=authoritativeTrainerSession?.terminalCompletionId??null;
+    if(activeTab!=="train"||!restrictedLineCompleted||!authoritativeTrainerSession?.terminal||!terminalCompletionId)return;
+    const completionKey=terminalCompletionId;
     if(openingRunAwardKeyRef.current===completionKey)return;
     openingRunAwardKeyRef.current=completionKey;
     let cancelled=false;
@@ -5174,7 +5230,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
         userId,
         source:"opening_run_completed",
         openingId:selectedRepertoireId,
-        dailySessionId:learningSessionIdRef.current,
+        dailySessionId:terminalCompletionId,
         completionId:completionKey,
         createdAt:now,
       },
@@ -5186,9 +5242,14 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       setLatestCompletionResult(result);
       if(result.ok){
         setRepertoireProgress(result.repertoireProgress);
+      }else if(openingRunAwardKeyRef.current===completionKey){
+        openingRunAwardKeyRef.current="";
       }
     }).catch((error)=>{
       if(cancelled)return;
+      if(openingRunAwardKeyRef.current===completionKey){
+        openingRunAwardKeyRef.current="";
+      }
       setLatestCompletionResult({
         ok:false,
         code:"completion_failed",
@@ -5196,7 +5257,7 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
       });
     });
     return()=>{cancelled=true};
-  },[activeTab,bookComplete,branchCompleteEligibleNow,stage2TerminalProof.proven,trainingMode,selectedRepertoireId,runtimeTrainingSessionId,fen,repertoireProgress,onboardingProfile]);
+  },[activeTab,bookComplete,branchCompleteEligibleNow,stage2TerminalProof.proven,trainingMode,selectedRepertoireId,authoritativeTrainerSession?.terminal,authoritativeTrainerSession?.terminalCompletionId,fen,repertoireProgress,onboardingProfile]);
   useEffect(()=>{
     const continuationMoveCompleted=isBatteryCompletionEligible({trainingMode,userEnteredContinuation:userExplicitlyEnteredContinuation,moveUci:lastContinuationUserMoveRating?.moveUci,legal:Boolean(lastContinuationUserMoveRating?.legal),stale:Boolean(lastContinuationUserMoveRating?.stale)});
     if(activeTab!=="train"||!continuationMoveCompleted||!lastContinuationUserMoveRating)return;
@@ -5523,8 +5584,8 @@ function BlundrApp({ initialTab = "home", initialOpeningId = null }: { initialTa
     maiaOpponentRequestSeqRef.current=0;
     maiaTimelineSeqRef.current=0;
   }
-  function selectRepertoire(id:string, options:{allowLocked?:boolean}={}){const startFen=new Chess().fen();const canonicalId=resolveStage2CanonicalOpeningId(id)??id;const isLocked=Boolean(repertoireProgress.lockedOpeningIds.includes(canonicalId));if(isLocked&&!options.allowLocked){setFeedback("Keep training to unlock this opening.");setActiveTab("home");return}const nextLineSessionId=createLearningSessionId();clearProjectiveTacticOverlay("opening_switch");setSelectedRepertoireId(canonicalId);setRuntimeTrainingSessionId(nextLineSessionId);refreshRuntimeTrainingLineSelection(canonicalId,recentRuntimeTrainingLineKeys,nextLineSessionId);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setMoveHistoryUci([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
-  function resetBoard(){const startFen=new Chess().fen();const nextLineSessionId=createLearningSessionId();clearProjectiveTacticOverlay("restart");setRuntimeTrainingSessionId(nextLineSessionId);refreshRuntimeTrainingLineSelection(selectedRepertoireId,recentRuntimeTrainingLineKeys,nextLineSessionId);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setMoveHistoryUci([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveTab("train");bumpRuntimeFrame()}
+  function selectRepertoire(id:string, options:{allowLocked?:boolean}={}){const startFen=new Chess().fen();const canonicalId=resolveStage2CanonicalOpeningId(id)??id;const isLocked=Boolean(repertoireProgress.lockedOpeningIds.includes(canonicalId));if(isLocked&&!options.allowLocked){setFeedback("Keep training to unlock this opening.");setActiveTab("home");return}const nextLineSessionId=createLearningSessionId();clearAuthoritativeTrainerSessionResumes();clearProjectiveTacticOverlay("opening_switch");setSelectedRepertoireId(canonicalId);setRuntimeTrainingSessionId(nextLineSessionId);refreshRuntimeTrainingLineSelection(canonicalId,recentRuntimeTrainingLineKeys,nextLineSessionId);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Opening loaded. Play the restricted training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setMoveHistoryUci([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveBoardView("plan");setActiveTab("train");bumpRuntimeFrame()}
+  function resetBoard(){const startFen=new Chess().fen();const nextLineSessionId=createLearningSessionId();clearAuthoritativeTrainerSessionResumes();clearProjectiveTacticOverlay("restart");setRuntimeTrainingSessionId(nextLineSessionId);refreshRuntimeTrainingLineSelection(selectedRepertoireId,recentRuntimeTrainingLineKeys,nextLineSessionId);setFen(startFen);resetHistory(startFen);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setFeedback("Restarted. Find the first training move.");setLastMove(null);setLastMoveSan("");setLastMoveColor(null);setReviewingFen(null);resetBranchAndContinuationState();setMoveHistory([]);setMoveHistoryUci([]);setTrainingMode("restricted");setTrainerPhase("ready_for_user");setBookComplete(false);clearPendingOpponentReplyRequest({clearStaleIssue:true});setAnnotation(blankAnnotation());setEnginePreview(null);setBrain(p=>({...p,book:"ready",lichess:"ready",source:"rule visual",note:"Manual reveal/debug only"}));setActiveTab("train");bumpRuntimeFrame()}
   function recordPosition(nextFen:string){const nextIndex=historyIndex+1;setPositionHistory(prev=>[...prev.slice(0,nextIndex),nextFen]);setHistoryIndex(nextIndex)}
   function jumpHistory(direction:-1|1){const next=Math.max(0,Math.min(positionHistory.length-1,historyIndex+direction));if(next===historyIndex)return;clearProjectiveTacticOverlay("reset");setHistoryIndex(next);setFen(positionHistory[next]);setSelectedSquare(null);setPendingPromotion(null);setPromotionAuthorityDebug(null);setLastMove(null);setLastMoveSan("");setLastMoveColor(null);clearPendingOpponentReplyRequest({clearStaleIssue:true});setOpponentCue(null);setOpponentVariationDebug(null);setBookComplete(false);setFeedback(next===positionHistory.length-1?"Returned to the live position.":`Reviewing previous position ${next} of ${positionHistory.length-1}. Use the arrows to return to live play.`);bumpRuntimeFrame()}
   async function playOpponentMove(request:PendingOpponentRequest){

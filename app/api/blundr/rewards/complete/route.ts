@@ -6,9 +6,12 @@ import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTe
 
 export const dynamic = "force-dynamic";
 
-// PR-04 will add Trainer and continuation completion evidence. Until then,
-// Daily is the only completion source this endpoint can verify authoritatively.
-const SOURCES = new Set(["daily_blundr_deck_completed"]);
+// Restricted Trainer and Daily both have durable server-owned terminal
+// evidence. Free-play continuation remains deliberately unsupported.
+const SOURCES = new Set([
+  "opening_run_completed",
+  "daily_blundr_deck_completed",
+]);
 
 function text(value: unknown): string {
   return String(value ?? "").trim();
