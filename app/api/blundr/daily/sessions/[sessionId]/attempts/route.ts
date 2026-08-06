@@ -27,7 +27,12 @@ export async function POST(
     expectedVersion?: number;
     actionId?: string;
   } | null;
-  if (!body?.cardFingerprint || !body.actionId || !Number.isInteger(body.expectedVersion))
+  if (
+    !body?.cardFingerprint ||
+    typeof body.actionId !== "string" ||
+    !body.actionId ||
+    !Number.isInteger(body.expectedVersion)
+  )
     return NextResponse.json({ error: "invalid_attempt" }, { status: 400 });
   try {
     const result = await applyDailyAction({

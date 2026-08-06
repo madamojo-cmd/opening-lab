@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { toPublicDailySession } from "../productionDailyProjection";
+import {
+  productionDailyActionId,
+  toPublicDailySession,
+} from "../productionDailyProjection";
 import type {
   ProductionDailySession,
   ProductionDailyPrivateStep,
@@ -117,4 +120,22 @@ test("production Daily exposes only the current multi-step projection", () => {
   assert.equal(serialized.includes(privateSteps[1].positionFen), false);
   assert.equal(serialized.includes("acceptedMoves"), false);
   assert.equal(serialized.includes("privateSteps"), false);
+  assert.equal(
+    projected.publicCards[0].actionId,
+    productionDailyActionId({
+      sessionId: session.sessionId,
+      cardFingerprint: String(session.publicCards[0].cardFingerprint),
+      stepIndex: 0,
+      version: session.version,
+    }),
+  );
+  assert.equal(
+    toPublicDailySession(session).publicCards[0].actionId,
+    projected.publicCards[0].actionId,
+  );
+  assert.notEqual(
+    toPublicDailySession({ ...session, version: session.version + 1 })
+      .publicCards[0].actionId,
+    projected.publicCards[0].actionId,
+  );
 });

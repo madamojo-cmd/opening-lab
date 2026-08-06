@@ -60,8 +60,9 @@ export type ProductionDailySession = {
 
 export type ProductionDailyPublicSession = Omit<
   ProductionDailySession,
-  "userId" | "privateCards" | "state"
+  "userId" | "privateCards" | "state" | "publicCards"
 > & {
+  publicCards: readonly (ProductionDailyPublicCard & { actionId: string })[];
   state: {
     currentIndex: number;
     completedCardIds: readonly string[];

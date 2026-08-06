@@ -2,6 +2,21 @@ import type {
   ProductionDailyPublicSession,
   ProductionDailySession,
 } from "./productionDailyTypes";
+import { createDeterministicIdentity } from "@/lib/blundr/contracts";
+
+export function productionDailyActionId(input: {
+  sessionId: string;
+  cardFingerprint: string;
+  stepIndex: number;
+  version: number;
+}): string {
+  return createDeterministicIdentity("daily-action", [
+    input.sessionId,
+    input.cardFingerprint,
+    input.stepIndex,
+    input.version,
+  ]);
+}
 
 export function toPublicDailySession(
   session: ProductionDailySession,
@@ -30,7 +45,17 @@ export function toPublicDailySession(
     sessionId: session.sessionId,
     deckId: session.deckId,
     dateKey: session.dateKey,
-    publicCards,
+    publicCards: publicCards.map((card) => ({
+      ...card,
+      actionId: productionDailyActionId({
+        sessionId: session.sessionId,
+        cardFingerprint: String(card.cardFingerprint),
+        stepIndex:
+          session.state.activityProgress?.[card.cardFingerprint]?.stepIndex ??
+          0,
+        version: session.version,
+      }),
+    })),
     reservationIdentity: session.reservationIdentity,
     version: session.version,
     completedAt: session.completedAt,

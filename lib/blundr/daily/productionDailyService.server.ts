@@ -34,7 +34,10 @@ import { buildPunishmentActivity } from "./activities/punishTheMistake/punishmen
 import { buildTranspositionActivity } from "./activities/samePositionDifferentRoute/transpositionActivityBuilder";
 import { replayRoute } from "./activities/samePositionDifferentRoute/transpositionGroupBuilder";
 import { legalMoves } from "./activities/activityUtils";
-import { toPublicDailySession } from "./productionDailyProjection";
+import {
+  productionDailyActionId,
+  toPublicDailySession,
+} from "./productionDailyProjection";
 import { readDueReviewKeys } from "./productionReviewRepository.server";
 import type { DailyReservationIdentity } from "./productionDailyTypes";
 import { runtimeSequenceToFen } from "./runtimeSequence";
@@ -907,7 +910,7 @@ export async function applyDailyAction(input: {
   action: "answer" | "reveal" | "retry";
   answer?: string;
   expectedVersion: number;
-  actionId?: string;
+  actionId: string;
   now?: string;
 }) {
   const repository = new ProductionDailyRepository();
@@ -917,6 +920,16 @@ export async function applyDailyAction(input: {
     (card) => card.cardFingerprint === input.cardFingerprint,
   );
   if (!privateCard) throw new Error("daily_card_not_found");
+  const currentStepIndex =
+    session.state.activityProgress?.[input.cardFingerprint]?.stepIndex ?? 0;
+  const expectedActionId = productionDailyActionId({
+    sessionId: session.sessionId,
+    cardFingerprint: input.cardFingerprint,
+    stepIndex: currentStepIndex,
+    version: session.version,
+  });
+  if (input.actionId !== expectedActionId)
+    throw new Error("daily_action_id_invalid");
   const now = input.now ?? new Date().toISOString();
   if (privateCard.privateSteps?.length) {
     const progress =
@@ -980,15 +993,7 @@ export async function applyDailyAction(input: {
           : session.completedAt,
       updatedAt: now,
     };
-    const attemptId =
-      input.actionId ??
-      createDeterministicIdentity("daily-step-attempt", [
-        input.sessionId,
-        input.cardFingerprint,
-        current.stepIndex,
-        input.action,
-        input.answer ?? "",
-      ]);
+    const attemptId = input.actionId;
     const persisted = await repository.commitAction({
       attemptId,
       cardFingerprint: input.cardFingerprint,
@@ -1098,14 +1103,7 @@ export async function applyDailyAction(input: {
     updatedAt: now,
   };
   const persisted = await repository.commitAction({
-    attemptId:
-      input.actionId ??
-      reduced.state.attempts.at(-1)?.attemptId ??
-      createDeterministicIdentity("daily-noop", [
-        input.sessionId,
-        input.cardFingerprint,
-        input.action,
-      ]),
+    attemptId: input.actionId,
     cardFingerprint: input.cardFingerprint,
     firstAttempt: !firstAttemptAlreadyRecorded && input.action !== "retry",
     attemptKind: input.action,

@@ -11,7 +11,6 @@ import { DailyBlundrBoard } from "@/components/daily/DailyBlundrBoard";
 import { DailyBlundrCardFeedback } from "@/components/daily/DailyBlundrCardFeedback";
 import type { DailyBlundrBoardMoveAttempt } from "@/lib/blundr/daily/dailyBlundrPlayerTypes";
 import type {
-  ProductionDailyPublicCard,
   ProductionDailyPublicSession,
 } from "@/lib/blundr/daily/productionDailyTypes";
 import { recordBlundrTaskCompleted } from "@/lib/blundr/daily-rings/dailyRingGameplayEvents";
@@ -71,7 +70,9 @@ export function ProductionDailyBlundrScreen() {
     void load();
   }, [load]);
 
-  const currentCard = useMemo<ProductionDailyPublicCard | null>(() => {
+  const currentCard = useMemo<
+    ProductionDailyPublicSession["publicCards"][number] | null
+  >(() => {
     if (!session) return null;
     return (
       session.publicCards.find(
@@ -141,6 +142,7 @@ export function ProductionDailyBlundrScreen() {
           method: "POST",
           body: JSON.stringify({
             cardFingerprint: currentCard.cardFingerprint,
+            actionId: currentCard.actionId,
             answer,
             expectedVersion: session.version,
           }),

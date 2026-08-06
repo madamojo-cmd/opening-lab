@@ -24,8 +24,14 @@ export async function POST(
   const body = (await request.json().catch(() => null)) as {
     cardFingerprint?: string;
     expectedVersion?: number;
+    actionId?: string;
   } | null;
-  if (!body?.cardFingerprint || !Number.isInteger(body.expectedVersion))
+  if (
+    !body?.cardFingerprint ||
+    typeof body.actionId !== "string" ||
+    !body.actionId ||
+    !Number.isInteger(body.expectedVersion)
+  )
     return NextResponse.json({ error: "invalid_reveal" }, { status: 400 });
   try {
     const result = await applyDailyAction({
@@ -33,6 +39,7 @@ export async function POST(
       sessionId,
       cardFingerprint: body.cardFingerprint,
       expectedVersion: Number(body.expectedVersion),
+      actionId: body.actionId,
       action: "reveal",
     });
     return NextResponse.json({
