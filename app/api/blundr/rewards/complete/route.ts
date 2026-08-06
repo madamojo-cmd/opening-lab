@@ -6,11 +6,9 @@ import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTe
 
 export const dynamic = "force-dynamic";
 
-const SOURCES = new Set([
-  "opening_run_completed",
-  "continuation_completed",
-  "daily_blundr_deck_completed",
-]);
+// PR-04 will add Trainer and continuation completion evidence. Until then,
+// Daily is the only completion source this endpoint can verify authoritatively.
+const SOURCES = new Set(["daily_blundr_deck_completed"]);
 
 function text(value: unknown): string {
   return String(value ?? "").trim();
@@ -37,22 +35,12 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json().catch(() => null)) as {
-    completionId?: unknown;
     source?: unknown;
     evidenceId?: unknown;
-    localDate?: unknown;
-    openingId?: unknown;
   } | null;
-  const completionId = text(body?.completionId);
   const source = text(body?.source);
   const evidenceId = text(body?.evidenceId);
-  const localDate = text(body?.localDate);
-  if (
-    !completionId ||
-    !SOURCES.has(source) ||
-    !evidenceId ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(localDate)
-  ) {
+  if (!SOURCES.has(source) || !evidenceId) {
     return NextResponse.json(
       {
         error: "invalid_completion_request",
@@ -64,7 +52,6 @@ export async function POST(request: Request) {
 
   const result = await applyRewardCompletion({
     userId: user.userId,
-    completionId,
     source,
     evidenceId,
   });

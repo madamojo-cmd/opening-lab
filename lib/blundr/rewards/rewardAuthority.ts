@@ -24,7 +24,6 @@ function adminOrFailure() {
 
 export async function applyRewardCompletion(input: {
   userId: string;
-  completionId: string;
   source: string;
   evidenceId: string;
 }): Promise<
@@ -36,10 +35,12 @@ export async function applyRewardCompletion(input: {
     "blundr_apply_reward_transaction_v2",
     {
       p_user_id: input.userId,
-      p_completion_id: input.completionId,
+      // Required by the additive PR-01 shell, but not authoritative. The SQL
+      // writer derives its completion identity from verified evidence.
+      p_completion_id: `untrusted:${input.source}:${input.evidenceId}`,
       p_source: input.source,
       p_evidence_id: input.evidenceId,
-      p_idempotency_key: `completion:${input.completionId}`,
+      p_idempotency_key: `untrusted:${input.source}:${input.evidenceId}`,
       p_policy_version: REWARD_POLICY_VERSION,
       p_randomness_key_version:
         process.env.BLUNDR_REWARDS_HMAC_KEY_VERSION?.trim() || null,
