@@ -61,12 +61,12 @@ async function clientFor(email: string, password: string) {
   );
   return client;
 }
-function reservation(id: string, version = 1, priorReps = 0) {
+function reservation(id: string, version = 0, priorReps = 0) {
   return {
-    attempt_id: `attempt-${scope}-${id}`,
-    review_item_id: `item-${scope}-${id}`,
-    opening_id: `opening-${scope}-${id}`,
-    play_key: `play-${scope}-${id}`,
+    attempt_id: `attempt-${id}`,
+    review_item_id: `item-${id}`,
+    opening_id: `opening-${id}`,
+    play_key: `play-${id}`,
     review_state_version: version,
     expected_move_uci: "a1a2",
     prior_reps: priorReps,
@@ -82,7 +82,7 @@ async function seedDueState(userId: string, r: ReturnType<typeof reservation>) {
     last_attempt_id: "seed",
     last_outcome: "again",
     fsrs_algorithm_version: "blundr-fsrs-v1",
-    fsrs_state_version: 1,
+    fsrs_state_version: 0,
     fsrs_desired_retention: 0.9,
     review_state_version: r.review_state_version,
   });
@@ -109,7 +109,6 @@ function event(
     occurredAt: new Date().toISOString(),
     hinted: reveal,
     elapsedMs: input.rating === "easy" ? 1_000 : 10_000,
-    requestedRating: input.rating,
   });
   assert.equal(fsrs.rating, input.rating);
   return {
@@ -120,11 +119,7 @@ function event(
     session_id: r.attempt_id,
     attempt_id: r.attempt_id,
     occurred_at: new Date().toISOString(),
-    taxonomy: input.correct
-      ? "move_correct"
-      : reveal
-        ? "cue_revealed"
-        : "move_incorrect",
+    taxonomy: input.correct ? "move_correct" : "move_incorrect",
     position_key: `position-${r.review_item_id}`,
     canonical_fen: "8/8/8/8/8/8/8/K6k w - - 0 1",
     opening_id: r.opening_id,
@@ -280,7 +275,6 @@ async function main() {
         ).error,
       );
     }
-    console.log("PR-04 remote phase: privilege denial passed");
 
     const wrong = reservation("wrong");
     await seedDueState(userAId, wrong);
@@ -304,7 +298,6 @@ async function main() {
       (await answer(userAId, reveal, null, true, revealEvent)).error,
       null,
     );
-    console.log("PR-04 remote phase: Again evidence passed");
 
     const ratings: Array<{
       rating: Exclude<Rating, "again">;
@@ -318,7 +311,7 @@ async function main() {
     ratings.push({ rating: "easy", prior: { ...seed, reps: 8 } });
     const dueAt = new Set<string>();
     for (const { rating, prior } of ratings) {
-      const r = reservation(`rating-${rating}`, 1, prior?.reps ?? 0);
+      const r = reservation(`rating-${rating}`, 0, prior?.reps ?? 0);
       await seedDueState(userAId, r);
       await reserve(userAId, r);
       const e = event(userAId, r, { correct: true, rating, prior });
@@ -337,27 +330,21 @@ async function main() {
       dueAt.add(e.fsrs.dueAt);
     }
     assert.equal(dueAt.size, 3);
-    console.log("PR-04 remote phase: selected ratings passed");
 
     const cross = reservation("cross");
-    console.log("PR-04 remote phase: ownership setup");
     await seedDueState(userAId, cross);
     await reserve(userAId, cross);
-    console.log("PR-04 remote phase: ownership submit");
     assert.ok(
       (await answer(userBId, cross, "a1a2", false, null)).error,
       "cross-user service request denied",
     );
     const stale = reservation("stale", 1);
-    console.log("PR-04 remote phase: stale setup");
     await seedDueState(userAId, { ...stale, review_state_version: 2 });
     await reserve(userAId, stale);
-    console.log("PR-04 remote phase: stale submit");
     assert.ok(
       (await answer(userAId, stale, "a1a2", false, null)).error,
       "stale reservation rejected",
     );
-    console.log("PR-04 remote phase: ownership and stale guards passed");
 
     const duplicate = reservation("duplicate");
     await seedDueState(userAId, duplicate);
@@ -417,7 +404,6 @@ async function main() {
       new Set(pair.map((result) => result.data.status)),
       new Set(["inserted", "duplicate"]),
     );
-    console.log("PR-04 remote phase: idempotency and concurrency passed");
 
     const fabricated = reservation("fabricated");
     await seedDueState(userAId, fabricated);
@@ -471,7 +457,6 @@ async function main() {
       ).data?.state,
       "awaiting_rating",
     );
-    console.log("PR-04 remote phase: rollback passed");
 
     const eventIds = [
       wrongEvent.event_id,
@@ -519,12 +504,9 @@ async function main() {
     for (const id of made.reverse()) await service.auth.admin.deleteUser(id);
   }
 }
-const keepAlive = setInterval(() => undefined, 1_000);
-void main()
-  .catch((error) => {
-    console.error(
-      error instanceof Error ? error.message : "remote_review_authority_failed",
-    );
-    process.exitCode = 1;
-  })
-  .finally(() => clearInterval(keepAlive));
+void main().catch((error) => {
+  console.error(
+    error instanceof Error ? error.message : "remote_review_authority_failed",
+  );
+  process.exitCode = 1;
+});
