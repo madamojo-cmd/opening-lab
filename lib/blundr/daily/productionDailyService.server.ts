@@ -47,35 +47,101 @@ const MAX_RUNTIME_CANDIDATES_PER_RESERVATION = 600;
 const DAILY_COMPOSER_VERSION = "daily-board-first-v3";
 
 async function dailyLearningEvent(input: {
-  userId: string; sessionId: string; attemptId: string; card: ProductionDailyPrivateCard;
-  fen: string; correct: boolean; firstAttempt: boolean; now: string; runtimePackageId: string;
+  userId: string;
+  sessionId: string;
+  attemptId: string;
+  card: ProductionDailyPrivateCard;
+  fen: string;
+  correct: boolean;
+  firstAttempt: boolean;
+  now: string;
+  runtimePackageId: string;
 }): Promise<Record<string, unknown> | null> {
   if (!input.firstAttempt) return null;
   const exposureId = `daily:${input.sessionId}:${input.card.cardFingerprint}`;
   const client = createBlundrSupabaseAdminClient();
   const [review, mastery] = client
-    ? await Promise.all([client
-        .from("blundr_review_states")
-        .select("srs_state,review_state_version")
-        .eq("user_id", input.userId)
-        .eq("opening_id", input.card.openingId)
-        .eq("play_key", input.card.playKey)
-        .maybeSingle(), client.from("blundr_node_mastery").select("recall_attempt_count,correct_recall_count,lapse_count,mastery_state_version").eq("user_id", input.userId).eq("position_key", input.card.positionKey).maybeSingle()])
-    : [{ data: null, error: null }, { data: null, error: null }];
-  if (review.error || mastery.error) throw new Error("daily_projection_state_read_unavailable");
-  const projection = buildLearningProjection({ source: "daily", firstAttempt: true, exposureId, correct: input.correct, occurredAt: input.now, previousFsrs: (review.data?.srs_state as never) ?? null, previousMastery: mastery.data ? { recallAttemptCount: Number(mastery.data.recall_attempt_count ?? 0), correctRecallCount: Number(mastery.data.correct_recall_count ?? 0), lapseCount: Number(mastery.data.lapse_count ?? 0) } : null });
+    ? await Promise.all([
+        client
+          .from("blundr_review_states")
+          .select("srs_state,review_state_version")
+          .eq("user_id", input.userId)
+          .eq("opening_id", input.card.openingId)
+          .eq("play_key", input.card.playKey)
+          .maybeSingle(),
+        client
+          .from("blundr_node_mastery")
+          .select(
+            "recall_attempt_count,correct_recall_count,lapse_count,mastery_state_version",
+          )
+          .eq("user_id", input.userId)
+          .eq("position_key", input.card.positionKey)
+          .maybeSingle(),
+      ])
+    : [
+        { data: null, error: null },
+        { data: null, error: null },
+      ];
+  if (review.error || mastery.error)
+    throw new Error("daily_projection_state_read_unavailable");
+  const projection = buildLearningProjection({
+    source: "daily",
+    firstAttempt: true,
+    exposureId,
+    correct: input.correct,
+    occurredAt: input.now,
+    previousFsrs: (review.data?.srs_state as never) ?? null,
+    previousMastery: mastery.data
+      ? {
+          recallAttemptCount: Number(mastery.data.recall_attempt_count ?? 0),
+          correctRecallCount: Number(mastery.data.correct_recall_count ?? 0),
+          lapseCount: Number(mastery.data.lapse_count ?? 0),
+        }
+      : null,
+  });
   if (projection.evidenceKind !== "recall_attempt") return null;
   return {
-    event_id: createDeterministicIdentity("learning-event", [input.userId, input.attemptId]),
-    user_id: input.userId, idempotency_key: createDeterministicIdentity("learning-attempt", [input.userId, input.attemptId, true]),
-    schema_version: "2026-07-13.v1", session_id: input.sessionId, attempt_id: input.attemptId, occurred_at: input.now,
-    taxonomy: "daily_answered", position_key: input.card.positionKey, canonical_fen: input.fen, opening_id: input.card.openingId,
-    expected_move_uci: input.card.acceptedMoves[0] ?? null, repertoire_side: input.card.side, move_order_key: input.card.playKey,
-    source: "daily", first_attempt: true, finding: input.correct ? null : { category: "opening_move", explanation: input.card.explanation },
-    content_version: input.runtimePackageId, classifier_version: "weakness-classifier-v1", evidence_kind: projection.evidenceKind,
-    exposure_id: exposureId, evidence_version: "blundr-learning-evidence-v2", correct: input.correct, access_decision: "active", fsrs: projection.fsrs, mastery: projection.mastery,
-    expected_review_state_version: Number(review.data?.review_state_version ?? 0),
-    expected_mastery_state_version: Number(mastery.data?.mastery_state_version ?? 0),
+    event_id: createDeterministicIdentity("learning-event", [
+      input.userId,
+      input.attemptId,
+    ]),
+    user_id: input.userId,
+    idempotency_key: createDeterministicIdentity("learning-attempt", [
+      input.userId,
+      input.attemptId,
+      true,
+    ]),
+    schema_version: "2026-07-13.v1",
+    session_id: input.sessionId,
+    attempt_id: input.attemptId,
+    occurred_at: input.now,
+    taxonomy: "daily_answered",
+    position_key: input.card.positionKey,
+    canonical_fen: input.fen,
+    opening_id: input.card.openingId,
+    expected_move_uci: input.card.acceptedMoves[0] ?? null,
+    repertoire_side: input.card.side,
+    move_order_key: input.card.playKey,
+    source: "daily",
+    first_attempt: true,
+    finding: input.correct
+      ? null
+      : { category: "opening_move", explanation: input.card.explanation },
+    content_version: input.runtimePackageId,
+    classifier_version: "weakness-classifier-v1",
+    evidence_kind: projection.evidenceKind,
+    exposure_id: exposureId,
+    evidence_version: "blundr-learning-evidence-v2",
+    correct: input.correct,
+    access_decision: "active",
+    fsrs: projection.fsrs,
+    mastery: projection.mastery,
+    expected_review_state_version: Number(
+      review.data?.review_state_version ?? 0,
+    ),
+    expected_mastery_state_version: Number(
+      mastery.data?.mastery_state_version ?? 0,
+    ),
   };
 }
 
@@ -902,7 +968,18 @@ export async function applyDailyAction(input: {
       answer: input.action === "answer" ? input.answer : undefined,
       session: next,
       expectedVersion: input.expectedVersion,
-      learningEvent: await dailyLearningEvent({ userId: input.user.userId, sessionId: input.sessionId, attemptId, card: privateCard, fen: step.positionFen, correct: answerCorrect, firstAttempt: !current.firstAttemptRecorded && input.action === "answer", now, runtimePackageId: session.reservationIdentity.runtimePackageId }),
+      learningEvent: await dailyLearningEvent({
+        userId: input.user.userId,
+        sessionId: input.sessionId,
+        attemptId,
+        card: privateCard,
+        fen: step.positionFen,
+        correct: answerCorrect,
+        firstAttempt:
+          !current.firstAttemptRecorded && input.action === "answer",
+        now,
+        runtimePackageId: session.reservationIdentity.runtimePackageId,
+      }),
     });
     if (persisted === "conflict") throw new Error("daily_session_conflict");
     return {
@@ -994,7 +1071,18 @@ export async function applyDailyAction(input: {
     answer: input.action === "answer" ? input.answer : undefined,
     session: next,
     expectedVersion: input.expectedVersion,
-    learningEvent: await dailyLearningEvent({ userId: input.user.userId, sessionId: input.sessionId, attemptId: reduced.state.attempts.at(-1)?.attemptId ?? input.cardFingerprint, card: privateCard, fen: privateCard.positionFen, correct, firstAttempt: !firstAttemptAlreadyRecorded && input.action === "answer", now, runtimePackageId: session.reservationIdentity.runtimePackageId }),
+    learningEvent: await dailyLearningEvent({
+      userId: input.user.userId,
+      sessionId: input.sessionId,
+      attemptId:
+        reduced.state.attempts.at(-1)?.attemptId ?? input.cardFingerprint,
+      card: privateCard,
+      fen: privateCard.positionFen,
+      correct,
+      firstAttempt: !firstAttemptAlreadyRecorded && input.action === "answer",
+      now,
+      runtimePackageId: session.reservationIdentity.runtimePackageId,
+    }),
   });
   if (persisted === "conflict") throw new Error("daily_session_conflict");
   return {
