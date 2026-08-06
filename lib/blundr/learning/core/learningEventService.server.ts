@@ -55,7 +55,9 @@ export async function appendLearningEventV2(input: {
   if (review.error || mastery.error)
     throw new Error("learning_projection_read_unavailable");
   const recallAttempt =
-    input.taxonomy === "move_correct" || input.taxonomy === "move_incorrect";
+    input.taxonomy === "move_correct" ||
+    input.taxonomy === "move_incorrect" ||
+    input.taxonomy === "cue_revealed";
   const exposureId = recallAttempt
     ? createDeterministicIdentity("learning-exposure", [
         input.userId,

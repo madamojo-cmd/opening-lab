@@ -39,6 +39,24 @@ export type StoredBlundrFsrsCard = Omit<
   last_review: string | null;
 };
 
+export function selectBlundrFsrsRating(input: {
+  correct: boolean;
+  hinted: boolean;
+  elapsedMs: number | null;
+  priorReps: number;
+}): "again" | "hard" | "good" | "easy" {
+  if (!input.correct) return "again";
+  if (input.hinted || (input.elapsedMs !== null && input.elapsedMs > 20_000))
+    return "hard";
+  if (
+    input.priorReps >= 8 &&
+    input.elapsedMs !== null &&
+    input.elapsedMs <= 5_000
+  )
+    return "easy";
+  return "good";
+}
+
 const scheduler = fsrs({
   request_retention: BLUNDR_FSRS_DESIRED_RETENTION,
   enable_fuzz: false,
