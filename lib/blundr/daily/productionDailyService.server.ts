@@ -46,13 +46,24 @@ import { selectProductionDailyBoardCards } from "./productionDailyDeckSelection"
 const MAX_RUNTIME_CANDIDATES_PER_RESERVATION = 600;
 const DAILY_COMPOSER_VERSION = "daily-board-first-v3";
 
-function dailyLearningEvent(input: {
+async function dailyLearningEvent(input: {
   userId: string; sessionId: string; attemptId: string; card: ProductionDailyPrivateCard;
   fen: string; correct: boolean; firstAttempt: boolean; now: string; runtimePackageId: string;
 }): Record<string, unknown> | null {
   if (!input.firstAttempt) return null;
   const exposureId = `daily:${input.sessionId}:${input.card.cardFingerprint}`;
-  const projection = buildLearningProjection({ source: "daily", firstAttempt: true, exposureId, correct: input.correct, occurredAt: input.now, previousFsrs: null, previousMastery: null });
+  const client = createBlundrSupabaseAdminClient();
+  const review = client
+    ? await client
+        .from("blundr_review_states")
+        .select("srs_state,review_state_version")
+        .eq("user_id", input.userId)
+        .eq("opening_id", input.card.openingId)
+        .eq("play_key", input.card.playKey)
+        .maybeSingle()
+    : { data: null, error: null };
+  if (review.error) throw new Error("daily_review_state_read_unavailable");
+  const projection = buildLearningProjection({ source: "daily", firstAttempt: true, exposureId, correct: input.correct, occurredAt: input.now, previousFsrs: (review.data?.srs_state as never) ?? null, previousMastery: null });
   if (projection.evidenceKind !== "recall_attempt") return null;
   return {
     event_id: createDeterministicIdentity("learning-event", [input.userId, input.attemptId]),
@@ -63,7 +74,7 @@ function dailyLearningEvent(input: {
     source: "daily", first_attempt: true, finding: input.correct ? null : { category: "opening_move", explanation: input.card.explanation },
     content_version: input.runtimePackageId, classifier_version: "weakness-classifier-v1", evidence_kind: projection.evidenceKind,
     exposure_id: exposureId, evidence_version: "blundr-learning-evidence-v2", correct: input.correct, access_decision: "active", fsrs: projection.fsrs, mastery: projection.mastery,
-    expected_review_state_version: 0,
+    expected_review_state_version: Number(review.data?.review_state_version ?? 0),
   };
 }
 
@@ -892,7 +903,7 @@ export async function applyDailyAction(input: {
       answer: input.action === "answer" ? input.answer : undefined,
       session: next,
       expectedVersion: input.expectedVersion,
-      learningEvent: dailyLearningEvent({ userId: input.user.userId, sessionId: input.sessionId, attemptId, card: privateCard, fen: step.positionFen, correct: answerCorrect, firstAttempt: !current.firstAttemptRecorded && input.action === "answer", now, runtimePackageId: session.reservationIdentity.runtimePackageId }),
+      learningEvent: await dailyLearningEvent({ userId: input.user.userId, sessionId: input.sessionId, attemptId, card: privateCard, fen: step.positionFen, correct: answerCorrect, firstAttempt: !current.firstAttemptRecorded && input.action === "answer", now, runtimePackageId: session.reservationIdentity.runtimePackageId }),
     });
     if (persisted === "conflict") throw new Error("daily_session_conflict");
     return {
@@ -981,7 +992,7 @@ export async function applyDailyAction(input: {
     answer: input.action === "answer" ? input.answer : undefined,
     session: next,
     expectedVersion: input.expectedVersion,
-    learningEvent: dailyLearningEvent({ userId: input.user.userId, sessionId: input.sessionId, attemptId: reduced.state.attempts.at(-1)?.attemptId ?? input.cardFingerprint, card: privateCard, fen: privateCard.positionFen, correct, firstAttempt: !firstAttemptAlreadyRecorded && input.action === "answer", now, runtimePackageId: session.reservationIdentity.runtimePackageId }),
+    learningEvent: await dailyLearningEvent({ userId: input.user.userId, sessionId: input.sessionId, attemptId: reduced.state.attempts.at(-1)?.attemptId ?? input.cardFingerprint, card: privateCard, fen: privateCard.positionFen, correct, firstAttempt: !firstAttemptAlreadyRecorded && input.action === "answer", now, runtimePackageId: session.reservationIdentity.runtimePackageId }),
   });
   if (persisted === "conflict") throw new Error("daily_session_conflict");
   return {
