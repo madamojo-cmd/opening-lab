@@ -948,8 +948,13 @@ export async function applyDailyAction(input: {
         correct: answerCorrect,
       };
     }
+    const authoritative = await repository.getOwned(
+      input.sessionId,
+      input.user.userId,
+    );
+    if (!authoritative) throw new Error("daily_session_not_found");
     return {
-      session: next,
+      session: authoritative,
       presentation: {
         state:
           nextProgress.status === "completed"
@@ -1080,8 +1085,13 @@ export async function applyDailyAction(input: {
       correct,
     };
   }
+  const authoritative = await repository.getOwned(
+    input.sessionId,
+    input.user.userId,
+  );
+  if (!authoritative) throw new Error("daily_session_not_found");
   return {
-    session: next,
+    session: authoritative,
     presentation: reduced.presentation,
     result: reduced.result,
     correct,

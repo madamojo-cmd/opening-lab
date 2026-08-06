@@ -22,7 +22,7 @@ export function toPublicDailySession(
   session: ProductionDailySession,
 ): ProductionDailyPublicSession {
   const completedCardIds = session.state.attempts
-    .filter((attempt) => attempt.scored)
+    .filter((attempt) => attempt.outcome === "correct")
     .map((attempt) => attempt.card.cardFingerprint);
   const publicCards = session.publicCards.map((card) => {
     if (!card.steps?.length) return card;
