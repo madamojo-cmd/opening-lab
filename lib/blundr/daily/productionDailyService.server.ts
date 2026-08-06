@@ -854,7 +854,7 @@ export async function applyDailyAction(input: {
       input.action,
       input.answer ?? "",
     ]);
-    await repository.appendAttempt({
+    const persisted = await repository.commitAction({
       attemptId,
       sessionId: input.sessionId,
       userId: input.user.userId,
@@ -870,7 +870,10 @@ export async function applyDailyAction(input: {
               ? "correct"
               : "incorrect",
       answer: input.action === "answer" ? input.answer : undefined,
+      session: next,
+      expectedVersion: input.expectedVersion,
     });
+    if (persisted === "conflict") throw new Error("daily_session_conflict");
     if (input.action !== "retry" || current.firstAttemptRecorded)
       await appendLearningEventV2({
         userId: input.user.userId,
@@ -921,8 +924,6 @@ export async function applyDailyAction(input: {
             : "incorrect",
         srsState: { intervalDays: answerCorrect ? 1 : 0 },
       });
-    if ((await repository.update(next, input.expectedVersion)) === "conflict")
-      throw new Error("daily_session_conflict");
     return {
       session: next,
       presentation: {
@@ -992,7 +993,7 @@ export async function applyDailyAction(input: {
         ? (session.completedAt ?? now)
         : session.completedAt,
   };
-  await repository.appendAttempt({
+  const persisted = await repository.commitAction({
     attemptId:
       reduced.state.attempts.at(-1)?.attemptId ??
       createDeterministicIdentity("daily-noop", [
@@ -1007,7 +1008,10 @@ export async function applyDailyAction(input: {
     attemptKind: input.action,
     outcome,
     answer: input.action === "answer" ? input.answer : undefined,
+    session: next,
+    expectedVersion: input.expectedVersion,
   });
+  if (persisted === "conflict") throw new Error("daily_session_conflict");
   if (!firstAttemptAlreadyRecorded && input.action !== "retry")
     await appendLearningEventV2({
       userId: input.user.userId,
@@ -1038,8 +1042,6 @@ export async function applyDailyAction(input: {
       },
       explanation: privateCard.explanation,
     });
-  if ((await repository.update(next, input.expectedVersion)) === "conflict")
-    throw new Error("daily_session_conflict");
   return {
     session: next,
     presentation: reduced.presentation,

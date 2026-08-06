@@ -205,4 +205,46 @@ export class ProductionDailyRepository {
     if (result.error.code === "23505") return "duplicate";
     throw new Error("daily_attempt_persistence_unavailable");
   }
+
+  async commitAction(input: {
+    session: ProductionDailySession;
+    expectedVersion: number;
+    attemptId: string;
+    cardFingerprint: string;
+    firstAttempt: boolean;
+    attemptKind: "answer" | "reveal" | "retry";
+    outcome: "correct" | "incorrect" | "revealed" | "skipped";
+    answer?: unknown;
+  }): Promise<"inserted" | "duplicate" | "conflict"> {
+    const client = requireProductionPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
+    if (!client) return "inserted";
+    const result = await client.rpc("blundr_commit_daily_action_v2", {
+      p_user_id: input.session.userId,
+      p_session_id: input.session.sessionId,
+      p_action: {
+        action_id: input.attemptId,
+        attempt_id: input.attemptId,
+        card_fingerprint: input.cardFingerprint,
+        first_attempt: input.firstAttempt,
+        attempt_kind: input.attemptKind,
+        outcome: input.outcome,
+        answer: input.answer ?? null,
+        step_id: input.cardFingerprint,
+        expected_version: input.expectedVersion,
+        next_state: input.session.state,
+        completed_at: input.session.completedAt,
+        learning_exposure_id: input.firstAttempt
+          ? `daily:${input.session.sessionId}:${input.cardFingerprint}`
+          : null,
+      },
+    });
+    if (result.error) {
+      if (result.error.message.includes("daily_session_conflict"))
+        return "conflict";
+      throw new Error("daily_action_persistence_unavailable");
+    }
+    return result.data?.status === "duplicate" ? "duplicate" : "inserted";
+  }
 }
