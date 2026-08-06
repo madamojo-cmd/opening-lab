@@ -3,6 +3,7 @@ import { getServerFeatureFlags } from "@/lib/blundr/contracts/serverFeatureFlags
 import { requireGameDataUser } from "@/lib/blundr/gameData/gameDataService";
 import {
   applyDailyAction,
+  applyDailyCompletionReward,
   publicDailySession,
 } from "@/lib/blundr/daily/productionDailyService.server";
 
@@ -18,7 +19,7 @@ export async function POST(
       { error: "authentication_required" },
       { status: 401 },
     );
-  if (!getServerFeatureFlags().daily_production_store)
+  if (!getServerFeatureFlags().daily_adaptive_v2)
     return NextResponse.json({ error: "feature_disabled" }, { status: 503 });
   const { sessionId } = await context.params;
   const body = (await request.json().catch(() => null)) as {
@@ -41,6 +42,10 @@ export async function POST(
       expectedVersion: Number(body.expectedVersion),
       actionId: body.actionId,
       action: "retry",
+    });
+    await applyDailyCompletionReward({
+      userId: user.userId,
+      session: result.session,
     });
     return NextResponse.json({
       result: result.result,

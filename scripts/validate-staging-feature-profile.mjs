@@ -8,7 +8,7 @@ const DEPRECATED_DAILY_CAPABILITIES = [
   "daily_deep_minigames",
   "daily_mixed_test",
 ];
-const CUMULATIVE_RELEASE_MIGRATION_HEAD = "20260806110000";
+const CUMULATIVE_RELEASE_MIGRATION_HEAD = "20260806120000";
 const migrationHead = (await readdir("supabase/migrations"))
   .filter((file) => file.endsWith(".sql"))
   .sort()

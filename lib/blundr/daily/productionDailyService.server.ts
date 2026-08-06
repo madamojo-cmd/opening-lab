@@ -5,6 +5,7 @@ import {
   createDeterministicIdentity,
   createPositionIdentity,
   type CardFingerprint,
+  type OpeningAccessSnapshot,
 } from "@/lib/blundr/contracts";
 import { readUserRepertoire } from "@/lib/blundr/accounts/accountRepository";
 import type { CurrentBlundrUser } from "@/lib/blundr/accounts/accountTypes";
@@ -21,7 +22,8 @@ import type {
   ProductionDailyPublicSession,
   ProductionDailySession,
 } from "./productionDailyTypes";
-import { buildLearningProjection } from "@/lib/blundr/learning/core/learningProjection";
+import { prepareLearningEventV2 } from "@/lib/blundr/learning/core/learningEventService.server";
+import { applyRewardCompletion } from "@/lib/blundr/rewards/rewardAuthority";
 import { RepertoireOpeningAccessRepository } from "@/lib/blundr/openingAccess/openingAccessRepository";
 import { getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
 import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
@@ -62,121 +64,67 @@ async function dailyLearningEvent(input: {
   evidenceType: "answer" | "reveal" | "skip";
   submittedAnswer?: string | null;
   elapsedMs: number;
+  access: OpeningAccessSnapshot;
 }): Promise<Record<string, unknown> | null> {
   if (!input.firstAttempt) return null;
-  const exposureId = `daily:${input.sessionId}:${input.card.cardFingerprint}`;
-  const client = createBlundrSupabaseAdminClient();
-  const [review, mastery] = client
-    ? await Promise.all([
-        client
-          .from("blundr_review_states")
-          .select("srs_state,review_state_version")
-          .eq("user_id", input.userId)
-          .eq("opening_id", input.card.openingId)
-          .eq("play_key", input.card.playKey)
-          .maybeSingle(),
-        client
-          .from("blundr_node_mastery")
-          .select(
-            "recall_attempt_count,correct_recall_count,lapse_count,mastery_state_version",
-          )
-          .eq("user_id", input.userId)
-          .eq("position_key", input.card.positionKey)
-          .maybeSingle(),
-      ])
-    : [
-        { data: null, error: null },
-        { data: null, error: null },
-      ];
-  if (review.error || mastery.error)
-    throw new Error("daily_projection_state_read_unavailable");
-  const projection = buildLearningProjection({
-    source: "daily",
-    firstAttempt: true,
-    exposureId,
-    correct: input.correct,
-    occurredAt: input.now,
-    previousFsrs: (review.data?.srs_state as never) ?? null,
-    hinted: input.evidenceType === "reveal",
-    elapsedMs: input.elapsedMs,
-    previousMastery: mastery.data
-      ? {
-          recallAttemptCount: Number(mastery.data.recall_attempt_count ?? 0),
-          correctRecallCount: Number(mastery.data.correct_recall_count ?? 0),
-          lapseCount: Number(mastery.data.lapse_count ?? 0),
-        }
-      : null,
+  const expectedTaskAnswer =
+    input.card.acceptedAnswers?.[0] ?? input.card.acceptedMoves[0] ?? null;
+  const isMoveTask = input.card.interaction === "move";
+  const position = createPositionIdentity({
+    canonicalFen: input.fen,
+    openingId: input.card.openingId,
+    expectedMoveUci: input.card.acceptedMoves[0] ?? "",
+    repertoireSide: input.card.side,
+    moveOrderKey: input.card.playKey,
   });
-  if (projection.evidenceKind !== "recall_attempt") return null;
-  return {
-    event_id: createDeterministicIdentity("learning-event", [
-      input.userId,
-      input.attemptId,
-    ]),
-    user_id: input.userId,
-    idempotency_key: createDeterministicIdentity("learning-attempt", [
-      input.userId,
-      input.attemptId,
-      true,
-    ]),
-    schema_version: "2026-07-13.v1",
-    session_id: input.sessionId,
-    attempt_id: input.attemptId,
-    occurred_at: input.now,
-    taxonomy: "daily_answered",
-    position_key: input.card.positionKey,
-    canonical_fen: input.fen,
-    opening_id: input.card.openingId,
-    expected_move_uci: input.card.acceptedMoves[0] ?? null,
-    repertoire_side: input.card.side,
-    move_order_key: input.card.playKey,
+  const taxonomy =
+    input.evidenceType === "reveal"
+      ? "cue_revealed"
+      : input.correct
+        ? "move_correct"
+        : "move_incorrect";
+  const { event } = await prepareLearningEventV2({
+    userId: input.userId,
+    sessionId: input.sessionId,
+    attemptId: input.attemptId,
     source: "daily",
-    finding: input.correct
-      ? null
-      : { category: "opening_move", explanation: input.card.explanation },
-    content_version: input.runtimePackageId,
-    classifier_version: "weakness-classifier-v1",
-    evidence_kind: projection.evidenceKind,
-    exposure_id: exposureId,
-    evidence_version: "blundr-learning-evidence-v2",
+    taxonomy,
+    position,
     correct: input.correct,
-    review_rating: projection.fsrs.rating,
-    answer_evidence: {
+    now: input.now,
+    access: input.access,
+    explanation: input.card.explanation,
+    // Choice, plan, and route answers are opaque task-answer identities, not
+    // chess moves. Never coerce them into played_move_uci.
+    playedMoveUci: isMoveTask ? (input.submittedAnswer ?? null) : null,
+    reviewEvidence: {
       evidenceType: input.evidenceType,
-      submittedAnswer: input.submittedAnswer ?? null,
-      expectedAnswerIdentity: input.card.acceptedMoves[0] ?? null,
+      hinted: input.evidenceType === "reveal",
+      elapsedMs: input.elapsedMs,
+      retry: false,
+    },
+  });
+  return {
+    ...event,
+    content_version: input.runtimePackageId,
+    task_evidence: {
+      activityId: input.card.activityId,
+      taskType: input.card.activityId,
+      interaction: input.card.interaction,
+      submittedAnswerIdentity: input.submittedAnswer ?? null,
+      expectedTaskAnswerIdentity: expectedTaskAnswer,
       correct: input.correct,
+      canonicalTarget: {
+        positionKey: position.positionKey,
+        openingId: input.card.openingId,
+        playKey: input.card.playKey,
+        expectedMoveUci: input.card.acceptedMoves[0] ?? null,
+      },
       firstAttempt: true,
       retry: false,
       revealOccurred: input.evidenceType === "reveal",
-      hinted: input.evidenceType === "reveal",
-      elapsedMs: input.elapsedMs,
-      priorReps: Number(
-        (review.data?.srs_state as { reps?: unknown } | null)?.reps ?? 0,
-      ),
-      taskId: input.attemptId,
-      reservationId: input.sessionId,
+      evidenceType: input.evidenceType,
     },
-    access_decision: "active",
-    fsrs: projection.fsrs,
-    mastery: projection.mastery,
-    expected_review_state_version: Number(
-      review.data?.review_state_version ?? 0,
-    ),
-    expected_mastery_state_version: Number(
-      mastery.data?.mastery_state_version ?? 0,
-    ),
-    authority_fingerprint: createDeterministicIdentity("learning-authority", [
-      input.userId,
-      input.sessionId,
-      input.card.positionKey,
-      input.card.acceptedMoves[0] ?? "",
-      String(input.correct),
-      exposureId,
-      projection.fsrs.rating,
-      input.evidenceType,
-      input.submittedAnswer ?? "",
-    ]),
   };
 }
 
@@ -815,6 +763,24 @@ export async function getOrReserveDaily(
   ).session;
 }
 
+/**
+ * Daily completion evidence is derived exclusively from the persisted session.
+ * Callers never receive or choose a completion identity.
+ */
+export async function applyDailyCompletionReward(input: {
+  userId: string;
+  session: ProductionDailySession;
+}): Promise<void> {
+  if (input.session.state.status !== "completed" || !input.session.completedAt)
+    return;
+  const result = await applyRewardCompletion({
+    userId: input.userId,
+    source: "daily_blundr_deck_completed",
+    evidenceId: `daily-completion:${input.session.sessionId}`,
+  });
+  if (!result.ok) throw new Error("daily_reward_persistence_unavailable");
+}
+
 export async function applyDailyAction(input: {
   user: CurrentBlundrUser;
   sessionId: string;
@@ -832,6 +798,12 @@ export async function applyDailyAction(input: {
     (card) => card.cardFingerprint === input.cardFingerprint,
   );
   if (!privateCard) throw new Error("daily_card_not_found");
+  const access = (await openingAccess(input.user)).get({
+    userId: input.user.userId,
+    openingId: privateCard.openingId,
+    repertoireSide: privateCard.side,
+  });
+  if (access.decision !== "active") throw new Error("opening_locked");
   const stepCount = privateCard.privateSteps?.length ?? 1;
   const actionStepIndex = Array.from(
     { length: stepCount },
@@ -935,7 +907,13 @@ export async function applyDailyAction(input: {
         userId: input.user.userId,
         sessionId: input.sessionId,
         attemptId,
-        card: privateCard,
+        card: {
+          ...privateCard,
+          acceptedMoves: step.acceptedMoves,
+          acceptedAnswers: step.acceptedAnswers,
+          explanation: step.explanation,
+          interaction: "move",
+        },
         fen: step.positionFen,
         correct: answerCorrect,
         firstAttempt: isReplay
@@ -950,6 +928,7 @@ export async function applyDailyAction(input: {
           0,
           Date.parse(now) - Date.parse(session.updatedAt ?? now),
         ),
+        access,
       }),
     });
     if (persisted === "conflict") throw new Error("daily_session_conflict");
@@ -1081,6 +1060,7 @@ export async function applyDailyAction(input: {
         0,
         Date.parse(now) - Date.parse(session.updatedAt ?? now),
       ),
+      access,
     }),
   });
   if (persisted === "conflict") throw new Error("daily_session_conflict");

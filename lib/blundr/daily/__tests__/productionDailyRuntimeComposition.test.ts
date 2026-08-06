@@ -152,3 +152,33 @@ test("production composer contains no mixed minigame or fabricated mistake path"
   );
   assert.doesNotMatch(source, /kind:\s*["']mini_game["']/);
 });
+
+test("production Daily delegates learning projections to the shared v2 authority without coercing task answers into moves", () => {
+  const source = readFileSync(
+    new URL("../productionDailyService.server.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /prepareLearningEventV2/);
+  assert.doesNotMatch(source, /buildLearningProjection/);
+  assert.match(source, /task_evidence/);
+  assert.match(source, /submittedAnswerIdentity/);
+  assert.match(source, /expectedTaskAnswerIdentity/);
+  assert.match(source, /playedMoveUci:\s*isMoveTask/);
+  assert.match(source, /input\.card\.interaction === "move"/);
+});
+
+test("the active Daily browser submits only reserved actions and never owns rewards", () => {
+  const screen = readFileSync(
+    new URL(
+      "../../../components/daily/ProductionDailyBlundrScreen.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(screen, /cardFingerprint: currentCard\.cardFingerprint/);
+  assert.match(screen, /actionId: currentCard\.actionId/);
+  assert.doesNotMatch(
+    screen,
+    /recordBlundrTaskCompleted|completeDailyRingActivity|applyRewardCompletion/,
+  );
+});

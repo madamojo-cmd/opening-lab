@@ -13,7 +13,7 @@ export async function POST(request: Request) {
       { error: "authentication_required" },
       { status: 401 },
     );
-  if (!getServerFeatureFlags().daily_production_store)
+  if (!getServerFeatureFlags().daily_adaptive_v2)
     return NextResponse.json({ error: "feature_disabled" }, { status: 503 });
   const body = (await request.json().catch(() => null)) as {
     openingId?: string;

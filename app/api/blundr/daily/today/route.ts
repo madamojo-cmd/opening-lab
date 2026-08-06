@@ -16,7 +16,7 @@ export async function GET(request: Request) {
       { error: "authentication_required" },
       { status: 401 },
     );
-  if (!getServerFeatureFlags().daily_production_store)
+  if (!getServerFeatureFlags().daily_adaptive_v2)
     return NextResponse.json({ error: "feature_disabled" }, { status: 503 });
   const dateKey = new Date().toISOString().slice(0, 10);
   try {

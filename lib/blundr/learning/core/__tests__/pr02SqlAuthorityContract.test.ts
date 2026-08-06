@@ -11,6 +11,13 @@ const migration = readFileSync(
   ),
   "utf8",
 );
+const dailyTaskAuthorityMigration = readFileSync(
+  resolve(
+    root,
+    "supabase/migrations/20260806120000_blundr_daily_task_evidence_authority_v3.sql",
+  ),
+  "utf8",
+);
 const dailyWriter = readFileSync(
   resolve(root, "lib/blundr/daily/productionDailyService.server.ts"),
   "utf8",
@@ -66,24 +73,29 @@ test("PR-02 blocks spoofing, stale writes, duplicate actions, and reservation ra
     assert.match(migration, new RegExp(contract.replace(/[()]/g, "\\$&"), "i"));
 });
 
-test("Daily uses exactly one commit RPC and does not issue a second learning transport", () => {
-  assert.match(repository, /rpc\("blundr_commit_daily_action_v2"/);
+test("Daily uses the single v3 wrapper and does not issue a second learning transport", () => {
+  assert.match(repository, /rpc\("blundr_commit_daily_action_v3"/);
   assert.match(repository, /learning_event: input\.learningEvent/);
+  assert.match(repository, /daily_evidence:/);
   assert.doesNotMatch(dailyWriter, /appendLearningEventV2/);
   assert.match(dailyWriter, /await dailyLearningEvent/);
   assert.match(
     migration,
     /blundr_project_learning_evidence_v2\(p_user_id, p_action->'learning_event'\)/,
   );
+  assert.match(
+    dailyTaskAuthorityMigration,
+    /blundr_commit_daily_action_v2\(p_user_id,p_session_id,p_action\)/,
+  );
 });
 
 test("Daily policy and projection contracts retain explicit no-fabrication boundaries", () => {
-  assert.match(
-    dailyWriter,
-    /previousFsrs: \(review\.data\?\.srs_state as never\) \?\? null/,
-  );
-  assert.match(dailyWriter, /expected_review_state_version/);
-  assert.match(dailyWriter, /expected_mastery_state_version/);
+  assert.match(dailyWriter, /prepareLearningEventV2/);
+  assert.doesNotMatch(dailyWriter, /buildLearningProjection/);
+  assert.match(dailyWriter, /task_evidence/);
+  assert.match(dailyWriter, /playedMoveUci: isMoveTask/);
+  assert.match(dailyTaskAuthorityMigration, /daily_task_answer_not_reserved/);
+  assert.match(dailyTaskAuthorityMigration, /daily_task_evidence_conflict/);
   assert.match(migration, /first_recall_requires_exposure/);
   assert.match(migration, /daily-completion:/);
 });

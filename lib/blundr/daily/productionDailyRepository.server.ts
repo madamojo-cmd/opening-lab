@@ -225,7 +225,7 @@ export class ProductionDailyRepository {
       createBlundrSupabaseAdminClient(),
     );
     if (!client) return "inserted";
-    const result = await client.rpc("blundr_commit_daily_action_v2", {
+    const result = await client.rpc("blundr_commit_daily_action_v3", {
       p_user_id: input.session.userId,
       p_session_id: input.session.sessionId,
       p_action: {
@@ -245,6 +245,11 @@ export class ProductionDailyRepository {
           ? `daily:${input.session.sessionId}:${input.cardFingerprint}`
           : null,
         learning_event: input.learningEvent ?? null,
+        daily_evidence:
+          input.learningEvent && typeof input.learningEvent === "object"
+            ? ((input.learningEvent as Record<string, unknown>).task_evidence ??
+              null)
+            : null,
       },
     });
     if (result.error) {
