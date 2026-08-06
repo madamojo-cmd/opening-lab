@@ -25,8 +25,9 @@ export async function POST(
     cardFingerprint?: string;
     answer?: string;
     expectedVersion?: number;
+    actionId?: string;
   } | null;
-  if (!body?.cardFingerprint || !Number.isInteger(body.expectedVersion))
+  if (!body?.cardFingerprint || !body.actionId || !Number.isInteger(body.expectedVersion))
     return NextResponse.json({ error: "invalid_attempt" }, { status: 400 });
   try {
     const result = await applyDailyAction({
@@ -35,6 +36,7 @@ export async function POST(
       cardFingerprint: body.cardFingerprint,
       answer: body.answer,
       expectedVersion: Number(body.expectedVersion),
+      actionId: body.actionId,
       action: "answer",
     });
     return NextResponse.json({

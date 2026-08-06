@@ -882,6 +882,7 @@ export async function applyDailyAction(input: {
   action: "answer" | "reveal" | "retry";
   answer?: string;
   expectedVersion: number;
+  actionId?: string;
   now?: string;
 }) {
   const repository = new ProductionDailyRepository();
@@ -953,7 +954,7 @@ export async function applyDailyAction(input: {
           ? (session.completedAt ?? now)
           : session.completedAt,
     };
-    const attemptId = createDeterministicIdentity("daily-step-attempt", [
+    const attemptId = input.actionId ?? createDeterministicIdentity("daily-step-attempt", [
       input.sessionId,
       input.cardFingerprint,
       current.stepIndex,
@@ -1062,7 +1063,7 @@ export async function applyDailyAction(input: {
   };
   const persisted = await repository.commitAction({
     attemptId:
-      reduced.state.attempts.at(-1)?.attemptId ??
+      input.actionId ?? reduced.state.attempts.at(-1)?.attemptId ??
       createDeterministicIdentity("daily-noop", [
         input.sessionId,
         input.cardFingerprint,
