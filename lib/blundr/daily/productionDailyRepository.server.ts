@@ -90,30 +90,26 @@ export class ProductionDailyRepository {
       localSessions.set(`${input.userId}:${input.dateKey}`, session);
       return { created: true, session };
     }
-    const deck = await client.from("blundr_daily_decks").insert({
-      deck_id: input.deckId,
-      user_id: input.userId,
-      local_date: input.dateKey,
-      deck_fingerprint: input.deckId,
-      public_cards: input.publicCards,
-      server_cards: input.privateCards,
-      content_version: "daily-production-v1",
-      composer_version: input.reservationIdentity.composerVersion,
-      runtime_package_id: input.reservationIdentity.runtimePackageId,
-      profile_version: input.reservationIdentity.profileVersion,
-      reserved_at: input.now,
+    const reserved = await client.rpc("blundr_reserve_daily_v2", {
+      p_user_id: input.userId,
+      p_local_date: input.dateKey,
+      p_reservation: {
+        deck_id: input.deckId,
+        session_id: input.sessionId,
+        deck_fingerprint: input.deckId,
+        public_cards: input.publicCards,
+        server_cards: input.privateCards,
+        content_version: "daily-production-v2",
+        composer_version: input.reservationIdentity.composerVersion,
+        runtime_package_id: input.reservationIdentity.runtimePackageId,
+        profile_version: input.reservationIdentity.profileVersion,
+        access_policy_id: "adaptive-daily-v2",
+        access_policy_version: "v1",
+        time_zone: "UTC",
+        state: input.state,
+      },
     });
-    if (deck.error && deck.error.code !== "23505")
-      throw new Error("daily_deck_persistence_unavailable");
-    const inserted = await client.from("blundr_daily_sessions").insert({
-      session_id: input.sessionId,
-      deck_id: input.deckId,
-      user_id: input.userId,
-      state: input.state,
-      state_version: 1,
-    });
-    if (inserted.error && inserted.error.code !== "23505")
-      throw new Error("daily_session_persistence_unavailable");
+    if (reserved.error) throw new Error("daily_deck_persistence_unavailable");
     return {
       created: false,
       session: (await this.getByDate(input.userId, input.dateKey)) ?? session,
