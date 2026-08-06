@@ -27,6 +27,7 @@ export function buildLearningProjection(input: {
   } | null;
 }):
   | { evidenceKind: "imported_observation"; firstAttempt: false }
+  | { evidenceKind: "system_observation"; firstAttempt: false }
   | {
       evidenceKind: "recall_attempt";
       firstAttempt: boolean;
@@ -45,6 +46,8 @@ export function buildLearningProjection(input: {
   // a recall prompt. They intentionally do not receive an FSRS grade.
   if (input.source === "imported_game")
     return { evidenceKind: "imported_observation", firstAttempt: false };
+  if (!input.firstAttempt)
+    return { evidenceKind: "system_observation", firstAttempt: false };
   if (input.firstAttempt && !input.exposureId)
     throw new Error("first_recall_requires_exposure");
   const fsrs = gradeBlundrRecall({
