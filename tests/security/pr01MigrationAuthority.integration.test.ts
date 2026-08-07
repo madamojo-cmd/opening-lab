@@ -51,7 +51,7 @@ const rpcCases = [
   {
     name: "blundr_project_learning_evidence_v2",
     args: (userId: string) => ({ p_user_id: userId, p_event: {} }),
-    serviceError: /learning_projection_authority_not_implemented/i,
+    serviceError: /invalid_learning_projection_request/i,
   },
   {
     name: "blundr_reserve_daily_v2",
@@ -60,7 +60,7 @@ const rpcCases = [
       p_local_date: "2026-08-05",
       p_reservation: {},
     }),
-    serviceError: /daily_reservation_authority_not_implemented/i,
+    serviceError: /invalid_daily_reservation_request/i,
   },
   {
     name: "blundr_commit_daily_action_v2",
@@ -69,7 +69,7 @@ const rpcCases = [
       p_session_id: "pr01-rls-session",
       p_action: {},
     }),
-    serviceError: /daily_action_authority_not_implemented/i,
+    serviceError: /invalid_daily_action_request/i,
   },
   {
     name: "blundr_apply_reward_transaction_v2",
@@ -82,18 +82,18 @@ const rpcCases = [
       p_policy_version: "pr01-test",
       p_randomness_key_version: null,
     }),
-    serviceError: /blundr_rewards_v2_transaction_unavailable/i,
+    serviceError: /invalid_reward_transaction_request/i,
   },
   {
     name: "blundr_spend_inventory_and_unlock_v2",
     args: (userId: string) => ({
       p_user_id: userId,
       p_opening_id: "italian-game",
-      p_inventory_kind: "opening_fragment",
+      p_inventory_kind: "pr01-invalid",
       p_idempotency_key: "pr01-idempotency",
       p_policy_version: "pr01-test",
     }),
-    serviceError: /blundr_rewards_v2_inventory_unlock_unavailable/i,
+    serviceError: /invalid_inventory_unlock_request/i,
   },
 ] as const;
 
@@ -161,7 +161,7 @@ async function hasPr01Schema(service: TestClient): Promise<boolean> {
   return true;
 }
 
-async function assertServiceOnlyShells(
+async function assertServiceOnlyAuthorityRpcs(
   service: TestClient,
   anonymous: TestClient,
   userA: TestClient,
@@ -173,7 +173,7 @@ async function assertServiceOnlyShells(
     const serviceResponse = await service.rpc(rpc.name, args as never);
     assert.ok(
       serviceResponse.error,
-      `${rpc.name} service shell must fail closed`,
+      `${rpc.name} service authority must fail closed`,
     );
     assert.match(serviceResponse.error.message, rpc.serviceError);
     for (const [actor, client] of [
@@ -186,7 +186,7 @@ async function assertServiceOnlyShells(
       assert.doesNotMatch(
         response.error.message,
         rpc.serviceError,
-        `${rpc.name} exposed its service-only implementation to ${actor}`,
+        `${rpc.name} exposed its internal validation error to ${actor}`,
       );
     }
   }
@@ -879,7 +879,13 @@ async function runPr01RlsMatrix(): Promise<void> {
       runTag,
     );
     await assertAnonymousProtectedStateDenied(service, anonymous, userAId);
-    await assertServiceOnlyShells(service, anonymous, userA, userB, userAId);
+    await assertServiceOnlyAuthorityRpcs(
+      service,
+      anonymous,
+      userA,
+      userB,
+      userAId,
+    );
     await assertAccountDeletionCascade(service, userAId);
     userAId = undefined;
   } finally {
