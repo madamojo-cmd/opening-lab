@@ -18,6 +18,8 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      BLUNDR_RLS_FRESH_PROJECT_REF: ${{ secrets.BLUNDR_RLS_FRESH_PROJECT_REF }}
+      BLUNDR_RLS_UPGRADE_PROJECT_REF: ${{ secrets.BLUNDR_RLS_UPGRADE_PROJECT_REF }}
       BLUNDR_RLS_TEST_PROJECT_REF: ${{ secrets.BLUNDR_RLS_TEST_PROJECT_REF }}
       BLUNDR_RLS_TEST_ENVIRONMENT_ROLE: ${{ secrets.BLUNDR_RLS_TEST_ENVIRONMENT_ROLE }}
       BLUNDR_RLS_TEST_USER_A_EMAIL: ${{ secrets.BLUNDR_RLS_TEST_USER_A_EMAIL }}
@@ -51,6 +53,8 @@ jobs:
           for name in \
             SUPABASE_ACCESS_TOKEN \
             SUPABASE_DB_PASSWORD \
+            BLUNDR_RLS_FRESH_PROJECT_REF \
+            BLUNDR_RLS_UPGRADE_PROJECT_REF \
             BLUNDR_RLS_TEST_PROJECT_REF \
             BLUNDR_RLS_TEST_ENVIRONMENT_ROLE \
             BLUNDR_RLS_TEST_USER_A_EMAIL \
@@ -60,6 +64,14 @@ jobs:
           do
             test -n "${!name:-}" || { echo "$name is required"; exit 1; }
           done
+          test "$BLUNDR_RLS_FRESH_PROJECT_REF" != "$BLUNDR_RLS_UPGRADE_PROJECT_REF" || {
+            echo "Fresh and upgrade project refs must be distinct"
+            exit 1
+          }
+          test "$BLUNDR_RLS_TEST_PROJECT_REF" = "$BLUNDR_RLS_UPGRADE_PROJECT_REF" || {
+            echo "Test and upgrade project refs must match"
+            exit 1
+          }
           test "$BLUNDR_RLS_TEST_ENVIRONMENT_ROLE" = "disposable" || {
             echo "Remote target must be disposable"
             exit 1
@@ -68,7 +80,7 @@ jobs:
       - name: Confirm disposable project and export keys
         env:
           BLUNDR_PR01_PREFLIGHT_MODE: fresh
-          BLUNDR_PR01_PREFLIGHT_PROJECT_REF: ${{ secrets.BLUNDR_RLS_TEST_PROJECT_REF }}
+          BLUNDR_PR01_PREFLIGHT_PROJECT_REF: ${{ secrets.BLUNDR_RLS_FRESH_PROJECT_REF }}
           BLUNDR_PR01_EXPORT_API_KEYS: "true"
         run: npm run verify:pr01-disposable-project
 
@@ -79,7 +91,7 @@ jobs:
           mkdir -p "$LOG_DIR"
           log="$LOG_DIR/link.log"
           command_log="$(mktemp)"
-          if ! npx --yes supabase@2.111.0 link --project-ref "$BLUNDR_RLS_TEST_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD" >"$command_log" 2>&1; then
+          if ! npx --yes supabase@2.111.0 link --project-ref "$BLUNDR_RLS_FRESH_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD" >"$command_log" 2>&1; then
             cat "$command_log"
             rm -f "$command_log"
             exit 1
@@ -91,6 +103,12 @@ jobs:
           fi
           cat "$command_log" | tee "$log" >/dev/null
           rm -f "$command_log"
+
+      - name: Promote fresh project for downstream authority tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "BLUNDR_RLS_TEST_PROJECT_REF=$BLUNDR_RLS_FRESH_PROJECT_REF" >> "$GITHUB_ENV"
 
       - name: Verify remote migration history starts empty
         shell: bash
