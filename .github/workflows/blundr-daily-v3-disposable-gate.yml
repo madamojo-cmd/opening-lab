@@ -110,70 +110,102 @@ jobs:
           set -euo pipefail
           echo "BLUNDR_RLS_TEST_PROJECT_REF=$BLUNDR_RLS_FRESH_PROJECT_REF" >> "$GITHUB_ENV"
 
-      - name: Verify remote migration history starts empty
+      - name: Verify remote migration history starts at PR-01 baseline
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$LOG_DIR"
-          log="$LOG_DIR/migrations-before.log"
-          node --input-type=module <<'NODE' | tee "$log"
-          import assert from "node:assert/strict";
-          import { readdir } from "node:fs/promises";
-          import { execFileSync } from "node:child_process";
+          log="$LOG_DIR/migrations-pr01-before-upgrade.log"
+          BLUNDR_EXPECTED_MIGRATION_COUNT=25 BLUNDR_EXPECTED_MIGRATION_HEAD=20260805150000 \
+            npm run verify:remote-migration-history | tee "$log"
 
-          const localVersions = (await readdir("supabase/migrations"))
-            .filter((file) => file.endsWith(".sql"))
-            .sort()
-            .map((file) => file.match(/^(\d{8}(?:\d{6})?)_/)?.[1]);
-          assert.ok(localVersions.every(Boolean));
-          const stdout = execFileSync(
-            "npx",
-            [
-              "--yes",
-              "supabase@2.111.0",
-              "migration",
-              "list",
-              "--linked",
-              "--output-format",
-              "json",
-            ],
-            { encoding: "utf8", maxBuffer: 1024 * 1024 },
-          );
-          const parsed = JSON.parse(stdout);
-          const remote = [];
-          const collect = (value) => {
-            if (Array.isArray(value)) {
-              for (const entry of value) collect(entry);
-              return;
-            }
-            if (!value || typeof value !== "object") return;
-            for (const [key, entry] of Object.entries(value)) {
-              if (
-                /^remote(?:_|[A-Z])?version$|^remote$/i.test(key) &&
-                typeof entry === "string" &&
-                /^\d{8}(?:\d{6})?$/.test(entry)
-              ) {
-                remote.push(entry);
-              } else {
-                collect(entry);
-              }
-            }
-          };
-          collect(parsed);
-          remote.sort();
-          assert.equal(remote.length, 0);
-          assert.equal(remote.at(-1) ?? null, null);
-          console.log("Remote migration history verified: count=0 head=none");
-          NODE
-
-      - name: Apply remote migrations
+      - name: Prove 25→28 upgrade path
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$LOG_DIR"
-          log="$LOG_DIR/db-push.log"
+          require_dry_run_migrations() {
+            expected_file="$1"
+            command_log="$(mktemp)"
+            actual_file="$(mktemp)"
+            if ! npx --yes supabase@2.111.0 db push --dry-run >"$command_log" 2>&1; then
+              rm -f "$command_log" "$actual_file" "$expected_file"
+              echo "Supabase migration dry-run failed without emitting target details"
+              exit 1
+            fi
+            expected_count="$(wc -l <"$expected_file" | tr -d ' ')"
+            grep -oE '[0-9]{8}([0-9]{6})?_[A-Za-z0-9._-]+\.sql' "$command_log" | tail -n "$expected_count" >"$actual_file" || true
+            if ! cmp -s "$expected_file" "$actual_file"; then
+              cat "$command_log"
+              rm -f "$command_log" "$actual_file" "$expected_file"
+              echo "Supabase migration dry-run did not contain the exact expected migration set"
+              exit 1
+            fi
+            cat "$command_log" | tee "$LOG_DIR/db-push-dry-run.log" >/dev/null
+            rm -f "$command_log" "$actual_file" "$expected_file"
+            echo "Validated sanitized migration dry-run with $expected_count expected migrations"
+          }
+          expected_upgrade_migrations="$(mktemp)"
+          find supabase/migrations -maxdepth 1 -name '*.sql' -type f -printf '%f\n' | sort | tail -n 3 >"$expected_upgrade_migrations"
+          require_dry_run_migrations "$expected_upgrade_migrations"
           command_log="$(mktemp)"
           if ! npx --yes supabase@2.111.0 db push >"$command_log" 2>&1; then
+            cat "$command_log"
+            rm -f "$command_log"
+            exit 1
+          fi
+          if grep -q '"_tag":"Error"' "$command_log"; then
+            cat "$command_log"
+            rm -f "$command_log"
+            exit 1
+          fi
+          cat "$command_log" | tee "$LOG_DIR/db-push-upgrade.log" >/dev/null
+          rm -f "$command_log"
+
+      - name: Verify remote migration history reached 28 after upgrade
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          log="$LOG_DIR/migrations-after-upgrade.log"
+          BLUNDR_EXPECTED_MIGRATION_COUNT=28 BLUNDR_EXPECTED_MIGRATION_HEAD=20260806130000 \
+            npm run verify:remote-migration-history | tee "$log"
+
+      - name: Validate linked reset support
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          help_log="$LOG_DIR/db-reset-help.log"
+          command_log="$(mktemp)"
+          if ! npx --yes supabase@2.111.0 db reset --help >"$command_log" 2>&1; then
+            cat "$command_log"
+            rm -f "$command_log"
+            exit 1
+          fi
+          if ! grep -q -- '--linked' "$command_log"; then
+            cat "$command_log"
+            rm -f "$command_log"
+            echo "Supabase db reset help did not advertise --linked"
+            exit 1
+          fi
+          if ! grep -q -- '--no-seed' "$command_log"; then
+            cat "$command_log"
+            rm -f "$command_log"
+            echo "Supabase db reset help did not advertise --no-seed"
+            exit 1
+          fi
+          cat "$command_log" | tee "$help_log" >/dev/null
+          rm -f "$command_log"
+
+      - name: Rebuild disposable project from local migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          log="$LOG_DIR/db-reset-linked.log"
+          command_log="$(mktemp)"
+          if ! npx --yes supabase@2.111.0 db reset --linked --no-seed >"$command_log" 2>&1; then
             cat "$command_log"
             rm -f "$command_log"
             exit 1
@@ -186,66 +218,29 @@ jobs:
           cat "$command_log" | tee "$log" >/dev/null
           rm -f "$command_log"
 
-      - name: Verify remote migration history reached 0→28
+      - name: Verify rebuilt remote migration history
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$LOG_DIR"
-          log="$LOG_DIR/migrations-after.log"
-          node --input-type=module <<'NODE' | tee "$log"
-          import assert from "node:assert/strict";
-          import { readdir } from "node:fs/promises";
-          import { execFileSync } from "node:child_process";
+          log="$LOG_DIR/migrations-after-reset.log"
+          BLUNDR_EXPECTED_MIGRATION_COUNT=28 BLUNDR_EXPECTED_MIGRATION_HEAD=20260806130000 \
+            npm run verify:remote-migration-history | tee "$log"
 
-          const expectedCount = 28;
-          const expectedHead = "20260806130000";
-          const localVersions = (await readdir("supabase/migrations"))
-            .filter((file) => file.endsWith(".sql"))
-            .sort()
-            .map((file) => file.match(/^(\d{8}(?:\d{6})?)_/)?.[1]);
-          assert.ok(localVersions.every(Boolean));
-          const stdout = execFileSync(
-            "npx",
-            [
-              "--yes",
-              "supabase@2.111.0",
-              "migration",
-              "list",
-              "--linked",
-              "--output-format",
-              "json",
-            ],
-            { encoding: "utf8", maxBuffer: 1024 * 1024 },
-          );
-          const parsed = JSON.parse(stdout);
-          const remote = [];
-          const collect = (value) => {
-            if (Array.isArray(value)) {
-              for (const entry of value) collect(entry);
-              return;
-            }
-            if (!value || typeof value !== "object") return;
-            for (const [key, entry] of Object.entries(value)) {
-              if (
-                /^remote(?:_|[A-Z])?version$|^remote$/i.test(key) &&
-                typeof entry === "string" &&
-                /^\d{8}(?:\d{6})?$/.test(entry)
-              ) {
-                remote.push(entry);
-              } else {
-                collect(entry);
-              }
-            }
-          };
-          collect(parsed);
-          remote.sort();
-          assert.equal(remote.length, expectedCount);
-          assert.deepEqual(remote, localVersions.slice(0, expectedCount).sort());
-          assert.equal(remote.at(-1) ?? null, expectedHead);
-          console.log(
-            `Remote migration history verified: count=${expectedCount} head=${expectedHead}`,
-          );
-          NODE
+      - name: Promote fresh project for downstream authority tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "BLUNDR_RLS_TEST_PROJECT_REF=$BLUNDR_RLS_FRESH_PROJECT_REF" >> "$GITHUB_ENV"
+
+      - name: Assert downstream fresh target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$BLUNDR_RLS_TEST_PROJECT_REF" = "$BLUNDR_RLS_FRESH_PROJECT_REF" || {
+            echo "Downstream tests must target the fresh disposable project"
+            exit 1
+          }
 
       - id: daily_v3_remote_authority
         name: Daily v3 remote authority
@@ -298,27 +293,54 @@ jobs:
           node --preserve-symlinks --import tsx tests/security/learningCoreRls.integration.test.ts | tee "$LOG_DIR/learning-core-rls.log"
 
       - id: local_daily_rewards_ring_and_security_contracts
-        name: Local Daily, rewards, ring, and security contracts
+        name: Daily composition and fallback tests
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$LOG_DIR"
-          echo "Running productionDailyRuntimeComposition.test.ts"
           node --preserve-symlinks --import tsx lib/blundr/daily/__tests__/productionDailyRuntimeComposition.test.ts | tee "$LOG_DIR/production-daily-runtime-composition.log"
-          echo "Running serverAuthoritativeRewards.test.ts"
+      - id: rewards_server_authoritative_contract
+        name: Rewards v2 server authority contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
           node --preserve-symlinks --import tsx lib/blundr/rewards/__tests__/serverAuthoritativeRewards.test.ts | tee "$LOG_DIR/server-authoritative-rewards.log"
-          echo "Running dailyRingsReadOnlyAuthority.test.ts"
+
+      - id: daily_rings_read_only_authority
+        name: Daily ring authenticated writer-isolation tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
           node --preserve-symlinks --import tsx components/daily-rings/__tests__/dailyRingsReadOnlyAuthority.test.ts | tee "$LOG_DIR/daily-rings-read-only-authority.log"
-          echo "Running RewardPresentationHost.contract.test.ts"
+
+      - id: reward_presentation_host_contract_tests
+        name: Reward presentation host contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
           node --preserve-symlinks --import tsx components/rewards/__tests__/RewardPresentationHost.contract.test.ts | tee "$LOG_DIR/reward-presentation-host.contract.log"
-          echo "Running securityBaseline.test.ts"
+
+      - id: security_baseline
+        name: Security baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
           node --preserve-symlinks --import tsx tests/security/securityBaseline.test.ts | tee "$LOG_DIR/security-baseline.log"
-          echo "Running deepMinigameCatalogSafety.test.ts"
           node --preserve-symlinks --import tsx tests/security/deepMinigameCatalogSafety.test.ts | tee "$LOG_DIR/deep-minigame-catalog-safety.log"
-          echo "Running sentryPrivacy.test.ts"
           node --preserve-symlinks --import tsx tests/security/sentryPrivacy.test.ts | tee "$LOG_DIR/sentry-privacy.log"
-          echo "Running sentryVerificationRoute.test.ts"
           node --preserve-symlinks --import tsx tests/security/sentryVerificationRoute.test.ts | tee "$LOG_DIR/sentry-verification-route.log"
+
+      - id: protected_runtime_hash_verification
+        name: Protected runtime hash verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          node --preserve-symlinks --import tsx tests/runtimeBook/stage2Final21RuntimePackageAcceptance.test.ts | tee "$LOG_DIR/stage2-final-21-runtime-package-acceptance.log"
 
       - name: Publish gate summary
         if: always()
@@ -337,7 +359,12 @@ jobs:
             echo "- Trainer regression: ${{ steps.durable_trainer_completion_authority_regression.outcome }}"
             echo "- PR-01 migration authority regression: ${{ steps.pr01_migration_authority_regression.outcome }}"
             echo "- Learning core RLS and cross-user isolation matrix: ${{ steps.learning_core_rls_cross_user_isolation_matrix.outcome }}"
-            echo "- Local contract/security regressions: ${{ steps.local_daily_rewards_ring_and_security_contracts.outcome }}"
+            echo "- Daily composition and fallback tests: ${{ steps.local_daily_rewards_ring_and_security_contracts.outcome }}"
+            echo "- Rewards v2 server authority contract tests: ${{ steps.rewards_server_authoritative_contract.outcome }}"
+            echo "- Daily ring authenticated writer-isolation tests: ${{ steps.daily_rings_read_only_authority.outcome }}"
+            echo "- Reward presentation host contract tests: ${{ steps.reward_presentation_host_contract_tests.outcome }}"
+            echo "- Security baseline: ${{ steps.security_baseline.outcome }}"
+            echo "- Protected runtime hash verification: ${{ steps.protected_runtime_hash_verification.outcome }}"
             echo "- Skipped tests: 0"
             echo "- Logs: uploaded as artifact from $LOG_DIR"
           } >> "$GITHUB_STEP_SUMMARY"
