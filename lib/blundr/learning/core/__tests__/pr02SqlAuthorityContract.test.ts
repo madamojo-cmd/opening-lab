@@ -18,6 +18,13 @@ const dailyTaskAuthorityMigration = readFileSync(
   ),
   "utf8",
 );
+const dailyTaskNormalizationMigration = readFileSync(
+  resolve(
+    root,
+    "supabase/migrations/20260806140000_blundr_daily_task_evidence_stringified_json_v3.sql",
+  ),
+  "utf8",
+);
 const dailyWriter = readFileSync(
   resolve(root, "lib/blundr/daily/productionDailyService.server.ts"),
   "utf8",
@@ -98,6 +105,25 @@ test("Daily policy and projection contracts retain explicit no-fabrication bound
   assert.match(dailyTaskAuthorityMigration, /daily_task_evidence_conflict/);
   assert.match(migration, /first_recall_requires_exposure/);
   assert.match(migration, /daily-completion:/);
+});
+
+test("Daily v3 normalization keeps task evidence as validated JSON object data", () => {
+  assert.match(
+    dailyTaskNormalizationMigration,
+    /jsonb_typeof\(v_task\)\s*=\s*'string'/,
+  );
+  assert.match(
+    dailyTaskNormalizationMigration,
+    /jsonb_typeof\(v_event\)\s*=\s*'string'/,
+  );
+  assert.match(
+    dailyTaskNormalizationMigration,
+    /v_event->'task_evidence' is distinct from v_task/,
+  );
+  assert.match(
+    dailyTaskNormalizationMigration,
+    /\(v_task #>> '\{\}'\)::jsonb/,
+  );
 });
 
 test("route derives correctness and scheduling from server authority", () => {

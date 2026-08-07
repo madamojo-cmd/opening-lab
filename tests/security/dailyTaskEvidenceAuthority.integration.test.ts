@@ -59,6 +59,7 @@ type ActionInput = {
   answer?: string | null;
   expectedVersion?: number;
   learningEvent?: Record<string, unknown> | null;
+  stringifyEvidence?: boolean;
 };
 
 async function createUser(label: string) {
@@ -264,7 +265,7 @@ function action(reserved: Reserved, input: ActionInput = {}) {
             dailyEvidence,
           })
         : input.learningEvent;
-  return {
+  const payload = {
     action_id: actionId,
     attempt_id: `attempt-${actionId}`,
     card_fingerprint: reserved.cardId,
@@ -278,6 +279,15 @@ function action(reserved: Reserved, input: ActionInput = {}) {
     learning_exposure_id: `daily:${reserved.sessionId}:${reserved.cardId}`,
     learning_event: event,
     daily_evidence: dailyEvidence,
+  };
+  if (!input.stringifyEvidence) return payload;
+  return {
+    ...payload,
+    learning_event:
+      payload.learning_event === null
+        ? null
+        : JSON.stringify(payload.learning_event),
+    daily_evidence: JSON.stringify(payload.daily_evidence),
   };
 }
 
@@ -341,6 +351,30 @@ async function main() {
       "option-primary",
     );
     assert.ok(taskEvidence.data?.every((row) => row.learning_event_id));
+
+    const stringifiedReserved = await reserve(userAId, taskCases[1], 13);
+    const stringified = await commit(stringifiedReserved, {
+      actionId: `stringified-${scope}`,
+      stringifyEvidence: true,
+    });
+    assert.equal(stringified.error, null, stringified.error?.message);
+    assert.equal(stringified.data?.status, "inserted");
+    const stringifiedEvidence = await service
+      .from("blundr_daily_task_evidence_v3")
+      .select("task_type,canonical_target,submitted_answer_identity")
+      .eq("user_id", userAId)
+      .eq("session_id", stringifiedReserved.sessionId)
+      .single();
+    assert.equal(
+      stringifiedEvidence.error,
+      null,
+      stringifiedEvidence.error?.message,
+    );
+    assert.equal(stringifiedEvidence.data?.task_type, "daily_candidate_choice");
+    assert.equal(
+      stringifiedEvidence.data?.canonical_target?.openingId,
+      "italian-white",
+    );
 
     const opaqueEvents = await service
       .from("blundr_learning_events")
@@ -428,7 +462,7 @@ async function main() {
       ],
     );
 
-    const retryReserved = await reserve(userAId, taskCases[0], 13);
+    const retryReserved = await reserve(userAId, taskCases[0], 14);
     const incorrect = await commit(retryReserved, {
       actionId: `incorrect-${scope}`,
       answer: "a1b1",
@@ -456,7 +490,7 @@ async function main() {
       "a teaching retry cannot rewrite failed first-attempt evidence",
     );
 
-    const badReserved = await reserve(userAId, taskCases[0], 11);
+    const badReserved = await reserve(userAId, taskCases[0], 15);
     const malformed = await commit(badReserved, { learningEvent: null });
     assert.ok(malformed.error, "first answer requires a valid learning event");
     const noAttempt = await service
@@ -477,7 +511,7 @@ async function main() {
         answer: "a1a2",
         interaction: "move",
       },
-      12,
+      16,
     );
     const missingMistake = await commit(fixReserved);
     assert.ok(
