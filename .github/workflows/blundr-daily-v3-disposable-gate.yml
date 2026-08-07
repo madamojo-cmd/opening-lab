@@ -205,7 +205,7 @@ jobs:
           mkdir -p "$LOG_DIR"
           log="$LOG_DIR/db-reset-linked.log"
           command_log="$(mktemp)"
-          if ! npx --yes supabase@2.111.0 db reset --linked --no-seed >"$command_log" 2>&1; then
+          if ! npx --yes supabase@2.111.0 --yes db reset --linked --no-seed >"$command_log" 2>&1; then
             cat "$command_log"
             rm -f "$command_log"
             exit 1
