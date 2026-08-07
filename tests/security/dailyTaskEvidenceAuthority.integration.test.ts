@@ -62,6 +62,11 @@ type ActionInput = {
   stringifyEvidence?: boolean;
 };
 
+function actionIdFor(reserved: Reserved, input: ActionInput = {}) {
+  const kind = input.kind ?? "answer";
+  return input.actionId ?? `action-${scope}-${reserved.cardId}-${kind}`;
+}
+
 async function createUser(label: string) {
   const created = await service.auth.admin.createUser({
     email: `${label}-${scope}@example.test`,
@@ -238,8 +243,7 @@ function action(reserved: Reserved, input: ActionInput = {}) {
         : correct
           ? "correct"
           : "incorrect";
-  const actionId =
-    input.actionId ?? `action-${scope}-${reserved.cardId}-${kind}`;
+  const actionId = actionIdFor(reserved, input);
   const dailyEvidence = {
     taskType: reserved.task.taskType,
     submittedAnswerIdentity: answer,
@@ -333,37 +337,41 @@ async function main() {
       const reserved = await reserve(userAId, task, index);
       const first = await commit(reserved);
       assert.equal(first.error, null, first.error?.message);
+      assert.ok(first.data?.projection, "daily projection should be preserved");
+      const firstEvidence = await service
+        .from("blundr_daily_task_evidence_v3")
+        .select("learning_event_id,submitted_answer_identity")
+        .eq("session_id", reserved.sessionId)
+        .eq("action_id", actionIdFor(reserved))
+        .single();
+      assert.equal(firstEvidence.error, null, firstEvidence.error?.message);
+      assert.equal(
+        firstEvidence.data?.learning_event_id,
+        `event-${actionIdFor(reserved)}`,
+      );
+      assert.equal(
+        firstEvidence.data?.submitted_answer_identity,
+        expectedAnswer(reserved),
+      );
       const duplicate = await commit(reserved);
       assert.equal(duplicate.error, null, duplicate.error?.message);
       assert.equal(duplicate.data?.status, "duplicate");
     }
 
-    const taskEvidence = await service
-      .from("blundr_daily_task_evidence_v3")
-      .select("task_type,submitted_answer_identity,learning_event_id")
-      .eq("user_id", userAId);
-    assert.equal(taskEvidence.error, null, taskEvidence.error?.message);
-    assert.equal(taskEvidence.data?.length, taskCases.length);
-    assert.equal(
-      taskEvidence.data?.find(
-        (row) => row.task_type === "daily_candidate_choice",
-      )?.submitted_answer_identity,
-      "option-primary",
-    );
-    assert.ok(taskEvidence.data?.every((row) => row.learning_event_id));
-
     const stringifiedReserved = await reserve(userAId, taskCases[1], 13);
+    const stringifiedActionId = `stringified-${scope}`;
     const stringified = await commit(stringifiedReserved, {
-      actionId: `stringified-${scope}`,
+      actionId: stringifiedActionId,
       stringifyEvidence: true,
     });
     assert.equal(stringified.error, null, stringified.error?.message);
     assert.equal(stringified.data?.status, "inserted");
     const stringifiedEvidence = await service
       .from("blundr_daily_task_evidence_v3")
-      .select("task_type,canonical_target,submitted_answer_identity")
+      .select("task_type,canonical_target,submitted_answer_identity,learning_event_id")
       .eq("user_id", userAId)
       .eq("session_id", stringifiedReserved.sessionId)
+      .eq("action_id", stringifiedActionId)
       .single();
     assert.equal(
       stringifiedEvidence.error,
@@ -374,6 +382,10 @@ async function main() {
     assert.equal(
       stringifiedEvidence.data?.canonical_target?.openingId,
       "italian-white",
+    );
+    assert.equal(
+      stringifiedEvidence.data?.learning_event_id,
+      `event-${stringifiedActionId}`,
     );
 
     const opaqueEvents = await service
@@ -436,6 +448,7 @@ async function main() {
     const revealReserved = await reserve(userAId, taskCases[0], 10);
     const revealed = await commit(revealReserved, { kind: "reveal" });
     assert.equal(revealed.error, null, revealed.error?.message);
+    const revealedActionId = actionIdFor(revealReserved, { kind: "reveal" });
     const retry = await commit(revealReserved, {
       kind: "retry",
       actionId: `retry-${scope}`,
@@ -444,21 +457,23 @@ async function main() {
     assert.equal(retry.error, null, retry.error?.message);
     const revealEvidence = await service
       .from("blundr_daily_task_evidence_v3")
-      .select("outcome,first_attempt,reveal_occurred,retry")
+      .select("action_id,outcome,first_attempt,reveal_occurred,retry,learning_event_id")
       .eq("user_id", userAId)
       .eq("session_id", revealReserved.sessionId)
       .order("created_at");
     assert.equal(revealEvidence.error, null, revealEvidence.error?.message);
     assert.deepEqual(
       revealEvidence.data?.map((row) => [
+        row.action_id,
         row.outcome,
         row.first_attempt,
         row.reveal_occurred,
         row.retry,
+        row.learning_event_id,
       ]),
       [
-        ["revealed", true, true, false],
-        ["skipped", false, false, true],
+        [revealedActionId, "revealed", true, true, false, `event-${revealedActionId}`],
+        [`retry-${scope}`, "skipped", false, false, true, null],
       ],
     );
 

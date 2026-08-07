@@ -21,7 +21,7 @@ const dailyTaskAuthorityMigration = readFileSync(
 const dailyTaskNormalizationMigration = readFileSync(
   resolve(
     root,
-    "supabase/migrations/20260806140000_blundr_daily_task_evidence_stringified_json_v3.sql",
+    "supabase/migrations/20260806150000_blundr_daily_task_evidence_call_chain_v3.sql",
   ),
   "utf8",
 );
@@ -122,7 +122,19 @@ test("Daily v3 normalization keeps task evidence as validated JSON object data",
   );
   assert.match(
     dailyTaskNormalizationMigration,
-    /\(v_task #>> '\{\}'\)::jsonb/,
+    /return public\.blundr_commit_daily_action_v3_inner\(p_user_id, p_session_id, v_action\)/,
+  );
+  assert.match(
+    dailyTaskNormalizationMigration,
+    /v_learning_event_id := case/,
+  );
+  assert.match(
+    dailyTaskNormalizationMigration,
+    /nullif\(v_event->>'event_id', ''\)/,
+  );
+  assert.doesNotMatch(
+    dailyTaskNormalizationMigration,
+    /v_result->>'eventId'/,
   );
 });
 
