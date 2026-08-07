@@ -110,6 +110,26 @@ jobs:
           set -euo pipefail
           echo "BLUNDR_RLS_TEST_PROJECT_REF=$BLUNDR_RLS_FRESH_PROJECT_REF" >> "$GITHUB_ENV"
 
+      - name: Restore PR-01 baseline from reusable disposable project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          log="$LOG_DIR/db-reset-to-pr01-baseline.log"
+          command_log="$(mktemp)"
+          if ! npx --yes supabase@2.111.0 --yes db reset --linked --version 20260805150000 --no-seed >"$command_log" 2>&1; then
+            cat "$command_log"
+            rm -f "$command_log"
+            exit 1
+          fi
+          if grep -q '"_tag":"Error"' "$command_log"; then
+            cat "$command_log"
+            rm -f "$command_log"
+            exit 1
+          fi
+          cat "$command_log" | tee "$log" >/dev/null
+          rm -f "$command_log"
+
       - name: Verify remote migration history starts at PR-01 baseline
         shell: bash
         run: |
