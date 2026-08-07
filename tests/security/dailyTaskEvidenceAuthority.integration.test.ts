@@ -368,7 +368,9 @@ async function main() {
     assert.equal(stringified.data?.status, "inserted");
     const stringifiedEvidence = await service
       .from("blundr_daily_task_evidence_v3")
-      .select("task_type,canonical_target,submitted_answer_identity,learning_event_id")
+      .select(
+        "task_type,canonical_target,submitted_answer_identity,learning_event_id",
+      )
       .eq("user_id", userAId)
       .eq("session_id", stringifiedReserved.sessionId)
       .eq("action_id", stringifiedActionId)
@@ -457,7 +459,9 @@ async function main() {
     assert.equal(retry.error, null, retry.error?.message);
     const revealEvidence = await service
       .from("blundr_daily_task_evidence_v3")
-      .select("action_id,outcome,first_attempt,reveal_occurred,retry,learning_event_id")
+      .select(
+        "action_id,outcome,first_attempt,reveal_occurred,retry,learning_event_id",
+      )
       .eq("user_id", userAId)
       .eq("session_id", revealReserved.sessionId)
       .order("created_at");
@@ -472,7 +476,14 @@ async function main() {
         row.learning_event_id,
       ]),
       [
-        [revealedActionId, "revealed", true, true, false, `event-${revealedActionId}`],
+        [
+          revealedActionId,
+          "revealed",
+          true,
+          true,
+          false,
+          `event-${revealedActionId}`,
+        ],
         [`retry-${scope}`, "skipped", false, false, true, null],
       ],
     );
