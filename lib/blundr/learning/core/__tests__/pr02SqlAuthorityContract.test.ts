@@ -124,18 +124,12 @@ test("Daily v3 normalization keeps task evidence as validated JSON object data",
     dailyTaskNormalizationMigration,
     /return public\.blundr_commit_daily_action_v3_inner\(p_user_id, p_session_id, v_action\)/,
   );
-  assert.match(
-    dailyTaskNormalizationMigration,
-    /v_learning_event_id := case/,
-  );
+  assert.match(dailyTaskNormalizationMigration, /v_learning_event_id := case/);
   assert.match(
     dailyTaskNormalizationMigration,
     /nullif\(v_event->>'event_id', ''\)/,
   );
-  assert.doesNotMatch(
-    dailyTaskNormalizationMigration,
-    /v_result->>'eventId'/,
-  );
+  assert.doesNotMatch(dailyTaskNormalizationMigration, /v_result->>'eventId'/);
 });
 
 test("route derives correctness and scheduling from server authority", () => {
