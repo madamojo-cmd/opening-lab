@@ -12,15 +12,18 @@ export function testRuntimeBookBeforeContinuation(): void {
     trainingMode: "continuation",
     trainerPhase: "ready_for_user",
     isUserTurn: true,
-    boardFen: "r2q1rk1/bpp2ppp/p1np1n2/4p3/4P1b1/1BPP1N2/PP1N1PPP/R1BQR1K1 w - - 0 10",
-    boardFen4: "r2q1rk1/bpp2ppp/p1np1n2/4p3/4P1b1/1BPP1N2/PP1N1PPP/R1BQR1K1 w - -",
+    boardFen:
+      "r2q1rk1/bpp2ppp/p1np1n2/4p3/4P1b1/1BPP1N2/PP1N1PPP/R1BQR1K1 w - - 0 10",
+    boardFen4:
+      "r2q1rk1/bpp2ppp/p1np1n2/4p3/4P1b1/1BPP1N2/PP1N1PPP/R1BQR1K1 w - -",
     legalMoveUcis: ["h2h3", "a2a3", "d1e2"],
     lockedCandidate: null,
     continuationResolvedTargetUci: "h2h3",
     continuationResolvedTargetSan: "h3",
     continuationResolvedTargetSource: "stage2-runtime-book",
     continuationResolvedTargetLabel: "Book",
-    continuationResolvedTargetFen4: "r2q1rk1/bpp2ppp/p1np1n2/4p3/4P1b1/1BPP1N2/PP1N1PPP/R1BQR1K1 w - -",
+    continuationResolvedTargetFen4:
+      "r2q1rk1/bpp2ppp/p1np1n2/4p3/4P1b1/1BPP1N2/PP1N1PPP/R1BQR1K1 w - -",
   });
 
   assert.equal(promoted.candidate?.uci, "h2h3");
@@ -29,9 +32,9 @@ export function testRuntimeBookBeforeContinuation(): void {
   assert.equal(promoted.guard.stockfishPromotionGuardSourceAllowed, true);
 
   const appPage = fs.readFileSync(APP_PAGE, "utf8");
-  assert.equal(
-    appPage.includes("runtimeBookPreferredCandidate?.uci??stockfishTopMovesForContinuation.bestMoveUci??null"),
-    true,
+  assert.match(
+    appPage,
+    /runtimeBookPreferredCandidate\?\.uci\s*\?\?\s*stockfishTopMovesForContinuation\.bestMoveUci\s*\?\?\s*null/,
     "app_page_must_resolve_runtime_book_before_stockfish",
   );
   assert.equal(

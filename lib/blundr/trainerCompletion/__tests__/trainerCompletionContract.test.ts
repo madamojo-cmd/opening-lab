@@ -62,9 +62,9 @@ assert.match(page, /clearAuthoritativeTrainerSessionResumes\(\)/);
 // the in-flight guard so interruption retry can reuse that exact identity.
 assert.match(
   page,
-  /const terminalCompletionId=authoritativeTrainerSession\?\.terminalCompletionId/,
+  /const terminalCompletionId\s*=\s*authoritativeTrainerSession\?\.terminalCompletionId\s*\?\?\s*null;/,
 );
-assert.match(page, /const completionKey=terminalCompletionId/);
-assert.match(page, /openingRunAwardKeyRef\.current=""/);
+assert.match(page, /const completionKey\s*=\s*terminalCompletionId/);
+assert.match(page, /openingRunAwardKeyRef\.current\s*=\s*""/);
 
 console.log("trainerCompletionContract ok");

@@ -2,21 +2,67 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 export function testStage2CanonicalIdentityNoPendingOpponentRenderLoop(): void {
-  const source = readFileSync(new URL("../../app/page.tsx", import.meta.url), "utf8");
-  const effectStart = source.indexOf("useEffect(()=>{\n    if(!branchCompleteShouldCancelPending)return;");
+  const source = readFileSync(
+    new URL("../../app/page.tsx", import.meta.url),
+    "utf8",
+  );
+  const effectStart = source.search(
+    /useEffect\(\(\)\s*=>\s*\{\s*if\s*\(!branchCompleteShouldCancelPending\)\s*return;/,
+  );
   assert.notEqual(effectStart, -1, "branch_complete_cancel_effect_present");
-  const effectEnd = source.indexOf("useEffect(()=>{\n    if(!pendingOpponentRequest)return;", effectStart);
-  assert.notEqual(effectEnd, -1, "branch_complete_cancel_effect_terminates_before_pending_guard");
+  const effectEnd = source.search(
+    /useEffect\(\(\)\s*=>\s*\{\s*if\s*\(!pendingOpponentRequest\)\s*return;/,
+  );
+  assert.notEqual(
+    effectEnd,
+    -1,
+    "branch_complete_cancel_effect_terminates_before_pending_guard",
+  );
   const effect = source.slice(effectStart, effectEnd);
 
-  assert.match(effect, /const pendingId=pendingOpponentRequestRef\.current\?\.requestId\?\?null;/);
-  assert.match(effect, /const hasPendingState=pendingOpponentRequest!==null;/);
-  assert.match(effect, /const hasPendingRef=pendingId!==null;/);
-  assert.match(effect, /const isOpponentTransitionPhase=\s*trainerPhase==="opponent_replying"\|\|\s*trainerPhase==="opponent_selecting";/);
-  assert.match(effect, /if\(!hasPendingState&&!hasPendingRef&&!isOpponentTransitionPhase\)\{\s*return;\s*\}/);
-  assert.match(effect, /if\(hasPendingState\|\|hasPendingRef\)\{\s*clearPendingOpponentReplyRequest\(\{clearStaleIssue:true\}\);\s*\}/);
-  assert.match(effect, /setTrainerPhase\(\(current\)=>\(\s*current==="opponent_replying"\|\|current==="opponent_selecting"\s*\?\s*"ready_for_user"\s*:\s*current\s*\)\);/);
-  assert.match(effect, /pendingOpponentRequest\?\.requestId/);
+  assert.equal(
+    effect.includes(
+      "const pendingId = pendingOpponentRequestRef.current?.requestId ?? null;",
+    ),
+    true,
+  );
+  assert.equal(
+    effect.includes("const hasPendingState = pendingOpponentRequest !== null;"),
+    true,
+  );
+  assert.equal(
+    effect.includes("const hasPendingRef = pendingId !== null;"),
+    true,
+  );
+  assert.equal(
+    effect.includes(
+      'const isOpponentTransitionPhase =\n      trainerPhase === "opponent_replying" ||\n      trainerPhase === "opponent_selecting";',
+    ),
+    true,
+  );
+  assert.equal(
+    effect.includes(
+      "if (!hasPendingState && !hasPendingRef && !isOpponentTransitionPhase) {",
+    ),
+    true,
+  );
+  assert.equal(
+    effect.includes("if (hasPendingState || hasPendingRef) {"),
+    true,
+  );
+  assert.equal(
+    effect.includes(
+      "clearPendingOpponentReplyRequest({ clearStaleIssue: true });",
+    ),
+    true,
+  );
+  assert.equal(
+    effect.includes(
+      'setTrainerPhase((current) =>\n        current === "opponent_replying" || current === "opponent_selecting"\n          ? "ready_for_user"\n          : current,',
+    ),
+    true,
+  );
+  assert.equal(effect.includes("pendingOpponentRequest?.requestId"), true);
 }
 
 testStage2CanonicalIdentityNoPendingOpponentRenderLoop();

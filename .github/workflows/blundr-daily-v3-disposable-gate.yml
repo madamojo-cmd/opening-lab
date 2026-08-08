@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: blundr-daily-v3-disposable-gate-${{ github.ref }}
+  group: blundr-disposable-rls-fresh
   cancel-in-progress: false
 
 jobs:

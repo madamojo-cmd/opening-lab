@@ -127,6 +127,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: blundr-disposable-rls
+    concurrency:
+      group: blundr-disposable-rls-fresh
+      cancel-in-progress: false
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       BLUNDR_RLS_FRESH_PROJECT_REF: ${{ secrets.BLUNDR_RLS_FRESH_PROJECT_REF }}
@@ -214,6 +217,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: blundr-disposable-rls
+    concurrency:
+      group: blundr-disposable-rls-upgrade
+      cancel-in-progress: false
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       BLUNDR_RLS_FRESH_PROJECT_REF: ${{ secrets.BLUNDR_RLS_FRESH_PROJECT_REF }}
