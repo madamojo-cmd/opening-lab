@@ -9,7 +9,9 @@ import type {
 const DEFAULT_SKILL_LEVEL: MaiaSkillLevel = "maia-1500";
 
 function normalizeSkillInput(value: unknown): string {
-  return String(value ?? "").trim().toLowerCase();
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
 }
 
 export function resolveMaiaSkillLevel(input: {
@@ -35,15 +37,23 @@ export function resolveMaiaSkillLevel(input: {
 }
 
 function normalizeUci(uci: unknown): string | null {
-  const value = String(uci ?? "").trim().toLowerCase();
+  const value = String(uci ?? "")
+    .trim()
+    .toLowerCase();
   return /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(value) ? value : null;
 }
 
 function candidateSortScore(candidate: MaiaMoveCandidate): number {
-  const rank = Number.isFinite(Number(candidate.rank)) ? Number(candidate.rank) : Number.POSITIVE_INFINITY;
-  const likelihood = Number.isFinite(Number(candidate.humanLikelihood)) ? Number(candidate.humanLikelihood) : -1;
-  const policyScore = Number.isFinite(Number(candidate.policyScore)) ? Number(candidate.policyScore) : -1;
-  return (-likelihood * 1000) + rank - policyScore;
+  const rank = Number.isFinite(Number(candidate.rank))
+    ? Number(candidate.rank)
+    : Number.POSITIVE_INFINITY;
+  const likelihood = Number.isFinite(Number(candidate.humanLikelihood))
+    ? Number(candidate.humanLikelihood)
+    : -1;
+  const policyScore = Number.isFinite(Number(candidate.policyScore))
+    ? Number(candidate.policyScore)
+    : -1;
+  return -likelihood * 1000 + rank - policyScore;
 }
 
 export function selectMaiaOpponentReply(
@@ -57,7 +67,10 @@ export function selectMaiaOpponentReply(
   const pool = Array.isArray(result.candidates) ? result.candidates : [];
   const legalCandidates = pool
     .map((candidate) => ({ ...candidate, uci: normalizeUci(candidate.uci) }))
-    .filter((candidate): candidate is MaiaMoveCandidate & { uci: string } => Boolean(candidate.uci) && legal.has(candidate.uci));
+    .filter(
+      (candidate): candidate is MaiaMoveCandidate & { uci: string } =>
+        Boolean(candidate.uci) && legal.has(candidate.uci),
+    );
   if (!legalCandidates.length) return null;
   legalCandidates.sort((a, b) => candidateSortScore(a) - candidateSortScore(b));
   return legalCandidates[0] ?? null;
@@ -179,18 +192,21 @@ export function buildMaiaOpponentReplyDecision(input: {
       fallbackReason: null,
     };
   }
-  if (input.providerStatus === "unavailable" || input.providerStatus === "disabled") {
+  if (
+    input.providerStatus === "unavailable" ||
+    input.providerStatus === "disabled"
+  ) {
     return {
       allowed: false,
       reason: "provider_unavailable",
       providerUsed: false,
       selectedMoveUci: null,
       selectedMoveSan: null,
-      selectedMoveSource: "fallback",
+      selectedMoveSource: "none",
       skillLevel: input.skillLevel ?? null,
       humanLikelihood: null,
       candidateCount: 0,
-      fallbackReason: input.fallbackRequested ? "fallback_used" : null,
+      fallbackReason: null,
     };
   }
 
@@ -220,25 +236,33 @@ export function classifyMaiaProviderStatus(input: {
   return "ready";
 }
 
-export function withMaiaTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<{ ok: true; value: T } | { ok: false; reason: "timeout" }> {
+export function withMaiaTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<{ ok: true; value: T } | { ok: false; reason: "timeout" }> {
   return new Promise((resolve) => {
     let done = false;
-    const timer = setTimeout(() => {
-      if (done) return;
-      done = true;
-      resolve({ ok: false, reason: "timeout" });
-    }, Math.max(1, timeoutMs));
-    promise.then((value) => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      resolve({ ok: true, value });
-    }).catch(() => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      resolve({ ok: false, reason: "timeout" });
-    });
+    const timer = setTimeout(
+      () => {
+        if (done) return;
+        done = true;
+        resolve({ ok: false, reason: "timeout" });
+      },
+      Math.max(1, timeoutMs),
+    );
+    promise
+      .then((value) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve({ ok: true, value });
+      })
+      .catch(() => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve({ ok: false, reason: "timeout" });
+      });
   });
 }
 
@@ -246,11 +270,29 @@ export function evaluateMaiaSanityGuard(input: {
   enabled: boolean;
   cpLoss?: number | null;
   maxAllowedCpLoss: number;
-}): { allowed: boolean; result: "allowed" | "blocked" | "sanity_guard_unavailable"; blockedReason: string | null } {
-  if (!input.enabled) return { allowed: true, result: "sanity_guard_unavailable", blockedReason: null };
-  if (!Number.isFinite(Number(input.cpLoss))) return { allowed: true, result: "sanity_guard_unavailable", blockedReason: null };
+}): {
+  allowed: boolean;
+  result: "allowed" | "blocked" | "sanity_guard_unavailable";
+  blockedReason: string | null;
+} {
+  if (!input.enabled)
+    return {
+      allowed: true,
+      result: "sanity_guard_unavailable",
+      blockedReason: null,
+    };
+  if (!Number.isFinite(Number(input.cpLoss)))
+    return {
+      allowed: true,
+      result: "sanity_guard_unavailable",
+      blockedReason: null,
+    };
   if (Number(input.cpLoss) > input.maxAllowedCpLoss) {
-    return { allowed: false, result: "blocked", blockedReason: "maia_sanity_guard_rejected_candidate" };
+    return {
+      allowed: false,
+      result: "blocked",
+      blockedReason: "maia_sanity_guard_rejected_candidate",
+    };
   }
   return { allowed: true, result: "allowed", blockedReason: null };
 }

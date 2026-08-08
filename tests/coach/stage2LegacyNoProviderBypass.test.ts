@@ -19,7 +19,7 @@ export function testStage2LegacyNoProviderBypass(): void {
   assert.equal(blocked.allowed, false);
   assert.equal(blocked.selectedMoveSource, "none");
 
-  const fallback = buildMaiaOpponentReplyDecision({
+  const unavailable = buildMaiaOpponentReplyDecision({
     trainingMode: "continuation",
     userExplicitlyEnteredContinuation: true,
     sideToMove: "b",
@@ -30,8 +30,11 @@ export function testStage2LegacyNoProviderBypass(): void {
     providerStatus: "unavailable",
     fallbackRequested: true,
   });
-  assert.equal(fallback.allowed, false);
-  assert.equal(fallback.selectedMoveSource, "fallback");
+  assert.equal(unavailable.allowed, false);
+  assert.equal(unavailable.reason, "provider_unavailable");
+  assert.equal(unavailable.providerUsed, false);
+  assert.equal(unavailable.selectedMoveSource, "none");
+  assert.equal(unavailable.fallbackReason, null);
 
   const startFen = new Chess().fen();
   const continuationBlocked = resolveEffectiveContinuationCandidate({
@@ -47,7 +50,10 @@ export function testStage2LegacyNoProviderBypass(): void {
     continuationResolvedTargetLabel: "book move",
   });
   assert.equal(continuationBlocked.candidate, null);
-  assert.equal(continuationBlocked.guard.blockedReason, "not_continuation_mode");
+  assert.equal(
+    continuationBlocked.guard.blockedReason,
+    "not_continuation_mode",
+  );
 }
 
 testStage2LegacyNoProviderBypass();

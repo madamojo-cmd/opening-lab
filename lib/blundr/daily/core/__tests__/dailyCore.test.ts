@@ -141,14 +141,19 @@ test("Daily reservation is atomic and scored first attempts are immutable", () =
     now: "2026-07-13T00:00:00Z",
     outcome: "incorrect",
   });
-  const duplicate = reduceDailySession(first.state, {
+  const teachingRetry = reduceDailySession(first.state, {
     userId: "u",
     cardFingerprint: "card",
     now: "2026-07-13T00:01:00Z",
     outcome: "correct",
   });
-  assert.equal(duplicate.result, "already_committed");
-  assert.equal(duplicate.state.attempts.length, 1);
+  assert.equal(teachingRetry.result, "accepted");
+  assert.equal(teachingRetry.state.attempts.length, 2);
+  assert.equal(teachingRetry.state.attempts[0].outcome, "incorrect");
+  assert.equal(teachingRetry.state.attempts[0].scored, true);
+  assert.equal(teachingRetry.state.attempts[1].outcome, "correct");
+  assert.equal(teachingRetry.state.attempts[1].scored, false);
+  assert.equal(teachingRetry.state.currentIndex, 1);
 });
 test("Daily session persistence resumes the exact serialized state", () => {
   const deck = buildDeterministicDailyDeck({
@@ -207,4 +212,5 @@ test("Daily reveal and retry remain unscored and cannot replace the first scored
     retry.state.attempts.filter((attempt) => attempt.scored).length,
     0,
   );
+  assert.equal(retry.state.revealedCardIds.length, 0);
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
+import { formatRepertoirePoints } from "@/lib/blundr/presentation/userFacingNumbers";
 
 type RepertoirePointsSummaryProps = {
   progress: RepertoireProgress;
@@ -33,9 +34,9 @@ export function RepertoirePointsSummary({ progress, className, compact }: Repert
         <div className="rounded-full bg-green-50 px-3 py-1 text-xs font-black text-green-700">{progress.unlockedOpeningIds.length} unlocked</div>
       </div>
       <div className={classNames("mt-3 grid gap-2", compact ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-4")}>
-        <Stat label="Available" value={progress.availablePoints} sub="ready to spend" />
-        <Stat label="Lifetime" value={progress.lifetimePoints} sub="all earned" />
-        <Stat label="Spent" value={progress.spentPoints} sub="on unlocks" />
+        <Stat label="Available" value={formatRepertoirePoints(progress.availablePoints)} sub="ready to spend" />
+        <Stat label="Lifetime" value={formatRepertoirePoints(progress.lifetimePoints)} sub="all earned" />
+        <Stat label="Spent" value={formatRepertoirePoints(progress.spentPoints)} sub="on unlocks" />
         <Stat label="Unlocked" value={progress.unlockedOpeningIds.length} sub="openings ready" />
       </div>
     </section>

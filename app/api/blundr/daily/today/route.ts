@@ -5,6 +5,7 @@ import {
   getOrReserveDaily,
   publicDailySession,
 } from "@/lib/blundr/daily/productionDailyService.server";
+import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTelemetry.server";
 
 export const dynamic = "force-dynamic";
 
@@ -15,11 +16,16 @@ export async function GET(request: Request) {
       { error: "authentication_required" },
       { status: 401 },
     );
-  if (!getServerFeatureFlags().daily_production_store)
+  if (!getServerFeatureFlags().daily_adaptive_v2)
     return NextResponse.json({ error: "feature_disabled" }, { status: 503 });
   const dateKey = new Date().toISOString().slice(0, 10);
   try {
     const session = await getOrReserveDaily(user, dateKey);
+    await emitBlundrOperationalEvent("daily_composed", {
+      status: session.publicCards.length ? "ready" : "empty",
+      cardCount: session.publicCards.length,
+      sessionVersion: session.version,
+    });
     return NextResponse.json({
       dateKey,
       status: session.publicCards.length ? "ready" : "empty",
@@ -28,12 +34,13 @@ export async function GET(request: Request) {
       session: publicDailySession(session),
     });
   } catch (error) {
+    const code =
+      error instanceof Error ? error.message : "persistence_unavailable";
     return NextResponse.json(
       {
-        error:
-          error instanceof Error ? error.message : "persistence_unavailable",
+        error: code,
       },
-      { status: 503 },
+      { status: code === "daily_opening_selection_required" ? 409 : 503 },
     );
   }
 }

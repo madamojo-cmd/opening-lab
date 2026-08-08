@@ -21,11 +21,14 @@ const EXEMPT = [
 
 function activeNav(pathname: string): AppShellNavKey {
   if (pathname.startsWith("/train")) return "train";
-  if (pathname.startsWith("/daily")) return "daily";
-  if (pathname.startsWith("/review")) return "review";
+  if (
+    pathname.startsWith("/daily") ||
+    pathname.startsWith("/review") ||
+    pathname.startsWith("/minigames")
+  )
+    return "review";
+  if (pathname.startsWith("/progress")) return "progress";
   if (pathname.startsWith("/repertoire")) return "repertoire";
-  if (pathname.startsWith("/minigames")) return "minigames";
-  if (pathname.startsWith("/settings")) return "settings";
   return "home";
 }
 

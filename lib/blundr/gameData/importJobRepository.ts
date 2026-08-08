@@ -6,6 +6,7 @@ import type {
   ImportMetrics,
   ImportJobStatus,
 } from "./gameDataTypes";
+import { requireProviderPersistence } from "./providerPersistence.server";
 
 const jobs = new Map<string, GameImportJob>();
 export const MAX_IMPORT_ATTEMPTS = 5;
@@ -14,7 +15,9 @@ export class ImportJobRepository {
   async nextPending(limit = 5): Promise<GameImportJob[]> {
     const now = new Date();
     await this.recoverStranded(now);
-    const client = createBlundrSupabaseAdminClient();
+    const client = requireProviderPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
     if (!client)
       return [...jobs.values()]
         .filter(
@@ -36,7 +39,9 @@ export class ImportJobRepository {
 
   async recoverStranded(now = new Date()): Promise<void> {
     const updatedAt = now.toISOString();
-    const client = createBlundrSupabaseAdminClient();
+    const client = requireProviderPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
     if (!client) {
       for (const [jobId, job] of jobs) {
         if (
@@ -73,7 +78,9 @@ export class ImportJobRepository {
     correlationId: string;
   }): Promise<GameImportJob> {
     const now = new Date().toISOString();
-    const client = createBlundrSupabaseAdminClient();
+    const client = requireProviderPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
     if (!client) {
       const existing = [...jobs.values()].find(
         (job) =>
@@ -151,7 +158,9 @@ export class ImportJobRepository {
     userId: string,
     provider: GameImportJob["provider"],
   ): Promise<GameImportJob | null> {
-    const client = createBlundrSupabaseAdminClient();
+    const client = requireProviderPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
     if (!client)
       return (
         [...jobs.values()].find(
@@ -182,7 +191,9 @@ export class ImportJobRepository {
     ttlMs = 60_000,
   ): Promise<GameImportJob | null> {
     const expiry = new Date(now.valueOf() + ttlMs).toISOString();
-    const client = createBlundrSupabaseAdminClient();
+    const client = requireProviderPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
     if (!client) {
       const job = jobs.get(jobId);
       if (
@@ -236,7 +247,9 @@ export class ImportJobRepository {
     ttlMs = 60_000,
   ): Promise<boolean> {
     const expiry = new Date(now.valueOf() + ttlMs).toISOString();
-    const client = createBlundrSupabaseAdminClient();
+    const client = requireProviderPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
     if (!client) {
       const job = jobs.get(jobId);
       if (job?.status !== "running" || job.leaseOwner !== workerId)
@@ -274,7 +287,9 @@ export class ImportJobRepository {
     >,
   ): Promise<void> {
     const now = new Date().toISOString();
-    const client = createBlundrSupabaseAdminClient();
+    const client = requireProviderPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
     if (!client) {
       const job = jobs.get(jobId);
       if (job) jobs.set(jobId, { ...job, ...patch, updatedAt: now });

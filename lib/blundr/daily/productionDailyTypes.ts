@@ -55,12 +55,14 @@ export type ProductionDailySession = {
   reservationIdentity: DailyReservationIdentity;
   version: number;
   completedAt: string | null;
+  updatedAt?: string;
 };
 
 export type ProductionDailyPublicSession = Omit<
   ProductionDailySession,
-  "userId" | "privateCards" | "state"
+  "userId" | "privateCards" | "state" | "publicCards"
 > & {
+  publicCards: readonly (ProductionDailyPublicCard & { actionId: string })[];
   state: {
     currentIndex: number;
     completedCardIds: readonly string[];

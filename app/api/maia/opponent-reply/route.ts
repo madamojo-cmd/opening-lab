@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 
 import { MaiaLc0RuntimeAdapter } from "@/lib/blundr/maia/maiaLc0RuntimeAdapter";
+import { MaiaRemoteRuntimeAdapter } from "@/lib/blundr/maia/maiaRemoteRuntimeAdapter";
 import { readMaiaRuntimeConfig } from "@/lib/blundr/maia/maiaRuntimeConfig";
 import { validateOpponentReplyPayload } from "@/lib/blundr/maia/opponentReplyPayload";
+import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTelemetry.server";
 
 function jsonNoStore(body: unknown, init?: ResponseInit): NextResponse {
   const response = NextResponse.json(body, init);
@@ -10,17 +12,24 @@ function jsonNoStore(body: unknown, init?: ResponseInit): NextResponse {
   return response;
 }
 
-function buildUnavailableResponse(request: any, errorReason: string, providerMs: number | null = null): Response {
-  return jsonNoStore({
-    status: "unavailable",
-    requestId: Number(request?.requestId ?? 0) || 0,
-    fen4: String(request?.fen4 ?? ""),
-    skillLevel: String(request?.skillLevel ?? "maia-1500"),
-    candidates: [],
-    selectedCandidate: null,
-    errorReason,
-    providerMs,
-  }, { status: 503 });
+function buildUnavailableResponse(
+  request: any,
+  errorReason: string,
+  providerMs: number | null = null,
+): Response {
+  return jsonNoStore(
+    {
+      status: "unavailable",
+      requestId: Number(request?.requestId ?? 0) || 0,
+      fen4: String(request?.fen4 ?? ""),
+      skillLevel: String(request?.skillLevel ?? "maia-1500"),
+      candidates: [],
+      selectedCandidate: null,
+      errorReason,
+      providerMs,
+    },
+    { status: 503 },
+  );
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -39,7 +48,10 @@ export async function POST(request: Request): Promise<Response> {
   const payload = validated.value;
   try {
     const config = readMaiaRuntimeConfig();
-    const adapter = new MaiaLc0RuntimeAdapter(config);
+    const adapter =
+      config.transport === "remote"
+        ? new MaiaRemoteRuntimeAdapter(config)
+        : new MaiaLc0RuntimeAdapter(config);
     const runtime = await adapter.getBestMove(payload);
 
     const candidate = runtime.bestMoveUci
@@ -65,6 +77,19 @@ export async function POST(request: Request): Promise<Response> {
             ? "timeout"
             : "unavailable";
 
+    await emitBlundrOperationalEvent(
+      providerStatus === "ready"
+        ? "maia_request_completed"
+        : "maia_request_failed",
+      {
+        status: providerStatus,
+        transport: config.transport,
+        legal: Boolean(runtime.legal),
+        runtimeMs: runtime.runtimeMs,
+        skillLevel: payload.skillLevel,
+      },
+    );
+
     return jsonNoStore({
       status: providerStatus,
       requestId: payload.requestId,
@@ -78,7 +103,20 @@ export async function POST(request: Request): Promise<Response> {
       providerMs: runtime.runtimeMs,
     });
   } catch (error) {
-    return buildUnavailableResponse(payload, error instanceof Error && /timeout/i.test(error.message) ? "timeout" : "provider_error");
+    await emitBlundrOperationalEvent("maia_request_failed", {
+      status: "unavailable",
+      reason:
+        error instanceof Error && /timeout/i.test(error.message)
+          ? "timeout"
+          : "provider_error",
+      skillLevel: payload.skillLevel,
+    });
+    return buildUnavailableResponse(
+      payload,
+      error instanceof Error && /timeout/i.test(error.message)
+        ? "timeout"
+        : "provider_error",
+    );
   }
 }
 

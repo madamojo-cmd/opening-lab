@@ -6,6 +6,7 @@ import type {
   ExtractedFinding,
 } from "./gameDataTypes";
 import { projectImportedFinding } from "./learningProjectionService";
+import { requireProviderPersistence } from "./providerPersistence.server";
 
 const games = new Map<string, ProviderGameRecord>();
 const segments = new Map<string, OpeningSegmentRecord>();
@@ -17,7 +18,9 @@ export class ExternalGameRepository {
     provider: ProviderGameRecord["provider"],
     fingerprint: string,
   ): Promise<boolean> {
-    const client = createBlundrSupabaseAdminClient();
+    const client = requireProviderPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
     if (!client) return games.has(`${userId}:${provider}:${fingerprint}`);
     const result = await client
       .from("blundr_external_games")
@@ -33,7 +36,9 @@ export class ExternalGameRepository {
 
   async saveGame(userId: string, game: ProviderGameRecord): Promise<void> {
     const key = game.providerFingerprint ?? game.fallbackFingerprint;
-    const client = createBlundrSupabaseAdminClient();
+    const client = requireProviderPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
     if (!client) {
       games.set(`${userId}:${game.provider}:${key}`, game);
       return;
@@ -69,7 +74,9 @@ export class ExternalGameRepository {
     userId: string,
     segment: OpeningSegmentRecord,
   ): Promise<void> {
-    const client = createBlundrSupabaseAdminClient();
+    const client = requireProviderPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
     if (!client) {
       segments.set(`${userId}:${segment.segmentId}`, segment);
       return;
@@ -96,7 +103,9 @@ export class ExternalGameRepository {
     userId: string,
     finding: ExtractedFinding,
   ): Promise<boolean> {
-    const client = createBlundrSupabaseAdminClient();
+    const client = requireProviderPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
     if (!client) {
       const key = `${userId}:${finding.fingerprint}`;
       const duplicate = findings.has(key);
@@ -129,7 +138,9 @@ export class ExternalGameRepository {
   }
 
   async deleteProviderData(userId: string, provider: string): Promise<void> {
-    const client = createBlundrSupabaseAdminClient();
+    const client = requireProviderPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
     if (!client) return;
     await client
       .from("blundr_external_games")

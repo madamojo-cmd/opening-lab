@@ -18,12 +18,15 @@ describe("AppShell", () => {
         task={<button type="button">Submit move</button>}
         context={<p>Due today</p>}
       >
-        <p>Existing page content</p>
+        <main>
+          <p>Existing page content</p>
+        </main>
       </AppShell>,
     );
 
     expect(screen.getByRole("banner")).toBeInTheDocument();
     expect(screen.getAllByRole("navigation")).toHaveLength(1);
+    expect(screen.getAllByRole("main")).toHaveLength(1);
     expect(screen.getByRole("main")).toContainElement(
       screen.getByText("Existing page content"),
     );
@@ -46,18 +49,16 @@ describe("AppShell", () => {
     const links = within(
       screen.getByRole("navigation", { name: "Primary" }),
     ).getAllByRole("link");
-    expect(links).toHaveLength(7);
+    expect(links).toHaveLength(5);
     expect(new Set(links.map((link) => link.getAttribute("href"))).size).toBe(
-      7,
+      5,
     );
     expect(links.map((link) => link.textContent)).toEqual([
       "Home",
       "Train",
-      "Daily",
       "Review",
+      "Progress",
       "Repertoire",
-      "Minigames",
-      "Settings",
     ]);
   });
 

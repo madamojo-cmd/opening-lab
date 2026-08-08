@@ -5,8 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { persistAuthenticatedAccountSnapshot } from "@/lib/blundr/accounts/authenticatedAccountHydration";
 import type { UserAccountBootstrap } from "@/lib/blundr/accounts/accountTypes";
+import { BLUNDR_ANALYTICS_EVENTS } from "@/lib/blundr/analytics/blundrAnalyticsEvents";
+import { trackBlundrAnalyticsEvent } from "@/lib/blundr/analytics/blundrAnalyticsService";
 import { BLUNDR_DAILY_RING_REFRESH_EVENT } from "@/lib/blundr/daily-rings/dailyRingRefreshSignal";
 import { useOnboardingAuthSession } from "@/lib/blundr/onboarding/useOnboardingAuthSession";
+import { RewardPresentationHost } from "@/components/rewards/RewardPresentationHost";
 
 const EXEMPT_PREFIXES = [
   "/signup",
@@ -21,6 +24,7 @@ const EXEMPT_PREFIXES = [
   "/acceptable-use",
   "/subscription-terms",
 ];
+export const ACCOUNT_BOOTSTRAP_TIMEOUT_MS = 8_000;
 
 export function AuthenticatedAccountHydrationGate({
   children,
@@ -50,11 +54,13 @@ export function AuthenticatedAccountHydrationGate({
       return;
     }
     let active = true;
+    const startedAt = performance.now();
     setState("loading");
     void fetch("/api/blundr/account/bootstrap", {
       method: "POST",
       headers: { authorization: `Bearer ${auth.session.accessToken}` },
       cache: "no-store",
+      signal: AbortSignal.timeout(ACCOUNT_BOOTSTRAP_TIMEOUT_MS),
     })
       .then(async (response) => {
         const payload = (await response.json().catch(() => null)) as {
@@ -63,6 +69,15 @@ export function AuthenticatedAccountHydrationGate({
         } | null;
         if (!active) return;
         if (!response.ok || !payload?.ok || !payload.data) {
+          trackBlundrAnalyticsEvent(
+            BLUNDR_ANALYTICS_EVENTS.AUTH_HYDRATION_FAILED,
+            {
+              attempt: attempt + 1,
+              durationMs: Math.round(performance.now() - startedAt),
+              pathClass: "protected",
+              reason: `bootstrap_${response.status}`,
+            },
+          );
           setState("error");
           return;
         }
@@ -71,14 +86,46 @@ export function AuthenticatedAccountHydrationGate({
           payload.data,
         );
         if (!persisted.ok) {
+          trackBlundrAnalyticsEvent(
+            BLUNDR_ANALYTICS_EVENTS.AUTH_HYDRATION_FAILED,
+            {
+              attempt: attempt + 1,
+              durationMs: Math.round(performance.now() - startedAt),
+              pathClass: "protected",
+              reason: "snapshot_persistence_failed",
+            },
+          );
           setState("error");
           return;
         }
         window.dispatchEvent(new Event(BLUNDR_DAILY_RING_REFRESH_EVENT));
+        trackBlundrAnalyticsEvent(
+          BLUNDR_ANALYTICS_EVENTS.AUTH_HYDRATION_COMPLETED,
+          {
+            attempt: attempt + 1,
+            durationMs: Math.round(performance.now() - startedAt),
+            pathClass: "protected",
+            reason: "ready",
+          },
+        );
         setState("ready");
       })
-      .catch(() => {
-        if (active) setState("error");
+      .catch((error: unknown) => {
+        if (active) {
+          trackBlundrAnalyticsEvent(
+            BLUNDR_ANALYTICS_EVENTS.AUTH_HYDRATION_FAILED,
+            {
+              attempt: attempt + 1,
+              durationMs: Math.round(performance.now() - startedAt),
+              pathClass: "protected",
+              reason:
+                error instanceof Error && error.name === "TimeoutError"
+                  ? "bootstrap_timeout"
+                  : "bootstrap_network_error",
+            },
+          );
+          setState("error");
+        }
       });
     return () => {
       active = false;
@@ -108,7 +155,12 @@ export function AuthenticatedAccountHydrationGate({
     );
   }
   if (state === "ready" && auth.status === "authenticated")
-    return <>{children}</>;
+    return (
+      <>
+        {children}
+        <RewardPresentationHost />
+      </>
+    );
   if (state === "error") {
     return (
       <main className="min-h-screen bg-stone-50 p-6">

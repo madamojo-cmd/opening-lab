@@ -3,6 +3,7 @@ import { getServerFeatureFlags } from "@/lib/blundr/contracts/serverFeatureFlags
 import { requireGameDataUser } from "@/lib/blundr/gameData/gameDataService";
 import {
   applyDailyAction,
+  applyDailyCompletionReward,
   publicDailySession,
 } from "@/lib/blundr/daily/productionDailyService.server";
 
@@ -18,15 +19,21 @@ export async function POST(
       { error: "authentication_required" },
       { status: 401 },
     );
-  if (!getServerFeatureFlags().daily_production_store)
+  if (!getServerFeatureFlags().daily_adaptive_v2)
     return NextResponse.json({ error: "feature_disabled" }, { status: 503 });
   const { sessionId } = await context.params;
   const body = (await request.json().catch(() => null)) as {
     cardFingerprint?: string;
     answer?: string;
     expectedVersion?: number;
+    actionId?: string;
   } | null;
-  if (!body?.cardFingerprint || !Number.isInteger(body.expectedVersion))
+  if (
+    !body?.cardFingerprint ||
+    typeof body.actionId !== "string" ||
+    !body.actionId ||
+    !Number.isInteger(body.expectedVersion)
+  )
     return NextResponse.json({ error: "invalid_attempt" }, { status: 400 });
   try {
     const result = await applyDailyAction({
@@ -35,7 +42,12 @@ export async function POST(
       cardFingerprint: body.cardFingerprint,
       answer: body.answer,
       expectedVersion: Number(body.expectedVersion),
+      actionId: body.actionId,
       action: "answer",
+    });
+    await applyDailyCompletionReward({
+      userId: user.userId,
+      session: result.session,
     });
     return NextResponse.json({
       result: result.result,

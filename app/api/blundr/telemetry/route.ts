@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server";
-import {
-  BLUNDR_ANALYTICS_EVENT_NAMES,
-  type BlundrAnalyticsEventName,
-} from "@/lib/blundr/analytics/blundrAnalyticsEvents";
+import type { BlundrAnalyticsEventName } from "@/lib/blundr/analytics/blundrAnalyticsEvents";
 
 export const dynamic = "force-dynamic";
+
+const PUBLIC_TELEMETRY_EVENTS = new Set<BlundrAnalyticsEventName>([
+  "AUTH_HYDRATION_COMPLETED",
+  "AUTH_HYDRATION_FAILED",
+]);
+const PUBLIC_PAYLOAD_KEYS = new Set([
+  "attempt",
+  "durationMs",
+  "pathClass",
+  "reason",
+]);
 
 function sanitizePayload(
   value: unknown,
@@ -12,7 +20,7 @@ function sanitizePayload(
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>)
-      .filter(([key]) => /^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(key))
+      .filter(([key]) => PUBLIC_PAYLOAD_KEYS.has(key))
       .slice(0, 32)
       .map(([key, raw]) => [
         key,
@@ -33,7 +41,7 @@ export async function POST(request: Request) {
     payload?: unknown;
   } | null;
   const name = body?.name;
-  if (!BLUNDR_ANALYTICS_EVENT_NAMES.includes(name as BlundrAnalyticsEventName))
+  if (!PUBLIC_TELEMETRY_EVENTS.has(name as BlundrAnalyticsEventName))
     return NextResponse.json(
       { error: "invalid_telemetry_event" },
       { status: 400 },

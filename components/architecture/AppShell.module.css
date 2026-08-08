@@ -31,6 +31,10 @@
   min-width: 0;
 }
 
+.accountMenu {
+  margin-left: auto;
+}
+
 .eyebrow,
 .title {
   margin: 0;
@@ -63,7 +67,7 @@
 
 .navigationList {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 2px;
   max-width: 560px;
   margin: 0 auto;
@@ -186,7 +190,15 @@
   }
 
   .main {
-    margin-left: var(--shell-rail);
+    width: min(calc(100% - var(--shell-rail)), var(--shell-content-max));
+    margin-right: auto;
+    margin-left: max(
+      var(--shell-rail),
+      calc(
+        var(--shell-rail) +
+          (100vw - var(--shell-rail) - var(--shell-content-max)) / 2
+      )
+    );
     padding-bottom: 40px;
   }
 }

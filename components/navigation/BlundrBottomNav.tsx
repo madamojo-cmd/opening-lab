@@ -18,23 +18,43 @@ const NAV_ITEMS: readonly NavItem[] = [
   { id: "train", label: "Train", href: "/train", icon: Target },
   { id: "review", label: "Review", href: "/review", icon: CheckCircle2 },
   { id: "progress", label: "Progress", href: "/progress", icon: BarChart3 },
-  { id: "repertoire", label: "Repertoire", href: "/repertoire", icon: BookOpen },
+  {
+    id: "repertoire",
+    label: "Repertoire",
+    href: "/repertoire",
+    icon: BookOpen,
+  },
 ] as const;
 
 function getActiveTab(pathname: string | null): NavItem["id"] {
   if (!pathname) return "home";
-  if (pathname === "/" || pathname.startsWith("/profile") || pathname.startsWith("/settings") || pathname.startsWith("/paywall")) {
+  if (
+    pathname === "/" ||
+    pathname.startsWith("/profile") ||
+    pathname.startsWith("/settings") ||
+    pathname.startsWith("/paywall")
+  ) {
     return "home";
   }
   if (pathname.startsWith("/train")) return "train";
-  if (pathname.startsWith("/daily")) return "home";
-  if (pathname.startsWith("/review")) return "review";
+  if (
+    pathname.startsWith("/daily") ||
+    pathname.startsWith("/review") ||
+    pathname.startsWith("/minigames")
+  )
+    return "review";
   if (pathname.startsWith("/progress")) return "progress";
   if (pathname.startsWith("/repertoire")) return "repertoire";
   return "home";
 }
 
-export function BlundrBottomNav({ className, activeTab: activeTabOverride }: { className?: string; activeTab?: NavItem["id"] }) {
+export function BlundrBottomNav({
+  className,
+  activeTab: activeTabOverride,
+}: {
+  className?: string;
+  activeTab?: NavItem["id"];
+}) {
   const pathname = usePathname();
   const shellNavigationActive = useAppShellNavigation();
   const activeTab = activeTabOverride ?? getActiveTab(pathname);
@@ -43,7 +63,10 @@ export function BlundrBottomNav({ className, activeTab: activeTabOverride }: { c
 
   return (
     <nav
-      className={classNames("fixed inset-x-0 bottom-0 z-50 border-t border-stone-200 bg-white/95 px-2 pb-[calc(env(safe-area-inset-bottom)+0.65rem)] pt-1.5 backdrop-blur", className)}
+      className={classNames(
+        "fixed inset-x-0 bottom-0 z-50 border-t border-stone-200 bg-white/95 px-2 pb-[calc(env(safe-area-inset-bottom)+0.65rem)] pt-1.5 backdrop-blur",
+        className,
+      )}
       aria-label="Primary"
     >
       <div className="mx-auto grid w-full max-w-[430px] grid-cols-5 gap-1">

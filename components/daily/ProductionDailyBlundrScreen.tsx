@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Home, RefreshCw, Settings, Sparkles } from "lucide-react";
 import {
   authenticatedApiFetch,
@@ -10,17 +10,7 @@ import {
 import { DailyBlundrBoard } from "@/components/daily/DailyBlundrBoard";
 import { DailyBlundrCardFeedback } from "@/components/daily/DailyBlundrCardFeedback";
 import type { DailyBlundrBoardMoveAttempt } from "@/lib/blundr/daily/dailyBlundrPlayerTypes";
-import type {
-  ProductionDailyPublicCard,
-  ProductionDailyPublicSession,
-} from "@/lib/blundr/daily/productionDailyTypes";
-import { recordBlundrTaskCompleted } from "@/lib/blundr/daily-rings/dailyRingGameplayEvents";
-import {
-  getLocalAccountCurrentUserId,
-  getLocalTrainingProfile,
-} from "@/lib/blundr/accounts/localAccountStorage";
-import { loadRepertoireProgress } from "@/lib/blundr/repertoire/repertoireProgressService";
-import { resolveProductionDailyCompletion } from "@/lib/blundr/daily/productionDailyCompletion";
+import type { ProductionDailyPublicSession } from "@/lib/blundr/daily/productionDailyTypes";
 
 type DailyResponse = {
   dateKey: string;
@@ -30,7 +20,6 @@ type DailyResponse = {
 };
 
 export function ProductionDailyBlundrScreen() {
-  const completionRequests = useRef(new Set<string>());
   const [session, setSession] = useState<ProductionDailyPublicSession | null>(
     null,
   );
@@ -43,8 +32,7 @@ export function ProductionDailyBlundrScreen() {
     message: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [completionSyncFailed, setCompletionSyncFailed] = useState(false);
-  const [completionSyncAttempt, setCompletionSyncAttempt] = useState(0);
+  const [recoveryHref, setRecoveryHref] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -54,15 +42,24 @@ export function ProductionDailyBlundrScreen() {
       );
       setSession(response.session);
       setError(null);
+      setRecoveryHref(null);
     } catch (nextError) {
-      setError(
+      const openingSelectionRequired =
         nextError instanceof AuthenticatedApiError &&
-          nextError.code === "authentication_required"
-          ? "Sign in to receive your personalized Daily Blundr deck."
+        nextError.code === "daily_opening_selection_required";
+      setError(
+        openingSelectionRequired
+          ? "Choose a starter pack or unlock an opening before starting Daily Blundr."
           : nextError instanceof AuthenticatedApiError &&
-              nextError.code === "feature_disabled"
-            ? "Personalized Daily is not enabled for this staging environment yet."
-            : "Daily Blundr could not load right now.",
+              nextError.code === "authentication_required"
+            ? "Sign in to receive your personalized Daily Blundr deck."
+            : nextError instanceof AuthenticatedApiError &&
+                nextError.code === "feature_disabled"
+              ? "Personalized Daily is not enabled for this staging environment yet."
+              : "Daily Blundr could not load right now.",
+      );
+      setRecoveryHref(
+        openingSelectionRequired ? "/onboarding/starter-pack" : null,
       );
     }
   }, []);
@@ -71,7 +68,9 @@ export function ProductionDailyBlundrScreen() {
     void load();
   }, [load]);
 
-  const currentCard = useMemo<ProductionDailyPublicCard | null>(() => {
+  const currentCard = useMemo<
+    ProductionDailyPublicSession["publicCards"][number] | null
+  >(() => {
     if (!session) return null;
     return (
       session.publicCards.find(
@@ -80,49 +79,13 @@ export function ProductionDailyBlundrScreen() {
       ) ?? null
     );
   }, [session]);
-
-  useEffect(() => {
-    if (currentCard) return;
-    const completion = resolveProductionDailyCompletion(session);
-    if (!completion) return;
-
-    const userId = getLocalAccountCurrentUserId();
-    if (!userId) return;
-    const completionId = completion.completionId;
-    if (completionRequests.current.has(completionId)) return;
-    completionRequests.current.add(completionId);
-
-    void recordBlundrTaskCompleted({
-      userId,
-      dateKey: completion.dateKey,
-      deckId: completion.deckId,
-      reviewSessionId: completion.reviewSessionId,
-      taskId: completion.taskId,
-      completionId,
-      repertoireProgress: loadRepertoireProgress({ userId }),
-      profile: getLocalTrainingProfile(userId) ?? undefined,
-      now: completion.completedAt,
-    })
-      .then((result) => {
-        if (!result.ok) {
-          completionRequests.current.delete(completionId);
-          setCompletionSyncFailed(true);
-          setError(
-            "Daily completed, but its progress could not be saved. Retry to sync it.",
-          );
-          return;
-        }
-        setCompletionSyncFailed(false);
-        setError(null);
-      })
-      .catch(() => {
-        completionRequests.current.delete(completionId);
-        setCompletionSyncFailed(true);
-        setError(
-          "Daily completed, but its progress could not be saved. Retry to sync it.",
-        );
-      });
-  }, [completionSyncAttempt, currentCard, session]);
+  const currentTaskNumber = useMemo(() => {
+    if (!session || !currentCard) return null;
+    const index = session.publicCards.findIndex(
+      (card) => card.cardFingerprint === currentCard.cardFingerprint,
+    );
+    return index >= 0 ? index + 1 : null;
+  }, [currentCard, session]);
 
   async function action(kind: "attempt" | "reveal" | "retry", answer?: string) {
     if (!session || !currentCard) return;
@@ -141,6 +104,7 @@ export function ProductionDailyBlundrScreen() {
           method: "POST",
           body: JSON.stringify({
             cardFingerprint: currentCard.cardFingerprint,
+            actionId: currentCard.actionId,
             answer,
             expectedVersion: session.version,
           }),
@@ -216,17 +180,13 @@ export function ProductionDailyBlundrScreen() {
             >
               {error}
             </p>
-            {completionSyncFailed ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setError(null);
-                  setCompletionSyncAttempt((value) => value + 1);
-                }}
+            {recoveryHref ? (
+              <Link
+                href={recoveryHref}
                 className="mt-4 inline-flex rounded-2xl bg-stone-950 px-4 py-3 text-sm font-black text-white"
               >
-                Retry progress sync
-              </button>
+                Choose openings
+              </Link>
             ) : (
               <Link
                 href="/settings"
@@ -259,6 +219,11 @@ export function ProductionDailyBlundrScreen() {
               <div className="text-xs font-black uppercase tracking-[0.18em] text-green-300">
                 {currentCard.activityId.replaceAll("_", " ")}
               </div>
+              {currentTaskNumber ? (
+                <div className="mt-2 text-xs font-bold text-stone-400">
+                  Task {currentTaskNumber} of {session.publicCards.length}
+                </div>
+              ) : null}
               <h2 className="mt-2 text-xl font-black">{currentCard.title}</h2>
               <p className="mt-2 text-sm leading-6 text-stone-300">
                 {currentCard.prompt}

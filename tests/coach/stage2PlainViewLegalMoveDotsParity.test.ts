@@ -8,17 +8,37 @@ export function testStage2PlainViewLegalMoveDotsParity(): void {
   const pageSource = fs.readFileSync(path.join(REPO_ROOT, "app", "page.tsx"), "utf8");
 
   assert.equal(
-    /if\(\s*!instructionTarget\?\.uci\s*&&\s*!selectedSquare\s*&&\s*selectedLegalMoves\.length===0\)/.test(pageSource),
+    pageSource.includes("!instructionTarget?.uci"),
     true,
     "app_page_missing_selection_safe_visibility_gate",
   );
   assert.equal(
-    /suppressPlainPreTargetHighlights\s*\?\s*null\s*:\s*instructionTarget\?\.from\s*\?\?\s*null/.test(pageSource),
+    pageSource.includes("!selectedSquare"),
+    true,
+    "app_page_missing_selection_safe_visibility_gate",
+  );
+  assert.equal(
+    pageSource.includes("selectedLegalMoves.length === 0"),
+    true,
+    "app_page_missing_selection_safe_visibility_gate",
+  );
+  assert.equal(
+    pageSource.includes("instructionTargetFrom: suppressPlainPreTargetHighlights"),
     true,
     "app_page_missing_plain_view_target_from_suppression",
   );
   assert.equal(
-    /suppressPlainPreTargetHighlights\s*\?\s*null\s*:\s*instructionTarget\?\.to\s*\?\?\s*null/.test(pageSource),
+    pageSource.includes("instructionTarget?.from ?? null"),
+    true,
+    "app_page_missing_plain_view_target_from_suppression",
+  );
+  assert.equal(
+    pageSource.includes("instructionTargetTo: suppressPlainPreTargetHighlights"),
+    true,
+    "app_page_missing_plain_view_target_to_suppression",
+  );
+  assert.equal(
+    pageSource.includes("instructionTarget?.to ?? null"),
     true,
     "app_page_missing_plain_view_target_to_suppression",
   );

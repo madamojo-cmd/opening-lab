@@ -5,6 +5,10 @@ export type MaiaRuntimeStatus =
   | "disabled"
   | "missing_lc0_path"
   | "missing_weights_path"
+  | "missing_remote_url"
+  | "missing_remote_token"
+  | "insecure_remote_url"
+  | "remote_unreachable"
   | "weights_not_found"
   | "lc0_not_found"
   | "startup_failed"
@@ -22,6 +26,10 @@ export interface MaiaRuntimeConfig {
   backend?: string | null;
   maxConcurrentRequests: number;
   cacheEnabled: boolean;
+  transport?: "local" | "remote";
+  remoteUrl?: string | null;
+  remoteHealthUrl?: string | null;
+  remoteToken?: string | null;
 }
 
 export interface MaiaRuntimeHealth {
@@ -41,6 +49,8 @@ export interface MaiaRuntimeHealth {
   weightsExists: boolean;
   timeoutMs: number;
   nodes: number;
+  transport?: "local" | "remote";
+  remoteConfigured?: boolean;
   lastError: string | null;
   checkedAt: number;
 }

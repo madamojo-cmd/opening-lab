@@ -11,6 +11,7 @@ import { loadTrainingRuntimePackage } from "@/lib/blundr/trainingRuntime/trainin
 import { loadOpeningAccessForWorker } from "@/lib/blundr/gameData/gameDataService";
 import { isGameDataWorkerEnabled } from "@/lib/blundr/gameData/featureFlags";
 import { buildSuccessfulProviderSyncAccount } from "@/lib/blundr/gameData/providerAccountSync";
+import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTelemetry.server";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,10 @@ async function processJobs(request: Request) {
   for (const pending of await jobs.nextPending(3)) {
     const leased = await jobs.lease(pending.id, `cron-${crypto.randomUUID()}`);
     if (!leased) continue;
+    await emitBlundrOperationalEvent("import_leased", {
+      provider: leased.provider,
+      attemptCount: leased.attemptCount,
+    });
     const account = await accounts.get(leased.userId, leased.provider);
     if (!account) {
       await jobs.update(leased.id, {
@@ -87,6 +92,13 @@ async function processJobs(request: Request) {
         status: result.status,
         counts: result.counts,
       });
+      await emitBlundrOperationalEvent("import_fetched", {
+        provider: leased.provider,
+        status: result.status,
+        fetched: result.counts.fetched,
+        accepted: result.counts.accepted,
+        analyzed: result.counts.analyzed,
+      });
     } catch (error) {
       const status =
         leased.attemptCount >= MAX_IMPORT_ATTEMPTS
@@ -98,6 +110,11 @@ async function processJobs(request: Request) {
         errorCode,
         leaseOwner: null,
         leaseExpiresAt: null,
+      });
+      await emitBlundrOperationalEvent("import_failed", {
+        provider: leased.provider,
+        status,
+        errorCode,
       });
       results.push({ jobId: leased.id, status, errorCode });
     }

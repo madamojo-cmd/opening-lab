@@ -150,6 +150,7 @@ function mapSource(raw: string | null | undefined, fallbackKind: InstructionTarg
   if (value === "stockfish_safe_move") return "continuation_policy";
   if (value === "engine_best") return "continuation_policy";
   if (value === "lesson_line") return "opening_tree";
+  if (value === "runtime_selected_line") return "runtime_selected_line";
   if (value === "engine_preview_fallback") return "engine_preview_fallback";
   if (value === "legacy_recoverable") return "legacy_recoverable";
   if (value === "guided_move" || value === "lichess_branch_move" || value === "adaptive_branch_move") return "opening_tree";

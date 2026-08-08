@@ -4,6 +4,7 @@ import type { ProductionDailyPublicSession } from "../productionDailyTypes";
 import { resolveProductionDailyCompletion } from "../productionDailyCompletion";
 
 const card = {
+  actionId: "daily-action-test",
   cardFingerprint: "card-1",
   positionKey: "position-1",
   activityId: "candidate_choice",

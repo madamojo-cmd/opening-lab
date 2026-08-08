@@ -5,6 +5,7 @@ import {
   createDeterministicIdentity,
   createPositionIdentity,
   type CardFingerprint,
+  type OpeningAccessSnapshot,
 } from "@/lib/blundr/contracts";
 import { readUserRepertoire } from "@/lib/blundr/accounts/accountRepository";
 import type { CurrentBlundrUser } from "@/lib/blundr/accounts/accountTypes";
@@ -21,7 +22,8 @@ import type {
   ProductionDailyPublicSession,
   ProductionDailySession,
 } from "./productionDailyTypes";
-import { appendLearningEventV2 } from "@/lib/blundr/learning/core/learningEventService.server";
+import { prepareLearningEventV2 } from "@/lib/blundr/learning/core/learningEventService.server";
+import { applyRewardCompletion } from "@/lib/blundr/rewards/rewardAuthority";
 import { RepertoireOpeningAccessRepository } from "@/lib/blundr/openingAccess/openingAccessRepository";
 import { getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
 import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
@@ -30,20 +32,124 @@ import { buildCandidateSet } from "./activities/candidateChoice/candidateSetBuil
 import { buildPlanRecall } from "./activities/planRecall/planQuestionBuilder";
 import { approvedPlanEvidence } from "./activities/planRecall/approvedPlanAdapter";
 import { buildContinuationChallenge } from "./activities/continuationChallenge/continuationChallengeBuilder";
-import { buildPunishmentActivity } from "./activities/punishTheMistake/punishmentBuilder";
 import { buildTranspositionActivity } from "./activities/samePositionDifferentRoute/transpositionActivityBuilder";
 import { replayRoute } from "./activities/samePositionDifferentRoute/transpositionGroupBuilder";
 import { legalMoves } from "./activities/activityUtils";
-import { toPublicDailySession } from "./productionDailyProjection";
+import {
+  productionDailyActionId,
+  toPublicDailySession,
+} from "./productionDailyProjection";
 import { readDueReviewKeys } from "./productionReviewRepository.server";
-import { upsertReviewState } from "./productionReviewRepository.server";
 import type { DailyReservationIdentity } from "./productionDailyTypes";
+import { runtimeSequenceToFen } from "./runtimeSequence";
+import { selectProductionDailyBoardCards } from "./productionDailyDeckSelection";
+import { resolveServerDailyTaskCount } from "./core/adaptiveDailyPolicy";
 
 // Request-time Daily selection uses only verified runtime data. Bound the
 // amount of chess reconstruction per reservation so a large runtime package
 // cannot turn an empty or newly unlocked account into an unbounded request.
 const MAX_RUNTIME_CANDIDATES_PER_RESERVATION = 600;
-const DAILY_COMPOSER_VERSION = "daily-board-first-v2";
+const DAILY_COMPOSER_VERSION = "daily-board-first-v3";
+
+type DailyTaskEvidenceInput = {
+  userId: string;
+  sessionId: string;
+  attemptId: string;
+  card: ProductionDailyPrivateCard;
+  fen: string;
+  correct: boolean;
+  firstAttempt: boolean;
+  now: string;
+  runtimePackageId: string;
+  evidenceType: "answer" | "reveal" | "skip";
+  submittedAnswer?: string | null;
+  elapsedMs: number;
+  access: OpeningAccessSnapshot;
+};
+
+function dailyTaskEvidence(input: DailyTaskEvidenceInput) {
+  const expectedTaskAnswer =
+    input.card.acceptedAnswers?.[0] ?? input.card.acceptedMoves[0] ?? null;
+  const isMoveTask = input.card.interaction === "move";
+  const position = createPositionIdentity({
+    canonicalFen: input.fen,
+    openingId: input.card.openingId,
+    expectedMoveUci: input.card.acceptedMoves[0] ?? "",
+    repertoireSide: input.card.side,
+    moveOrderKey: input.card.playKey,
+  });
+  return {
+    activityId: input.card.activityId,
+    taskType: input.card.activityId,
+    interaction: input.card.interaction,
+    submittedAnswerIdentity: input.submittedAnswer ?? null,
+    expectedTaskAnswerIdentity: expectedTaskAnswer,
+    correct: input.correct,
+    canonicalTarget: {
+      positionKey: position.positionKey,
+      openingId: input.card.openingId,
+      playKey: input.card.playKey,
+      expectedMoveUci: input.card.acceptedMoves[0] ?? null,
+    },
+    firstAttempt: input.firstAttempt,
+    retry: !input.firstAttempt,
+    revealOccurred: input.evidenceType === "reveal",
+    evidenceType: input.evidenceType,
+  };
+}
+
+async function dailyLearningEvent(
+  input: DailyTaskEvidenceInput,
+): Promise<Record<string, unknown> | null> {
+  if (!input.firstAttempt) return null;
+  const isMoveTask = input.card.interaction === "move";
+  const position = createPositionIdentity({
+    canonicalFen: input.fen,
+    openingId: input.card.openingId,
+    expectedMoveUci: input.card.acceptedMoves[0] ?? "",
+    repertoireSide: input.card.side,
+    moveOrderKey: input.card.playKey,
+  });
+  const taxonomy =
+    input.evidenceType === "reveal"
+      ? "cue_revealed"
+      : input.correct
+        ? "move_correct"
+        : "move_incorrect";
+  const { event } = await prepareLearningEventV2({
+    userId: input.userId,
+    sessionId: input.sessionId,
+    attemptId: input.attemptId,
+    source: "daily",
+    taxonomy,
+    position,
+    correct: input.correct,
+    now: input.now,
+    access: input.access,
+    explanation: input.card.explanation,
+    // Choice, plan, and route answers are opaque task-answer identities, not
+    // chess moves. Never coerce them into played_move_uci.
+    playedMoveUci: isMoveTask ? (input.submittedAnswer ?? null) : null,
+    reviewEvidence: {
+      evidenceType: input.evidenceType,
+      hinted: input.evidenceType === "reveal",
+      elapsedMs: input.elapsedMs,
+      retry: false,
+    },
+  });
+  return {
+    ...event,
+    content_version: input.runtimePackageId,
+    // The shared FSRS projector accepts an answer identity separate from the
+    // optional chess move. Non-move Daily tasks retain their opaque answer
+    // here while played_move_uci remains null.
+    answer_evidence: {
+      ...((event.answer_evidence as Record<string, unknown> | undefined) ?? {}),
+      submittedAnswer: input.submittedAnswer ?? null,
+    },
+    task_evidence: dailyTaskEvidence(input),
+  };
+}
 
 function dailyProfileVersion(
   flags: ReturnType<typeof getServerFeatureFlags>,
@@ -55,8 +161,6 @@ function dailyProfileVersion(
       "daily_plan_recall",
       "daily_same_position_different_route",
       "daily_continuation_challenge",
-      "daily_punish_the_mistake",
-      "daily_mixed_test",
     ].filter((flag) => flags[flag as keyof typeof flags]),
   ].join(",");
 }
@@ -70,11 +174,13 @@ function stableDailyHash(value: string): number {
   return hash >>> 0;
 }
 
-function selectBoundedRuntimeNodes<T extends {
-  openingId: string;
-  sideToMove: string;
-  playKey: string;
-}>(
+function selectBoundedRuntimeNodes<
+  T extends {
+    openingId: string;
+    sideToMove: string;
+    playKey: string;
+  },
+>(
   nodes: readonly T[],
   priorityOpenings: ReadonlySet<string>,
   priorityPositions: ReadonlySet<string>,
@@ -86,39 +192,50 @@ function selectBoundedRuntimeNodes<T extends {
     if (!unique.has(key)) unique.set(key, node);
   }
   const ranked = (items: readonly T[]) =>
-    [...items].sort((a, b) =>
-      stableDailyHash(`${seed}:${a.openingId}:${a.playKey}`) -
-        stableDailyHash(`${seed}:${b.openingId}:${b.playKey}`) ||
-      a.openingId.localeCompare(b.openingId) ||
-      a.playKey.localeCompare(b.playKey),
+    [...items].sort(
+      (a, b) =>
+        stableDailyHash(`${seed}:${a.openingId}:${a.playKey}`) -
+          stableDailyHash(`${seed}:${b.openingId}:${b.playKey}`) ||
+        a.openingId.localeCompare(b.openingId) ||
+        a.playKey.localeCompare(b.playKey),
     );
   const selected: T[] = [];
   const seen = new Set<string>();
   const add = (node: T) => {
     const key = `${node.openingId}:${node.playKey}`;
-    if (selected.length < MAX_RUNTIME_CANDIDATES_PER_RESERVATION && !seen.has(key)) {
+    if (
+      selected.length < MAX_RUNTIME_CANDIDATES_PER_RESERVATION &&
+      !seen.has(key)
+    ) {
       seen.add(key);
       selected.push(node);
     }
   };
   for (const node of ranked(
-    [...unique.values()].filter((node) =>
-      priorityPositions.has(`${node.openingId}:${node.playKey}`) ||
-      priorityOpenings.has(node.openingId),
+    [...unique.values()].filter(
+      (node) =>
+        priorityPositions.has(`${node.openingId}:${node.playKey}`) ||
+        priorityOpenings.has(node.openingId),
     ),
-  )) add(node);
+  ))
+    add(node);
   const buckets = new Map<string, T[]>();
   for (const node of unique.values()) {
     const key = `${node.openingId}:${node.sideToMove}`;
     buckets.set(key, [...(buckets.get(key) ?? []), node]);
   }
   const queues = [...buckets.entries()]
-    .sort(([a], [b]) =>
-      stableDailyHash(`${seed}:bucket:${a}`) - stableDailyHash(`${seed}:bucket:${b}`) ||
-      a.localeCompare(b),
+    .sort(
+      ([a], [b]) =>
+        stableDailyHash(`${seed}:bucket:${a}`) -
+          stableDailyHash(`${seed}:bucket:${b}`) || a.localeCompare(b),
     )
     .map(([, bucket]) => ranked(bucket));
-  for (let index = 0; selected.length < MAX_RUNTIME_CANDIDATES_PER_RESERVATION; index += 1) {
+  for (
+    let index = 0;
+    selected.length < MAX_RUNTIME_CANDIDATES_PER_RESERVATION;
+    index += 1
+  ) {
     let added = false;
     for (const queue of queues) {
       const node = queue[index];
@@ -130,22 +247,6 @@ function selectBoundedRuntimeNodes<T extends {
     if (!added) break;
   }
   return selected;
-}
-
-function fenForSequence(sequence: string): string | null {
-  try {
-    const chess = new Chess();
-    for (const uci of sequence.trim().split(/\s+/).filter(Boolean)) {
-      chess.move({
-        from: uci.slice(0, 2),
-        to: uci.slice(2, 4),
-        promotion: uci[4] as "q" | "r" | "b" | "n" | undefined,
-      });
-    }
-    return chess.fen();
-  } catch {
-    return null;
-  }
 }
 
 function fenAfterMoves(
@@ -226,10 +327,12 @@ async function buildReservation(
   if (admin) {
     const [projectionResult, priorityResult] = await Promise.all([
       admin
-      .from("blundr_weakness_projection")
-      .select("position_key,opening_id,play_key,score,confidence,updated_at,access_decision")
-      .eq("user_id", user.userId)
-      .eq("access_decision", "active"),
+        .from("blundr_weakness_projection")
+        .select(
+          "position_key,opening_id,play_key,score,confidence,updated_at,access_decision",
+        )
+        .eq("user_id", user.userId)
+        .eq("access_decision", "active"),
       admin
         .from("blundr_daily_priorities")
         .select("opening_id,status,requested_for")
@@ -237,31 +340,33 @@ async function buildReservation(
         .in("status", ["queued", "added_today"])
         .lte("requested_for", dateKey),
     ]);
-    if (!projectionResult.error) {
+    if (projectionResult.error || priorityResult.error)
+      throw new Error("daily_priority_projection_unavailable");
+    {
       for (const projection of projectionResult.data ?? []) {
         const score = Number(projection.score);
         if (Number.isFinite(score) && score > 0)
           weaknessScores.set(String(projection.position_key), score);
         if (projection.opening_id && projection.play_key)
-          priorityPositions.add(`${projection.opening_id}:${projection.play_key}`);
+          priorityPositions.add(
+            `${projection.opening_id}:${projection.play_key}`,
+          );
       }
     }
-    if (!priorityResult.error)
-      for (const priority of priorityResult.data ?? [])
-        priorityOpenings.add(String(priority.opening_id));
+    for (const priority of priorityResult.data ?? [])
+      priorityOpenings.add(String(priority.opening_id));
   }
-  const eligibleNodes = runtime.nodes
-    .filter((node) => {
-      const availability = getStage2OpeningAvailability(node.openingId);
-      return Boolean(
-        availability &&
-          access.get({
-            userId: user.userId,
-            openingId: node.openingId,
-            repertoireSide: node.sideToMove,
-          }).decision === "active",
-      );
-    })
+  const eligibleNodes = runtime.nodes.filter((node) => {
+    const availability = getStage2OpeningAvailability(node.openingId);
+    return Boolean(
+      availability &&
+        access.get({
+          userId: user.userId,
+          openingId: node.openingId,
+          repertoireSide: node.sideToMove,
+        }).decision === "active",
+    );
+  });
   const boundedNodes = selectBoundedRuntimeNodes(
     eligibleNodes,
     priorityOpenings,
@@ -277,7 +382,7 @@ async function buildReservation(
         openingId: node.openingId,
         repertoireSide: side,
       }).decision;
-      const fen = fenForSequence(node.playSequenceUci);
+      const fen = runtimeSequenceToFen(node.playSequenceUci);
       const snapshot = {
         openingId: node.openingId,
         repertoireSide: side,
@@ -285,9 +390,9 @@ async function buildReservation(
         checkedAt: now,
         expiresAt: new Date(Date.parse(now) + 300000).toISOString(),
       } as const;
-      const moves = (movesByOpeningPlayKey.get(
-        `${node.openingId}:${node.playKey}`,
-      ) ?? [])
+      const moves = (
+        movesByOpeningPlayKey.get(`${node.openingId}:${node.playKey}`) ?? []
+      )
         .slice()
         .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
       if (!availability || decision !== "active" || !fen || !moves.length)
@@ -306,7 +411,14 @@ async function buildReservation(
         snapshot,
         position,
         moves,
-        priority: weaknessScores.get(position.positionKey) ?? 0.1,
+        // Personalized evidence is ordered ahead of runtime fallback, but a
+        // newly unlocked repertoire remains a truthful, playable Daily.
+        priority:
+          weaknessScores.get(position.positionKey) ??
+          (priorityPositions.has(`${node.openingId}:${node.playKey}`) ||
+          priorityOpenings.has(node.openingId)
+            ? 0.5
+            : 0.1),
       };
     })
     .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
@@ -344,9 +456,11 @@ async function buildReservation(
       playKey: entry.node.playKey,
       side: entry.side,
       why:
-        entry.priority > 0.1
+        entry.priority > 0.5
           ? "This position is prioritized from a verified weakness projection."
-          : "This position comes from an unlocked, verified opening line.",
+          : entry.priority > 0.1
+            ? "This position is prioritized from your authoritative review evidence."
+            : "This position comes from an unlocked, verified opening line.",
       interaction: options?.length ? "choice" : "move",
       options,
       steps: privateSteps?.map(
@@ -386,8 +500,8 @@ async function buildReservation(
     addCard(
       entry,
       "daily_move_recall",
-      "Opening recall",
-      "Play the approved move for this exact position.",
+      "Missing Move",
+      "Play the missing move from this verified opening position.",
       [primary.moveUci],
       "This move keeps the approved opening plan on track.",
     );
@@ -546,50 +660,12 @@ async function buildReservation(
           privateSteps,
         );
     }
-
-    if (
-      child &&
-      childMove &&
-      secondMove &&
-      labels.length >= 2 &&
-      privateSteps &&
-      featureFlags.daily_punish_the_mistake
-    ) {
-      const built = buildPunishmentActivity({
-        openingId: entry.node.openingId,
-        side: entry.side,
-        positionKey: entry.position.positionKey,
-        fen: entry.fen,
-        mistakeMove: labels[1].moveUci,
-        bestResponses: [primary.moveUci],
-        continuation: [childMove.moveUci, secondMove.moveUci],
-        sourceId: entry.node.nodeId,
-        source: "continuation",
-        access: entry.snapshot,
-        evidenceVerified: true,
-        explanation:
-          "The verified reply restores the opening plan after the deviation.",
-      });
-      if (built.ok)
-        addCard(
-          entry,
-          built.activityId,
-          "Punish the mistake",
-          "Find the verified response to the deviation.",
-          [primary.moveUci],
-          built.solution.explanation,
-          undefined,
-          undefined,
-          privateSteps,
-        );
-    }
-
   }
 
   if (featureFlags.daily_same_position_different_route) {
     const routeGroups = new Map<string, (typeof runtimeCandidates)[number][]>();
     for (const entry of runtimeCandidates) {
-      const finalFen = fenForSequence(entry.node.playSequenceUci);
+      const finalFen = runtimeSequenceToFen(entry.node.playSequenceUci);
       if (!finalFen) continue;
       const key = `${entry.node.openingId}:${finalFen.split(" ").slice(0, 4).join(" ")}`;
       routeGroups.set(key, [...(routeGroups.get(key) ?? []), entry]);
@@ -638,91 +714,10 @@ async function buildReservation(
     }
   }
 
-  if (featureFlags.daily_mixed_test) {
-    const mixedSourceCards = cards
-      .filter(
-        (card) =>
-          card.publicCard.activityId !== "daily_move_recall" &&
-          card.publicCard.activityId !== "daily_mixed_test",
-      )
-      .sort(
-        (a, b) =>
-          b.priority - a.priority || a.stableKey.localeCompare(b.stableKey),
-      )
-      .filter(
-        (card, index, all) =>
-          all.findIndex(
-            (candidate) =>
-              candidate.publicCard.activityId === card.publicCard.activityId,
-          ) === index,
-      );
-    if (mixedSourceCards.length >= 3) {
-      const first = mixedSourceCards[0];
-      const baseEntry = runtimeCandidates.find(
-        (entry) => entry.position.positionKey === first.publicCard.positionKey,
-      );
-      if (baseEntry) {
-        const privateSteps = mixedSourceCards.slice(0, 5).map(
-          (card, stepIndex) =>
-            ({
-              stepIndex,
-              positionFen: card.publicCard.positionFen,
-              prompt: card.publicCard.prompt,
-              side: card.publicCard.side,
-              options: card.publicCard.options,
-              acceptedMoves: card.privateCard.acceptedMoves,
-              acceptedAnswers: card.privateCard.acceptedAnswers,
-              explanation: card.privateCard.explanation,
-            }) satisfies ProductionDailyPrivateStep,
-        );
-        addCard(
-          baseEntry,
-          "daily_mixed_test",
-          "Mixed Test",
-          "Complete the verified no-hint item block.",
-          privateSteps[0].acceptedMoves,
-          "This block combines independently verified Daily items.",
-          undefined,
-          undefined,
-          privateSteps,
-        );
-      }
-    }
-  }
-
-  const orderedCards = cards.sort(
-    (a, b) => b.priority - a.priority || a.stableKey.localeCompare(b.stableKey),
-  );
-  const selected: typeof cards = [];
-  const selectedPositions = new Set<string>();
-  const selectedActivities = new Set<string>();
-  const boardRecall = orderedCards.find(
-    (card) => card.publicCard.activityId === "daily_move_recall",
-  );
-  if (boardRecall) {
-    selected.push(boardRecall);
-    selectedActivities.add(boardRecall.publicCard.activityId);
-    selectedPositions.add(boardRecall.publicCard.positionKey);
-  }
-  for (const card of orderedCards) {
-    if (
-      selectedActivities.has(card.publicCard.activityId) ||
-      selectedPositions.has(card.publicCard.positionKey)
-    )
-      continue;
-    selected.push(card);
-    selectedActivities.add(card.publicCard.activityId);
-    selectedPositions.add(card.publicCard.positionKey);
-    if (selected.length >= 5) break;
-  }
-  if (selected.length < 5) {
-    for (const card of orderedCards) {
-      if (selectedPositions.has(card.publicCard.positionKey)) continue;
-      selected.push(card);
-      selectedPositions.add(card.publicCard.positionKey);
-      if (selected.length >= 5) break;
-    }
-  }
+  if (!eligibleNodes.length)
+    throw new Error("daily_opening_selection_required");
+  const taskCount = resolveServerDailyTaskCount({});
+  const selected = selectProductionDailyBoardCards(cards, taskCount);
   const deck = buildDeterministicDailyDeck({
     userId: user.userId,
     dateKey,
@@ -736,7 +731,7 @@ async function buildReservation(
       stableKey,
       cardFingerprint: publicCard.cardFingerprint,
     })),
-    limit: 5,
+    limit: taskCount,
   });
   const privateById = new Map(
     selected.map((entry) => [
@@ -791,6 +786,24 @@ export async function getOrReserveDaily(
   ).session;
 }
 
+/**
+ * Daily completion evidence is derived exclusively from the persisted session.
+ * Callers never receive or choose a completion identity.
+ */
+export async function applyDailyCompletionReward(input: {
+  userId: string;
+  session: ProductionDailySession;
+}): Promise<void> {
+  if (input.session.state.status !== "completed" || !input.session.completedAt)
+    return;
+  const result = await applyRewardCompletion({
+    userId: input.userId,
+    source: "daily_blundr_deck_completed",
+    evidenceId: `daily-completion:${input.session.sessionId}`,
+  });
+  if (!result.ok) throw new Error("daily_reward_persistence_unavailable");
+}
+
 export async function applyDailyAction(input: {
   user: CurrentBlundrUser;
   sessionId: string;
@@ -798,6 +811,7 @@ export async function applyDailyAction(input: {
   action: "answer" | "reveal" | "retry";
   answer?: string;
   expectedVersion: number;
+  actionId: string;
   now?: string;
 }) {
   const repository = new ProductionDailyRepository();
@@ -807,6 +821,28 @@ export async function applyDailyAction(input: {
     (card) => card.cardFingerprint === input.cardFingerprint,
   );
   if (!privateCard) throw new Error("daily_card_not_found");
+  const access = (await openingAccess(input.user)).get({
+    userId: input.user.userId,
+    openingId: privateCard.openingId,
+    repertoireSide: privateCard.side,
+  });
+  if (access.decision !== "active") throw new Error("opening_locked");
+  const stepCount = privateCard.privateSteps?.length ?? 1;
+  const actionStepIndex = Array.from(
+    { length: stepCount },
+    (_, stepIndex) => stepIndex,
+  ).find(
+    (stepIndex) =>
+      input.actionId ===
+      productionDailyActionId({
+        sessionId: session.sessionId,
+        cardFingerprint: input.cardFingerprint,
+        stepIndex,
+        version: input.expectedVersion,
+      }),
+  );
+  if (actionStepIndex === undefined) throw new Error("daily_action_id_invalid");
+  const isReplay = input.expectedVersion !== session.version;
   const now = input.now ?? new Date().toISOString();
   if (privateCard.privateSteps?.length) {
     const progress =
@@ -817,7 +853,7 @@ export async function applyDailyAction(input: {
       firstAttemptRecorded: false,
       status: "in_progress" as const,
     };
-    const step = privateCard.privateSteps[current.stepIndex];
+    const step = privateCard.privateSteps[actionStepIndex];
     if (!step) throw new Error("daily_activity_step_not_found");
     const answerCorrect = Boolean(
       input.action === "answer" &&
@@ -868,22 +904,47 @@ export async function applyDailyAction(input: {
         completedState.status === "completed"
           ? (session.completedAt ?? now)
           : session.completedAt,
+      updatedAt: now,
     };
-    if ((await repository.update(next, input.expectedVersion)) === "conflict")
-      throw new Error("daily_session_conflict");
-    const attemptId = createDeterministicIdentity("daily-step-attempt", [
-      input.sessionId,
-      input.cardFingerprint,
-      current.stepIndex,
-      input.action,
-      input.answer ?? "",
-    ]);
-    await repository.appendAttempt({
-      attemptId,
-      sessionId: input.sessionId,
+    const attemptId = input.actionId;
+    const learningInput: DailyTaskEvidenceInput = {
       userId: input.user.userId,
+      sessionId: input.sessionId,
+      attemptId,
+      card: {
+        ...privateCard,
+        acceptedMoves: step.acceptedMoves,
+        acceptedAnswers: step.acceptedAnswers,
+        explanation: step.explanation,
+        interaction: "move",
+      },
+      fen: step.positionFen,
+      correct: answerCorrect,
+      firstAttempt: isReplay
+        ? input.action === "answer" || input.action === "reveal"
+        : !current.firstAttemptRecorded &&
+          (input.action === "answer" || input.action === "reveal"),
+      now,
+      runtimePackageId: session.reservationIdentity.runtimePackageId,
+      evidenceType:
+        input.action === "reveal"
+          ? "reveal"
+          : input.action === "retry"
+            ? "skip"
+            : "answer",
+      submittedAnswer: input.action === "answer" ? input.answer : null,
+      elapsedMs: Math.max(
+        0,
+        Date.parse(now) - Date.parse(session.updatedAt ?? now),
+      ),
+      access,
+    };
+    const persisted = await repository.commitAction({
+      attemptId,
       cardFingerprint: input.cardFingerprint,
-      firstAttempt: !current.firstAttemptRecorded && input.action !== "retry",
+      firstAttempt: isReplay
+        ? input.action !== "retry"
+        : !current.firstAttemptRecorded && input.action !== "retry",
       attemptKind: input.action,
       outcome:
         input.action === "reveal"
@@ -893,54 +954,37 @@ export async function applyDailyAction(input: {
             : answerCorrect
               ? "correct"
               : "incorrect",
+      stepIndex: actionStepIndex,
       answer: input.action === "answer" ? input.answer : undefined,
-    });
-    if (input.action !== "retry" || current.firstAttemptRecorded)
-      await appendLearningEventV2({
-        userId: input.user.userId,
-        sessionId: input.sessionId,
-        attemptId,
-        source: "daily",
-        taxonomy:
-          input.action === "reveal"
-            ? "daily_revealed"
-            : input.action === "retry"
-              ? "daily_retried"
-              : "daily_answered",
-        position: {
-          positionKey: privateCard.positionKey,
-          canonicalFen: step.positionFen,
-          openingId: privateCard.openingId,
-          expectedMoveUci: step.acceptedMoves[0] ?? null,
-          repertoireSide: privateCard.side,
-          moveOrderKey: privateCard.playKey,
-          runtimePackageVersion: session.reservationIdentity.runtimePackageId,
-        },
-        correct: answerCorrect,
-        firstAttempt: !current.firstAttemptRecorded && input.action !== "retry",
-        now,
-        access: {
-          openingId: privateCard.openingId,
-          repertoireSide: privateCard.side,
-          decision: "active",
-          checkedAt: now,
-          authorityVersion: "repertoire-unlock-v1",
-          expiresAt: new Date(Date.parse(now) + 300000).toISOString(),
-        },
-        explanation: step.explanation,
-      });
-    if (input.action !== "retry")
-      await upsertReviewState({
-        userId: input.user.userId,
-        openingId: privateCard.openingId,
-        playKey: privateCard.playKey,
-        dueAt: new Date(Date.parse(now) + (answerCorrect ? 86400000 : 300000)).toISOString(),
-        attemptId,
-        outcome: answerCorrect ? "correct" : input.action === "reveal" ? "revealed" : "incorrect",
-        srsState: { intervalDays: answerCorrect ? 1 : 0 },
-      });
-    return {
       session: next,
+      expectedVersion: input.expectedVersion,
+      dailyEvidence: dailyTaskEvidence(learningInput),
+      learningEvent: await dailyLearningEvent(learningInput),
+    });
+    if (persisted === "conflict") throw new Error("daily_session_conflict");
+    if (persisted === "duplicate") {
+      const authoritative = await repository.getOwned(
+        input.sessionId,
+        input.user.userId,
+      );
+      if (!authoritative) throw new Error("daily_session_not_found");
+      return {
+        session: authoritative,
+        presentation: {
+          state: "committed",
+          feedback: { kind: "recorded", message: "Recorded." },
+        },
+        result: "accepted",
+        correct: answerCorrect,
+      };
+    }
+    const authoritative = await repository.getOwned(
+      input.sessionId,
+      input.user.userId,
+    );
+    if (!authoritative) throw new Error("daily_session_not_found");
+    return {
+      session: authoritative,
       presentation: {
         state:
           nextProgress.status === "completed"
@@ -1007,57 +1051,79 @@ export async function applyDailyAction(input: {
       reduced.state.status === "completed"
         ? (session.completedAt ?? now)
         : session.completedAt,
+    updatedAt: now,
   };
-  if ((await repository.update(next, input.expectedVersion)) === "conflict")
-    throw new Error("daily_session_conflict");
-  await repository.appendAttempt({
-    attemptId:
-      reduced.state.attempts.at(-1)?.attemptId ??
-      createDeterministicIdentity("daily-noop", [
-        input.sessionId,
-        input.cardFingerprint,
-        input.action,
-      ]),
-    sessionId: input.sessionId,
+  const learningInput: DailyTaskEvidenceInput = {
     userId: input.user.userId,
+    sessionId: input.sessionId,
+    attemptId:
+      reduced.state.attempts.at(-1)?.attemptId ?? input.cardFingerprint,
+    card: privateCard,
+    fen: privateCard.positionFen,
+    correct,
+    firstAttempt: isReplay
+      ? input.action === "answer" || input.action === "reveal"
+      : !firstAttemptAlreadyRecorded &&
+        (input.action === "answer" || input.action === "reveal"),
+    now,
+    runtimePackageId: session.reservationIdentity.runtimePackageId,
+    evidenceType:
+      input.action === "reveal"
+        ? "reveal"
+        : input.action === "retry"
+          ? "skip"
+          : "answer",
+    submittedAnswer: input.action === "answer" ? input.answer : null,
+    elapsedMs: Math.max(
+      0,
+      Date.parse(now) - Date.parse(session.updatedAt ?? now),
+    ),
+    access,
+  };
+  const persisted = await repository.commitAction({
+    attemptId: input.actionId,
     cardFingerprint: input.cardFingerprint,
-    firstAttempt: !firstAttemptAlreadyRecorded && input.action !== "retry",
+    firstAttempt: isReplay
+      ? input.action !== "retry"
+      : !firstAttemptAlreadyRecorded && input.action !== "retry",
     attemptKind: input.action,
-    outcome,
+    outcome:
+      outcome === "reveal"
+        ? "revealed"
+        : outcome === "retry"
+          ? "skipped"
+          : outcome,
+    stepIndex: actionStepIndex,
     answer: input.action === "answer" ? input.answer : undefined,
-  });
-  if (!firstAttemptAlreadyRecorded && input.action !== "retry")
-    await appendLearningEventV2({
-      userId: input.user.userId,
-      sessionId: input.sessionId,
-      attemptId:
-        reduced.state.attempts.at(-1)?.attemptId ?? input.cardFingerprint,
-      source: "daily",
-      taxonomy: input.action === "reveal" ? "daily_revealed" : "daily_answered",
-      position: {
-        positionKey: privateCard.positionKey,
-        canonicalFen: privateCard.positionFen,
-        openingId: privateCard.openingId,
-        expectedMoveUci: privateCard.acceptedMoves[0] ?? null,
-        repertoireSide: privateCard.side,
-        moveOrderKey: privateCard.playKey,
-        runtimePackageVersion: session.reservationIdentity.runtimePackageId,
-      },
-      correct,
-      firstAttempt: true,
-      now,
-      access: {
-        openingId: privateCard.openingId,
-        repertoireSide: privateCard.side,
-        decision: "active",
-        checkedAt: now,
-        authorityVersion: "repertoire-unlock-v1",
-        expiresAt: new Date(Date.parse(now) + 300000).toISOString(),
-      },
-      explanation: privateCard.explanation,
-    });
-  return {
     session: next,
+    expectedVersion: input.expectedVersion,
+    dailyEvidence: dailyTaskEvidence(learningInput),
+    learningEvent: await dailyLearningEvent(learningInput),
+  });
+  if (persisted === "conflict") throw new Error("daily_session_conflict");
+  if (persisted === "duplicate") {
+    const authoritative = await repository.getOwned(
+      input.sessionId,
+      input.user.userId,
+    );
+    if (!authoritative) throw new Error("daily_session_not_found");
+    return {
+      session: authoritative,
+      presentation: {
+        state: "committed",
+        feedback: { kind: "recorded", message: "Recorded." },
+      },
+      result: "accepted",
+      correct,
+    };
+  }
+  const authoritative = await repository.getOwned(
+    input.sessionId,
+    input.user.userId,
+  );
+  if (!authoritative) throw new Error("daily_session_not_found");
+  return {
+    session: authoritative,
     presentation: reduced.presentation,
     result: reduced.result,
     correct,

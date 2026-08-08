@@ -2,20 +2,32 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, BookOpen, RefreshCw, Settings, Sparkles } from "lucide-react";
-import { BLUNDR_EMPTY_STATE_ASSETS, BLUNDR_TEMPO_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
+import {
+  ArrowLeft,
+  BookOpen,
+  RefreshCw,
+  Settings,
+  Sparkles,
+} from "lucide-react";
+import {
+  BLUNDR_EMPTY_STATE_ASSETS,
+  BLUNDR_TEMPO_ASSETS,
+} from "@/lib/blundr/assets/blundrAssetManifest";
 import { BLUNDR_ANALYTICS_EVENTS } from "@/lib/blundr/analytics/blundrAnalyticsEvents";
 import { trackBlundrAnalyticsEvent } from "@/lib/blundr/analytics/blundrAnalyticsService";
-import { getLocalAccountCurrentUserId } from "@/lib/blundr/accounts/localAccountStorage";
 import { getStarterPackById } from "@/lib/blundr/onboarding/starterPacks";
-import { loadRepertoireProgress, unlockAndPersistOpening } from "@/lib/blundr/repertoire/repertoireProgressService";
-import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
 import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 import { RepertoireOpeningGrid } from "./RepertoireOpeningGrid";
 import { RepertoirePointsSummary } from "./RepertoirePointsSummary";
 import { RepertoireTempoCallout } from "./RepertoireTempoCallout";
 import { RepertoireUnlockProgress } from "./RepertoireUnlockProgress";
 import { RewardHistoryList } from "@/components/rewards/RewardHistoryList";
+import {
+  authenticatedApiFetch,
+  AuthenticatedApiError,
+} from "@/lib/blundr/api/authenticatedApiClient";
+import { useDurableRepertoireProgress } from "./useDurableRepertoireProgress";
+import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
 
 type RepertoireProgressPanelProps = {
   onTrainOpening?: (openingId: string) => void;
@@ -24,68 +36,84 @@ type RepertoireProgressPanelProps = {
   embedded?: boolean;
 };
 
-function classNames(...classes: Array<string | false | null | undefined>): string {
+function classNames(
+  ...classes: Array<string | false | null | undefined>
+): string {
   return classes.filter(Boolean).join(" ");
 }
 
-function useRepertoireProgress(initialUserId: string): [string, RepertoireProgress, (progress: RepertoireProgress) => void] {
-  const [userId, setUserId] = useState(initialUserId);
-  const [progress, setProgress] = useState<RepertoireProgress>(() => loadRepertoireProgress({ userId: initialUserId }));
-
-  useEffect(() => {
-    const nextUserId = getLocalAccountCurrentUserId();
-    setUserId(nextUserId);
-    setProgress(loadRepertoireProgress({ userId: nextUserId }));
-  }, [initialUserId]);
-
-  return [userId, progress, setProgress];
-}
-
-export function RepertoireProgressPanel({ onTrainOpening, homeHref = "/", className, embedded = false }: RepertoireProgressPanelProps) {
-  const initialUserId = getLocalAccountCurrentUserId();
-  const [userId, progress, setProgress] = useRepertoireProgress(initialUserId);
+export function RepertoireProgressPanel({
+  onTrainOpening,
+  homeHref = "/",
+  className,
+  embedded = false,
+}: RepertoireProgressPanelProps) {
+  const [repertoireState, refreshRepertoire] = useDurableRepertoireProgress();
+  const progress =
+    repertoireState.status === "ready" ? repertoireState.progress : null;
+  const userId = progress?.userId ?? null;
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [unlockingOpeningId, setUnlockingOpeningId] = useState<string | null>(null);
+  const [unlockingOpeningId, setUnlockingOpeningId] = useState<string | null>(
+    null,
+  );
 
-  const starterPack = useMemo(() => getStarterPackById(progress.selectedStarterPackId), [progress.selectedStarterPackId]);
-  const unlockedCount = progress.unlockedOpeningIds.length;
-  const lockedCount = progress.lockedOpeningIds.length;
+  const starterPack = useMemo(
+    () =>
+      progress ? getStarterPackById(progress.selectedStarterPackId) : null,
+    [progress],
+  );
+  const unlockedCount = progress?.unlockedOpeningIds.length ?? 0;
+  const lockedCount = progress?.lockedOpeningIds.length ?? 0;
 
   useEffect(() => {
     trackBlundrAnalyticsEvent(BLUNDR_ANALYTICS_EVENTS.REPERTOIRE_PAGE_VIEWED, {
-      userId,
+      userId: userId ?? "signed_out",
       unlockedCount,
       lockedCount,
     });
-  }, [userId]);
+  }, [userId, unlockedCount, lockedCount]);
 
   async function handleUnlock(openingId: string) {
+    if (!progress) return;
     setUnlockingOpeningId(openingId);
     setErrorMessage(null);
     setStatusMessage(null);
-    trackBlundrAnalyticsEvent(BLUNDR_ANALYTICS_EVENTS.REPERTOIRE_UNLOCK_ATTEMPTED, {
-      userId,
-      openingId,
-    });
-    try {
-      const result = await unlockAndPersistOpening({
+    trackBlundrAnalyticsEvent(
+      BLUNDR_ANALYTICS_EVENTS.REPERTOIRE_UNLOCK_ATTEMPTED,
+      {
         userId,
         openingId,
-        starterPackId: progress.selectedStarterPackId,
-      });
-      if (result.ok === false) {
-        const error = result;
-        setErrorMessage(error.message);
-        trackBlundrAnalyticsEvent(BLUNDR_ANALYTICS_EVENTS.REPERTOIRE_UNLOCK_FAILED, {
-          userId,
+      },
+    );
+    try {
+      const result = await authenticatedApiFetch<{
+        ok: true;
+        data: unknown;
+      }>("/api/blundr/repertoire/unlock", {
+        method: "POST",
+        body: JSON.stringify({
           openingId,
-          code: error.code,
-        });
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      });
+      void result;
+      setStatusMessage("Opening unlocked.");
+      await refreshRepertoire();
+    } catch (error) {
+      if (error instanceof AuthenticatedApiError) {
+        setErrorMessage(error.message);
+        trackBlundrAnalyticsEvent(
+          BLUNDR_ANALYTICS_EVENTS.REPERTOIRE_UNLOCK_FAILED,
+          {
+            userId: userId ?? "signed_out",
+            openingId,
+            code: error.code,
+          },
+        );
         return;
       }
-      setProgress(result.progress);
-      setStatusMessage("Opening unlocked.");
+      setErrorMessage("Unlocking is temporarily unavailable.");
     } finally {
       setUnlockingOpeningId(null);
     }
@@ -108,26 +136,46 @@ export function RepertoireProgressPanel({ onTrainOpening, homeHref = "/", classN
               <BookOpen size={13} />
               Repertoire progress
             </div>
-            <h1 className="mt-3 text-2xl font-black tracking-tight text-stone-950">Build your repertoire</h1>
+            <h1 className="mt-3 text-2xl font-black tracking-tight text-stone-950">
+              Build your repertoire
+            </h1>
             <p className="mt-2 text-sm leading-6 text-stone-600">
-              Earn repertoire points by training. Use them to unlock more openings when you are ready.
+              Earn repertoire points by training. Use them to unlock more
+              openings when you are ready.
             </p>
           </div>
           {!embedded ? (
             <div className="flex items-center gap-2">
-              <Link href="/settings" className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm" aria-label="Open settings">
+              <Link
+                href="/settings"
+                className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm"
+                aria-label="Open settings"
+              >
                 <Settings size={18} />
               </Link>
-              <Link href={homeHref} className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm" aria-label="Back to home">
+              <Link
+                href={homeHref}
+                className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm"
+                aria-label="Back to home"
+              >
                 <ArrowLeft size={18} />
               </Link>
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <Link href="/settings" className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm" aria-label="Open settings">
+              <Link
+                href="/settings"
+                className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm"
+                aria-label="Open settings"
+              >
                 <Settings size={18} />
               </Link>
-              <button type="button" onClick={() => setProgress(loadRepertoireProgress({ userId }))} className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm" aria-label="Refresh repertoire">
+              <button
+                type="button"
+                onClick={() => void refreshRepertoire()}
+                className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm"
+                aria-label="Refresh repertoire"
+              >
                 <RefreshCw size={18} />
               </button>
             </div>
@@ -136,15 +184,26 @@ export function RepertoireProgressPanel({ onTrainOpening, homeHref = "/", classN
 
         <div className="mt-4 rounded-2xl bg-[#fbfcf7] p-3">
           <div className="grid gap-3 sm:grid-cols-[auto,1fr] sm:items-center">
-            <BlundrAssetImage asset={BLUNDR_TEMPO_ASSETS.coach} alt="Tempo coach" variant="tempoInline" className="mx-auto sm:mx-0" />
+            <BlundrAssetImage
+              asset={BLUNDR_TEMPO_ASSETS.coach}
+              alt="Tempo coach"
+              variant="tempoInline"
+              className="mx-auto sm:mx-0"
+            />
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">Tempo says</div>
+              <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
+                Tempo says
+              </div>
               <p className="mt-1 text-sm leading-6 text-stone-700">
-                Every rep makes your repertoire wider. Start with your pack, then unlock the lines you want next.
+                Every rep makes your repertoire wider. Start with your pack,
+                then unlock the lines you want next.
               </p>
               {starterPack ? (
                 <p className="mt-2 text-xs font-semibold text-stone-500">
-                  Current pack: <span className="font-black text-stone-700">{starterPack.displayName}</span>
+                  Current pack:{" "}
+                  <span className="font-black text-stone-700">
+                    {starterPack.displayName}
+                  </span>
                   {" • "}
                   {starterPack.styleSummary}
                 </p>
@@ -155,7 +214,9 @@ export function RepertoireProgressPanel({ onTrainOpening, homeHref = "/", classN
       </header>
 
       {statusMessage ? (
-        <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-900 shadow-sm">{statusMessage}</div>
+        <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-900 shadow-sm">
+          {statusMessage}
+        </div>
       ) : null}
       {errorMessage ? (
         <div className="rounded-2xl border border-stone-200 bg-white p-4 text-sm font-semibold text-stone-700 shadow-sm">
@@ -167,82 +228,145 @@ export function RepertoireProgressPanel({ onTrainOpening, homeHref = "/", classN
               className="mx-auto sm:mx-0 sm:shrink-0"
             />
             <div>
-              <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">Safe fallback</div>
-              <p className="mt-2 text-sm leading-6 text-stone-700">{errorMessage}</p>
+              <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">
+                Safe fallback
+              </div>
+              <p className="mt-2 text-sm leading-6 text-stone-700">
+                {errorMessage}
+              </p>
             </div>
           </div>
         </div>
       ) : null}
 
-      <RepertoirePointsSummary progress={progress} />
-      <RepertoireUnlockProgress progress={progress} />
-
-      <RepertoireTempoCallout />
-      <RewardHistoryList />
-
-      <div className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">Current state</div>
-            <div className="mt-1 text-sm font-semibold text-stone-600">
-              {unlockedCount} unlocked, {lockedCount} locked
-            </div>
+      {repertoireState.status === "loading" ? (
+        <div className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
+          <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
+            Loading
           </div>
-          <div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-600">
-            {progress.nextUnlockCost > 0 ? `${progress.nextUnlockCost} points next` : "All MVP lines unlocked"}
-          </div>
+          <p className="mt-2 text-sm leading-6 text-stone-600">
+            Tempo is loading your durable repertoire state.
+          </p>
         </div>
-      </div>
+      ) : repertoireState.status === "signed_out" ? (
+        <div className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
+          <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
+            Signed out
+          </div>
+          <p className="mt-2 text-sm leading-6 text-stone-600">
+            Sign in to load your repertoire from server authority.
+          </p>
+        </div>
+      ) : repertoireState.status === "error" ? (
+        <div className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
+          <div className="text-xs font-black uppercase tracking-[0.18em] text-amber-700">
+            Unavailable
+          </div>
+          <p className="mt-2 text-sm leading-6 text-stone-600">
+            {repertoireState.error}
+          </p>
+          <button
+            type="button"
+            onClick={() => void refreshRepertoire()}
+            className="mt-3 rounded-2xl bg-stone-100 px-4 py-2 text-sm font-black text-stone-700"
+          >
+            Retry
+          </button>
+        </div>
+      ) : (
+        <>
+          <RepertoirePointsSummary progress={progress} />
+          <RepertoireUnlockProgress progress={progress} />
 
-      <RepertoireOpeningGrid
-        progress={progress}
-        onUnlock={handleUnlock}
-        onTrainOpening={handleTrainOpening}
-        unlockingOpeningId={unlockingOpeningId}
-        emptyLockedState={
-          <div className="rounded-[1.5rem] border border-stone-200 bg-white p-4 text-sm leading-6 text-stone-600 shadow-sm">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-              <BlundrAssetImage
-                asset={BLUNDR_EMPTY_STATE_ASSETS.emptyRepertoire}
-                alt="Empty repertoire"
-                variant="emptyState"
-                className="mx-auto sm:mx-0 sm:shrink-0"
-              />
+          <RepertoireTempoCallout />
+          <RewardHistoryList />
+
+          <div className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">All set</div>
-                <p className="mt-2">
-                  All eligible MVP openings are unlocked. Keep training to build points for future packs.
-                </p>
-                <p className="mt-2 text-xs font-semibold text-stone-500">
-                  Tempo will widen the pool when new repertoire is ready.
-                </p>
+                <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">
+                  Current state
+                </div>
+                <div className="mt-1 text-sm font-semibold text-stone-600">
+                  {unlockedCount} unlocked, {lockedCount} locked
+                </div>
+              </div>
+              <div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-600">
+                {progress.nextUnlockCost > 0
+                  ? `${progress.nextUnlockCost} points next`
+                  : "All MVP lines unlocked"}
               </div>
             </div>
           </div>
-        }
-      />
 
-      <div className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">Starter pack</div>
-            <div className="mt-1 text-lg font-black tracking-tight text-stone-950">{starterPack?.displayName ?? "Starter pack"}</div>
-          </div>
-          <div className="rounded-full bg-green-50 px-3 py-1 text-xs font-black text-green-700">{starterPack?.shortName ?? "Tempo"}</div>
-        </div>
-        {starterPack ? (
-          <div className="mt-3 grid gap-2 text-sm text-stone-600 sm:grid-cols-2">
-            <div className="rounded-2xl bg-stone-50 p-3">
-              <div className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">White</div>
-              <div className="mt-1 font-black text-stone-900">{starterPack.whiteOpeningName}</div>
+          <RepertoireOpeningGrid
+            progress={progress}
+            onUnlock={handleUnlock}
+            onTrainOpening={handleTrainOpening}
+            unlockingOpeningId={unlockingOpeningId}
+            emptyLockedState={
+              <div className="rounded-[1.5rem] border border-stone-200 bg-white p-4 text-sm leading-6 text-stone-600 shadow-sm">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                  <BlundrAssetImage
+                    asset={BLUNDR_EMPTY_STATE_ASSETS.emptyRepertoire}
+                    alt="Empty repertoire"
+                    variant="emptyState"
+                    className="mx-auto sm:mx-0 sm:shrink-0"
+                  />
+                  <div>
+                    <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
+                      All set
+                    </div>
+                    <p className="mt-2">
+                      All eligible MVP openings are unlocked. Keep training to
+                      build points for future packs.
+                    </p>
+                    <p className="mt-2 text-xs font-semibold text-stone-500">
+                      Tempo will widen the pool when new repertoire is ready.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            }
+          />
+
+          <div className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
+                  Starter pack
+                </div>
+                <div className="mt-1 text-lg font-black tracking-tight text-stone-950">
+                  {starterPack?.displayName ?? "Starter pack"}
+                </div>
+              </div>
+              <div className="rounded-full bg-green-50 px-3 py-1 text-xs font-black text-green-700">
+                {starterPack?.shortName ?? "Tempo"}
+              </div>
             </div>
-            <div className="rounded-2xl bg-stone-50 p-3">
-              <div className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">Black</div>
-              <div className="mt-1 font-black text-stone-900">{starterPack.blackOpeningName}</div>
-            </div>
+            {starterPack ? (
+              <div className="mt-3 grid gap-2 text-sm text-stone-600 sm:grid-cols-2">
+                <div className="rounded-2xl bg-stone-50 p-3">
+                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">
+                    White
+                  </div>
+                  <div className="mt-1 font-black text-stone-900">
+                    {starterPack.whiteOpeningName}
+                  </div>
+                </div>
+                <div className="rounded-2xl bg-stone-50 p-3">
+                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">
+                    Black
+                  </div>
+                  <div className="mt-1 font-black text-stone-900">
+                    {starterPack.blackOpeningName}
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
-        ) : null}
-      </div>
+        </>
+      )}
     </section>
   );
 }

@@ -5,13 +5,18 @@ import { BlundrBottomNav } from "@/components/navigation/BlundrBottomNav";
 import { ProfileSettingsIcon } from "@/components/navigation/ProfileSettingsIcon";
 import { HomeCurrentOpeningsCard } from "@/components/home/HomeCurrentOpeningsCard";
 import { BlundrStateCard } from "@/components/blundr/ui";
+import { authenticatedApiFetch } from "@/lib/blundr/api/authenticatedApiClient";
+import { getBlundrStorageModeSetting } from "@/lib/blundr/backend/backendEnv";
 import { getLocalAccountCurrentUserId } from "@/lib/blundr/accounts/localAccountStorage";
+import { getLocalDateKey } from "@/lib/blundr/daily-rings/dailyRingDate";
 import { loadDailyRingSnapshot } from "@/lib/blundr/daily-rings/dailyRingService";
-import { reconcileDailyBlundrRingCompletionForToday } from "@/lib/blundr/daily-rings/dailyRingBlundrReconciliation";
 import { BLUNDR_DAILY_RING_REFRESH_EVENT } from "@/lib/blundr/daily-rings/dailyRingRefreshSignal";
 import type { DailyRingSnapshot } from "@/lib/blundr/daily-rings/dailyRingTypes";
+import { BLUNDR_LOCAL_DEMO_USER_ID } from "@/lib/blundr/persistence/persistenceKeys";
+import type { BlundrProgressSummary } from "@/lib/blundr/progress/progressTypes";
 import { loadRepertoireProgress } from "@/lib/blundr/repertoire/repertoireProgressService";
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
+import { clampProgressPercentage, formatProgressPercentage, formatRepertoirePoints } from "@/lib/blundr/presentation/userFacingNumbers";
 import { NestedDailyRings } from "@/components/daily-rings/NestedDailyRings";
 import svgPaths from "./svg-lrkovulksy";
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -52,6 +57,23 @@ type HomeDailyRingItem = {
   percent: number;
   closed: boolean;
 };
+
+function isNamedLocalDemo(userId: string): boolean {
+  return process.env.NODE_ENV !== "production" && getBlundrStorageModeSetting() === "local_demo" && userId === BLUNDR_LOCAL_DEMO_USER_ID;
+}
+
+function toAuthoritativeDailyRingSnapshot(summary: BlundrProgressSummary): DailyRingSnapshot {
+  const ring = (ringId: "daily_tempo" | "daily_battery" | "daily_blundr") => summary.today.rings.find((item) => item.ringId === ringId) ?? { ringId, label: ringId, progress: 0, goal: 1, percent: 0, closed: false };
+  const tempo = ring("daily_tempo");
+  const battery = ring("daily_battery");
+  const blundr = ring("daily_blundr");
+  return {
+    userId: summary.userId, localDate: summary.todayDateKey,
+    dayRecord: { userId: summary.userId, localDate: summary.todayDateKey, dailyTempo: { ringId: "daily_tempo", progress: tempo.progress, goal: tempo.goal, closed: tempo.closed }, dailyBattery: { ringId: "daily_battery", progress: battery.progress, goal: battery.goal, closed: battery.closed }, dailyBlundr: { ringId: "daily_blundr", progress: blundr.progress, goal: blundr.goal, closed: blundr.closed }, allRingsClosed: summary.today.allRingsClosed, xpEarnedToday: 0, repertoirePointsEarnedToday: 0, activityEventIds: [], createdAt: summary.generatedAt, updatedAt: summary.generatedAt },
+    streakRecord: { userId: summary.userId, currentStreakDays: summary.streak.currentDays, longestStreakDays: summary.streak.bestDays, totalAllRingsClosedDays: summary.streak.totalAllRingsClosedDays, updatedAt: summary.generatedAt },
+    tempo: { current: tempo.progress, target: tempo.goal, percent: tempo.percent, complete: tempo.closed }, battery: { current: battery.progress, target: battery.goal, percent: battery.percent, complete: battery.closed }, blundr: { current: blundr.progress, target: blundr.goal, percent: blundr.percent, complete: blundr.closed }, allComplete: summary.today.allRingsClosed, updatedAt: summary.generatedAt,
+  };
+}
 
 // ─── Tempo mascot ─────────────────────────────────────────────────────────────
 
@@ -325,6 +347,9 @@ function HomeStatsRow({
   const bestValue = longestStreakDays === null ? "Loading" : String(longestStreakDays);
   const allRingValue = allRingDays === null ? "Loading" : String(allRingDays);
   const closedRingsValue = `${closedRingCount}/3 rings closed`;
+  const clampedUnlockProgress = clampProgressPercentage(nextUnlockProgressPct);
+  const availablePointsLabel = formatRepertoirePoints(availablePoints);
+  const unlockProgressLabel = formatProgressPercentage(clampedUnlockProgress);
 
   return (
     <div className="grid w-full gap-3 sm:grid-cols-2">
@@ -365,14 +390,14 @@ function HomeStatsRow({
           </p>
         </div>
         <div className="mt-3 flex items-end justify-between gap-3">
-          <p style={{ fontFamily: G.inter, fontWeight: 800, fontSize: 30, lineHeight: "30px", color: G.textPrimary }}>{String(availablePoints)}</p>
+          <p style={{ fontFamily: G.inter, fontWeight: 800, fontSize: 30, lineHeight: "30px", color: G.textPrimary }}>{availablePointsLabel}</p>
           <p style={{ fontFamily: G.inter, fontWeight: 600, fontSize: 12, lineHeight: "16.5px", color: G.textMuted }}>
-            {`${nextUnlockProgressPct}% to next unlock`}
+            {`${unlockProgressLabel} to next unlock`}
           </p>
         </div>
         <div className="mt-3">
           <div className="rounded-full w-full overflow-clip" style={{ height: 6, background: "#eae7e1" }}>
-            <div className="rounded-full" style={{ width: `${nextUnlockProgressPct}%`, height: 6, background: G.gold }} />
+            <div className="rounded-full" style={{ width: `${clampedUnlockProgress}%`, height: 6, background: G.gold }} />
           </div>
         </div>
         <div className="mt-2">
@@ -409,13 +434,16 @@ export function Figma5303HomeScreen({
 
     async function refreshDailySnapshot() {
       const userId = getLocalAccountCurrentUserId();
-      try {
-        await reconcileDailyBlundrRingCompletionForToday({ userId });
-      } catch {
-        // Keep local progress visible even if reconciliation fails.
+      if (isNamedLocalDemo(userId)) {
+        if (!cancelled) setDailyRingSnapshot(loadDailyRingSnapshot({ userId }));
+        return;
       }
-      if (cancelled) return;
-      setDailyRingSnapshot(loadDailyRingSnapshot({ userId }));
+      try {
+        const response = await authenticatedApiFetch<{ ok: true; data: BlundrProgressSummary }>(`/api/blundr/progress/summary?localDate=${encodeURIComponent(getLocalDateKey())}`, { cache: "no-store" });
+        if (!cancelled) setDailyRingSnapshot(toAuthoritativeDailyRingSnapshot(response.data));
+      } catch {
+        if (!cancelled) setDailyRingSnapshot(null);
+      }
     }
 
     void refreshDailySnapshot();

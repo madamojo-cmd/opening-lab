@@ -27,9 +27,14 @@ export function reduceDailySession(
     (attempt) =>
       attempt.card.cardFingerprint === card.cardFingerprint && attempt.scored,
   );
+  const alreadyCompleted = state.attempts.some(
+    (attempt) =>
+      attempt.card.cardFingerprint === card.cardFingerprint &&
+      attempt.outcome === "correct",
+  );
   const isRetry = input.outcome === "retry";
   const result: DailyReducerResult =
-    firstScored && !isRetry
+    alreadyCompleted && !isRetry
       ? "already_committed"
       : isRetry
         ? "retry_recorded"
@@ -45,6 +50,8 @@ export function reduceDailySession(
     card,
     submittedAt: input.now,
     outcome: input.outcome,
+    // First-attempt scoring is immutable. Later correct answers are retained
+    // for teaching progress without rewriting that original recall evidence.
     scored: !isRetry && input.outcome !== "reveal" && !firstScored,
     feedback: input.feedback ?? null,
   };
@@ -58,12 +65,20 @@ export function reduceDailySession(
     revealedCardIds:
       input.outcome === "reveal"
         ? [...new Set([...state.revealedCardIds, card.cardFingerprint])]
-        : state.revealedCardIds,
+        : input.outcome === "retry" || input.outcome === "correct"
+          ? state.revealedCardIds.filter((id) => id !== card.cardFingerprint)
+          : state.revealedCardIds,
     firstAttemptIds: attempt.scored
       ? [...state.firstAttemptIds, card.cardFingerprint]
       : state.firstAttemptIds,
+    currentIndex:
+      result === "accepted" && input.outcome === "correct"
+        ? Math.min(state.currentIndex + 1, state.deck.cards.length)
+        : state.currentIndex,
     status:
-      state.currentIndex >= state.deck.cards.length - 1 && attempt.scored
+      result === "accepted" &&
+      input.outcome === "correct" &&
+      state.currentIndex >= state.deck.cards.length - 1
         ? "completed"
         : state.status,
   };

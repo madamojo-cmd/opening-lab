@@ -3,16 +3,140 @@ name: Blundr release candidate
 on:
   pull_request:
   push:
-    branches: [main]
+    branches:
+      [main, release/blundr-staging-3.99, release/blundr-production-3.99]
+  workflow_dispatch:
+    inputs:
+      deployment_url:
+        description: Immutable staging deployment URL
+        required: true
+        type: string
+      expected_sha:
+        description: Full candidate Git SHA
+        required: true
+        type: string
+      rollback_sha:
+        description: Full previously accepted Git SHA
+        required: true
+        type: string
+      browser_qa_evidence_url:
+        description: Browser and accessibility evidence URL
+        required: true
+        type: string
+      telemetry_evidence_url:
+        description: Telemetry delivery evidence URL
+        required: true
+        type: string
+      rollback_evidence_url:
+        description: Rollback rehearsal evidence URL
+        required: true
+        type: string
 
 jobs:
-  verify:
+  source-identity:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    steps:
+      - name: Bind dispatch to the requested exact SHA
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          echo "Exact SHA $GITHUB_SHA"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          fi
+
+  static-and-registry:
+    needs: source-identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+      - run: echo "Exact SHA $GITHUB_SHA"
+      - run: npm ci
+      - name: Static checks
+        run: |
+          npm run verify:registry
+          npm run verify:feature-profile
+          npm run verify:manifest
+          npm run verify:flags
+          npm run verify:deep-minigame-catalog
+          npm run verify:migrations
+          npm run verify:unit-shards
+          npm run typecheck
+          npm run lint
+          npm run format:check
+          npm run security:audit
+          npm run dependency:audit
+      - name: Strict registry release gate
+        if: github.ref == 'refs/heads/main'
+        run: npm run verify:registry:release
+
+  unit-tests:
+    needs: source-identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+      - run: echo "Exact SHA $GITHUB_SHA; unit shard ${{ matrix.shard }}/4"
+      - run: npm ci
+      - run: npm run test:unit:shard:${{ matrix.shard }}
+
+  component-and-integration:
+    needs: source-identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+      - run: echo "Exact SHA $GITHUB_SHA"
+      - run: npm ci
+      - run: npm run test:component
+      - run: npm run test:integration
+
+  chess-content:
+    needs: source-identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+      - run: echo "Exact SHA $GITHUB_SHA"
+      - run: npm ci
+      - run: npm run test:chess-content
+
+  supabase-rls-fresh:
+    needs: source-identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: blundr-disposable-rls
+    concurrency:
+      group: blundr-disposable-rls-fresh
+      cancel-in-progress: false
     env:
-      BLUNDR_RLS_TEST_URL: ${{ secrets.BLUNDR_RLS_TEST_URL }}
-      BLUNDR_RLS_TEST_ANON_KEY: ${{ secrets.BLUNDR_RLS_TEST_ANON_KEY }}
-      BLUNDR_RLS_TEST_SERVICE_ROLE_KEY: ${{ secrets.BLUNDR_RLS_TEST_SERVICE_ROLE_KEY }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      BLUNDR_RLS_FRESH_PROJECT_REF: ${{ secrets.BLUNDR_RLS_FRESH_PROJECT_REF }}
+      BLUNDR_RLS_UPGRADE_PROJECT_REF: ${{ secrets.BLUNDR_RLS_UPGRADE_PROJECT_REF }}
+      BLUNDR_RLS_TEST_PROJECT_REF: ${{ secrets.BLUNDR_RLS_TEST_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      BLUNDR_RLS_TEST_ENVIRONMENT_ROLE: ${{ secrets.BLUNDR_RLS_TEST_ENVIRONMENT_ROLE }}
       BLUNDR_RLS_TEST_USER_A_EMAIL: ${{ secrets.BLUNDR_RLS_TEST_USER_A_EMAIL }}
       BLUNDR_RLS_TEST_USER_A_PASSWORD: ${{ secrets.BLUNDR_RLS_TEST_USER_A_PASSWORD }}
       BLUNDR_RLS_TEST_USER_B_EMAIL: ${{ secrets.BLUNDR_RLS_TEST_USER_B_EMAIL }}
@@ -23,46 +147,267 @@ jobs:
         with:
           node-version: 24.14.0
           cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Require disposable RLS test configuration
+      - name: Assert exact immutable checkout
         run: |
           set -eu
-          for name in \
-            BLUNDR_RLS_TEST_URL \
-            BLUNDR_RLS_TEST_ANON_KEY \
-            BLUNDR_RLS_TEST_SERVICE_ROLE_KEY \
-            BLUNDR_RLS_TEST_USER_A_EMAIL \
-            BLUNDR_RLS_TEST_USER_A_PASSWORD \
-            BLUNDR_RLS_TEST_USER_B_EMAIL \
-            BLUNDR_RLS_TEST_USER_B_PASSWORD
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - run: npm ci
+      - name: Require fresh disposable migration credentials
+        run: |
+          set -eu
+          for name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD BLUNDR_RLS_FRESH_PROJECT_REF BLUNDR_RLS_UPGRADE_PROJECT_REF BLUNDR_RLS_TEST_PROJECT_REF BLUNDR_RLS_TEST_ENVIRONMENT_ROLE BLUNDR_RLS_TEST_USER_A_EMAIL BLUNDR_RLS_TEST_USER_A_PASSWORD BLUNDR_RLS_TEST_USER_B_EMAIL BLUNDR_RLS_TEST_USER_B_PASSWORD
           do
             test -n "${!name:-}" || { echo "$name is required"; exit 1; }
           done
-      - name: Static checks
+          test "$BLUNDR_RLS_TEST_ENVIRONMENT_ROLE" = "disposable" || {
+            echo "Remote RLS target must have the disposable environment role"
+            exit 1
+          }
+      - name: Journey A preflight and fresh zero-to-35 rebuild
         run: |
-          npm run verify:registry
-          npm run verify:deep-minigame-catalog
-          npm run typecheck
-          npm run lint
-          npm run format:check
-          npm run security:audit
-          npm run dependency:audit
-      - name: Test suites
+          set -eu
+          run_supabase() {
+            command_log="$(mktemp)"
+            if ! npx --yes supabase@2.111.0 "$@" >"$command_log" 2>&1; then
+              rm -f "$command_log"
+              echo "Supabase migration command failed without emitting target details"
+              exit 1
+            fi
+            if grep -q '"_tag":"Error"' "$command_log"; then
+              rm -f "$command_log"
+              echo "Supabase migration command returned a structured failure"
+              exit 1
+            fi
+            rm -f "$command_log"
+          }
+          require_dry_run_migrations() {
+            expected_file="$1"
+            command_log="$(mktemp)"
+            actual_file="$(mktemp)"
+            if ! npx --yes supabase@2.111.0 db push --dry-run >"$command_log" 2>&1; then
+              rm -f "$command_log" "$actual_file" "$expected_file"
+              echo "Supabase migration dry-run failed without emitting target details"
+              exit 1
+            fi
+            expected_count="$(wc -l <"$expected_file" | tr -d ' ')"
+            grep -oE '[0-9]{8}([0-9]{6})?_[A-Za-z0-9._-]+\.sql' "$command_log" | tail -n "$expected_count" >"$actual_file" || true
+            if ! cmp -s "$expected_file" "$actual_file"; then
+              rm -f "$command_log" "$actual_file" "$expected_file"
+              echo "Supabase migration dry-run did not contain the exact expected migration set"
+              exit 1
+            fi
+            rm -f "$command_log" "$actual_file" "$expected_file"
+            echo "Validated sanitized migration dry-run with $expected_count expected migrations"
+          }
+          BLUNDR_PR01_PREFLIGHT_MODE=fresh BLUNDR_PR01_PREFLIGHT_PROJECT_REF="$BLUNDR_RLS_FRESH_PROJECT_REF" BLUNDR_PR01_EXPORT_API_KEYS=true npm run verify:pr01-disposable-project
+          run_supabase link --project-ref "$BLUNDR_RLS_FRESH_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+          run_supabase --yes db reset --linked --no-seed
+          BLUNDR_EXPECTED_MIGRATION_COUNT=35 BLUNDR_EXPECTED_MIGRATION_HEAD=20260806200000 npm run verify:remote-migration-history
+      - name: Run non-skippable fresh authority matrix
         run: |
-          npm run test:unit
-          npm run test:component
-          npm run test:integration
-          npm run test:chess-content
-          npm run test:security
-          npm run verify:migrations
-      - name: Production build and browser checks
+          set -eu
+          for name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD BLUNDR_RLS_TEST_ENVIRONMENT_ROLE BLUNDR_RLS_TEST_URL BLUNDR_RLS_TEST_ANON_KEY BLUNDR_RLS_TEST_SERVICE_ROLE_KEY BLUNDR_RLS_TEST_USER_A_EMAIL BLUNDR_RLS_TEST_USER_A_PASSWORD BLUNDR_RLS_TEST_USER_B_EMAIL BLUNDR_RLS_TEST_USER_B_PASSWORD
+          do
+            test -n "${!name:-}" || { echo "$name is required"; exit 1; }
+          done
+          BLUNDR_RLS_TEST_PROJECT_REF="$BLUNDR_RLS_FRESH_PROJECT_REF" npm run test:pr03-remote-authority
+
+  supabase-rls-upgrade:
+    needs: source-identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: blundr-disposable-rls
+    concurrency:
+      group: blundr-disposable-rls-upgrade
+      cancel-in-progress: false
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      BLUNDR_RLS_FRESH_PROJECT_REF: ${{ secrets.BLUNDR_RLS_FRESH_PROJECT_REF }}
+      BLUNDR_RLS_UPGRADE_PROJECT_REF: ${{ secrets.BLUNDR_RLS_UPGRADE_PROJECT_REF }}
+      BLUNDR_RLS_TEST_PROJECT_REF: ${{ secrets.BLUNDR_RLS_TEST_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      BLUNDR_RLS_TEST_ENVIRONMENT_ROLE: ${{ secrets.BLUNDR_RLS_TEST_ENVIRONMENT_ROLE }}
+      BLUNDR_RLS_TEST_USER_A_EMAIL: ${{ secrets.BLUNDR_RLS_TEST_USER_A_EMAIL }}
+      BLUNDR_RLS_TEST_USER_A_PASSWORD: ${{ secrets.BLUNDR_RLS_TEST_USER_A_PASSWORD }}
+      BLUNDR_RLS_TEST_USER_B_EMAIL: ${{ secrets.BLUNDR_RLS_TEST_USER_B_EMAIL }}
+      BLUNDR_RLS_TEST_USER_B_PASSWORD: ${{ secrets.BLUNDR_RLS_TEST_USER_B_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+      - name: Assert exact immutable checkout
         run: |
-          rm -rf .next
-          npm run build
-          npm run bundle:audit
-          npm run test:e2e
-          npm run verify:release
-      - name: Strict registry release gate
-        if: github.ref == 'refs/heads/main'
-        run: npm run verify:registry:release
+          set -eu
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - run: npm ci
+      - name: Require upgrade disposable migration and authority credentials
+        run: |
+          set -eu
+          for name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD BLUNDR_RLS_FRESH_PROJECT_REF BLUNDR_RLS_UPGRADE_PROJECT_REF BLUNDR_RLS_TEST_PROJECT_REF BLUNDR_RLS_TEST_ENVIRONMENT_ROLE BLUNDR_RLS_TEST_USER_A_EMAIL BLUNDR_RLS_TEST_USER_A_PASSWORD BLUNDR_RLS_TEST_USER_B_EMAIL BLUNDR_RLS_TEST_USER_B_PASSWORD
+          do
+            test -n "${!name:-}" || { echo "$name is required"; exit 1; }
+          done
+          test "$BLUNDR_RLS_TEST_ENVIRONMENT_ROLE" = "disposable" || {
+            echo "Remote RLS target must have the disposable environment role"
+            exit 1
+          }
+          test "$BLUNDR_RLS_TEST_PROJECT_REF" = "$BLUNDR_RLS_UPGRADE_PROJECT_REF" || {
+            echo "The RLS authority target must be the upgrade migration target"
+            exit 1
+          }
+      - name: Journey B preflight and exact 25-to-35 upgrade
+        run: |
+          set -eu
+          run_supabase() {
+            command_log="$(mktemp)"
+            if ! npx --yes supabase@2.111.0 "$@" >"$command_log" 2>&1; then
+              rm -f "$command_log"
+              echo "Supabase migration command failed without emitting target details"
+              exit 1
+            fi
+            if grep -q '"_tag":"Error"' "$command_log"; then
+              rm -f "$command_log"
+              echo "Supabase migration command returned a structured failure"
+              exit 1
+            fi
+            rm -f "$command_log"
+          }
+          require_dry_run_migrations() {
+            expected_file="$1"
+            command_log="$(mktemp)"
+            actual_file="$(mktemp)"
+            if ! npx --yes supabase@2.111.0 db push --dry-run >"$command_log" 2>&1; then
+              rm -f "$command_log" "$actual_file" "$expected_file"
+              echo "Supabase migration dry-run failed without emitting target details"
+              exit 1
+            fi
+            expected_count="$(wc -l <"$expected_file" | tr -d ' ')"
+            grep -oE '[0-9]{8}([0-9]{6})?_[A-Za-z0-9._-]+\.sql' "$command_log" | tail -n "$expected_count" >"$actual_file" || true
+            if ! cmp -s "$expected_file" "$actual_file"; then
+              rm -f "$command_log" "$actual_file" "$expected_file"
+              echo "Supabase migration dry-run did not contain the exact expected migration set"
+              exit 1
+            fi
+            rm -f "$command_log" "$actual_file" "$expected_file"
+            echo "Validated sanitized migration dry-run with $expected_count expected migrations"
+          }
+          BLUNDR_PR01_PREFLIGHT_MODE=upgrade BLUNDR_PR01_PREFLIGHT_PROJECT_REF="$BLUNDR_RLS_UPGRADE_PROJECT_REF" BLUNDR_PR01_EXPORT_API_KEYS=true npm run verify:pr01-disposable-project
+          while IFS='=' read -r generated_name generated_value
+          do
+            case "$generated_name" in
+              BLUNDR_RLS_TEST_URL|BLUNDR_RLS_TEST_ANON_KEY|BLUNDR_RLS_TEST_SERVICE_ROLE_KEY)
+                export "$generated_name=$generated_value"
+                ;;
+            esac
+          done < "$GITHUB_ENV"
+          run_supabase link --project-ref "$BLUNDR_RLS_UPGRADE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+          run_supabase --yes db reset --linked --version 20260805150000 --no-seed
+          BLUNDR_EXPECTED_MIGRATION_COUNT=25 BLUNDR_EXPECTED_MIGRATION_HEAD=20260805150000 npm run verify:remote-migration-history
+          expected_pr03_migration="$(mktemp)"
+          find supabase/migrations -maxdepth 1 -name '*.sql' -type f -printf '%f\n' | sort | tail -n 10 >"$expected_pr03_migration"
+          require_dry_run_migrations "$expected_pr03_migration"
+          run_supabase db push
+          BLUNDR_EXPECTED_MIGRATION_COUNT=35 BLUNDR_EXPECTED_MIGRATION_HEAD=20260806200000 npm run verify:remote-migration-history
+      - name: Run non-skippable upgraded authority matrix
+        run: |
+          set -eu
+          for name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD BLUNDR_RLS_TEST_PROJECT_REF BLUNDR_RLS_TEST_ENVIRONMENT_ROLE BLUNDR_RLS_TEST_URL BLUNDR_RLS_TEST_ANON_KEY BLUNDR_RLS_TEST_SERVICE_ROLE_KEY BLUNDR_RLS_TEST_USER_A_EMAIL BLUNDR_RLS_TEST_USER_A_PASSWORD BLUNDR_RLS_TEST_USER_B_EMAIL BLUNDR_RLS_TEST_USER_B_PASSWORD
+          do
+            test -n "${!name:-}" || { echo "$name is required"; exit 1; }
+          done
+          npm run test:pr03-remote-authority
+
+  production-build:
+    needs:
+      [
+        static-and-registry,
+        unit-tests,
+        component-and-integration,
+        chess-content,
+        supabase-rls-fresh,
+        supabase-rls-upgrade,
+      ]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+      - run: echo "Exact SHA $GITHUB_SHA"
+      - run: npm ci
+      - run: npx playwright install --with-deps
+      - run: npm run build
+      - run: npm run bundle:audit
+      - run: npm run test:e2e
+
+  release-summary:
+    if: always()
+    needs:
+      [
+        static-and-registry,
+        unit-tests,
+        component-and-integration,
+        chess-content,
+        supabase-rls-fresh,
+        supabase-rls-upgrade,
+        production-build,
+      ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every release job
+        env:
+          RESULTS: ${{ join(needs.*.result, ',') }}
+        run: |
+          echo "Exact SHA $GITHUB_SHA"
+          echo "Required results: $RESULTS"
+          test "$RESULTS" = "success,success,success,success,success,success,success"
+
+  staging-golden:
+    if: github.event_name == 'workflow_dispatch'
+    needs: release-summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: blundr-staging
+    env:
+      BLUNDR_STAGING_BASE_URL: ${{ inputs.deployment_url }}
+      BLUNDR_EXPECTED_GIT_SHA: ${{ inputs.expected_sha }}
+      BLUNDR_ROLLBACK_GIT_SHA: ${{ inputs.rollback_sha }}
+      BLUNDR_BROWSER_QA_EVIDENCE_URL: ${{ inputs.browser_qa_evidence_url }}
+      BLUNDR_TELEMETRY_EVIDENCE_URL: ${{ inputs.telemetry_evidence_url }}
+      BLUNDR_ROLLBACK_EVIDENCE_URL: ${{ inputs.rollback_evidence_url }}
+      BLUNDR_RELEASE_EVIDENCE_TOKEN: ${{ secrets.BLUNDR_RELEASE_EVIDENCE_TOKEN }}
+      BLUNDR_STAGING_SUPABASE_URL: ${{ secrets.BLUNDR_STAGING_SUPABASE_URL }}
+      BLUNDR_STAGING_SUPABASE_ANON_KEY: ${{ secrets.BLUNDR_STAGING_SUPABASE_ANON_KEY }}
+      BLUNDR_STAGING_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.BLUNDR_STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+      BLUNDR_STAGING_QA_PASSWORD: ${{ secrets.BLUNDR_STAGING_QA_PASSWORD }}
+      BLUNDR_STAGING_QA_EMAIL_DOMAIN: ${{ secrets.BLUNDR_STAGING_QA_EMAIL_DOMAIN }}
+      BLUNDR_STAGING_CHESSCOM_USERNAME: ${{ secrets.BLUNDR_STAGING_CHESSCOM_USERNAME }}
+      BLUNDR_STAGING_LICHESS_USERNAME: ${{ secrets.BLUNDR_STAGING_LICHESS_USERNAME }}
+      BLUNDR_STAGING_CRON_SECRET: ${{ secrets.BLUNDR_STAGING_CRON_SECRET }}
+      BLUNDR_EVIDENCE_OUTPUT: release/evidence/staging-3.99-${{ inputs.expected_sha }}.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+      - name: Assert immutable checkout
+        run: test "$(git rev-parse HEAD)" = "$BLUNDR_EXPECTED_GIT_SHA"
+      - name: Install dependencies
+        run: npm ci
+      - name: Run ten exact-SHA golden journeys
+        run: npm run staging:golden
+      - name: Preserve staging evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blundr-staging-3.99-${{ inputs.expected_sha }}
+          path: release/evidence/*.json
+          if-no-files-found: error
+          retention-days: 90

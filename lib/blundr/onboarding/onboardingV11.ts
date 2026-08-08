@@ -1,6 +1,5 @@
 import "server-only";
 
-import { getAccountPersistenceAdapter } from "@/lib/blundr/accounts/accountRepository";
 import type {
   CurrentBlundrUser,
   RatingBandId,
@@ -8,6 +7,7 @@ import type {
 } from "@/lib/blundr/accounts/accountTypes";
 import { createDefaultTrainingProfile } from "@/lib/blundr/accounts/accountDefaults";
 import { createBlundrSupabaseServerClient } from "@/lib/blundr/backend/supabaseServerClient";
+import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
 import {
   buildInitialRepertoireFromStarterPack,
@@ -280,39 +280,54 @@ export async function completeOnboardingV11(
     state.priorities.length === 0
   )
     throw new Error("onboarding_incomplete:plan");
-  const adapter = getAccountPersistenceAdapter({
-    user,
-    accessToken: user.accessToken,
-    mode: user.mode,
-    allowLocalFallback: false,
-  });
   const now = nowIso();
   const repertoire = buildInitialRepertoireFromStarterPack({
     userId: user.userId,
     starterPackId: state.starterPackId,
     now,
   });
-  const repertoireResult = await adapter.upsertUserRepertoire(repertoire);
-  if (!repertoireResult.ok)
+  const admin = createBlundrSupabaseAdminClient();
+  if (!admin) throw new Error("starter_repertoire_persistence_unavailable");
+  const inserted = await admin.from("blundr_user_repertoires").insert({
+    user_id: user.userId,
+    selected_starter_pack_id: repertoire.selectedStarterPackId,
+    unlocked_opening_ids: repertoire.unlockedOpeningIds,
+    locked_opening_ids: repertoire.lockedOpeningIds,
+    opening_unlock_points: 0,
+    updated_at: now,
+  });
+  if (inserted.error && inserted.error.code !== "23505")
     throw new Error("starter_repertoire_persistence_unavailable");
-  const verifiedRepertoire = await adapter.getUserRepertoire(user.userId);
-  if (!verifiedRepertoire.ok || !verifiedRepertoire.data) {
+  const verifiedRepertoire = await admin
+    .from("blundr_user_repertoires")
+    .select("*")
+    .eq("user_id", user.userId)
+    .maybeSingle();
+  if (verifiedRepertoire.error || !verifiedRepertoire.data) {
     throw new Error("starter_repertoire_verification_failed");
   }
+  const verified = verifiedRepertoire.data as {
+    user_id: string;
+    selected_starter_pack_id: StarterPackId | null;
+    unlocked_opening_ids: string[];
+    locked_opening_ids: string[];
+    opening_unlock_points: number;
+    updated_at: string;
+  };
   const verifiedProgress: RepertoireProgress = {
-    userId: verifiedRepertoire.data.userId,
+    userId: verified.user_id,
     selectedStarterPackId:
-      verifiedRepertoire.data.selectedStarterPackId ?? state.starterPackId,
-    unlockedOpeningIds: verifiedRepertoire.data.unlockedOpeningIds,
-    lockedOpeningIds: verifiedRepertoire.data.lockedOpeningIds,
-    availablePoints: verifiedRepertoire.data.openingUnlockPoints,
-    lifetimePoints: verifiedRepertoire.data.openingUnlockPoints,
+      verified.selected_starter_pack_id ?? state.starterPackId,
+    unlockedOpeningIds: verified.unlocked_opening_ids ?? [],
+    lockedOpeningIds: verified.locked_opening_ids ?? [],
+    availablePoints: Math.max(0, Number(verified.opening_unlock_points) || 0),
+    lifetimePoints: Math.max(0, Number(verified.opening_unlock_points) || 0),
     spentPoints: 0,
     nextUnlockCost: 0,
     nextUnlockProgressPct: 0,
     pointEvents: [],
     unlockEvents: [],
-    updatedAt: verifiedRepertoire.data.updatedAt,
+    updatedAt: verified.updated_at,
   };
   if (
     !hasVerifiedStarterOpeningAccess(
