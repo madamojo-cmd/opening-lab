@@ -1,0 +1,10 @@
+name: Blundr Daily v3 disposable gate
+
+on:
+  workflow_dispatch:
+
+jobs:
+  dispatch-placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Select the PR-04 branch when manually dispatching this workflow."
