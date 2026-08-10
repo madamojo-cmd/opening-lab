@@ -47,7 +47,7 @@ export async function prepareLearningEventV2(
   ]);
   const client = createBlundrSupabaseAdminClient();
   if (!client) throw new Error("learning_event_persistence_unavailable");
-  const [review, mastery] = await Promise.all([
+  const [review, masteryExact] = await Promise.all([
     client
       .from("blundr_review_states")
       .select("srs_state,review_state_version")
@@ -64,8 +64,23 @@ export async function prepareLearningEventV2(
       .eq("position_key", input.position.positionKey)
       .maybeSingle(),
   ]);
-  if (review.error || mastery.error)
+  if (review.error || masteryExact.error)
     throw new Error("learning_projection_read_unavailable");
+  let mastery = masteryExact.data;
+  if (!mastery) {
+    const canonicalMastery = await client
+      .from("blundr_node_mastery")
+      .select(
+        "recall_attempt_count,correct_recall_count,lapse_count,mastery_state_version",
+      )
+      .eq("user_id", input.userId)
+      .eq("opening_id", input.position.openingId)
+      .eq("play_key", input.position.moveOrderKey)
+      .maybeSingle();
+    if (canonicalMastery.error)
+      throw new Error("learning_projection_read_unavailable");
+    mastery = canonicalMastery.data;
+  }
   const recallAttempt =
     input.taxonomy === "move_correct" ||
     input.taxonomy === "move_incorrect" ||
@@ -86,11 +101,11 @@ export async function prepareLearningEventV2(
     hinted: input.reviewEvidence?.hinted ?? input.taxonomy === "cue_revealed",
     elapsedMs: input.reviewEvidence?.elapsedMs ?? null,
     previousFsrs: (review.data?.srs_state as never) ?? null,
-    previousMastery: mastery.data
+    previousMastery: mastery
       ? {
-          recallAttemptCount: Number(mastery.data.recall_attempt_count ?? 0),
-          correctRecallCount: Number(mastery.data.correct_recall_count ?? 0),
-          lapseCount: Number(mastery.data.lapse_count ?? 0),
+          recallAttemptCount: Number(mastery.recall_attempt_count ?? 0),
+          correctRecallCount: Number(mastery.correct_recall_count ?? 0),
+          lapseCount: Number(mastery.lapse_count ?? 0),
         }
       : null,
   });
@@ -168,9 +183,7 @@ export async function prepareLearningEventV2(
     expected_review_state_version: Number(
       review.data?.review_state_version ?? 0,
     ),
-    expected_mastery_state_version: Number(
-      mastery.data?.mastery_state_version ?? 0,
-    ),
+    expected_mastery_state_version: Number(mastery?.mastery_state_version ?? 0),
     ...(projection.evidenceKind === "recall_attempt"
       ? { fsrs: projection.fsrs, mastery: projection.mastery }
       : {}),

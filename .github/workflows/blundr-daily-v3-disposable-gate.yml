@@ -139,7 +139,7 @@ jobs:
           BLUNDR_EXPECTED_MIGRATION_COUNT=25 BLUNDR_EXPECTED_MIGRATION_HEAD=20260805150000 \
             npm run verify:remote-migration-history | tee "$log"
 
-      - name: Prove 25→35 upgrade path
+      - name: Prove 25→36 upgrade path
         shell: bash
         run: |
           set -euo pipefail
@@ -166,7 +166,7 @@ jobs:
             echo "Validated sanitized migration dry-run with $expected_count expected migrations"
           }
           expected_upgrade_migrations="$(mktemp)"
-          find supabase/migrations -maxdepth 1 -name '*.sql' -type f -printf '%f\n' | sort | tail -n 10 >"$expected_upgrade_migrations"
+          find supabase/migrations -maxdepth 1 -name '*.sql' -type f -printf '%f\n' | sort | tail -n 11 >"$expected_upgrade_migrations"
           require_dry_run_migrations "$expected_upgrade_migrations"
           command_log="$(mktemp)"
           if ! npx --yes supabase@2.111.0 db push >"$command_log" 2>&1; then
@@ -182,13 +182,13 @@ jobs:
           cat "$command_log" | tee "$LOG_DIR/db-push-upgrade.log" >/dev/null
           rm -f "$command_log"
 
-      - name: Verify remote migration history reached 35 after upgrade
+      - name: Verify remote migration history reached 36 after upgrade
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$LOG_DIR"
           log="$LOG_DIR/migrations-after-upgrade.log"
-          BLUNDR_EXPECTED_MIGRATION_COUNT=35 BLUNDR_EXPECTED_MIGRATION_HEAD=20260806200000 \
+          BLUNDR_EXPECTED_MIGRATION_COUNT=36 BLUNDR_EXPECTED_MIGRATION_HEAD=20260806210000 \
             npm run verify:remote-migration-history | tee "$log"
 
       - name: Validate linked reset support
@@ -244,7 +244,7 @@ jobs:
           set -euo pipefail
           mkdir -p "$LOG_DIR"
           log="$LOG_DIR/migrations-after-reset.log"
-          BLUNDR_EXPECTED_MIGRATION_COUNT=35 BLUNDR_EXPECTED_MIGRATION_HEAD=20260806200000 \
+          BLUNDR_EXPECTED_MIGRATION_COUNT=36 BLUNDR_EXPECTED_MIGRATION_HEAD=20260806210000 \
             npm run verify:remote-migration-history | tee "$log"
 
       - name: Promote fresh project for downstream authority tests
@@ -371,8 +371,8 @@ jobs:
             echo "- Run ID: $GITHUB_RUN_ID"
             echo "- Tested SHA: $GITHUB_SHA"
             echo "- Disposable environment role: $BLUNDR_RLS_TEST_ENVIRONMENT_ROLE"
-            echo "- Migration count: 35"
-            echo "- Migration head: 20260806200000"
+            echo "- Migration count: 36"
+            echo "- Migration head: 20260806210000"
             echo "- Daily v3 remote authority: ${{ steps.daily_v3_remote_authority.outcome }}"
             echo "- PR-02 regression: ${{ steps.pr02_learning_and_daily_authority_regression.outcome }}"
             echo "- PR-03 regression: ${{ steps.pr03_rewards_grant_and_presentation_regression.outcome }}"

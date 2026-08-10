@@ -354,6 +354,225 @@ async function main() {
       0,
     );
 
+    const masteryOpeningId = "italian-white";
+    const sharedPlayKey = `shared-play-${scope}`;
+    const exactPlayKey = `exact-play-${scope}`;
+    const newPlayKey = `new-play-${scope}`;
+    const concurrentPlayKey = `concurrent-play-${scope}`;
+    const sharedLegacyPositionKey = `legacy-position-${scope}`;
+    const exactPositionKey = `exact-position-${scope}`;
+    const newPositionKey = `new-position-${scope}`;
+    const concurrentPositionKey = `concurrent-position-${scope}`;
+    const legacyMastery = {
+      user_id: userAId,
+      position_key: sharedLegacyPositionKey,
+      opening_id: masteryOpeningId,
+      play_key: sharedPlayKey,
+      attempts: 3,
+      first_attempt_result: "incorrect",
+      confidence: 0.42,
+      access_decision: "active",
+      mastery_state: "learning",
+      mastery_state_version: 0,
+      recall_attempt_count: 3,
+      correct_recall_count: 2,
+      lapse_count: 1,
+    };
+    assert.equal(
+      (await service.from("blundr_node_mastery").insert(legacyMastery)).error,
+      null,
+    );
+    const legacyEvent = event(userAId, {
+      correct: true,
+      rating: "good",
+      elapsedMs: 9_000,
+      position: sharedLegacyPositionKey,
+      play: sharedPlayKey,
+      exposure: `legacy-exp-${scope}`,
+    });
+    legacyEvent.expected_mastery_state_version = 0;
+    const legacyResult = await service.rpc(
+      "blundr_project_learning_evidence_v2",
+      {
+        p_user_id: userAId,
+        p_event: legacyEvent,
+      },
+    );
+    assert.equal(legacyResult.error, null, legacyResult.error?.message ?? "");
+    const legacyStored = await service
+      .from("blundr_node_mastery")
+      .select("position_key,opening_id,play_key,mastery_state_version")
+      .eq("user_id", userAId)
+      .eq("opening_id", masteryOpeningId)
+      .eq("play_key", sharedPlayKey)
+      .maybeSingle();
+    assert.equal(legacyStored.error, null);
+    assert.equal(legacyStored.data?.position_key, sharedLegacyPositionKey);
+    assert.equal(legacyStored.data?.mastery_state_version, 1);
+
+    const exactMastery = {
+      user_id: userAId,
+      position_key: exactPositionKey,
+      opening_id: masteryOpeningId,
+      play_key: exactPlayKey,
+      attempts: 1,
+      first_attempt_result: "incorrect",
+      confidence: 0.33,
+      access_decision: "active",
+      mastery_state: "learning",
+      mastery_state_version: 0,
+      recall_attempt_count: 1,
+      correct_recall_count: 0,
+      lapse_count: 1,
+    };
+    assert.equal(
+      (await service.from("blundr_node_mastery").insert(exactMastery)).error,
+      null,
+    );
+    const exactEvent = event(userAId, {
+      correct: true,
+      rating: "good",
+      elapsedMs: 8_000,
+      position: exactPositionKey,
+      play: exactPlayKey,
+      exposure: `exact-exp-${scope}`,
+    });
+    exactEvent.expected_mastery_state_version = 0;
+    const exactResult = await service.rpc(
+      "blundr_project_learning_evidence_v2",
+      {
+        p_user_id: userAId,
+        p_event: exactEvent,
+      },
+    );
+    assert.equal(exactResult.error, null, exactResult.error?.message ?? "");
+    const exactStored = await service
+      .from("blundr_node_mastery")
+      .select("position_key,opening_id,play_key,mastery_state_version")
+      .eq("user_id", userAId)
+      .eq("position_key", exactPositionKey)
+      .maybeSingle();
+    assert.equal(exactStored.error, null);
+    assert.equal(exactStored.data?.position_key, exactPositionKey);
+    assert.equal(exactStored.data?.mastery_state_version, 1);
+
+    const sharedUserBEvent = event(userBId, {
+      correct: true,
+      rating: "good",
+      elapsedMs: 7_500,
+      position: `user-b-shared-${scope}`,
+      play: sharedPlayKey,
+      exposure: `shared-exp-${scope}`,
+    });
+    sharedUserBEvent.expected_mastery_state_version = 0;
+    const sharedUserBResult = await service.rpc(
+      "blundr_project_learning_evidence_v2",
+      {
+        p_user_id: userBId,
+        p_event: sharedUserBEvent,
+      },
+    );
+    assert.equal(
+      sharedUserBResult.error,
+      null,
+      sharedUserBResult.error?.message ?? "",
+    );
+    const sharedUserAStored = await service
+      .from("blundr_node_mastery")
+      .select("position_key,mastery_state_version")
+      .eq("user_id", userAId)
+      .eq("opening_id", masteryOpeningId)
+      .eq("play_key", sharedPlayKey)
+      .maybeSingle();
+    const sharedUserBStored = await service
+      .from("blundr_node_mastery")
+      .select("position_key,mastery_state_version")
+      .eq("user_id", userBId)
+      .eq("opening_id", masteryOpeningId)
+      .eq("play_key", sharedPlayKey)
+      .maybeSingle();
+    assert.equal(sharedUserAStored.error, null);
+    assert.equal(sharedUserBStored.error, null);
+    assert.equal(sharedUserAStored.data?.position_key, sharedLegacyPositionKey);
+    assert.equal(
+      sharedUserBStored.data?.position_key,
+      `user-b-shared-${scope}`,
+    );
+
+    const newEvent = event(userBId, {
+      correct: true,
+      rating: "good",
+      elapsedMs: 6_500,
+      position: newPositionKey,
+      play: newPlayKey,
+      exposure: `new-exp-${scope}`,
+    });
+    newEvent.expected_mastery_state_version = 0;
+    const newResult = await service.rpc("blundr_project_learning_evidence_v2", {
+      p_user_id: userBId,
+      p_event: newEvent,
+    });
+    assert.equal(newResult.error, null, newResult.error?.message ?? "");
+    const newDuplicate = await service.rpc(
+      "blundr_project_learning_evidence_v2",
+      {
+        p_user_id: userBId,
+        p_event: newEvent,
+      },
+    );
+    assert.equal(newDuplicate.error, null);
+    assert.equal(newDuplicate.data?.status, "duplicate");
+    const newStored = await service
+      .from("blundr_node_mastery")
+      .select("position_key,mastery_state_version")
+      .eq("user_id", userBId)
+      .eq("opening_id", masteryOpeningId)
+      .eq("play_key", newPlayKey)
+      .maybeSingle();
+    assert.equal(newStored.error, null);
+    assert.equal(newStored.data?.position_key, newPositionKey);
+    assert.equal(newStored.data?.mastery_state_version, 1);
+
+    const concurrentEvent = event(userBId, {
+      correct: true,
+      rating: "good",
+      elapsedMs: 6_000,
+      position: concurrentPositionKey,
+      play: concurrentPlayKey,
+      exposure: `concurrent-exp-${scope}`,
+    });
+    concurrentEvent.expected_mastery_state_version = 0;
+    const concurrentResults = await Promise.all([
+      service.rpc("blundr_project_learning_evidence_v2", {
+        p_user_id: userBId,
+        p_event: concurrentEvent,
+      }),
+      service.rpc("blundr_project_learning_evidence_v2", {
+        p_user_id: userBId,
+        p_event: concurrentEvent,
+      }),
+    ]);
+    assert.ok(
+      concurrentResults.every((item) => !item.error),
+      "concurrent canonical mastery projections must remain idempotent",
+    );
+    assert.equal(
+      new Set(concurrentResults.map((item) => item.data?.status)).has(
+        "duplicate",
+      ),
+      true,
+    );
+    const concurrentStored = await service
+      .from("blundr_node_mastery")
+      .select("position_key,mastery_state_version")
+      .eq("user_id", userBId)
+      .eq("opening_id", masteryOpeningId)
+      .eq("play_key", concurrentPlayKey)
+      .maybeSingle();
+    assert.equal(concurrentStored.error, null);
+    assert.equal(concurrentStored.data?.position_key, concurrentPositionKey);
+    assert.equal(concurrentStored.data?.mastery_state_version, 1);
+
     const deckId = `deck-${scope}`,
       sessionId = `session-daily-${scope}`;
     const cards = [0, 1, 2].map((i) => ({

@@ -11,6 +11,13 @@ const migration = readFileSync(
   ),
   "utf8",
 );
+const masteryReconciliationMigration = readFileSync(
+  resolve(
+    root,
+    "supabase/migrations/20260806210000_blundr_mastery_canonical_reconciliation_v2.sql",
+  ),
+  "utf8",
+);
 const dailyTaskAuthorityMigration = readFileSync(
   resolve(
     root,
@@ -27,6 +34,10 @@ const dailyTaskNormalizationMigration = readFileSync(
 );
 const dailyWriter = readFileSync(
   resolve(root, "lib/blundr/daily/productionDailyService.server.ts"),
+  "utf8",
+);
+const learningEventService = readFileSync(
+  resolve(root, "lib/blundr/learning/core/learningEventService.server.ts"),
   "utf8",
 );
 const repository = readFileSync(
@@ -105,6 +116,49 @@ test("Daily policy and projection contracts retain explicit no-fabrication bound
   assert.match(dailyTaskAuthorityMigration, /daily_task_evidence_conflict/);
   assert.match(migration, /first_recall_requires_exposure/);
   assert.match(migration, /daily-completion:/);
+});
+
+test("Mastery reconciliation prefers exact rows and falls back to canonical runtime identity", () => {
+  assert.match(
+    learningEventService,
+    /const \[review, masteryExact\] = await Promise\.all\(/,
+  );
+  assert.match(learningEventService, /canonicalMastery/);
+  assert.match(
+    learningEventService,
+    /eq\("position_key", input\.position\.positionKey\)/,
+  );
+  assert.match(
+    learningEventService,
+    /eq\("opening_id", input\.position\.openingId\)/,
+  );
+  assert.match(
+    learningEventService,
+    /eq\("play_key", input\.position\.moveOrderKey\)/,
+  );
+  assert.match(
+    learningEventService,
+    /expected_mastery_state_version: Number\(/,
+  );
+  assert.match(masteryReconciliationMigration, /pg_advisory_xact_lock/);
+  assert.match(
+    masteryReconciliationMigration,
+    /position_key = p_event->>'position_key'/,
+  );
+  assert.match(
+    masteryReconciliationMigration,
+    /opening_id = p_event->>'opening_id'/,
+  );
+  assert.match(
+    masteryReconciliationMigration,
+    /play_key = p_event->>'move_order_key'/,
+  );
+  assert.match(masteryReconciliationMigration, /v_mastery_found/);
+  assert.match(masteryReconciliationMigration, /ctid = v_mastery_ctid/);
+  assert.match(
+    masteryReconciliationMigration,
+    /learning_mastery_state_conflict/,
+  );
 });
 
 test("Daily v3 normalization keeps task evidence as validated JSON object data", () => {
