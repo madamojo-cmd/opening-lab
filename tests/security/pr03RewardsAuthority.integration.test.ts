@@ -327,12 +327,18 @@ async function main() {
     );
     const ring = await service
       .from("blundr_daily_retention_progress")
-      .select("daily_blundr_progress,opening_points_earned")
+      .select(
+        "daily_blundr_progress,daily_battery_progress,opening_points_earned",
+      )
       .eq("user_id", userAId);
     assert.equal(ring.error, null);
     assert.deepEqual(
-      ring.data?.map((row) => row.daily_blundr_progress),
-      [1, 1],
+      ring.data
+        ?.map(
+          (row) => `${row.daily_blundr_progress}:${row.daily_battery_progress}`,
+        )
+        .sort(),
+      ["0:1", "1:0", "1:0"],
     );
 
     const claim = await service.rpc("blundr_claim_reward_presentation_v2", {
