@@ -163,7 +163,7 @@ jobs:
             echo "Remote RLS target must have the disposable environment role"
             exit 1
           }
-      - name: Journey A preflight and fresh zero-to-36 rebuild
+      - name: Journey A preflight and fresh zero-to-37 rebuild
         run: |
           set -eu
           run_supabase() {
@@ -257,7 +257,7 @@ jobs:
             echo "The RLS authority target must be the upgrade migration target"
             exit 1
           }
-      - name: Journey B preflight and exact 25-to-36 upgrade
+      - name: Journey B preflight and exact 25-to-37 upgrade
         run: |
           set -eu
           run_supabase() {

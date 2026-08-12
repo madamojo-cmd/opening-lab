@@ -79,6 +79,31 @@ function assertCreatedTablesEnableRls(sql: string, file: string): void {
   }
 }
 
+async function assertWorkflowMigrationEvidence(
+  migrationCount: number,
+  migrationHead: string,
+): Promise<void> {
+  const [releaseCandidate, dailyDisposable] = await Promise.all([
+    readFile(".github/workflows/blundr-release-candidate.yml", "utf8"),
+    readFile(".github/workflows/blundr-daily-v3-disposable-gate.yml", "utf8"),
+  ]);
+  assertContract(
+    releaseCandidate.includes(
+      `Journey A preflight and fresh zero-to-${migrationCount} rebuild`,
+    ) &&
+      releaseCandidate.includes(
+        `Journey B preflight and exact 25-to-${migrationCount} upgrade`,
+      ),
+    "release-candidate journey labels must match the cumulative migration count.",
+  );
+  assertContract(
+    dailyDisposable.includes(`Prove 25→${migrationCount} upgrade path`) &&
+      dailyDisposable.includes(`Migration count: ${migrationCount}`) &&
+      dailyDisposable.includes(`Migration head: ${migrationHead}`),
+    "Daily disposable evidence must publish the cumulative migration count and head.",
+  );
+}
+
 function assertPr01Contracts(migrations: MigrationSource[]): void {
   const byFile = new Map(
     migrations.map((migration) => [migration.file, migration.sql]),
@@ -290,6 +315,7 @@ async function main() {
     checksums.push(createHash("sha256").update(sql).digest("hex"));
   }
   assertPr01Contracts(migrations);
+  await assertWorkflowMigrationEvidence(files.length, versions.at(-1)!);
   console.log(
     `Verified ${files.length} local migrations (static ancestry, expand-only, RLS, RPC, compatibility, and backfill contracts only; no database apply was attempted). checksum=${createHash("sha256").update(checksums.join("\n")).digest("hex")}`,
   );
