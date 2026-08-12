@@ -12,9 +12,33 @@ const isPreviewDeployment =
 const hasRuntimeSentryDsn = Boolean(
   process.env.NEXT_PUBLIC_SENTRY_DSN || process.env.SENTRY_DSN,
 );
+const trainingRuntimeTraceIncludes = [
+  "./data/blundr/training-runtime/blundr-opening-runtime-3.99.v2/manifest.json",
+  "./data/blundr/training-runtime/blundr-opening-runtime-3.99.v2/opening-book.nodes.runtime.v1.jsonl",
+  "./data/blundr/training-runtime/blundr-opening-runtime-3.99.v2/opening-book.candidates.runtime.v1.jsonl",
+  "./data/blundr/training-runtime/blundr-opening-runtime-3.99.v2/opening-index.runtime.v1.json",
+  "./data/blundr/training-runtime/blundr-opening-runtime-3.99.v2/opening-availability.runtime.v1.json",
+  "./data/blundr/training-runtime/blundr-opening-runtime-3.99.v2/checksums.sha256",
+  "./data/blundr/training-runtime/blundr-opening-runtime-3.99.v2/validation-report.json",
+];
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: projectRoot,
+  outputFileTracingIncludes: {
+    "/api/blundr/jobs/process-game-import": trainingRuntimeTraceIncludes,
+    "/api/blundr/daily/today": trainingRuntimeTraceIncludes,
+    "/api/blundr/daily/sessions/[sessionId]/attempts":
+      trainingRuntimeTraceIncludes,
+    "/api/blundr/daily/sessions/[sessionId]/retry":
+      trainingRuntimeTraceIncludes,
+    "/api/blundr/daily/sessions/[sessionId]/reveal":
+      trainingRuntimeTraceIncludes,
+    "/api/blundr/learning/events": trainingRuntimeTraceIncludes,
+    "/api/blundr/repertoire/openings/[openingId]/insights":
+      trainingRuntimeTraceIncludes,
+    "/api/blundr/dev/game-data-health": trainingRuntimeTraceIncludes,
+    "/api/runtime-book/candidates": trainingRuntimeTraceIncludes,
+  },
   allowedDevOrigins: ["127.0.0.1", "localhost"],
   webpack(config, { dev }) {
     // The production compiler's filesystem cache can exceed the isolated
