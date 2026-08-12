@@ -56,6 +56,10 @@ test("one hydrated reward writer owns all three evidence sources", () => {
     migration,
     /create or replace function public\.blundr_apply_reward_transaction_v2[\s\S]*select public\.blundr_apply_completion_reward_v3/i,
   );
+  assert.match(
+    migration,
+    /blundr_apply_completion_reward_v3[\s\S]*pg_advisory_xact_lock\(hashtextextended\(p_user_id::text, 403\)\)[\s\S]*v_tx\.policy_version is distinct from p_policy_version[\s\S]*reward_idempotency_conflict/i,
+  );
 });
 
 test("reward authority failures retain actionable HTTP semantics", () => {

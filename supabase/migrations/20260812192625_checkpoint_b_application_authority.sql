@@ -263,6 +263,35 @@ declare
   v_result jsonb;
   v_inserted boolean := false;
 begin
+  if p_user_id is null or nullif(btrim(p_completion_id), '') is null
+    or p_source not in ('opening_run_completed','continuation_completed','daily_blundr_deck_completed')
+    or nullif(btrim(p_evidence_id), '') is null
+    or nullif(btrim(p_idempotency_key), '') is null
+    or nullif(btrim(p_policy_version), '') is null then
+    raise exception 'invalid_reward_transaction_request';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended(p_user_id::text, 403));
+
+  -- The v2 core treats rows in the legacy completion projection as already
+  -- rewarded. Hydrated v3 writes that same projection, so validate its backing
+  -- transaction before taking the legacy-compatible duplicate return. This
+  -- preserves fail-closed policy-version idempotency on every public entry
+  -- point while retaining compatibility with genuine pre-v2 grants.
+  select * into v_existing
+  from public.blundr_completion_grants
+  where user_id=p_user_id and source=p_source and evidence_id=p_evidence_id
+  order by created_at desc limit 1;
+  if found then
+    select * into v_tx
+    from public.blundr_reward_transactions_v2
+    where user_id=p_user_id
+      and id::text=v_existing.result_json->>'transactionId';
+    if found and v_tx.policy_version is distinct from p_policy_version then
+      raise exception 'reward_idempotency_conflict';
+    end if;
+    return jsonb_set(v_existing.result_json,'{duplicate}','true'::jsonb,true);
+  end if;
+
   v_raw := public.blundr_apply_reward_transaction_v2_core(
     p_user_id,p_completion_id,p_source,p_evidence_id,p_idempotency_key,
     p_policy_version,p_randomness_key_version

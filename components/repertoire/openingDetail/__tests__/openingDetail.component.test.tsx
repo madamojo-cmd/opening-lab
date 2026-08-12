@@ -1,6 +1,9 @@
-import { render, screen } from "@testing-library/react";
-import { expect, test } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, expect, test } from "vitest";
 import { OpeningDetailPage } from "../OpeningDetailPage";
+
+afterEach(cleanup);
+
 const model = {
   openingId: "italian-white",
   openingName: "Italian Game",
