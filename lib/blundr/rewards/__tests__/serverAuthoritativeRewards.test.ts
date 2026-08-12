@@ -17,6 +17,13 @@ const v2Migration = readFileSync(
   ),
   "utf8",
 );
+const checkpointBMigration = readFileSync(
+  resolve(
+    process.cwd(),
+    "supabase/migrations/20260812192625_checkpoint_b_application_authority.sql",
+  ),
+  "utf8",
+);
 const completionRoute = readFileSync(
   resolve(process.cwd(), "app/api/blundr/rewards/complete/route.ts"),
   "utf8",
@@ -39,12 +46,12 @@ test("completion grants are service-only, evidence-backed, and idempotent", () =
   assert.match(v2Migration, /completion_evidence_unverified/i);
   assert.match(v2Migration, /pg_advisory_xact_lock/i);
   assert.match(
-    v2Migration,
-    /grant execute on function public\.blundr_apply_reward_transaction_v2[\s\S]*to service_role/i,
+    checkpointBMigration,
+    /grant execute on function public\.blundr_commit_continuation_completion_v1[\s\S]*public\.blundr_apply_completion_reward_v3[\s\S]*to service_role/i,
   );
   assert.doesNotMatch(
-    v2Migration,
-    /grant execute on function public\.blundr_apply_reward_transaction_v2[\s\S]*to authenticated/i,
+    checkpointBMigration,
+    /grant execute on function public\.blundr_apply_completion_reward_v3[\s\S]*to authenticated/i,
   );
   assert.match(
     legacyMigration,
@@ -138,6 +145,13 @@ test("v2 rewards use one atomic writer, an inventory ledger, and leased presenta
     /correct move is deliberately not completion evidence/i,
   );
   assert.doesNotMatch(v2Migration, /from public\.blundr_learning_events e/i);
+  assert.match(
+    checkpointBMigration,
+    /create or replace function public\.blundr_apply_completion_reward_v3/i,
+  );
+  assert.match(checkpointBMigration, /blundr_completion_grants/i);
+  assert.match(checkpointBMigration, /'dayRecord'/i);
+  assert.match(checkpointBMigration, /'streakRecord'/i);
 });
 
 test("v2 reward authority is account-scoped and deletion-safe by contract", () => {
@@ -148,8 +162,12 @@ test("v2 reward authority is account-scoped and deletion-safe by contract", () =
     /where id=p_presentation_id and user_id=p_user_id/i,
   );
   assert.match(
-    v2Migration,
-    /revoke all on function[\s\S]*public\.blundr_apply_reward_transaction_v2[\s\S]*from public, anon, authenticated/i,
+    checkpointBMigration,
+    /public\.blundr_apply_reward_transaction_v2_core[\s\S]*from public, anon, authenticated, service_role/i,
+  );
+  assert.match(
+    checkpointBMigration,
+    /create or replace function public\.blundr_apply_reward_transaction_v2[\s\S]*select public\.blundr_apply_completion_reward_v3/i,
   );
   assert.match(v2Migration, /to service_role/i);
   assert.match(

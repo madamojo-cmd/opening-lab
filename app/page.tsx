@@ -78,6 +78,7 @@ import {
   reserveAuthoritativeTrainerSession,
   type AuthoritativeTrainerSession,
 } from "@/lib/blundr/trainerCompletion/trainerCompletionClient";
+import { persistContinuationCompletion } from "@/lib/blundr/continuation/continuationCompletionClient";
 import {
   loadOpponentVariationMemory,
   recordOpponentChoice,
@@ -3295,6 +3296,12 @@ function BlundrApp({
   const lastTeachingCueEventKeyRef = useRef<string>("");
   const openingRunAwardKeyRef = useRef<string>("");
   const continuationAwardKeyRef = useRef<string>("");
+  const continuationStartPlyRef = useRef<number | null>(null);
+  const continuationTrainerSessionIdRef = useRef<string | null>(null);
+  const continuationCompletionPathRef = useRef<{
+    trainerSessionId: string;
+    pathUci: string[];
+  } | null>(null);
   const telemetrySeq = useRef(0);
   const telemetryEnabledRef = useRef(false);
   const telemetryEventsRef = useRef<LocalTelemetryEvent[]>([]);
@@ -8074,6 +8081,9 @@ function BlundrApp({
     key: string,
     input: Partial<LearningEvent> & Pick<LearningEvent, "type" | "source">,
   ) {
+    // Continuation is deliberately non-SRS. Restricted recall already owns the
+    // immutable learning projection and terminal Trainer evidence for this run.
+    if (trainingMode === "continuation") return true;
     setTrainerPersistencePending(true);
     const result = await trainerLearningPersistenceGateRef.current.persist(
       key,
@@ -9557,53 +9567,83 @@ function BlundrApp({
       !lastContinuationUserMoveRating
     )
       return;
-    const completionKey = `${selectedRepertoireId}:${continuationSessionId ?? "continuation"}:${lastContinuationUserMoveRating.evaluatedFenBeforeMove}:${lastContinuationUserMoveRating.moveUci}:continuation_completed`;
+    const trainerSessionId = continuationTrainerSessionIdRef.current;
+    const continuationStartPly = continuationStartPlyRef.current;
+    if (!trainerSessionId || continuationStartPly === null) return;
+    let completionPath = continuationCompletionPathRef.current;
+    if (
+      !completionPath ||
+      completionPath.trainerSessionId !== trainerSessionId
+    ) {
+      const pathUci = moveHistoryUci.slice(continuationStartPly);
+      if (
+        pathUci.length < 1 ||
+        pathUci.length > 2 ||
+        pathUci.at(-1) !== lastContinuationUserMoveRating.moveUci
+      )
+        return;
+      completionPath = { trainerSessionId, pathUci };
+      continuationCompletionPathRef.current = completionPath;
+    }
+    const completionKey = trainerSessionId;
     if (continuationAwardKeyRef.current === completionKey) return;
     continuationAwardKeyRef.current = completionKey;
-    let cancelled = false;
     const userId = getLocalAccountCurrentUserId();
     const now = new Date().toISOString();
     const profile =
       onboardingProfile ?? getLocalTrainingProfile(userId) ?? undefined;
-    void completeDailyRingActivity({
-      userId,
-      activity: {
-        userId,
-        source: "continuation_completed",
-        openingId: selectedRepertoireId,
-        dailySessionId: learningSessionIdRef.current,
-        completionId: completionKey,
-        createdAt: now,
-      },
-      repertoireProgress,
-      profile,
-      now,
-    })
+    void persistContinuationCompletion(completionPath)
+      .then((evidence) =>
+        completeDailyRingActivity({
+          userId,
+          activity: {
+            userId,
+            source: "continuation_completed",
+            openingId: selectedRepertoireId,
+            dailySessionId: evidence.evidenceId,
+            completionId: evidence.evidenceId,
+            createdAt: now,
+          },
+          repertoireProgress,
+          profile,
+          now,
+        }),
+      )
       .then((result) => {
-        if (cancelled) return;
+        if (
+          continuationCompletionPathRef.current?.trainerSessionId !==
+          trainerSessionId
+        )
+          return;
         setLatestCompletionResult(result);
         if (result.ok) {
           setRepertoireProgress(result.repertoireProgress);
+        } else if (continuationAwardKeyRef.current === completionKey) {
+          continuationAwardKeyRef.current = "";
         }
       })
       .catch((error) => {
-        if (cancelled) return;
+        if (
+          continuationCompletionPathRef.current?.trainerSessionId !==
+          trainerSessionId
+        )
+          return;
+        if (continuationAwardKeyRef.current === completionKey) {
+          continuationAwardKeyRef.current = "";
+        }
         setLatestCompletionResult({
           ok: false,
           code: "completion_failed",
           message: getErrorMessage(error, "Could not record daily progress."),
         });
       });
-    return () => {
-      cancelled = true;
-    };
   }, [
     activeTab,
     trainingMode,
     userExplicitlyEnteredContinuation,
     lastContinuationUserMoveRating,
     selectedRepertoireId,
-    continuationSessionId,
+    moveHistoryUci,
     repertoireProgress,
     onboardingProfile,
   ]);
@@ -11047,6 +11087,15 @@ function BlundrApp({
     const terminal = current.isGameOver() || legal === 0;
     const nextContinuationSessionId =
       continuationSessionId ?? createLearningSessionId();
+    if (trainingMode !== "continuation") {
+      continuationStartPlyRef.current = moveHistoryUci.length;
+      continuationTrainerSessionIdRef.current =
+        authoritativeTrainerSessionRef.current?.terminal === true
+          ? authoritativeTrainerSessionRef.current.sessionId
+          : null;
+      continuationCompletionPathRef.current = null;
+      continuationAwardKeyRef.current = "";
+    }
     clearProjectiveTacticOverlay("continuation_enter");
     setUserExplicitlyEnteredContinuation(true);
     setContinueFromHereClicked(true);

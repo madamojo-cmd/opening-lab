@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
 const required = [
@@ -28,6 +28,7 @@ const anonymous = createClient(url, anonKey, {
 });
 const scope = `pr03-${Date.now()}-${randomUUID().slice(0, 8)}`;
 const made: string[] = [];
+const REWARD_RPC = "blundr_apply_completion_reward_v3";
 const scopedEmail = (base: string, suffix: string) => {
   const at = base.indexOf("@");
   return `${base.slice(0, at)}+${scope}-${suffix}${base.slice(at)}`;
@@ -86,10 +87,13 @@ const rewardArgs = (
   userId: string,
   evidenceId: string,
   policy = "rewards-v2-test",
+  source:
+    | "daily_blundr_deck_completed"
+    | "continuation_completed" = "daily_blundr_deck_completed",
 ) => ({
   p_user_id: userId,
   p_completion_id: `client-completion-${randomUUID()}`,
-  p_source: "daily_blundr_deck_completed",
+  p_source: source,
   p_evidence_id: evidenceId,
   p_idempotency_key: `client-key-${randomUUID()}`,
   p_policy_version: policy,
@@ -149,43 +153,40 @@ async function main() {
       ["userA", userA],
       ["userB", userB],
     ] as const) {
-      const result = await client.rpc(
-        "blundr_apply_reward_transaction_v2",
-        deniedArgs,
-      );
+      const result = await client.rpc(REWARD_RPC, deniedArgs);
       assert.ok(result.error, `${label} cannot invoke reward authority`);
     }
-
     const acceptedArgs = rewardArgs(userAId, acceptedSession);
-    const first = await service.rpc(
-      "blundr_apply_reward_transaction_v2",
-      acceptedArgs,
-    );
+    const first = await service.rpc(REWARD_RPC, acceptedArgs);
     assert.equal(first.error, null);
     assert.equal(first.data.duplicate, false);
     assert.equal(first.data.randomEvaluation, "unavailable");
-    const retry = await service.rpc(
+    const compatibilityRetry = await service.rpc(
       "blundr_apply_reward_transaction_v2",
+      deniedArgs,
+    );
+    assert.equal(compatibilityRetry.error, null);
+    assert.equal(
+      compatibilityRetry.data.duplicate,
+      true,
+      "the shipped v2 RPC must delegate to the hydrated writer",
+    );
+    const retry = await service.rpc(
+      REWARD_RPC,
       rewardArgs(userAId, acceptedSession),
     );
     assert.equal(retry.error, null);
     assert.equal(retry.data.duplicate, true);
     const conflict = await service.rpc(
-      "blundr_apply_reward_transaction_v2",
+      REWARD_RPC,
       rewardArgs(userAId, acceptedSession, "conflicting-policy"),
     );
     assert.ok(conflict.error);
 
     const concurrentSession = await seedCompletedDaily(userAId, "2026-08-07");
     const concurrent = await Promise.all([
-      service.rpc(
-        "blundr_apply_reward_transaction_v2",
-        rewardArgs(userAId, concurrentSession),
-      ),
-      service.rpc(
-        "blundr_apply_reward_transaction_v2",
-        rewardArgs(userAId, concurrentSession),
-      ),
+      service.rpc(REWARD_RPC, rewardArgs(userAId, concurrentSession)),
+      service.rpc(REWARD_RPC, rewardArgs(userAId, concurrentSession)),
     ]);
     assert.ok(concurrent.every((result) => !result.error));
     assert.deepEqual(
@@ -199,10 +200,107 @@ async function main() {
       false,
     );
     assert.ok(
+      (await service.rpc(REWARD_RPC, rewardArgs(userAId, unacceptedSession)))
+        .error,
+    );
+
+    const trainerSessionId = `trainer-session:${createHash("sha256").update(`${scope}:trainer`).digest("hex")}`;
+    const terminalCompletionId = `trainer-terminal:${createHash("sha256").update(`${scope}:terminal`).digest("hex")}`;
+    const lineFingerprint = createHash("sha256")
+      .update(`${scope}:line`)
+      .digest("hex");
+    assert.equal(
+      (
+        await service.from("blundr_trainer_sessions_v2").insert({
+          session_id: trainerSessionId,
+          user_id: userAId,
+          opening_id: "italian-white",
+          line_id: `line-${scope}`,
+          line_fingerprint: lineFingerprint,
+          canonical_line: [{ target_id: `target-${scope}` }],
+          line_length: 1,
+          current_cursor: 1,
+          state: "completed",
+          state_version: 2,
+          terminal_completion_id: terminalCompletionId,
+          completed_at: new Date().toISOString(),
+        })
+      ).error,
+      null,
+    );
+    const pathUci = ["e7e5", "g1f3"];
+    const identityMaterial = [
+      userAId,
+      trainerSessionId,
+      terminalCompletionId,
+      pathUci.join(","),
+    ].join(":");
+    const continuationEvidenceId = `continuation-completion:${createHash("sha256").update(identityMaterial).digest("hex")}`;
+    const terminalFen =
+      "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1";
+    const completedFen =
+      "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2";
+    const requestFingerprint = createHash("sha256")
+      .update(
+        [identityMaterial, "italian-white", terminalFen, completedFen].join(
+          ":",
+        ),
+      )
+      .digest("hex");
+    const continuation = await service.rpc(
+      "blundr_commit_continuation_completion_v1",
+      {
+        p_user_id: userAId,
+        p_completion: {
+          completion_id: continuationEvidenceId,
+          trainer_session_id: trainerSessionId,
+          terminal_completion_id: terminalCompletionId,
+          opening_id: "italian-white",
+          path_uci: pathUci,
+          terminal_fen: terminalFen,
+          completed_fen: completedFen,
+          request_fingerprint: requestFingerprint,
+        },
+      },
+    );
+    assert.equal(continuation.error, null);
+    assert.equal(continuation.data.status, "inserted");
+    const continuationReward = await service.rpc(
+      REWARD_RPC,
+      rewardArgs(
+        userAId,
+        continuationEvidenceId,
+        "rewards-v2-test",
+        "continuation_completed",
+      ),
+    );
+    assert.equal(continuationReward.error, null);
+    assert.equal(continuationReward.data.duplicate, false);
+    assert.equal(continuationReward.data.dayRecord.dailyBattery.progress, 1);
+    assert.equal(
       (
         await service.rpc(
-          "blundr_apply_reward_transaction_v2",
-          rewardArgs(userAId, unacceptedSession),
+          REWARD_RPC,
+          rewardArgs(
+            userAId,
+            continuationEvidenceId,
+            "rewards-v2-test",
+            "continuation_completed",
+          ),
+        )
+      ).data.duplicate,
+      true,
+    );
+    assert.ok(
+      (
+        await service.rpc(
+          REWARD_RPC,
+          rewardArgs(
+            userBId,
+            continuationEvidenceId,
+            "rewards-v2-test",
+            "continuation_completed",
+          ),
         )
       ).error,
     );
@@ -213,7 +311,20 @@ async function main() {
       .eq("user_id", userAId)
       .eq("transaction_kind", "reward_grant");
     assert.equal(transactions.error, null);
-    assert.equal(transactions.data?.length, 2);
+    assert.equal(transactions.data?.length, 3);
+    const grants = await service
+      .from("blundr_completion_grants")
+      .select("source,evidence_id")
+      .eq("user_id", userAId);
+    assert.equal(grants.error, null);
+    assert.equal(grants.data?.length, 3);
+    assert.ok(
+      grants.data?.some(
+        (grant) =>
+          grant.source === "continuation_completed" &&
+          grant.evidence_id === continuationEvidenceId,
+      ),
+    );
     const ring = await service
       .from("blundr_daily_retention_progress")
       .select("daily_blundr_progress,opening_points_earned")
@@ -378,7 +489,7 @@ async function main() {
       });
     assert.ok(crossOwner.error);
     console.log(
-      "PR-03 remote reward authority matrix passed: transactions=2 idempotency=passed inventory=passed presentations=passed isolation=passed skips=0",
+      "PR-03 remote reward authority matrix passed: transactions=3 idempotency=passed continuation=passed inventory=passed presentations=passed isolation=passed skips=0",
     );
   } finally {
     for (const id of made.reverse()) await service.auth.admin.deleteUser(id);

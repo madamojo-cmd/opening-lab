@@ -182,13 +182,13 @@ jobs:
           cat "$command_log" | tee "$LOG_DIR/db-push-upgrade.log" >/dev/null
           rm -f "$command_log"
 
-      - name: Verify remote migration history reached 36 after upgrade
+      - name: Verify remote migration history reached 37 after upgrade
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$LOG_DIR"
           log="$LOG_DIR/migrations-after-upgrade.log"
-          BLUNDR_EXPECTED_MIGRATION_COUNT=36 BLUNDR_EXPECTED_MIGRATION_HEAD=20260806210000 \
+          BLUNDR_EXPECTED_MIGRATION_COUNT=37 BLUNDR_EXPECTED_MIGRATION_HEAD=20260812192625 \
             npm run verify:remote-migration-history | tee "$log"
 
       - name: Validate linked reset support
@@ -244,7 +244,7 @@ jobs:
           set -euo pipefail
           mkdir -p "$LOG_DIR"
           log="$LOG_DIR/migrations-after-reset.log"
-          BLUNDR_EXPECTED_MIGRATION_COUNT=36 BLUNDR_EXPECTED_MIGRATION_HEAD=20260806210000 \
+          BLUNDR_EXPECTED_MIGRATION_COUNT=37 BLUNDR_EXPECTED_MIGRATION_HEAD=20260812192625 \
             npm run verify:remote-migration-history | tee "$log"
 
       - name: Promote fresh project for downstream authority tests

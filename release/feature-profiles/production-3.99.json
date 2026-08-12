@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "profileId": "production-3.99",
   "releaseId": "blundr-production-3.99",
-  "migrationHead": "20260806210000",
+  "migrationHead": "20260812192625",
   "runtimePackageId": "blundr-opening-runtime-3.99.v2",
   "deploymentTarget": "production",
   "storageMode": "authenticated",

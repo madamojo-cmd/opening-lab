@@ -21,6 +21,9 @@ function failure(error: unknown): RewardAuthorityFailure {
     "inventory_idempotency_conflict",
     "reward_idempotency_conflict",
     "reward_presentation_lease_not_owned",
+    "continuation_trainer_terminal_unverified",
+    "continuation_completion_idempotency_conflict",
+    "completion_projection_idempotency_conflict",
   ];
   return {
     ok: false,
@@ -45,7 +48,7 @@ export async function applyRewardCompletion(input: {
   const client = adminOrFailure();
   if (!client.ok) return { ok: false, code: client.code };
   const { data, error } = await client.admin.rpc(
-    "blundr_apply_reward_transaction_v2",
+    "blundr_apply_completion_reward_v3",
     {
       p_user_id: input.userId,
       // Required by the additive PR-01 shell, but not authoritative. The SQL

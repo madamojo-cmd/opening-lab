@@ -6,10 +6,11 @@ import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTe
 
 export const dynamic = "force-dynamic";
 
-// Restricted Trainer and Daily both have durable server-owned terminal
-// evidence. Free-play continuation remains deliberately unsupported.
+// Every accepted source resolves to durable server-owned evidence before the
+// sole reward writer can mutate rings, streaks, points, XP, or presentations.
 const SOURCES = new Set([
   "opening_run_completed",
+  "continuation_completed",
   "daily_blundr_deck_completed",
 ]);
 
@@ -18,7 +19,17 @@ function text(value: unknown): string {
 }
 
 function statusForDatabaseError(message: string): number {
-  if (message.includes("completion_evidence_unverified")) return 422;
+  if (
+    message.includes("completion_evidence_unverified") ||
+    message.includes("continuation_trainer_terminal_unverified")
+  )
+    return 422;
+  if (
+    message.includes("reward_idempotency_conflict") ||
+    message.includes("continuation_completion_idempotency_conflict") ||
+    message.includes("completion_projection_idempotency_conflict")
+  )
+    return 409;
   if (message.includes("completion_date_out_of_range")) return 400;
   if (message.includes("invalid_completion")) return 400;
   if (message.includes("account_not_ready")) return 409;

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerFeatureFlags } from "@/lib/blundr/contracts/serverFeatureFlags";
+import { isProductionDailyAvailable } from "@/lib/blundr/daily/productionDailyCapability";
 import { requireGameDataUser } from "@/lib/blundr/gameData/gameDataService";
 import {
   applyDailyAction,
@@ -19,7 +20,7 @@ export async function POST(
       { error: "authentication_required" },
       { status: 401 },
     );
-  if (!getServerFeatureFlags().daily_adaptive_v2)
+  if (!isProductionDailyAvailable(getServerFeatureFlags()))
     return NextResponse.json({ error: "feature_disabled" }, { status: 503 });
   const { sessionId } = await context.params;
   const body = (await request.json().catch(() => null)) as {

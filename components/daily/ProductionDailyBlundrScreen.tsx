@@ -55,7 +55,7 @@ export function ProductionDailyBlundrScreen() {
             ? "Sign in to receive your personalized Daily Blundr deck."
             : nextError instanceof AuthenticatedApiError &&
                 nextError.code === "feature_disabled"
-              ? "Personalized Daily is not enabled for this staging environment yet."
+              ? "Daily Blundr is unavailable because its production authority is disabled."
               : "Daily Blundr could not load right now.",
       );
       setRecoveryHref(
@@ -188,12 +188,13 @@ export function ProductionDailyBlundrScreen() {
                 Choose openings
               </Link>
             ) : (
-              <Link
-                href="/settings"
+              <button
+                type="button"
+                onClick={() => void load()}
                 className="mt-4 inline-flex rounded-2xl bg-stone-950 px-4 py-3 text-sm font-black text-white"
               >
-                Open Settings
-              </Link>
+                Try again
+              </button>
             )}
           </section>
         ) : null}

@@ -75,11 +75,16 @@ for (const requiredId of [
 const entryById = new Map(registry.entries.map((entry) => [entry.id, entry]));
 const dailyAdaptive = entryById.get("DAILY-ADAPTIVE-001");
 assert.ok(dailyAdaptive, "Missing Adaptive Daily contract");
-assert.equal(dailyAdaptive.contractVersion, "1");
+assert.equal(dailyAdaptive.contractVersion, "2");
 assert.deepEqual(dailyAdaptive.featureFlags, [
-  "BLUNDR_FEATURE_DAILY_ADAPTIVE_V2",
+  "BLUNDR_FEATURE_DAILY_CORE_V2",
+  "BLUNDR_FEATURE_DAILY_PRODUCTION_STORE",
+  "BLUNDR_FEATURE_LEARNING_CORE_V2",
+  "BLUNDR_FEATURE_LEARNING_CORE_V2_READ",
+  "BLUNDR_FEATURE_LEARNING_CORE_V2_WRITE",
+  "BLUNDR_FEATURE_OPENING_ACCESS_V2",
 ]);
-assert.match(dailyAdaptive.fallback, /Missing, false, or mismatched flags/);
+assert.match(dailyAdaptive.fallback, /missing current authority flag/i);
 
 const rewards = entryById.get("REWARD-001");
 assert.ok(rewards, "Missing Rewards contract");
