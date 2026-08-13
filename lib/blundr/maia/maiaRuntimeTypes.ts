@@ -1,4 +1,8 @@
 import type { MaiaSkillLevel } from "./maiaTypes";
+import type {
+  MaiaRemoteHealthEvidence,
+  MaiaRemoteProvenance,
+} from "./maiaRemoteContract";
 
 export type MaiaRuntimeStatus =
   | "ready"
@@ -53,6 +57,7 @@ export interface MaiaRuntimeHealth {
   remoteConfigured?: boolean;
   lastError: string | null;
   checkedAt: number;
+  remoteEvidence?: MaiaRemoteHealthEvidence | null;
 }
 
 export interface MaiaRuntimeMoveRequest {
@@ -77,4 +82,5 @@ export interface MaiaRuntimeMoveResult {
   legal: boolean;
   errorReason: string | null;
   runtimeMs: number;
+  provenance?: MaiaRemoteProvenance | null;
 }

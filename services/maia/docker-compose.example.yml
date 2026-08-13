@@ -1,20 +1,27 @@
-version: "3.9"
 services:
-  blundr:
+  maia:
     build:
-      context: ../..
-      dockerfile: services/maia/Dockerfile
+      context: .
+      dockerfile: Dockerfile
+    init: true
+    restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:8080:8080"
     environment:
-      NEXT_PUBLIC_MAIA_API_ENABLED: "true"
-      MAIA_ENABLED: "true"
-      MAIA_LC0_PATH: "/usr/local/bin/lc0"
-      MAIA_WEIGHTS_PATH: "/models/maia-1500.pb.gz"
-      MAIA_SKILL_LEVEL: "maia-1500"
-      MAIA_TIMEOUT_MS: "1500"
-      MAIA_NODES: "1"
-      MAIA_MAX_CONCURRENT_REQUESTS: "2"
-      MAIA_CACHE_ENABLED: "true"
-    volumes:
-      - ../../.maia:/models:ro
+      MAIA_SERVICE_TOKEN: "replace-with-at-least-32-random-characters"
+      MAIA_BACKEND: "blas"
+      MAIA_REQUEST_TIMEOUT_MS: "2500"
+      MAIA_QUEUE_LIMIT: "32"
+      MAIA_MAX_WARM_WORKERS: "3"
+      MAIA_PREWARM_SKILLS: "maia-1100,maia-1500,maia-1900"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "node", "src/healthcheck.mjs"]
+      interval: 30s
+      timeout: 3s
+      start_period: 45s
+      retries: 3

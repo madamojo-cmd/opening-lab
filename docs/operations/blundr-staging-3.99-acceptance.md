@@ -35,7 +35,10 @@ inside the isolated staging project so `VERCEL_ENV=production`.
 - Onboarding: `NEXT_PUBLIC_BLUNDR_ONBOARDING_V11=true`.
 - Maia: `NEXT_PUBLIC_MAIA_API_ENABLED=true`, `MAIA_ENABLED=true`, an HTTPS
   `MAIA_REMOTE_URL`, optional dedicated HTTPS health URL, and remote token.
-  Local LC0 paths are not staging evidence.
+  Local LC0 paths are not staging evidence. The remote health and move
+  responses must match `blundr-maia-health.v1` and `blundr-maia-move.v1` and
+  identify the pinned service, model SHA-256, LCZero commit, `classic`, and
+  `nodes: 1`.
 - Worker: a unique `CRON_SECRET` and every provider/import flag enabled by
   `release/feature-profiles/staging-3.99.json`.
 - Telemetry: external `BLUNDR_TELEMETRY_ENDPOINT` and its token when required.
@@ -78,7 +81,8 @@ one deployment:
 4. V11 onboarding plus starter repertoire persistence;
 5. Chess.com and Lichess connection persistence;
 6. worker processing and normalized imported-game evidence;
-7. exact-frame, rating-matched remote Maia response;
+7. exact-frame, complete-legal-set, rating-matched remote Maia response with
+   pinned provider/model/engine provenance;
 8. Trainer learning persistence and idempotent server reward;
 9. five completed board-first Daily cards plus the three MVP minigames with
    load, feedback, and retry persistence;

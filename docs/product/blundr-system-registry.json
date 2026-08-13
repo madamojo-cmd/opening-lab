@@ -66,20 +66,20 @@
     {
       "id": "TRAIN-MAIA-001",
       "name": "Maia continuation opponent",
-      "contractVersion": "2",
+      "contractVersion": "3",
       "userPromise": "Continuation play labelled Maia invokes an authenticated remote production Maia authority for the exact live position, skill level, and legal move set.",
-      "status": "blocked",
+      "status": "partial",
       "releaseRequired": true,
-      "authority": ["lib/blundr/maia", "app/api/maia"],
+      "authority": ["services/maia", "lib/blundr/maia", "app/api/maia"],
       "entryPoints": ["/train", "/api/maia/opponent-reply", "/api/maia/health"],
       "persistence": ["Provider/model/rating/fallback request evidence"],
-      "dependencies": ["Maia runtime or service"],
+      "dependencies": ["CSSLab Maia v1 model weights", "LCZero 0.32.1", "Authenticated Cloud Run service"],
       "featureFlags": ["NEXT_PUBLIC_MAIA_API_ENABLED", "MAIA_ENABLED"],
       "fallback": "Show Maia unavailable and play no substitute opponent move when remote authentication, exact-frame validation, or legal-move validation fails; never label Stockfish, runtime, random, fixture, or generic cached moves as Maia.",
-      "requiredTests": ["tests/coach/maiaRemoteRuntimeAdapter.test.ts", "tests/coach/maiaContinuationFailClosed.test.ts", "tests/integration", "tests/security"],
+      "requiredTests": ["services/maia/test", "tests/coach/maiaRemoteRuntimeAdapter.test.ts", "tests/coach/maiaRemoteContractManifest.test.ts", "tests/coach/maiaContinuationFailClosed.test.ts", "scripts/blundr/runStagingGoldenJourneys.mjs", "tests/integration", "tests/security"],
       "lastVerifiedSha": null,
       "evidence": [],
-      "blockers": ["An authenticated remote production Maia service, pinned model manifest, and legal-set/exact-frame enforcement are not implemented.", "A real provider invocation and exact-SHA staging provenance have not been proven."]
+      "blockers": ["The standalone authenticated service, pinned model manifest, exact legal-set enforcement, and provenance validation are implemented but have not yet passed an immutable Cloud Run container build and exact-SHA staging journey.", "Commercial redistribution approval or explicit maintainer confirmation for the Maia v1 weight assets must be recorded before a public production release."]
     },
     {
       "id": "REWARD-001",

@@ -1,0 +1,73 @@
+name: Blundr Maia service
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/blundr-maia-service.yml"
+      - "services/maia/**"
+      - "lib/blundr/maia/**"
+      - "app/api/maia/**"
+      - "tests/coach/maia*"
+      - "scripts/blundr/runStagingGoldenJourneys.mjs"
+      - "docs/operations/blundr-maia-production.md"
+      - "docs/product/**"
+  push:
+    branches: [release/blundr-staging-3.99, release/blundr-production-3.99]
+    paths:
+      - "services/maia/**"
+      - "lib/blundr/maia/**"
+      - "app/api/maia/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blundr-maia-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract-and-container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+          cache-dependency-path: services/maia/package-lock.json
+      - name: Verify standalone service contracts
+        working-directory: services/maia
+        run: |
+          npm ci
+          npm run verify
+      - name: Build pinned Maia and LCZero image
+        run: docker build --pull --tag blundr-maia:${GITHUB_SHA} services/maia
+      - name: Run container and exact-contract smoke
+        env:
+          MAIA_SERVICE_TOKEN: ci-only-maia-token-00000000000000000000000000000000
+        run: |
+          docker run --detach --rm \
+            --name blundr-maia-ci \
+            --publish 127.0.0.1:8080:8080 \
+            --env MAIA_SERVICE_TOKEN \
+            blundr-maia:${GITHUB_SHA}
+          for attempt in $(seq 1 90); do
+            if curl --fail --silent http://127.0.0.1:8080/live >/dev/null; then
+              break
+            fi
+            if [ "$attempt" = 90 ]; then
+              docker logs blundr-maia-ci
+              exit 1
+            fi
+            sleep 1
+          done
+          cd services/maia
+          MAIA_SMOKE_URL=http://127.0.0.1:8080 npm run smoke
+      - name: Retain sanitized container logs on failure
+        if: failure()
+        run: docker logs blundr-maia-ci 2>&1 || true
+      - name: Stop container
+        if: always()
+        run: docker stop blundr-maia-ci >/dev/null 2>&1 || true

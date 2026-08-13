@@ -10,6 +10,13 @@ import type {
   MaiaRuntimeMoveRequest,
   MaiaRuntimeMoveResult,
 } from "./maiaRuntimeTypes";
+import {
+  BLUNDR_MAIA_HEALTH_CONTRACT,
+  BLUNDR_MAIA_MOVE_CONTRACT,
+  BLUNDR_MAIA_SERVICE_VERSION,
+  parseMaiaRemoteHealth,
+  parseMaiaRemoteProvenance,
+} from "./maiaRemoteContract";
 
 type FetchFn = typeof fetch;
 
@@ -40,7 +47,7 @@ function normalizeUci(value: unknown): string | null {
 
 export class MaiaRemoteRuntimeAdapter {
   readonly providerName = "maia-remote-runtime";
-  readonly providerVersion = "14B";
+  readonly providerVersion = BLUNDR_MAIA_SERVICE_VERSION;
 
   constructor(
     private readonly config: MaiaRuntimeConfig,
@@ -60,22 +67,29 @@ export class MaiaRemoteRuntimeAdapter {
     try {
       const response = await (this.deps.fetch ?? fetch)(endpoint, {
         method: "GET",
-        headers: { authorization: `Bearer ${this.config.remoteToken}` },
+        headers: {
+          authorization: `Bearer ${this.config.remoteToken}`,
+          "x-blundr-maia-contract": BLUNDR_MAIA_HEALTH_CONTRACT,
+        },
         signal: AbortSignal.timeout(Math.min(this.config.timeoutMs, 2_000)),
         cache: "no-store",
       });
       const body = (await response.json().catch(() => null)) as {
         ready?: unknown;
       } | null;
-      if (!response.ok || body?.ready !== true)
+      const remoteEvidence = parseMaiaRemoteHealth(body);
+      if (!response.ok || !remoteEvidence)
         return buildMaiaRuntimeHealth(this.config, {
           status: "remote_unreachable",
           lastError: "remote_health_unavailable",
         });
-      return buildMaiaRuntimeHealth(this.config, {
-        status: "ready",
-        lastError: null,
-      });
+      return {
+        ...buildMaiaRuntimeHealth(this.config, {
+          status: "ready",
+          lastError: null,
+        }),
+        remoteEvidence,
+      };
     } catch {
       return buildMaiaRuntimeHealth(this.config, {
         status: "remote_unreachable",
@@ -107,6 +121,7 @@ export class MaiaRemoteRuntimeAdapter {
           headers: {
             authorization: `Bearer ${this.config.remoteToken}`,
             "content-type": "application/json",
+            "x-blundr-maia-contract": BLUNDR_MAIA_MOVE_CONTRACT,
           },
           body: JSON.stringify(request),
           signal: AbortSignal.timeout(
@@ -121,6 +136,19 @@ export class MaiaRemoteRuntimeAdapter {
       > | null;
       if (!response.ok || !body)
         return errorResult(request, "error", "provider_error", started);
+      if (body.status !== "ready" || body.legal !== true)
+        return errorResult(request, "error", "provider_error", started);
+      const provenance = parseMaiaRemoteProvenance(
+        body.provenance,
+        request.skillLevel,
+      );
+      if (!provenance)
+        return errorResult(
+          request,
+          "error",
+          "response_provenance_mismatch",
+          started,
+        );
       if (
         Number(body.requestId) !== request.requestId ||
         String(body.fen4 ?? "") !== request.fen4 ||
@@ -156,6 +184,7 @@ export class MaiaRemoteRuntimeAdapter {
         legal: true,
         errorReason: null,
         runtimeMs: Date.now() - started,
+        provenance,
       };
     } catch (error) {
       return errorResult(
