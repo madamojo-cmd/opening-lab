@@ -27,7 +27,7 @@ RUN test "$(git rev-parse HEAD)" = "${LC0_COMMIT}" \
     -Donnx=false \
     -Ddag_classic=false \
     -Ddefault_search=classic \
-  && /opt/lc0/bin/lc0 --version | grep -Fq '0.32.1+git.fd71a2d'
+  && /opt/lc0/bin/lc0 --help 2>&1 | grep -Fq '0.32.1+git.fd71a2d'
 
 FROM node:24.14.0-bookworm-slim AS model-fetcher
 WORKDIR /service
