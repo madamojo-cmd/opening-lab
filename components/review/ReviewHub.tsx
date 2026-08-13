@@ -43,23 +43,37 @@ export function ReviewHub({
   settingsHref = "/settings",
   className,
 }: ReviewHubProps) {
-  const [catalog, setCatalog] = useState<readonly string[] | null>(null);
+  const [capabilities, setCapabilities] = useState<{
+    deepMiniGames: readonly string[];
+    dailyEnabled: boolean;
+  } | null>(null);
   useEffect(() => {
     let active = true;
     void fetch("/api/blundr/capabilities", { cache: "no-store" })
       .then((response) => response.json())
-      .then((payload: { deepMiniGames?: string[] }) => {
-        if (active) setCatalog(payload.deepMiniGames ?? []);
-      })
+      .then(
+        (payload: {
+          deepMiniGames?: string[];
+          daily?: { enabled?: boolean };
+        }) => {
+          if (active)
+            setCapabilities({
+              deepMiniGames: payload.deepMiniGames ?? [],
+              dailyEnabled: payload.daily?.enabled === true,
+            });
+        },
+      )
       .catch(() => {
-        if (active) setCatalog([]);
+        if (active) setCapabilities({ deepMiniGames: [], dailyEnabled: false });
       });
     return () => {
       active = false;
     };
   }, []);
   const productionGames = PRODUCTION_MINI_GAME_REGISTRY.filter(
-    (definition) => catalog === null || catalog.includes(definition.id),
+    (definition) =>
+      capabilities === null ||
+      capabilities.deepMiniGames.includes(definition.id),
   );
   return (
     <section className={classNames("space-y-4", className)}>
@@ -101,7 +115,7 @@ export function ReviewHub({
         </header>
       ) : null}
 
-      <ReviewTabDailyBlundrPanel />
+      <ReviewTabDailyBlundrPanel enabled={capabilities?.dailyEnabled ?? null} />
 
       <section className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
@@ -194,7 +208,7 @@ export function ReviewHub({
             </Link>
           );
         })}
-        {catalog !== null && productionGames.length === 0 ? (
+        {capabilities !== null && productionGames.length === 0 ? (
           <div className="rounded-[1.75rem] border border-amber-200 bg-amber-50 p-5 text-sm leading-6 text-amber-950">
             Deep minigames are not enabled for this staging environment yet.
           </div>

@@ -799,7 +799,7 @@ export async function applyDailyCompletionReward(input: {
   const result = await applyRewardCompletion({
     userId: input.userId,
     source: "daily_blundr_deck_completed",
-    evidenceId: `daily-completion:${input.session.sessionId}`,
+    evidenceId: input.session.sessionId,
   });
   if (!result.ok) throw new Error("daily_reward_persistence_unavailable");
 }

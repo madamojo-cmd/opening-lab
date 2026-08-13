@@ -219,26 +219,22 @@ async function main() {
     for (const userId of [userAId, userBId]) {
       assert.equal(
         (
-          await service
-            .from("blundr_user_profiles")
-            .insert({
-              user_id: userId,
-              time_zone: "UTC",
-              daily_tempo_goal: 1,
-              daily_battery_goal: 1,
-              daily_blundr_goal: 1,
-            })
+          await service.from("blundr_user_profiles").insert({
+            user_id: userId,
+            time_zone: "UTC",
+            daily_tempo_goal: 1,
+            daily_battery_goal: 1,
+            daily_blundr_goal: 1,
+          })
         ).error,
         null,
       );
       assert.equal(
         (
-          await service
-            .from("blundr_user_repertoires")
-            .insert({
-              user_id: userId,
-              unlocked_opening_ids: ["italian-white"],
-            })
+          await service.from("blundr_user_repertoires").insert({
+            user_id: userId,
+            unlocked_opening_ids: ["italian-white"],
+          })
         ).error,
         null,
       );
@@ -261,7 +257,7 @@ async function main() {
     const reserved = await reserve(userAId);
     assert.ok(
       (
-        await service.rpc("blundr_apply_reward_transaction_v2", {
+        await service.rpc("blundr_apply_completion_reward_v3", {
           p_user_id: userAId,
           p_completion_id: "untrusted",
           p_source: "opening_run_completed",
@@ -358,19 +354,16 @@ async function main() {
       p_randomness_key_version: null,
     };
     const reward = await service.rpc(
-      "blundr_apply_reward_transaction_v2",
+      "blundr_apply_completion_reward_v3",
       rewardArgs,
     );
     assert.equal(reward.error, null);
     assert.equal(reward.data.duplicate, false);
-    const rewardRetry = await service.rpc(
-      "blundr_apply_reward_transaction_v2",
-      {
-        ...rewardArgs,
-        p_completion_id: "different",
-        p_idempotency_key: "different",
-      },
-    );
+    const rewardRetry = await service.rpc("blundr_apply_completion_reward_v3", {
+      ...rewardArgs,
+      p_completion_id: "different",
+      p_idempotency_key: "different",
+    });
     assert.equal(rewardRetry.error, null);
     assert.equal(rewardRetry.data.duplicate, true);
     const transactions = await service

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { getServerFeatureFlags } from "@/lib/blundr/contracts/serverFeatureFlags";
 import { DEEP_MINI_GAME_REGISTRY } from "@/lib/blundr/daily/miniGames/deep";
+import {
+  isProductionDailyAvailable,
+  PRODUCTION_DAILY_REQUIRED_FLAGS,
+} from "@/lib/blundr/daily/productionDailyCapability";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +17,10 @@ export async function GET() {
       lichess: flags.game_data_connections && flags.game_data_lichess,
     },
     daily: {
+      enabled: isProductionDailyAvailable(flags),
+      authority: "production_v2",
       productionStore: flags.daily_production_store,
+      requiredFlags: PRODUCTION_DAILY_REQUIRED_FLAGS,
       activities: {
         candidate_choice: flags.daily_candidate_choice,
         plan_recall: flags.daily_plan_recall,

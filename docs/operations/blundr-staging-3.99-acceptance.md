@@ -11,8 +11,8 @@ project and its isolated database only.
 2. Run the complete release-candidate workflow from a clean checkout.
 3. Record the full passing SHA. Do not deploy a dirty checkout or a branch
    name that can move.
-4. Review and apply all 21 additive migrations through head
-   `20260804130000` to the isolated staging database.
+4. Review and apply all 37 additive migrations through head
+   `20260812192625` to the isolated staging database.
 5. Retain the prior accepted full SHA and immutable deployment URL as the
    rollback target.
 
@@ -28,7 +28,7 @@ inside the isolated staging project so `VERCEL_ENV=production`.
 
 - Release: `BLUNDR_RELEASE_ID=blundr-staging-3.99`,
   `BLUNDR_FEATURE_PROFILE_ID=staging-3.99`,
-  `BLUNDR_MIGRATION_HEAD=20260804130000`, and a unique
+  `BLUNDR_MIGRATION_HEAD=20260812192625`, and a unique
   `BLUNDR_RELEASE_EVIDENCE_TOKEN`.
 - Persistence: staging Supabase URL, anon key, service-role key, and
   `NEXT_PUBLIC_BLUNDR_STORAGE_MODE=authenticated`.
@@ -39,8 +39,8 @@ inside the isolated staging project so `VERCEL_ENV=production`.
 - Worker: a unique `CRON_SECRET` and every provider/import flag enabled by
   `release/feature-profiles/staging-3.99.json`.
 - Telemetry: external `BLUNDR_TELEMETRY_ENDPOINT` and its token when required.
-- Capabilities: set all 21 `BLUNDR_FEATURE_*` variables represented by the
-  versioned feature profile to true.
+- Capabilities: set every feature variable to the exact boolean value in the
+  versioned feature profile; deliberately disabled flags must remain false.
 
 Do not copy secrets, provider responses, raw PGNs, server-owned Daily answers,
 or QA passwords into the evidence artifact.

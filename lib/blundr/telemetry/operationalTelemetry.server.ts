@@ -6,6 +6,8 @@ export type BlundrOperationalEventName =
   | "import_failed"
   | "import_fetched"
   | "import_leased"
+  | "continuation_completion_accepted"
+  | "continuation_completion_rejected"
   | "learning_event_accepted"
   | "learning_event_rejected"
   | "maia_request_completed"

@@ -18,6 +18,13 @@ const dashboard = readFileSync(
   resolve(process.cwd(), "components/progress/ProgressDashboard.tsx"),
   "utf8",
 );
+const home = readFileSync(
+  resolve(
+    process.cwd(),
+    "components/figma-source/5303-dashboard-daily-review/Figma5303DashboardDailyReview.tsx",
+  ),
+  "utf8",
+);
 
 test("progress summary is authenticated and fail-closed", () => {
   assert.match(route, /allowLocalFallback:\s*false/);
@@ -48,4 +55,12 @@ test("the dashboard never falls back to local progress after an API failure", ()
   assert.match(dashboard, /durable storage/);
   assert.doesNotMatch(dashboard, /loadBlundrProgressSummary/);
   assert.doesNotMatch(dashboard, /reconcileDailyBlundrRingCompletionForToday/);
+});
+
+test("Home and Progress share the rounded authoritative ring snapshot", () => {
+  for (const consumer of [home, dashboard]) {
+    assert.match(consumer, /\/api\/blundr\/progress\/summary/);
+  }
+  assert.match(service, /Math\.round\(\(progress \/ goal\) \* 100\)/);
+  assert.match(service, /Math\.min\(100,/);
 });
