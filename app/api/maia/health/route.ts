@@ -41,6 +41,7 @@ export async function GET(): Promise<Response> {
     lc0Exists: health.lc0Exists,
     weightsExists: health.weightsExists,
     lastError: health.lastError,
+    provenance: health.remoteEvidence ?? null,
     summary,
   });
 }

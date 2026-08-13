@@ -6,6 +6,16 @@ import {
   readMaiaRuntimeConfig,
 } from "../../lib/blundr/maia/maiaRuntimeConfig";
 import type { MaiaRuntimeConfig } from "../../lib/blundr/maia/maiaRuntimeTypes";
+import {
+  BLUNDR_MAIA_ENGINE_COMMIT,
+  BLUNDR_MAIA_ENGINE_VERSION,
+  BLUNDR_MAIA_HEALTH_CONTRACT,
+  BLUNDR_MAIA_MODEL_SHA256,
+  BLUNDR_MAIA_MOVE_CONTRACT,
+  BLUNDR_MAIA_PROVIDER_COMMIT,
+  BLUNDR_MAIA_PROVIDER_NAME,
+  BLUNDR_MAIA_SERVICE_VERSION,
+} from "../../lib/blundr/maia/maiaRemoteContract";
 
 const config: MaiaRuntimeConfig = {
   enabled: true,
@@ -31,6 +41,55 @@ const request = {
   timeoutMs: 1500,
 };
 
+const provenance = {
+  contractVersion: BLUNDR_MAIA_MOVE_CONTRACT,
+  service: {
+    name: "blundr-maia-service",
+    version: BLUNDR_MAIA_SERVICE_VERSION,
+  },
+  provider: {
+    name: BLUNDR_MAIA_PROVIDER_NAME,
+    sourceCommit: BLUNDR_MAIA_PROVIDER_COMMIT,
+  },
+  model: {
+    id: "csslab-maia-v1-1500",
+    skillLevel: "maia-1500",
+    sha256: BLUNDR_MAIA_MODEL_SHA256["maia-1500"],
+  },
+  engine: {
+    name: "lc0",
+    version: BLUNDR_MAIA_ENGINE_VERSION,
+    commit: BLUNDR_MAIA_ENGINE_COMMIT,
+    search: "classic",
+    nodes: 1,
+    backend: "blas",
+  },
+};
+
+const healthResponse = {
+  contractVersion: BLUNDR_MAIA_HEALTH_CONTRACT,
+  ready: true,
+  service: {
+    name: "blundr-maia-service",
+    version: BLUNDR_MAIA_SERVICE_VERSION,
+  },
+  provider: {
+    name: BLUNDR_MAIA_PROVIDER_NAME,
+    sourceCommit: BLUNDR_MAIA_PROVIDER_COMMIT,
+  },
+  engine: {
+    name: "lc0",
+    version: BLUNDR_MAIA_ENGINE_VERSION,
+    commit: BLUNDR_MAIA_ENGINE_COMMIT,
+    search: "classic",
+    nodes: 1,
+  },
+  models: {
+    verified: 9,
+    availableSkills: Object.keys(BLUNDR_MAIA_MODEL_SHA256),
+  },
+};
+
 async function main() {
   const ready = new MaiaRemoteRuntimeAdapter(config, {
     fetch: async (_url, init) => {
@@ -38,11 +97,18 @@ async function main() {
         (init?.headers as Record<string, string>).authorization,
         "Bearer test-token",
       );
+      assert.equal(
+        (init?.headers as Record<string, string>)["x-blundr-maia-contract"],
+        BLUNDR_MAIA_MOVE_CONTRACT,
+      );
       return Response.json({
         requestId: 17,
         fen4: request.fen4,
         skillLevel: "maia-1500",
         bestMoveUci: "e2e4",
+        status: "ready",
+        legal: true,
+        provenance,
       });
     },
   });
@@ -55,6 +121,9 @@ async function main() {
         fen4: request.fen4,
         skillLevel: "maia-1500",
         bestMoveUci: "e2e4",
+        status: "ready",
+        legal: true,
+        provenance,
       }),
   });
   assert.equal(
@@ -69,6 +138,9 @@ async function main() {
         fen4: request.fen4,
         skillLevel: "maia-1500",
         bestMoveUci: "e2e5",
+        status: "ready",
+        legal: true,
+        provenance,
       }),
   });
   assert.equal(
@@ -76,10 +148,44 @@ async function main() {
     "bestmove_illegal",
   );
 
-  const health = new MaiaRemoteRuntimeAdapter(config, {
-    fetch: async () => Response.json({ ready: true }),
+  const unproven = new MaiaRemoteRuntimeAdapter(config, {
+    fetch: async () =>
+      Response.json({
+        requestId: 17,
+        fen4: request.fen4,
+        skillLevel: "maia-1500",
+        bestMoveUci: "e2e4",
+        status: "ready",
+        legal: true,
+      }),
   });
-  assert.equal((await health.health()).ready, true);
+  assert.equal(
+    (await unproven.getBestMove(request)).errorReason,
+    "response_provenance_mismatch",
+  );
+
+  const health = new MaiaRemoteRuntimeAdapter(config, {
+    fetch: async (_url, init) => {
+      assert.equal(
+        (init?.headers as Record<string, string>)["x-blundr-maia-contract"],
+        BLUNDR_MAIA_HEALTH_CONTRACT,
+      );
+      return Response.json(healthResponse);
+    },
+  });
+  const healthResult = await health.health();
+  assert.equal(healthResult.ready, true);
+  assert.equal(
+    healthResult.remoteEvidence?.providerCommit,
+    BLUNDR_MAIA_PROVIDER_COMMIT,
+  );
+  assert.equal(
+    evaluateMaiaRuntimeConfig({
+      ...config,
+      remoteHealthUrl: "http://maia.internal/health",
+    }).errorReason,
+    "insecure_remote_url",
+  );
 
   const previous = {
     nodeEnv: process.env.NODE_ENV,

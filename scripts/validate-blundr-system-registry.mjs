@@ -105,12 +105,25 @@ for (const id of ["MINIGAME-PROCEDURAL-001", "MINIGAME-DEEP-001"]) {
   );
 }
 
-for (const id of [
-  "TRAIN-MAIA-001",
-  "REVIEW-SRS-001",
-  "IMPORT-001",
-  "OBSERVABILITY-001",
-]) {
+const maia = entryById.get("TRAIN-MAIA-001");
+assert.ok(maia, "Missing TRAIN-MAIA-001 production release contract");
+assert.equal(
+  maia.contractVersion,
+  "3",
+  "TRAIN-MAIA-001: contract must be revised",
+);
+assert.equal(
+  maia.status,
+  "partial",
+  "TRAIN-MAIA-001: implementation must remain partial until deployed proof",
+);
+assert.ok(maia.authority.includes("services/maia"));
+assert.ok(
+  maia.blockers.length,
+  "TRAIN-MAIA-001: deployed proof needs blockers",
+);
+
+for (const id of ["REVIEW-SRS-001", "IMPORT-001", "OBSERVABILITY-001"]) {
   const entry = entryById.get(id);
   assert.ok(entry, `Missing ${id} production release contract`);
   assert.equal(entry.contractVersion, "2", `${id}: contract must be revised`);

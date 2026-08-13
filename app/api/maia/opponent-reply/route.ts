@@ -101,6 +101,7 @@ export async function POST(request: Request): Promise<Response> {
       selectedCandidate: candidate && runtime.legal ? candidate : null,
       errorReason: runtime.errorReason,
       providerMs: runtime.runtimeMs,
+      provenance: runtime.provenance ?? null,
     });
   } catch (error) {
     await emitBlundrOperationalEvent("maia_request_failed", {

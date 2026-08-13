@@ -9,7 +9,7 @@ explains how to use it.
 | `AUTH-ACCOUNT-001` | Authenticated account state survives recovery and reauthentication | Partial |
 | `ONBOARD-001` | Onboarding owns starter selection and persists completion | Partial |
 | `TRAIN-RUNTIME-001` | Guided opening play uses the versioned runtime | Partial |
-| `TRAIN-MAIA-001` | Maia-labelled continuation uses a proven Maia provider | Blocked |
+| `TRAIN-MAIA-001` | Maia-labelled continuation uses a proven Maia provider | Partial |
 | `REWARD-001` | Completions award exactly once to the authenticated user | Partial |
 | `RINGS-001` | Tempo, Battery, and Blundr fill only their intended rings | Partial |
 | `REVIEW-SRS-001` | Review/SRS records durable learning outcomes | Partial |

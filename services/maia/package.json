@@ -1,0 +1,23 @@
+{
+  "name": "@blundr/maia-service",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.14.0 <25"
+  },
+  "scripts": {
+    "start": "node src/index.mjs",
+    "test": "node --test --test-concurrency=1 --test-reporter=spec test/*.test.mjs",
+    "format:check": "prettier --check --ignore-path .prettierignore package.json package-lock.json model-manifest.json README.md docker-compose.example.yml scripts src test",
+    "verify": "npm run format:check && npm run test && node scripts/verify-manifest.mjs",
+    "models:fetch": "node scripts/fetch-models.mjs",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "chess.js": "1.4.0"
+  },
+  "devDependencies": {
+    "prettier": "3.6.2"
+  }
+}

@@ -453,10 +453,36 @@ async function main() {
       legalMovesUci.includes(body.selectedCandidate?.uci),
       "Maia selected an illegal move",
     );
+    assert(
+      body.provenance?.contractVersion === "blundr-maia-move.v1",
+      "Maia response contract is not production v1",
+    );
+    assert(
+      body.provenance?.provider?.name === "csslab-maia-v1" &&
+        body.provenance?.provider?.sourceCommit ===
+          "749204cf5979ce7f8b0412e804a4ee7c83c49ff8",
+      "Maia provider provenance is missing",
+    );
+    assert(
+      body.provenance?.model?.skillLevel === "maia-1500" &&
+        body.provenance?.model?.sha256 ===
+          "35ab6f20421d59e1df3b17c5a5016947af4c6761368ef84044a9a9c7619a9a00",
+      "Maia model provenance is missing",
+    );
+    assert(
+      body.provenance?.engine?.name === "lc0" &&
+        body.provenance?.engine?.version === "0.32.1" &&
+        body.provenance?.engine?.commit ===
+          "fd71a2d921b689c5f479d3227c3806c8e272d9c5" &&
+        body.provenance?.engine?.search === "classic" &&
+        body.provenance?.engine?.nodes === 1,
+      "Maia engine provenance is invalid",
+    );
     return {
       fen4,
       selectedCandidate: body.selectedCandidate,
       providerMs: body.providerMs,
+      provenance: body.provenance,
     };
   });
 

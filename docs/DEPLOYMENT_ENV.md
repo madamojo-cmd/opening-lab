@@ -19,19 +19,23 @@ This document is the launch reference for Blundr production environment variable
 | --- | --- | --- | --- |
 | `NEXT_PUBLIC_MAIA_API_ENABLED` | Optional | `false` unless Maia is deployed and tested | Client-side gate for calling `/api/maia/opponent-reply`. This is safe to expose. |
 | `MAIA_ENABLED` | Optional | `true` only when the remote service has passed health checks | Server-side runtime gate. |
-| `MAIA_REMOTE_URL` | Required in production when `MAIA_ENABLED=true` | Authenticated `https://` move endpoint | Production rejects HTTP and local-process configuration. |
-| `MAIA_REMOTE_HEALTH_URL` | Optional | Authenticated `https://` health endpoint | Defaults to `/health` beside `MAIA_REMOTE_URL`. The response must include `ready: true`. |
+| `MAIA_REMOTE_URL` | Required in production when `MAIA_ENABLED=true` | Authenticated `https://.../move` endpoint | Production rejects HTTP, local-process configuration, unpinned contracts, and unproven model responses. |
+| `MAIA_REMOTE_HEALTH_URL` | Optional | Authenticated `https://.../health` endpoint | Defaults to `/health` beside `MAIA_REMOTE_URL`. Readiness must match the pinned service/provider/model/engine contract. |
 | `MAIA_REMOTE_TOKEN` | Required in production when `MAIA_ENABLED=true` | Scoped service token | Server-only bearer credential. Never expose with `NEXT_PUBLIC_`. |
 | `MAIA_LC0_PATH` | Development only | Absolute local path to `lc0` | Rejected as a production transport. Must never ship to browser bundles. |
 | `MAIA_WEIGHTS_PATH` | Development only | Absolute local path to Maia weights | Rejected as a production transport. Must never ship to browser bundles. |
 | `MAIA_SKILL_LEVEL` | Optional | `maia-1500` | Allowed values: `maia-1100` through `maia-1900`. Rating-band mapping may override request skill. |
 | `MAIA_TIMEOUT_MS` | Optional | `1500` to `2500` | Server clamps requests to a bounded timeout. |
-| `MAIA_NODES` | Optional | `1` | Keep low for launch because lc0 is spawned per request. |
+| `MAIA_NODES` | Optional | `1` | Maia requires one policy evaluation. The remote service enforces `nodes=1`. |
 | `MAIA_CACHE_ENABLED` | Optional | `true` | Reserved runtime configuration; safe to keep enabled. |
-| `MAIA_MAX_CONCURRENT_REQUESTS` | Optional | `1` or `2` | Hard concurrency guard. Overload returns a stable unavailable response. |
+| `MAIA_MAX_CONCURRENT_REQUESTS` | Optional | `1` or `2` | Application-side request guard. Cloud Run uses concurrency 1 and horizontal scaling. |
 | `MAIA_BACKEND` | Optional | Host-specific | Passed to lc0 as `--backend=...` when present. |
 
 Local `lc0` plus weights is acceptable for development and test only. Production and isolated staging require the authenticated HTTPS remote service. If that service is unavailable, continuation stops with an explicit error and plays no Stockfish, Lichess, random, runtime, fixture, or cached substitute move. The app can run safely with Maia disabled by setting both `NEXT_PUBLIC_MAIA_API_ENABLED=false` and `MAIA_ENABLED=false`.
+
+The deployable service, model manifest, and Cloud Run/Vercel setup procedure are
+in [`services/maia`](../services/maia) and
+[`docs/operations/blundr-maia-production.md`](./operations/blundr-maia-production.md).
 
 No `lc0` binary or Maia weights should ship to the browser. `.maia/`, `*.pb.gz`, and engine model formats are ignored as local/server runtime assets.
 
@@ -96,7 +100,7 @@ curl -fsS "$BASE_URL/api/maia/opponent-reply" \
     "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
     "fen4": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -",
     "sideToMove": "w",
-    "legalMovesUci": ["e2e4", "d2d4", "g1f3", "c2c4"],
+    "legalMovesUci": ["a2a3", "a2a4", "b2b3", "b2b4", "c2c3", "c2c4", "d2d3", "d2d4", "e2e3", "e2e4", "f2f3", "f2f4", "g2g3", "g2g4", "h2h3", "h2h4", "b1a3", "b1c3", "g1f3", "g1h3"],
     "skillLevel": "maia-1500",
     "timeoutMs": 1500,
     "ratingBandId": "club",

@@ -6,6 +6,7 @@ import type {
   MaiaRuntimeHealth,
   MaiaRuntimeStatus,
 } from "./maiaRuntimeTypes";
+import { BLUNDR_MAIA_SERVICE_VERSION } from "./maiaRemoteContract";
 
 const ALLOWED_SKILLS: MaiaSkillLevel[] = [
   "maia-1100",
@@ -112,6 +113,11 @@ export function evaluateMaiaRuntimeConfig(config: MaiaRuntimeConfig): {
         status: "insecure_remote_url",
         errorReason: "insecure_remote_url",
       };
+    if (config.remoteHealthUrl && !isSecureRemoteUrl(config.remoteHealthUrl))
+      return {
+        status: "insecure_remote_url",
+        errorReason: "insecure_remote_url",
+      };
     if (!config.remoteToken)
       return {
         status: "missing_remote_token",
@@ -150,7 +156,7 @@ export function buildMaiaRuntimeHealth(
     status,
     ready: status === "ready",
     providerName: remote ? "maia-remote-runtime" : "maia-lc0-runtime",
-    providerVersion: "14B",
+    providerVersion: remote ? BLUNDR_MAIA_SERVICE_VERSION : "development-lc0",
     enabled: config.enabled,
     configured: remote
       ? Boolean(config.remoteUrl && config.remoteToken)
@@ -196,5 +202,6 @@ export function getRedactedMaiaRuntimeSummary(
     remoteConfigured: health.remoteConfigured,
     lastError: health.lastError,
     checkedAt: health.checkedAt,
+    remoteEvidence: health.remoteEvidence ?? null,
   };
 }
