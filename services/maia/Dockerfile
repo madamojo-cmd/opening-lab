@@ -14,7 +14,10 @@ RUN git init /src/lc0 \
   && git -C /src/lc0 checkout --detach "${LC0_COMMIT}" \
   && git -C /src/lc0 submodule update --init --recursive --depth=1
 WORKDIR /src/lc0
-RUN test "$(git rev-parse HEAD)" = "${LC0_COMMIT}" \
+RUN git update-index --refresh \
+  && test -z "$(git status --porcelain=v1 --untracked-files=no)" \
+  && git diff-index --quiet HEAD -- \
+  && test "$(git rev-parse HEAD)" = "${LC0_COMMIT}" \
   && INSTALL_PREFIX=/opt/lc0 ./build.sh release \
     -Dgtest=false \
     -Dnative_arch=false \
