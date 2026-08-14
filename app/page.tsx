@@ -218,6 +218,7 @@ import {
   DEFAULT_STAGE2_RATING_BAND_ID,
   STAGE2_RATING_BANDS,
   getStage2RatingBandByFilterValue,
+  getStage2RatingBandForAccountRatingBand,
   type Stage2RatingBand,
 } from "@/lib/blundr/ratings/ratingBands";
 import { unavailableMaiaProvider } from "@/lib/blundr/maia/maiaProvider";
@@ -257,6 +258,7 @@ import {
   writeLocalBoardPreferences,
 } from "@/lib/blundr/board/boardPreferenceService";
 import { shouldShowOnboarding } from "@/lib/blundr/onboarding/onboardingRouting";
+import { getRatingBandLabel } from "@/lib/blundr/onboarding/ratingBand";
 import { loadRepertoireProgress } from "@/lib/blundr/repertoire/repertoireProgressService";
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
 import { completeDailyRingActivity } from "@/lib/blundr/daily-rings/dailyRingService";
@@ -4164,6 +4166,9 @@ function BlundrApp({
     ],
   );
   const rating = ratingPreset(ratingFilter);
+  const accountRatingBandLabel = onboardingProfile
+    ? getRatingBandLabel(onboardingProfile.ratingBandId)
+    : `${rating.label} band • ${rating.target}`;
   const enabledViews: ActiveBoardView[] = ([] as ActiveBoardView[]).concat(
     boardSettings.showAttack ? ["attack"] : [],
     boardSettings.showDefense ? ["defense"] : [],
@@ -8518,7 +8523,20 @@ function BlundrApp({
   }, []);
   useEffect(() => {
     const currentUserId = getLocalAccountCurrentUserId();
-    setOnboardingProfile(getLocalTrainingProfile(currentUserId));
+    const profile = getLocalTrainingProfile(currentUserId);
+    setOnboardingProfile(profile);
+    if (profile) {
+      setRatingFilter(
+        getStage2RatingBandForAccountRatingBand(profile.ratingBandId).value,
+      );
+    } else {
+      const savedRatingBand = localStorage.getItem("blundr-stage2-rating-band");
+      if (savedRatingBand) {
+        setRatingFilter(
+          getStage2RatingBandByFilterValue(savedRatingBand).value,
+        );
+      }
+    }
     setRepertoireProgress(loadRepertoireProgress({ userId: currentUserId }));
   }, []);
   useEffect(() => {
@@ -8555,11 +8573,6 @@ function BlundrApp({
       ),
     [customRepertoires],
   );
-  useEffect(() => {
-    const savedRatingBand = localStorage.getItem("blundr-stage2-rating-band");
-    if (savedRatingBand)
-      setRatingFilter(getStage2RatingBandByFilterValue(savedRatingBand).value);
-  }, []);
   useEffect(() => {
     const currentPreferences = readLocalBoardPreferences(localStorage);
     const nextPreferences: BlundrBoardPreferences = {
@@ -10588,8 +10601,7 @@ function BlundrApp({
         selectedLineExhausted: Boolean(
           branchCompleteContract.selectedLineExhausted,
         ),
-        hasUserContinuationMove:
-          request.authority.hasUserContinuationMove,
+        hasUserContinuationMove: request.authority.hasUserContinuationMove,
         terminalPosition: current.isGameOver() || legalMovesUci.length === 0,
         legalMovesCount: legalMovesUci.length,
         providerStatus: defaultMaiaStatus,
@@ -13580,9 +13592,9 @@ function BlundrApp({
                 </h1>
                 <p className="text-sm font-semibold text-green-700">
                   {trainingMode === "restricted"
-                    ? `Restricted trainer • ${rating.label} band`
+                    ? "Restricted trainer"
                     : "Continuation"}{" "}
-                  • {rating.target}
+                  • {accountRatingBandLabel}
                   {isReviewingHistory ? " • reviewing" : ""}
                 </p>
               </div>
@@ -14690,8 +14702,7 @@ function BlundrApp({
           settings={boardSettings}
           setSettings={setBoardSettings}
           rating={rating}
-          ratingBands={RATING_PRESETS}
-          onRatingFilterChange={setRatingFilter}
+          ratingBandLabel={accountRatingBandLabel}
           onClose={() => setShowSettings(false)}
         />
       )}
@@ -15296,15 +15307,13 @@ function SettingsPanel({
   settings,
   setSettings,
   rating,
-  ratingBands,
-  onRatingFilterChange,
+  ratingBandLabel,
   onClose,
 }: {
   settings: BoardSettings;
   setSettings: (s: BoardSettings) => void;
   rating: Stage2RatingBand;
-  ratingBands: readonly Stage2RatingBand[];
-  onRatingFilterChange: (value: string) => void;
+  ratingBandLabel: string;
   onClose: () => void;
 }) {
   const update = <K extends keyof BoardSettings>(
@@ -15392,20 +15401,20 @@ function SettingsPanel({
         <div className="space-y-5">
           <div>
             <div className="mb-2 text-sm font-black">Trainer rating band</div>
-            <select
-              value={rating.value}
-              onChange={(event) => onRatingFilterChange(event.target.value)}
-              className="w-full rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-black text-stone-800 outline-none focus:border-green-700"
-            >
-              {ratingBands.map((band) => (
-                <option key={band.id} value={band.value}>
-                  {band.label} — {band.target}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
+              <span className="text-sm font-black text-stone-800">
+                {ratingBandLabel}
+              </span>
+              <Link
+                href="/settings#training_preferences"
+                className="text-xs font-black text-green-700 underline underline-offset-4"
+              >
+                Change in Settings
+              </Link>
+            </div>
             <p className="mt-2 text-xs font-semibold leading-5 text-stone-500">
-              Restricted Trainer uses this rating band for line selection. Maia
-              continuation maps to {rating.maiaSkill} / ~{rating.maiaRating}.
+              This account rating band drives restricted-line selection and maps
+              Maia continuation to {rating.maiaSkill} / ~{rating.maiaRating}.
             </p>
           </div>
           <div>

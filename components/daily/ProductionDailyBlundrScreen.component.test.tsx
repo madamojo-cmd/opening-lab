@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -141,6 +147,60 @@ describe("ProductionDailyBlundrScreen", () => {
     expect(
       screen.getByRole("link", { name: "Choose openings" }),
     ).toHaveAttribute("href", "/onboarding/starter-pack");
+  });
+
+  it("submits a board move against the exact reserved card and version", async () => {
+    const initial = dailyResponse(3);
+    mocks.apiFetch.mockResolvedValueOnce(initial).mockResolvedValueOnce({
+      ...initial,
+      session: { ...initial.session, version: 1 },
+      correct: true,
+    });
+    render(<ProductionDailyBlundrScreen />);
+    fireEvent.click(await screen.findByTestId("daily-board"));
+
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledTimes(2));
+    const [requestPath, init] = mocks.apiFetch.mock.calls[1] as [
+      string,
+      RequestInit,
+    ];
+    expect(requestPath).toBe("/api/blundr/daily/sessions/session-1/attempts");
+    expect(JSON.parse(String(init.body))).toEqual({
+      cardFingerprint: "card-0",
+      actionId: "action-0",
+      answer: "g1f3",
+      expectedVersion: 0,
+    });
+  });
+
+  it("reveals the exact reserved card without discarding the session", async () => {
+    const initial = dailyResponse(3);
+    mocks.apiFetch.mockResolvedValueOnce(initial).mockResolvedValueOnce({
+      ...initial,
+      session: {
+        ...initial.session,
+        version: 1,
+        state: {
+          ...initial.session.state,
+          revealedCardIds: ["card-0"],
+        },
+      },
+    });
+    render(<ProductionDailyBlundrScreen />);
+    fireEvent.click(await screen.findByRole("button", { name: "Reveal" }));
+
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledTimes(2));
+    const [requestPath, init] = mocks.apiFetch.mock.calls[1] as [
+      string,
+      RequestInit,
+    ];
+    expect(requestPath).toBe("/api/blundr/daily/sessions/session-1/reveal");
+    expect(JSON.parse(String(init.body))).toEqual({
+      cardFingerprint: "card-0",
+      actionId: "action-0",
+      expectedVersion: 0,
+    });
+    expect(screen.getByText("Task 1 of 3")).toBeInTheDocument();
   });
 
   it("shows the safe server failure and preserves the reserved card for retry", async () => {
