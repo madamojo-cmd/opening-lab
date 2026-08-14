@@ -1,3 +1,4 @@
+import type { RatingBandId } from "../accounts/accountTypes";
 import type { MaiaSkillLevel } from "../maia/maiaTypes";
 
 export type Stage2RatingBandId =
@@ -8,7 +9,12 @@ export type Stage2RatingBandId =
   | "strong"
   | "advanced"
   | "expert"
-  | "all";
+  | "all"
+  | "account-new-to-openings"
+  | "account-u800"
+  | "account-800-1200"
+  | "account-1600-2000"
+  | "account-2000-plus";
 
 export type Stage2RatingBand = {
   id: Stage2RatingBandId;
@@ -154,22 +160,119 @@ export const STAGE2_RATING_BANDS: readonly Stage2RatingBand[] = [
     ],
     description: "All local rating profiles.",
   },
+  {
+    id: "account-new-to-openings",
+    label: "New to openings",
+    value: "account-new-to-openings",
+    target: "New to openings",
+    minRating: null,
+    maxRating: 999,
+    engineSkill: 800,
+    skill: 800,
+    maiaSkill: "maia-1100",
+    maiaRating: 1100,
+    profileIds: ["beginner_rapid_classical_1000_1400"],
+    description: "Account-authoritative entry-level training band.",
+  },
+  {
+    id: "account-u800",
+    label: "Under 800",
+    value: "account-u800",
+    target: "Under 800",
+    minRating: null,
+    maxRating: 799,
+    engineSkill: 800,
+    skill: 800,
+    maiaSkill: "maia-1100",
+    maiaRating: 1100,
+    profileIds: ["beginner_rapid_classical_1000_1400"],
+    description: "Account-authoritative under-800 training band.",
+  },
+  {
+    id: "account-800-1200",
+    label: "800-1200",
+    value: "account-800-1200",
+    target: "800-1200",
+    minRating: 800,
+    maxRating: 1200,
+    engineSkill: 1000,
+    skill: 1000,
+    maiaSkill: "maia-1100",
+    maiaRating: 1100,
+    profileIds: ["beginner_rapid_classical_1000_1400"],
+    description: "Account-authoritative 800-1200 training band.",
+  },
+  {
+    id: "account-1600-2000",
+    label: "1600-2000",
+    value: "account-1600-2000",
+    target: "1600-2000",
+    minRating: 1600,
+    maxRating: 2000,
+    engineSkill: 1800,
+    skill: 1800,
+    maiaSkill: "maia-1800",
+    maiaRating: 1800,
+    profileIds: ["intermediate_blitz_rapid_classical_1600_2000"],
+    description: "Account-authoritative 1600-2000 training band.",
+  },
+  {
+    id: "account-2000-plus",
+    label: "2000+",
+    value: "account-2000-plus",
+    target: "2000+",
+    minRating: 2000,
+    maxRating: null,
+    engineSkill: 2200,
+    skill: 2200,
+    maiaSkill: "maia-1900",
+    maiaRating: 1900,
+    profileIds: ["advanced_rapid_classical_2000_plus", "masters_1952_3000"],
+    description: "Account-authoritative 2000-plus training band.",
+  },
 ];
 
 export function getStage2RatingBand(value?: string | null): Stage2RatingBand {
-  const normalized = String(value ?? "").trim().toLowerCase();
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
   return (
     STAGE2_RATING_BANDS.find((band) => band.id === normalized) ??
     STAGE2_RATING_BANDS.find((band) => band.value === normalized) ??
-    STAGE2_RATING_BANDS.find((band) => band.id === DEFAULT_STAGE2_RATING_BAND_ID)!
+    STAGE2_RATING_BANDS.find(
+      (band) => band.id === DEFAULT_STAGE2_RATING_BAND_ID,
+    )!
   );
 }
 
-export function getStage2RatingBandByFilterValue(value?: string | null): Stage2RatingBand {
+export function getStage2RatingBandByFilterValue(
+  value?: string | null,
+): Stage2RatingBand {
   return getStage2RatingBand(value);
 }
 
-export function resolveMaiaSkillForRatingBand(value?: string | null): MaiaSkillLevel {
+const ACCOUNT_RATING_BAND_TO_STAGE2: Readonly<
+  Record<RatingBandId, Stage2RatingBandId>
+> = {
+  new_to_openings: "account-new-to-openings",
+  u800: "account-u800",
+  "800-1200": "account-800-1200",
+  "1200-1600": "club",
+  "1600-2000": "account-1600-2000",
+  "2000-plus": "account-2000-plus",
+};
+
+export function getStage2RatingBandForAccountRatingBand(
+  value: RatingBandId | null | undefined,
+): Stage2RatingBand {
+  return getStage2RatingBand(
+    ACCOUNT_RATING_BAND_TO_STAGE2[value ?? "1200-1600"] ?? "club",
+  );
+}
+
+export function resolveMaiaSkillForRatingBand(
+  value?: string | null,
+): MaiaSkillLevel {
   return getStage2RatingBand(value).maiaSkill;
 }
 
@@ -213,7 +316,9 @@ export function stage2RatingBandMatchesLocalMetadata(input: {
     input.averageRating !== undefined &&
     String(input.averageRating).trim() !== "";
 
-  const averageRating = hasAverageRating ? Number(input.averageRating) : Number.NaN;
+  const averageRating = hasAverageRating
+    ? Number(input.averageRating)
+    : Number.NaN;
 
   if (Number.isFinite(averageRating)) {
     if (band.minRating !== null && averageRating < band.minRating) return false;

@@ -42,20 +42,31 @@ export class ProductionDailyRepository {
       createBlundrSupabaseAdminClient(),
     );
     if (!client) return localSessions.get(`${userId}:${dateKey}`) ?? null;
-    const result = await client
+
+    const deckResult = await client
       .from("blundr_daily_decks")
       .select(
-        "deck_id,local_date,public_cards,server_cards,composer_version,runtime_package_id,profile_version,blundr_daily_sessions!inner(session_id,user_id,state,state_version,completed_at,updated_at)",
+        "deck_id,local_date,public_cards,server_cards,composer_version,runtime_package_id,profile_version",
       )
       .eq("user_id", userId)
       .eq("local_date", dateKey)
       .maybeSingle();
-    if (result.error || !result.data) return null;
-    const session = Array.isArray(result.data.blundr_daily_sessions)
-      ? result.data.blundr_daily_sessions[0]
-      : result.data.blundr_daily_sessions;
-    if (!session) return null;
-    return rowToSession({ ...result.data, ...session });
+    if (deckResult.error) throw new Error("daily_deck_persistence_unavailable");
+    if (!deckResult.data) return null;
+
+    const sessionResult = await client
+      .from("blundr_daily_sessions")
+      .select(
+        "session_id,deck_id,user_id,state,state_version,completed_at,updated_at",
+      )
+      .eq("deck_id", deckResult.data.deck_id)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (sessionResult.error)
+      throw new Error("daily_session_persistence_unavailable");
+    if (!sessionResult.data) return null;
+
+    return rowToSession({ ...deckResult.data, ...sessionResult.data });
   }
 
   async reserve(input: {
@@ -132,19 +143,31 @@ export class ProductionDailyRepository {
             session.sessionId === sessionId && session.userId === userId,
         ) ?? null
       );
-    const result = await client
+
+    const sessionResult = await client
       .from("blundr_daily_sessions")
       .select(
-        "session_id,deck_id,user_id,state,state_version,completed_at,updated_at,blundr_daily_decks!inner(local_date,public_cards,server_cards,composer_version,runtime_package_id,profile_version)",
+        "session_id,deck_id,user_id,state,state_version,completed_at,updated_at",
       )
       .eq("session_id", sessionId)
       .eq("user_id", userId)
       .maybeSingle();
-    if (result.error || !result.data) return null;
-    const deck = Array.isArray(result.data.blundr_daily_decks)
-      ? result.data.blundr_daily_decks[0]
-      : result.data.blundr_daily_decks;
-    return deck ? rowToSession({ ...result.data, ...deck }) : null;
+    if (sessionResult.error)
+      throw new Error("daily_session_persistence_unavailable");
+    if (!sessionResult.data) return null;
+
+    const deckResult = await client
+      .from("blundr_daily_decks")
+      .select(
+        "deck_id,local_date,public_cards,server_cards,composer_version,runtime_package_id,profile_version",
+      )
+      .eq("deck_id", sessionResult.data.deck_id)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (deckResult.error) throw new Error("daily_deck_persistence_unavailable");
+    if (!deckResult.data) return null;
+
+    return rowToSession({ ...sessionResult.data, ...deckResult.data });
   }
 
   async update(
