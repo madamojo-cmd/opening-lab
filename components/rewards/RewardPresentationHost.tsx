@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { authenticatedApiFetch } from "@/lib/blundr/api/authenticatedApiClient";
+import { BLUNDR_REWARD_PRESENTATION_REFRESH_EVENT } from "@/lib/blundr/rewards/rewardPresentationSignal";
 
 type RewardPresentation = {
   id: string;
@@ -82,9 +83,14 @@ export function RewardPresentationHost() {
       if (document.visibilityState === "visible") void claimNext();
     };
     window.addEventListener("focus", resume);
+    window.addEventListener(BLUNDR_REWARD_PRESENTATION_REFRESH_EVENT, resume);
     document.addEventListener("visibilitychange", resume);
     return () => {
       window.removeEventListener("focus", resume);
+      window.removeEventListener(
+        BLUNDR_REWARD_PRESENTATION_REFRESH_EVENT,
+        resume,
+      );
       document.removeEventListener("visibilitychange", resume);
     };
   }, [claimNext]);

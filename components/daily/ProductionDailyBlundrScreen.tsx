@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Home, RefreshCw, Settings, Sparkles } from "lucide-react";
 import {
   authenticatedApiFetch,
@@ -11,6 +11,8 @@ import { DailyBlundrBoard } from "@/components/daily/DailyBlundrBoard";
 import { DailyBlundrCardFeedback } from "@/components/daily/DailyBlundrCardFeedback";
 import type { DailyBlundrBoardMoveAttempt } from "@/lib/blundr/daily/dailyBlundrPlayerTypes";
 import type { ProductionDailyPublicSession } from "@/lib/blundr/daily/productionDailyTypes";
+import { BLUNDR_DAILY_RING_REFRESH_EVENT } from "@/lib/blundr/daily-rings/dailyRingRefreshSignal";
+import { notifyRewardPresentationRefresh } from "@/lib/blundr/rewards/rewardPresentationSignal";
 
 type DailyResponse = {
   dateKey: string;
@@ -33,6 +35,8 @@ export function ProductionDailyBlundrScreen() {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recoveryHref, setRecoveryHref] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const actionInFlightRef = useRef(false);
 
   const load = useCallback(async () => {
     try {
@@ -87,8 +91,16 @@ export function ProductionDailyBlundrScreen() {
     return index >= 0 ? index + 1 : null;
   }, [currentCard, session]);
 
+  useEffect(() => {
+    setPresentation(null);
+    setFeedback(null);
+  }, [currentCard?.cardFingerprint]);
+
   async function action(kind: "attempt" | "reveal" | "retry", answer?: string) {
-    if (!session || !currentCard) return;
+    if (!session || !currentCard || actionInFlightRef.current) return;
+    actionInFlightRef.current = true;
+    setActionBusy(true);
+    setError(null);
     const path = kind === "attempt" ? "attempts" : kind;
     try {
       const response = await authenticatedApiFetch<{
@@ -127,17 +139,23 @@ export function ProductionDailyBlundrScreen() {
             ? "warning"
             : "neutral",
       });
+      if (response.session.completedAt) {
+        window.dispatchEvent(new Event(BLUNDR_DAILY_RING_REFRESH_EVENT));
+        notifyRewardPresentationRefresh();
+      }
     } catch (nextError) {
+      const authenticatedError =
+        nextError instanceof AuthenticatedApiError ? nextError : null;
       setError(
-        nextError instanceof AuthenticatedApiError && nextError.status === 409
+        authenticatedError?.status === 409
           ? "This Daily session changed in another tab. Reloading the reserved deck."
-          : "Daily could not record that action.",
+          : authenticatedError?.message ||
+              "Daily could not safely save that action. Your deck is unchanged; try again.",
       );
-      if (
-        nextError instanceof AuthenticatedApiError &&
-        nextError.status === 409
-      )
-        void load();
+      if (authenticatedError && authenticatedError.status === 409) void load();
+    } finally {
+      actionInFlightRef.current = false;
+      setActionBusy(false);
     }
   }
 
@@ -238,6 +256,7 @@ export function ProductionDailyBlundrScreen() {
                     key={option.id}
                     type="button"
                     disabled={
+                      actionBusy ||
                       presentation?.state === "revealed" ||
                       presentation?.state === "committed"
                     }
@@ -252,6 +271,7 @@ export function ProductionDailyBlundrScreen() {
               <DailyBlundrBoard
                 fen={currentCard.positionFen}
                 disabled={
+                  actionBusy ||
                   presentation?.state === "revealed" ||
                   presentation?.state === "committed"
                 }
@@ -267,15 +287,17 @@ export function ProductionDailyBlundrScreen() {
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
+                disabled={actionBusy}
                 onClick={() => void action("reveal")}
-                className="min-h-11 rounded-2xl bg-white px-4 py-3 text-sm font-black text-green-800"
+                className="min-h-11 rounded-2xl bg-white px-4 py-3 text-sm font-black text-green-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Reveal
               </button>
               <button
                 type="button"
+                disabled={actionBusy}
                 onClick={() => void action("retry")}
-                className="min-h-11 rounded-2xl bg-stone-700 px-4 py-3 text-sm font-black text-white"
+                className="min-h-11 rounded-2xl bg-stone-700 px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <RefreshCw size={15} className="mr-1 inline" />
                 Retry

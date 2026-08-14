@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -18,7 +18,38 @@ vi.mock("@/lib/blundr/api/authenticatedApiClient", () => {
 });
 
 vi.mock("@/components/daily/DailyBlundrBoard", () => ({
-  DailyBlundrBoard: () => <div data-testid="daily-board" />,
+  DailyBlundrBoard: ({
+    disabled,
+    onMoveAttempt,
+  }: {
+    disabled?: boolean;
+    onMoveAttempt?: (attempt: {
+      from: string;
+      to: string;
+      uci: string;
+      san: string;
+      legal: boolean;
+      promotion: null;
+    }) => void;
+  }) => (
+    <button
+      type="button"
+      data-testid="daily-board"
+      disabled={disabled}
+      onClick={() =>
+        onMoveAttempt?.({
+          from: "g1",
+          to: "f3",
+          uci: "g1f3",
+          san: "Nf3",
+          legal: true,
+          promotion: null,
+        })
+      }
+    >
+      Daily board
+    </button>
+  ),
 }));
 
 vi.mock("@/lib/blundr/daily-rings/dailyRingGameplayEvents", () => ({
@@ -110,5 +141,27 @@ describe("ProductionDailyBlundrScreen", () => {
     expect(
       screen.getByRole("link", { name: "Choose openings" }),
     ).toHaveAttribute("href", "/onboarding/starter-pack");
+  });
+
+  it("shows the safe server failure and preserves the reserved card for retry", async () => {
+    mocks.apiFetch
+      .mockResolvedValueOnce(dailyResponse(3))
+      .mockRejectedValueOnce(
+        new AuthenticatedApiError(
+          "persistence_unavailable" as never,
+          503,
+          "Daily could not safely save that action. Your deck is unchanged; try again.",
+        ),
+      );
+    render(<ProductionDailyBlundrScreen />);
+    const board = await screen.findByTestId("daily-board");
+    fireEvent.click(board);
+    expect(
+      await screen.findByText(
+        "Daily could not safely save that action. Your deck is unchanged; try again.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Task 1 of 3")).toBeInTheDocument();
+    expect(board).not.toBeDisabled();
   });
 });

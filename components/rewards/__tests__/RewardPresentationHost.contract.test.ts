@@ -24,4 +24,5 @@ assert.doesNotMatch(
   /applyRewardCompletion|spendInventoryAndUnlock|recordBlundrTaskCompleted/,
 );
 assert.match(host, /NEXT_PUBLIC_BLUNDR_REWARD_PRESENTATIONS_V2_ENABLED/);
+assert.match(host, /BLUNDR_REWARD_PRESENTATION_REFRESH_EVENT/);
 console.log("rewardPresentationHost contract ok");

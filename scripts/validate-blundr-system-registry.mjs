@@ -75,7 +75,7 @@ for (const requiredId of [
 const entryById = new Map(registry.entries.map((entry) => [entry.id, entry]));
 const dailyAdaptive = entryById.get("DAILY-ADAPTIVE-001");
 assert.ok(dailyAdaptive, "Missing Adaptive Daily contract");
-assert.equal(dailyAdaptive.contractVersion, "2");
+assert.equal(dailyAdaptive.contractVersion, "3");
 assert.deepEqual(dailyAdaptive.featureFlags, [
   "BLUNDR_FEATURE_DAILY_CORE_V2",
   "BLUNDR_FEATURE_DAILY_PRODUCTION_STORE",
@@ -88,7 +88,7 @@ assert.match(dailyAdaptive.fallback, /missing current authority flag/i);
 
 const rewards = entryById.get("REWARD-001");
 assert.ok(rewards, "Missing Rewards contract");
-assert.equal(rewards.contractVersion, "2");
+assert.equal(rewards.contractVersion, "3");
 assert.deepEqual(rewards.featureFlags, [
   "BLUNDR_REWARDS_V2_ENABLED",
   "NEXT_PUBLIC_BLUNDR_REWARD_PRESENTATIONS_V2_ENABLED",
@@ -126,7 +126,11 @@ assert.ok(
 for (const id of ["REVIEW-SRS-001", "IMPORT-001", "OBSERVABILITY-001"]) {
   const entry = entryById.get(id);
   assert.ok(entry, `Missing ${id} production release contract`);
-  assert.equal(entry.contractVersion, "2", `${id}: contract must be revised`);
+  assert.equal(
+    entry.contractVersion,
+    id === "OBSERVABILITY-001" ? "3" : "2",
+    `${id}: contract must be revised`,
+  );
   assert.ok(
     entry.status === "partial" || entry.status === "blocked",
     `${id}: must remain partial or blocked`,

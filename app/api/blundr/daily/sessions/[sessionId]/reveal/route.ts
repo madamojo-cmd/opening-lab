@@ -7,6 +7,8 @@ import {
   applyDailyCompletionReward,
   publicDailySession,
 } from "@/lib/blundr/daily/productionDailyService.server";
+import { classifyDailyActionHttpFailure } from "@/lib/blundr/daily/dailyActionHttp.server";
+import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTelemetry.server";
 
 export const dynamic = "force-dynamic";
 
@@ -54,11 +56,15 @@ export async function POST(
       session: publicDailySession(result.session),
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "daily_reveal_failed";
+    const failure = classifyDailyActionHttpFailure(error);
+    await emitBlundrOperationalEvent("daily_action_rejected", {
+      action: "reveal",
+      code: failure.code,
+      status: failure.status,
+    });
     return NextResponse.json(
-      { error: message },
-      { status: message === "daily_session_conflict" ? 409 : 422 },
+      { error: failure.code, message: failure.message },
+      { status: failure.status },
     );
   }
 }

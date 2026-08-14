@@ -7,8 +7,8 @@ import {
   type CardFingerprint,
   type OpeningAccessSnapshot,
 } from "@/lib/blundr/contracts";
-import { readUserRepertoire } from "@/lib/blundr/accounts/accountRepository";
 import type { CurrentBlundrUser } from "@/lib/blundr/accounts/accountTypes";
+import { normalizeStarterPackId } from "@/lib/blundr/accounts/accountDefaults";
 import { loadTrainingRuntimePackage } from "@/lib/blundr/trainingRuntime/trainingRuntimeLoader";
 import { buildDeterministicDailyDeck } from "./core/dailyDeckPolicy";
 import { reduceDailySession } from "./core/dailySessionReducer";
@@ -271,11 +271,36 @@ function fenAfterMoves(
 async function openingAccess(
   user: CurrentBlundrUser,
 ): Promise<RepertoireOpeningAccessRepository> {
-  const repertoire = await readUserRepertoire(user.userId, {
-    user,
-    allowLocalFallback: false,
-  });
-  const stored = repertoire.ok ? repertoire.data : null;
+  const client = createBlundrSupabaseAdminClient();
+  if (!client) throw new Error("daily_opening_access_unavailable");
+  const repertoire = await client
+    .from("blundr_user_repertoires")
+    .select(
+      "user_id,selected_starter_pack_id,unlocked_opening_ids,locked_opening_ids,opening_unlock_points,updated_at",
+    )
+    .eq("user_id", user.userId)
+    .maybeSingle();
+  if (repertoire.error) throw new Error("daily_opening_access_unavailable");
+  const row = repertoire.data;
+  const selectedStarterPackId = normalizeStarterPackId(
+    row?.selected_starter_pack_id,
+  );
+  const stored = row
+    ? {
+        selectedStarterPackId: selectedStarterPackId ?? "classical_attacker",
+        unlockedOpeningIds: Array.isArray(row.unlocked_opening_ids)
+          ? row.unlocked_opening_ids.map(String)
+          : [],
+        lockedOpeningIds: Array.isArray(row.locked_opening_ids)
+          ? row.locked_opening_ids.map(String)
+          : [],
+        openingUnlockPoints: Math.max(
+          0,
+          Number(row.opening_unlock_points ?? 0),
+        ),
+        updatedAt: String(row.updated_at),
+      }
+    : null;
   return new RepertoireOpeningAccessRepository(() =>
     stored
       ? {
