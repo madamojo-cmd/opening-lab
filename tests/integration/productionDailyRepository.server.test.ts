@@ -9,7 +9,7 @@ vi.mock("@/lib/blundr/backend/supabaseAdminClient", () => ({
   createBlundrSupabaseAdminClient: mocks.createClient,
 }));
 
-import { ProductionDailyRepository } from "./productionDailyRepository.server";
+import { ProductionDailyRepository } from "@/lib/blundr/daily/productionDailyRepository.server";
 
 type QueryResult = {
   data: Record<string, unknown> | null;
