@@ -178,7 +178,12 @@ import {
 } from "@/lib/blundr/runtime/currentInstructionFrame";
 import { resolveBranchCompleteContract } from "@/lib/blundr/runtime/branchCompleteContract";
 import { resolveContinuationFlowContract } from "@/lib/blundr/runtime/continuationFlowContract";
-import { shouldFlagStaleOpponentReplyCommit } from "@/lib/blundr/runtime/opponentReplyGuard";
+import {
+  captureOpponentReplyRequestAuthority,
+  shouldBlockRestrictedOpponentReplySchedule,
+  shouldFlagStaleOpponentReplyCommit,
+  type OpponentReplyRequestAuthority,
+} from "@/lib/blundr/runtime/opponentReplyGuard";
 import { resolveRestrictedOpponentReplyAuthority } from "@/lib/blundr/runtime/restrictedOpponentReplyAuthority";
 import { shouldScheduleContinuationOpponentReply } from "@/lib/blundr/runtime/continuationOpponentReplyGate";
 import { resolveBlackOpeningInitialOpponentHandoff } from "@/lib/blundr/runtime/blackOpeningInitialOpponentHandoff";
@@ -530,6 +535,7 @@ type PendingOpponentRequest = {
   baseFen: string;
   mode: TrainingMode;
   startedAt: number;
+  authority: OpponentReplyRequestAuthority;
   initialRestrictedOpponentMoveUci?: string;
   initialRestrictedOpponentHandoffKey?: string;
   restrictedRuntimeLineSnapshot?: RestrictedRuntimeLineRequestSnapshot | null;
@@ -8356,13 +8362,22 @@ function BlundrApp({
     mode: TrainingMode;
     delayMs?: number;
     baseFen?: string;
+    continuationAuthorized?: boolean;
+    hasUserContinuationMove?: boolean;
     initialRestrictedOpponentMoveUci?: string;
     initialRestrictedOpponentHandoffKey?: string;
     restrictedRuntimeLineSnapshot?: RestrictedRuntimeLineRequestSnapshot | null;
   }) {
     if (
-      (branchCompleteEligibleNow || stage2TerminalProof.proven) &&
-      input.mode === "restricted"
+      shouldBlockRestrictedOpponentReplySchedule({
+        mode: input.mode,
+        branchCompleteActive: branchCompleteEligibleNow,
+        terminalProofProven: stage2TerminalProof.proven,
+        initialRestrictedOpponentHandoff: Boolean(
+          input.initialRestrictedOpponentMoveUci &&
+            input.initialRestrictedOpponentHandoffKey,
+        ),
+      })
     ) {
       clearPendingOpponentReplyRequest({ clearStaleIssue: true });
       return null;
@@ -8382,9 +8397,8 @@ function BlundrApp({
       );
       return null;
     }
-    const baseFenNormalized = normalizeFen(
-      input.baseFen ?? fenRef.current ?? fen,
-    );
+    const baseFenRaw = input.baseFen ?? fenRef.current ?? fen;
+    const baseFenNormalized = normalizeFen(baseFenRaw);
     const currentPending = pendingOpponentRequestRef.current;
     if (
       currentPending &&
@@ -8400,6 +8414,20 @@ function BlundrApp({
       baseFen: baseFenNormalized,
       mode: input.mode,
       startedAt: Date.now(),
+      authority: captureOpponentReplyRequestAuthority({
+        mode: input.mode,
+        userExplicitlyEnteredContinuation:
+          input.continuationAuthorized ??
+          Boolean(userExplicitlyEnteredContinuation),
+        branchCompleteActive: Boolean(branchCompleteEligibleNow),
+        hasUserContinuationMove:
+          input.hasUserContinuationMove ??
+          Boolean(
+            lastContinuationUserMoveRating?.moveUci ||
+              (input.mode === "continuation" &&
+                new Chess(baseFenRaw).turn() === opponentColor),
+          ),
+      }),
       initialRestrictedOpponentMoveUci: input.initialRestrictedOpponentMoveUci,
       initialRestrictedOpponentHandoffKey:
         input.initialRestrictedOpponentHandoffKey,
@@ -10550,24 +10578,18 @@ function BlundrApp({
       });
       const maiaGate = buildMaiaOpponentReplyDecision({
         trainingMode: "continuation",
-        userExplicitlyEnteredContinuation: Boolean(
-          userExplicitlyEnteredContinuation,
-        ),
+        userExplicitlyEnteredContinuation:
+          request.authority.continuationAuthorized,
         sideToMove: current.turn() as ChessColor,
         opponentColor,
-        branchCompleteActive: Boolean(branchCompleteEligibleNow),
+        branchCompleteActive: request.authority.branchCompleteActive,
         continuationAnalysisStatus,
         continuationRuntimeStatus: continuationRuntimeState.status,
         selectedLineExhausted: Boolean(
           branchCompleteContract.selectedLineExhausted,
         ),
         hasUserContinuationMove:
-          Boolean(lastContinuationUserMoveRating?.moveUci) ||
-          Boolean(
-            trainingMode === "continuation" &&
-              userExplicitlyEnteredContinuation &&
-              current.turn() === opponentColor,
-          ),
+          request.authority.hasUserContinuationMove,
         terminalPosition: current.isGameOver() || legalMovesUci.length === 0,
         legalMovesCount: legalMovesUci.length,
         providerStatus: defaultMaiaStatus,
@@ -11156,6 +11178,8 @@ function BlundrApp({
         mode: "continuation",
         delayMs: 250,
         baseFen: current.fen(),
+        continuationAuthorized: true,
+        hasUserContinuationMove: current.turn() === opponentColor,
       });
       return;
     }

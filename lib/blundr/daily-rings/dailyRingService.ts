@@ -24,6 +24,7 @@ import {
 } from "../repertoire/repertoireProgressService";
 import { getPointAwardForSource } from "../repertoire/repertoirePoints";
 import { REWARD_CACHE_COPY } from "../rewards/rewardConstants";
+import { notifyRewardPresentationRefresh } from "../rewards/rewardPresentationSignal";
 import { evaluateTempoCacheRewards } from "../rewards/tempoCacheService";
 import { getDailyBlundrDateKey } from "../daily/dailyBlundrStorage";
 import {
@@ -889,6 +890,7 @@ export async function completeDailyRingActivity(args: {
       activityEventId: confirmed.activityEvent.id,
       updatedAt: confirmed.dayRecord.updatedAt,
     });
+    notifyRewardPresentationRefresh();
     return confirmed;
   }
 

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { Chess } from "chess.js";
 
-import { normalizeFen4, shouldFlagStaleOpponentReplyCommit } from "../opponentReplyGuard";
+import {
+  captureOpponentReplyRequestAuthority,
+  normalizeFen4,
+  shouldBlockRestrictedOpponentReplySchedule,
+  shouldFlagStaleOpponentReplyCommit,
+} from "../opponentReplyGuard";
 
 export function testOpponentReplyGuard(): void {
   const game = new Chess();
@@ -45,5 +50,38 @@ export function testOpponentReplyGuard(): void {
       liveFen: fenAfterE4,
     }),
     false,
+  );
+
+  assert.deepEqual(
+    captureOpponentReplyRequestAuthority({
+      mode: "continuation",
+      userExplicitlyEnteredContinuation: true,
+      branchCompleteActive: true,
+      hasUserContinuationMove: true,
+    }),
+    {
+      continuationAuthorized: true,
+      branchCompleteActive: false,
+      hasUserContinuationMove: true,
+    },
+  );
+
+  assert.equal(
+    shouldBlockRestrictedOpponentReplySchedule({
+      mode: "restricted",
+      branchCompleteActive: true,
+      terminalProofProven: true,
+      initialRestrictedOpponentHandoff: true,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldBlockRestrictedOpponentReplySchedule({
+      mode: "restricted",
+      branchCompleteActive: true,
+      terminalProofProven: false,
+      initialRestrictedOpponentHandoff: false,
+    }),
+    true,
   );
 }

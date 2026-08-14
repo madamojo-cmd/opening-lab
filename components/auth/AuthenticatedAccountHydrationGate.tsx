@@ -58,7 +58,13 @@ export function AuthenticatedAccountHydrationGate({
     setState("loading");
     void fetch("/api/blundr/account/bootstrap", {
       method: "POST",
-      headers: { authorization: `Bearer ${auth.session.accessToken}` },
+      headers: {
+        authorization: `Bearer ${auth.session.accessToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }),
       cache: "no-store",
       signal: AbortSignal.timeout(ACCOUNT_BOOTSTRAP_TIMEOUT_MS),
     })

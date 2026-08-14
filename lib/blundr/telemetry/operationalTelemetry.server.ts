@@ -2,6 +2,7 @@
 
 export type BlundrOperationalEventName =
   | "daily_composed"
+  | "daily_action_rejected"
   | "import_enqueued"
   | "import_failed"
   | "import_fetched"

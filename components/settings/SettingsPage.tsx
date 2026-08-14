@@ -47,6 +47,9 @@ import type {
   OnboardingAuthMode,
   OnboardingAuthSession,
 } from "@/lib/blundr/onboarding/onboardingTypes";
+import type { UserTrainingProfile } from "@/lib/blundr/accounts/accountTypes";
+import type { TrainingPreferencesPatch } from "@/lib/blundr/accounts/trainingPreferences";
+import { getAllRatingBands } from "@/lib/blundr/onboarding/ratingBand";
 import {
   signInForOnboarding,
   signUpForOnboarding,
@@ -106,18 +109,22 @@ function PillButton({
   label,
   onClick,
   description,
+  disabled = false,
 }: {
   active: boolean;
   label: string;
   onClick: () => void;
   description?: string;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       className={classNames(
         "rounded-2xl border px-3 py-3 text-left shadow-sm transition",
+        disabled && "cursor-not-allowed opacity-60",
         active
           ? "border-green-300 bg-green-50 text-stone-950"
           : "border-stone-200 bg-white text-stone-700",
@@ -168,6 +175,10 @@ export function SettingsPage({ homeHref = "/", className }: SettingsPageProps) {
   const [authMessage, setAuthMessage] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [ratingBandId, setRatingBandId] = useState(
+    snapshot.profile.ratingBandId,
+  );
   const [trainingGoalTempo, setTrainingGoalTempo] = useState(
     snapshot.profile.dailyTempoGoal,
   );
@@ -217,11 +228,25 @@ export function SettingsPage({ homeHref = "/", className }: SettingsPageProps) {
       setTrainingGoalBattery(nextSnapshot.profile.dailyBatteryGoal);
       setTrainingGoalBlundr(nextSnapshot.profile.dailyBlundrGoal);
       setPreferredTrainingMode(nextSnapshot.profile.preferredTrainingMode);
+      setRatingBandId(nextSnapshot.profile.ratingBandId);
       setSelectedStarterPackId(
         nextSnapshot.profile.selectedStarterPackId ?? "classical_attacker",
       );
       setBoardPreferences(nextSnapshot.boardPreferences);
       if (session) {
+        void authenticatedApiFetch<{
+          ok: true;
+          data: UserTrainingProfile;
+        }>("/api/blundr/account/preferences", { cache: "no-store" })
+          .then((response) => {
+            if (!cancelled) applyProfile(response.data);
+          })
+          .catch(() => {
+            if (!cancelled)
+              setStatusMessage(
+                "Your training preferences could not be loaded. Try refreshing.",
+              );
+          });
         void authenticatedApiFetch<BlundrProfilePublic>("/api/blundr/profile", {
           cache: "no-store",
         })
@@ -285,12 +310,59 @@ export function SettingsPage({ homeHref = "/", className }: SettingsPageProps) {
     setTrainingGoalBattery(nextSnapshot.profile.dailyBatteryGoal);
     setTrainingGoalBlundr(nextSnapshot.profile.dailyBlundrGoal);
     setPreferredTrainingMode(nextSnapshot.profile.preferredTrainingMode);
+    setRatingBandId(nextSnapshot.profile.ratingBandId);
     setSelectedStarterPackId(
       nextSnapshot.profile.selectedStarterPackId ?? "classical_attacker",
     );
   }
 
-  function saveProfilePatch(patch: Partial<typeof snapshot.profile>) {
+  function applyProfile(profile: UserTrainingProfile) {
+    const nextProfile = upsertLocalTrainingProfile(profile);
+    setSnapshot((previous) => ({
+      ...previous,
+      profile: nextProfile,
+      dailyGoalSummary: `${nextProfile.dailyTempoGoal} Tempo, ${nextProfile.dailyBatteryGoal} Battery, ${nextProfile.dailyBlundrGoal} Daily Blundr`,
+    }));
+    setRatingBandId(nextProfile.ratingBandId);
+    setTrainingGoalTempo(nextProfile.dailyTempoGoal);
+    setTrainingGoalBattery(nextProfile.dailyBatteryGoal);
+    setTrainingGoalBlundr(nextProfile.dailyBlundrGoal);
+    setPreferredTrainingMode(nextProfile.preferredTrainingMode);
+  }
+
+  async function saveProfilePatch(patch: TrainingPreferencesPatch) {
+    if (authSession) {
+      setProfileBusy(true);
+      setStatusMessage(null);
+      try {
+        const response = await authenticatedApiFetch<{
+          ok: true;
+          data: UserTrainingProfile;
+        }>("/api/blundr/account/preferences", {
+          method: "PATCH",
+          body: JSON.stringify({
+            ...patch,
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          }),
+        });
+        applyProfile(response.data);
+        setStatusMessage("Saved training preferences to your account.");
+      } catch (error) {
+        setRatingBandId(snapshot.profile.ratingBandId);
+        setTrainingGoalTempo(snapshot.profile.dailyTempoGoal);
+        setTrainingGoalBattery(snapshot.profile.dailyBatteryGoal);
+        setTrainingGoalBlundr(snapshot.profile.dailyBlundrGoal);
+        setPreferredTrainingMode(snapshot.profile.preferredTrainingMode);
+        setStatusMessage(
+          error instanceof AuthenticatedApiError
+            ? error.message
+            : "Training preferences could not be saved. Try again.",
+        );
+      } finally {
+        setProfileBusy(false);
+      }
+      return;
+    }
     const nextProfile = upsertLocalTrainingProfile({
       ...snapshot.profile,
       ...patch,
@@ -707,6 +779,40 @@ export function SettingsPage({ homeHref = "/", className }: SettingsPageProps) {
             title="Training preferences"
             copy="Tune the board and the core training feel."
           >
+            <div className="mb-5 rounded-[1.5rem] bg-stone-50 p-4 ring-1 ring-stone-200">
+              <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">
+                Rating band
+              </div>
+              <p className="mt-2 text-sm leading-6 text-stone-600">
+                This controls the Maia opponent level and rating-adjusted
+                training choices. You can change it whenever your level or
+                preference changes.
+              </p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {getAllRatingBands().map((band) => (
+                  <PillButton
+                    key={band.id}
+                    active={ratingBandId === band.id}
+                    label={band.label}
+                    description={band.trainingDescription}
+                    disabled={profileBusy}
+                    onClick={() => {
+                      const nextBand = band.id;
+                      setRatingBandId(nextBand);
+                      void saveProfilePatch({ ratingBandId: nextBand });
+                    }}
+                  />
+                ))}
+              </div>
+              {profileBusy ? (
+                <p
+                  className="mt-3 text-xs font-bold text-stone-500"
+                  role="status"
+                >
+                  Saving training preferences…
+                </p>
+              ) : null}
+            </div>
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-3">
                 <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">
@@ -784,12 +890,14 @@ export function SettingsPage({ homeHref = "/", className }: SettingsPageProps) {
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <button
                       type="button"
+                      disabled={profileBusy}
                       onClick={() => {
                         setPreferredTrainingMode("assisted");
                         saveProfilePatch({ preferredTrainingMode: "assisted" });
                       }}
                       className={classNames(
                         "rounded-2xl px-4 py-3 text-sm font-black",
+                        profileBusy && "cursor-not-allowed opacity-60",
                         preferredTrainingMode === "assisted"
                           ? "bg-green-700 text-white"
                           : "bg-white text-stone-700 ring-1 ring-stone-200",
@@ -799,12 +907,14 @@ export function SettingsPage({ homeHref = "/", className }: SettingsPageProps) {
                     </button>
                     <button
                       type="button"
+                      disabled={profileBusy}
                       onClick={() => {
                         setPreferredTrainingMode("plain");
                         saveProfilePatch({ preferredTrainingMode: "plain" });
                       }}
                       className={classNames(
                         "rounded-2xl px-4 py-3 text-sm font-black",
+                        profileBusy && "cursor-not-allowed opacity-60",
                         preferredTrainingMode === "plain"
                           ? "bg-green-700 text-white"
                           : "bg-white text-stone-700 ring-1 ring-stone-200",
@@ -833,13 +943,22 @@ export function SettingsPage({ homeHref = "/", className }: SettingsPageProps) {
                 <input
                   type="number"
                   min={1}
+                  max={100}
+                  disabled={profileBusy}
                   value={trainingGoalTempo}
                   onChange={(event) => {
-                    const value = Math.max(1, Number(event.target.value) || 1);
+                    const value = Math.min(
+                      100,
+                      Math.max(1, Number(event.target.value) || 1),
+                    );
                     setTrainingGoalTempo(value);
-                    saveProfilePatch({ dailyTempoGoal: value });
                   }}
-                  className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-black text-stone-950 shadow-sm outline-none focus:border-green-300"
+                  onBlur={() =>
+                    void saveProfilePatch({
+                      dailyTempoGoal: trainingGoalTempo,
+                    })
+                  }
+                  className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-black text-stone-950 shadow-sm outline-none focus:border-green-300 disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </label>
               <label className="grid gap-2 text-sm font-bold text-stone-700">
@@ -847,13 +966,22 @@ export function SettingsPage({ homeHref = "/", className }: SettingsPageProps) {
                 <input
                   type="number"
                   min={1}
+                  max={100}
+                  disabled={profileBusy}
                   value={trainingGoalBattery}
                   onChange={(event) => {
-                    const value = Math.max(1, Number(event.target.value) || 1);
+                    const value = Math.min(
+                      100,
+                      Math.max(1, Number(event.target.value) || 1),
+                    );
                     setTrainingGoalBattery(value);
-                    saveProfilePatch({ dailyBatteryGoal: value });
                   }}
-                  className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-black text-stone-950 shadow-sm outline-none focus:border-green-300"
+                  onBlur={() =>
+                    void saveProfilePatch({
+                      dailyBatteryGoal: trainingGoalBattery,
+                    })
+                  }
+                  className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-black text-stone-950 shadow-sm outline-none focus:border-green-300 disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </label>
               <label className="grid gap-2 text-sm font-bold text-stone-700">
@@ -861,13 +989,22 @@ export function SettingsPage({ homeHref = "/", className }: SettingsPageProps) {
                 <input
                   type="number"
                   min={1}
+                  max={100}
+                  disabled={profileBusy}
                   value={trainingGoalBlundr}
                   onChange={(event) => {
-                    const value = Math.max(1, Number(event.target.value) || 1);
+                    const value = Math.min(
+                      100,
+                      Math.max(1, Number(event.target.value) || 1),
+                    );
                     setTrainingGoalBlundr(value);
-                    saveProfilePatch({ dailyBlundrGoal: value });
                   }}
-                  className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-black text-stone-950 shadow-sm outline-none focus:border-green-300"
+                  onBlur={() =>
+                    void saveProfilePatch({
+                      dailyBlundrGoal: trainingGoalBlundr,
+                    })
+                  }
+                  className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-black text-stone-950 shadow-sm outline-none focus:border-green-300 disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </label>
             </div>

@@ -23,6 +23,7 @@ type SupabaseUserProfileRow = {
   onboarding_completed: boolean;
   rating_band_id: string;
   rating_source: string;
+  time_zone: string | null;
   raw_rating: number | null;
   rating_time_control: string | null;
   preferred_training_mode: string;
@@ -180,6 +181,7 @@ function mapTrainingProfileRow(profile: UserTrainingProfile): SupabaseUserProfil
     onboarding_completed: Boolean(profile.onboardingCompleted),
     rating_band_id: normalizeRatingBandId(profile.ratingBandId),
     rating_source: profile.ratingSource,
+    time_zone: normalizeText(profile.timeZone) || null,
     raw_rating: typeof profile.rawRating === "number" && Number.isFinite(profile.rawRating) ? profile.rawRating : null,
     rating_time_control: profile.ratingTimeControl ?? null,
     preferred_training_mode: profile.preferredTrainingMode,
@@ -200,6 +202,7 @@ function mapTrainingProfileRowToModel(row: SupabaseUserProfileRow | null): UserT
     onboardingCompleted: Boolean(row.onboarding_completed),
     ratingBandId: normalizeRatingBandId(row.rating_band_id),
     ratingSource: row.rating_source === "manual" || row.rating_source === "chesscom" || row.rating_source === "lichess" || row.rating_source === "default" ? row.rating_source : "default",
+    timeZone: normalizeText(row.time_zone) || undefined,
     rawRating: typeof row.raw_rating === "number" ? row.raw_rating : undefined,
     ratingTimeControl:
       row.rating_time_control === "rapid" ||

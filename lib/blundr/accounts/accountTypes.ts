@@ -21,6 +21,8 @@ export type UserTrainingProfile = {
   onboardingCompleted: boolean;
   ratingBandId: RatingBandId;
   ratingSource: "manual" | "chesscom" | "lichess" | "default";
+  /** Validated IANA timezone used by server-owned daily/reward accounting. */
+  timeZone?: string;
   rawRating?: number;
   ratingTimeControl?: "rapid" | "blitz" | "classical" | "bullet" | "unknown";
   preferredTrainingMode: "assisted" | "plain";
