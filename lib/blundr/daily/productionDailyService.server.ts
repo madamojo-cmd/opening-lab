@@ -11,7 +11,10 @@ import type { CurrentBlundrUser } from "@/lib/blundr/accounts/accountTypes";
 import { normalizeStarterPackId } from "@/lib/blundr/accounts/accountDefaults";
 import { loadTrainingRuntimePackage } from "@/lib/blundr/trainingRuntime/trainingRuntimeLoader";
 import { buildDeterministicDailyDeck } from "./core/dailyDeckPolicy";
-import { reduceDailySession } from "./core/dailySessionReducer";
+import {
+  hasRecordedDailyFirstAttempt,
+  reduceDailySession,
+} from "./core/dailySessionReducer";
 import type { DailySessionState } from "./core/dailyActivityTypes";
 import { ProductionDailyRepository } from "./productionDailyRepository.server";
 import type {
@@ -1036,9 +1039,9 @@ export async function applyDailyAction(input: {
       correct: answerCorrect,
     };
   }
-  const firstAttemptAlreadyRecorded = session.state.attempts.some(
-    (attempt) =>
-      attempt.card.cardFingerprint === input.cardFingerprint && attempt.scored,
+  const firstAttemptAlreadyRecorded = hasRecordedDailyFirstAttempt(
+    session.state,
+    input.cardFingerprint,
   );
   const correct =
     input.action === "answer" &&

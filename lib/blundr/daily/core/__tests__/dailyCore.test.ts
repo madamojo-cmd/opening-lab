@@ -10,7 +10,10 @@ import {
   InMemoryDailyDeckReservation,
   LocalDailySessionPersistence,
 } from "..";
-import { reduceDailySession } from "../dailySessionReducer";
+import {
+  hasRecordedDailyFirstAttempt,
+  reduceDailySession,
+} from "../dailySessionReducer";
 const card = {
   deckFingerprint: "deck" as DeckFingerprint,
   cardFingerprint: "card" as CardFingerprint,
@@ -213,4 +216,55 @@ test("Daily reveal and retry remain unscored and cannot replace the first scored
     0,
   );
   assert.equal(retry.state.revealedCardIds.length, 0);
+});
+
+test("Daily reveal remains first-attempt evidence after retry and reload", () => {
+  const deck = buildDeterministicDailyDeck({
+    userId: "u",
+    dateKey: "2026-08-14",
+    candidates: [card],
+  });
+
+  const initial = {
+    deck,
+    attempts: [],
+    currentIndex: 0,
+    revealedCardIds: [],
+    firstAttemptIds: [],
+    status: "in_progress" as const,
+  };
+
+  assert.equal(hasRecordedDailyFirstAttempt(initial, "card"), false);
+
+  const revealed = reduceDailySession(initial, {
+    userId: "u",
+    cardFingerprint: "card",
+    now: "2026-08-14T19:00:00Z",
+    outcome: "reveal",
+  });
+
+  assert.equal(revealed.state.attempts[0]?.scored, false);
+  assert.equal(hasRecordedDailyFirstAttempt(revealed.state, "card"), true);
+
+  const retried = reduceDailySession(revealed.state, {
+    userId: "u",
+    cardFingerprint: "card",
+    now: "2026-08-14T19:01:00Z",
+    outcome: "retry",
+  });
+
+  const reloaded = JSON.parse(
+    JSON.stringify(retried.state),
+  ) as typeof retried.state;
+
+  assert.equal(hasRecordedDailyFirstAttempt(reloaded, "card"), true);
+
+  const retryOnly = reduceDailySession(initial, {
+    userId: "u",
+    cardFingerprint: "card",
+    now: "2026-08-14T19:02:00Z",
+    outcome: "retry",
+  });
+
+  assert.equal(hasRecordedDailyFirstAttempt(retryOnly.state, "card"), false);
 });

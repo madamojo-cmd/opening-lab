@@ -9,6 +9,20 @@ import type {
 } from "./dailyActivityTypes";
 import { buildDailyPresentation } from "./dailyPresentationModel";
 
+export function hasRecordedDailyFirstAttempt(
+  state: Pick<DailySessionState, "attempts" | "firstAttemptIds">,
+  cardFingerprint: string,
+): boolean {
+  return (
+    state.firstAttemptIds.includes(cardFingerprint) ||
+    state.attempts.some(
+      (attempt) =>
+        attempt.card.cardFingerprint === cardFingerprint &&
+        attempt.outcome !== "retry",
+    )
+  );
+}
+
 export function reduceDailySession(
   state: DailySessionState,
   input: {
