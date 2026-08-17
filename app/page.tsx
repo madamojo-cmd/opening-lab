@@ -221,7 +221,6 @@ import {
   getStage2RatingBandForAccountRatingBand,
   type Stage2RatingBand,
 } from "@/lib/blundr/ratings/ratingBands";
-import { unavailableMaiaProvider } from "@/lib/blundr/maia/maiaProvider";
 import { MaiaApiClientProvider } from "@/lib/blundr/maia/maiaApiClientProvider";
 import {
   buildMaiaOpponentReplyDecision,
@@ -601,11 +600,11 @@ const USER_MOVE_RATING_MULTIPV = 32;
 const MAIA_OPPONENT_TIMEOUT_MS = 1500;
 const MAIA_MAX_ALLOWED_OPPONENT_CP_LOSS = 500;
 const MAIA_OPPONENT_REPLY_SANITY_GUARD_ENABLED = true;
-const maiaApiClientEnabled =
-  process.env.NEXT_PUBLIC_MAIA_API_ENABLED === "true";
-const maiaOpponentProvider = maiaApiClientEnabled
-  ? new MaiaApiClientProvider()
-  : unavailableMaiaProvider;
+// Browser-side Maia must not be compiled out by a preview-only/public env flag.
+// The authenticated `/api/maia/opponent-reply` route is the runtime availability
+// authority and already fails closed when the remote Maia service is unavailable.
+const maiaApiClientEnabled = true;
+const maiaOpponentProvider = new MaiaApiClientProvider();
 type LiveBrain = {
   ratingLabel: string;
   ratingPool: string;
@@ -13078,8 +13077,7 @@ function BlundrApp({
             : null,
           opponentVariationDebug,
           maiaEnabled: true,
-          maiaRuntimeEnabled:
-            process.env.NEXT_PUBLIC_MAIA_API_ENABLED === "true",
+          maiaRuntimeEnabled: maiaApiClientEnabled,
           maiaApiClientEnabled: maiaApiClientEnabled,
           maiaProviderName: maiaOpponentProvider.name,
           maiaProviderVersion: maiaOpponentProvider.version,
