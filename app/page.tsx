@@ -78,7 +78,7 @@ import {
   reserveAuthoritativeTrainerSession,
   type AuthoritativeTrainerSession,
 } from "@/lib/blundr/trainerCompletion/trainerCompletionClient";
-import { persistContinuationCompletion } from "@/lib/blundr/continuation/continuationCompletionClient";
+import { persistContinuationCheckmate } from "@/lib/blundr/continuation/continuationCheckmateClient";
 import {
   loadOpponentVariationMemory,
   recordOpponentChoice,
@@ -9611,6 +9611,10 @@ function BlundrApp({
       moveUci: lastContinuationUserMoveRating?.moveUci,
       legal: Boolean(lastContinuationUserMoveRating?.legal),
       stale: Boolean(lastContinuationUserMoveRating?.stale),
+      completedFen: fen,
+      lastMoveUci: lastMove,
+      lastMoveColor,
+      userColor,
     });
     if (
       activeTab !== "train" ||
@@ -9629,7 +9633,7 @@ function BlundrApp({
       const pathUci = moveHistoryUci.slice(continuationStartPly);
       if (
         pathUci.length < 1 ||
-        pathUci.length > 2 ||
+        pathUci.length > 128 ||
         pathUci.at(-1) !== lastContinuationUserMoveRating.moveUci
       )
         return;
@@ -9643,7 +9647,7 @@ function BlundrApp({
     const now = new Date().toISOString();
     const profile =
       onboardingProfile ?? getLocalTrainingProfile(userId) ?? undefined;
-    void persistContinuationCompletion(completionPath)
+    void persistContinuationCheckmate(completionPath)
       .then((evidence) =>
         completeDailyRingActivity({
           userId,
@@ -9695,6 +9699,10 @@ function BlundrApp({
     lastContinuationUserMoveRating,
     selectedRepertoireId,
     moveHistoryUci,
+    fen,
+    lastMove,
+    lastMoveColor,
+    userColor,
     repertoireProgress,
     onboardingProfile,
   ]);
