@@ -265,11 +265,75 @@ async function main() {
     );
     assert.equal(continuation.error, null);
     assert.equal(continuation.data.status, "inserted");
-    const continuationReward = await service.rpc(
+    const genericContinuationReward = await service.rpc(
       REWARD_RPC,
       rewardArgs(
         userAId,
         continuationEvidenceId,
+        "rewards-v2-test",
+        "continuation_completed",
+      ),
+    );
+    assert.ok(
+      genericContinuationReward.error,
+      "generic continuation evidence must not award Battery",
+    );
+    assert.equal(
+      genericContinuationReward.error?.message,
+      "completion_evidence_unverified",
+    );
+
+    const checkmatePathUci = ["f7h7"];
+    const checkmateTerminalFen = "7k/5Q2/6K1/8/8/8/8/8 w - - 0 1";
+    const checkmateFen = "7k/7Q/6K1/8/8/8/8/8 b - - 1 1";
+    const checkmateIdentityMaterial = [
+      userAId,
+      trainerSessionId,
+      terminalCompletionId,
+      checkmatePathUci.join(","),
+    ].join(":");
+    const checkmateEvidenceId = `continuation-checkmate:${createHash("sha256")
+      .update(checkmateIdentityMaterial)
+      .digest("hex")}`;
+    const checkmateRequestFingerprint = createHash("sha256")
+      .update(
+        [
+          checkmateIdentityMaterial,
+          "italian-white",
+          checkmateTerminalFen,
+          checkmateFen,
+          checkmatePathUci.at(-1),
+          "chess.js-server-v1",
+        ].join(":"),
+      )
+      .digest("hex");
+
+    const checkmateEvidence = await service.rpc(
+      "blundr_commit_continuation_checkmate_v1",
+      {
+        p_user_id: userAId,
+        p_completion: {
+          completion_id: checkmateEvidenceId,
+          trainer_session_id: trainerSessionId,
+          terminal_completion_id: terminalCompletionId,
+          opening_id: "italian-white",
+          path_uci: checkmatePathUci,
+          terminal_fen: checkmateTerminalFen,
+          checkmate_fen: checkmateFen,
+          mating_move_uci: checkmatePathUci.at(-1),
+          request_fingerprint: checkmateRequestFingerprint,
+          verification_version: "chess.js-server-v1",
+        },
+      },
+    );
+    assert.equal(checkmateEvidence.error, null);
+    assert.equal(checkmateEvidence.data.status, "inserted");
+
+    const continuationReward = await service.rpc(
+      REWARD_RPC,
+      rewardArgs(
+        userAId,
+        checkmateEvidenceId,
         "rewards-v2-test",
         "continuation_completed",
       ),
@@ -283,7 +347,7 @@ async function main() {
           REWARD_RPC,
           rewardArgs(
             userAId,
-            continuationEvidenceId,
+            checkmateEvidenceId,
             "rewards-v2-test",
             "continuation_completed",
           ),
@@ -297,7 +361,7 @@ async function main() {
           REWARD_RPC,
           rewardArgs(
             userBId,
-            continuationEvidenceId,
+            checkmateEvidenceId,
             "rewards-v2-test",
             "continuation_completed",
           ),
@@ -322,7 +386,7 @@ async function main() {
       grants.data?.some(
         (grant) =>
           grant.source === "continuation_completed" &&
-          grant.evidence_id === continuationEvidenceId,
+          grant.evidence_id === checkmateEvidenceId,
       ),
     );
     const ring = await service
