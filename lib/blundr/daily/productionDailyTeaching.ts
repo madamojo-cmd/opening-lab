@@ -1,11 +1,63 @@
 import { Chess, type PieceSymbol, type Square } from "chess.js";
 
-import type { ProductionDailyTeachingPayload } from "./productionDailyTypes";
+import type {
+  ProductionDailyPublicCard,
+  ProductionDailyPublicOption,
+  ProductionDailyTeachingPayload,
+} from "./productionDailyTypes";
 
 const UCI_MOVE_PATTERN = /^([a-h][1-8])([a-h][1-8])([qrbn])?$/i;
 
 export function isProductionDailyUciMove(value: string): boolean {
   return UCI_MOVE_PATTERN.test(String(value ?? "").trim());
+}
+
+export function productionDailyOptionMoveUci(
+  option: Pick<ProductionDailyPublicOption, "id" | "moveUci">,
+): string | null {
+  const explicit = String(option.moveUci ?? "").trim().toLowerCase();
+  if (isProductionDailyUciMove(explicit)) return explicit;
+  const legacyId = String(option.id ?? "").trim().toLowerCase();
+  return isProductionDailyUciMove(legacyId) ? legacyId : null;
+}
+
+export function productionDailyCardAcceptsBoardInput(
+  card: Pick<ProductionDailyPublicCard, "interaction" | "options">,
+): boolean {
+  return (
+    card.interaction === "move" ||
+    Boolean(
+      card.options?.some(
+        (option) => productionDailyOptionMoveUci(option) !== null,
+      ),
+    )
+  );
+}
+
+export function resolveProductionDailyBoardAnswer(
+  card: Pick<ProductionDailyPublicCard, "interaction" | "options">,
+  moveUci: string,
+): string {
+  const normalizedMove = String(moveUci ?? "").trim().toLowerCase();
+  if (card.interaction === "move") return normalizedMove;
+  const option = card.options?.find(
+    (candidate) =>
+      productionDailyOptionMoveUci(candidate) === normalizedMove,
+  );
+  return option?.id ?? normalizedMove;
+}
+
+export function resolveProductionDailyAnswerMoveUci(
+  card: Pick<ProductionDailyPublicCard, "options">,
+  answer: string,
+): string | null {
+  const normalizedAnswer = String(answer ?? "").trim();
+  if (isProductionDailyUciMove(normalizedAnswer))
+    return normalizedAnswer.toLowerCase();
+  const option = card.options?.find(
+    (candidate) => candidate.id === normalizedAnswer,
+  );
+  return option ? productionDailyOptionMoveUci(option) : null;
 }
 
 export function buildProductionDailyTeachingPayload(input: {

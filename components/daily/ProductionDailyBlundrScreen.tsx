@@ -16,7 +16,9 @@ import type {
 } from "@/lib/blundr/daily/productionDailyTypes";
 import {
   buildProductionDailyTeachingPayload,
-  isProductionDailyUciMove,
+  productionDailyCardAcceptsBoardInput,
+  resolveProductionDailyAnswerMoveUci,
+  resolveProductionDailyBoardAnswer,
 } from "@/lib/blundr/daily/productionDailyTeaching";
 import { BLUNDR_DAILY_RING_REFRESH_EVENT } from "@/lib/blundr/daily-rings/dailyRingRefreshSignal";
 import { notifyRewardPresentationRefresh } from "@/lib/blundr/rewards/rewardPresentationSignal";
@@ -134,11 +136,7 @@ export function ProductionDailyBlundrScreen() {
   }, [teaching]);
 
   const boardAcceptsMoveInput = Boolean(
-    displayCard &&
-      (displayCard.interaction === "move" ||
-        displayCard.options?.some((option) =>
-          isProductionDailyUciMove(option.id),
-        )),
+    displayCard && productionDailyCardAcceptsBoardInput(displayCard),
   );
   const boardDisabled =
     actionBusy ||
@@ -179,14 +177,17 @@ export function ProductionDailyBlundrScreen() {
         },
       );
 
-      const confirmedTeaching =
+      const confirmedMoveUci =
         kind === "attempt" && response.correct && answer
-          ? buildProductionDailyTeachingPayload({
-              sourceFen: actedCard.positionFen,
-              moveUci: answer,
-              note: "Correct. Review the verified move before continuing.",
-            })
+          ? resolveProductionDailyAnswerMoveUci(actedCard, answer)
           : null;
+      const confirmedTeaching = confirmedMoveUci
+        ? buildProductionDailyTeachingPayload({
+            sourceFen: actedCard.positionFen,
+            moveUci: confirmedMoveUci,
+            note: "Correct. Review the verified move before continuing.",
+          })
+        : null;
 
       setSession(response.session);
       if (kind === "retry") {
@@ -199,17 +200,22 @@ export function ProductionDailyBlundrScreen() {
         });
       }
 
-      const message =
-        response.presentation?.feedback?.message ??
-        (response.correct
-          ? "Correct."
-          : kind === "reveal"
-            ? "The verified move is now shown on the board."
-            : "Recorded.");
+      const incorrectAnswer =
+        kind === "attempt" && response.correct === false;
+      const message = incorrectAnswer
+        ? "Incorrect answer. Try again or reveal the verified move."
+        : response.presentation?.feedback?.message ??
+          (response.correct
+            ? "Correct."
+            : kind === "reveal"
+              ? "The verified move is now shown on the board."
+              : "Recorded.");
       setFeedback({
         message,
-        tone: response.correct
-          ? "success"
+        tone: response.correct || incorrectAnswer
+          ? response.correct
+            ? "success"
+            : "warning"
           : kind === "reveal"
             ? "warning"
             : "neutral",
@@ -236,7 +242,11 @@ export function ProductionDailyBlundrScreen() {
   }
 
   async function handleMove(attempt: DailyBlundrBoardMoveAttempt) {
-    await action("attempt", attempt.uci);
+    if (!displayCard) return;
+    await action(
+      "attempt",
+      resolveProductionDailyBoardAnswer(displayCard, attempt.uci),
+    );
   }
 
   function handleContinue() {

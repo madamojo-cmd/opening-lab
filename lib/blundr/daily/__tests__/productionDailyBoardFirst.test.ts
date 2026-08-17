@@ -5,6 +5,9 @@ import { toPublicDailySession } from "../productionDailyProjection";
 import {
   buildProductionDailyTeachingPayload,
   isProductionDailyUciMove,
+  productionDailyCardAcceptsBoardInput,
+  resolveProductionDailyAnswerMoveUci,
+  resolveProductionDailyBoardAnswer,
 } from "../productionDailyTeaching";
 import type {
   ProductionDailyPrivateCard,
@@ -88,6 +91,28 @@ function testTeachingMoveProjection(): void {
     }),
     null,
   );
+}
+
+function testOpaqueCandidateChoiceSupportsBoardInput(): void {
+  const card = basePublicCard({
+    interaction: "choice",
+    options: [
+      { id: "approved-e2e4", label: "e4", moveUci: "e2e4" },
+      { id: "mistake-d2d4", label: "d4", moveUci: "d2d4" },
+      { id: "alternative-c2c4", label: "c4", moveUci: "c2c4" },
+    ],
+  });
+
+  assert.equal(productionDailyCardAcceptsBoardInput(card), true);
+  assert.equal(
+    resolveProductionDailyBoardAnswer(card, "e2e4"),
+    "approved-e2e4",
+  );
+  assert.equal(
+    resolveProductionDailyAnswerMoveUci(card, "approved-e2e4"),
+    "e2e4",
+  );
+  assert.equal(resolveProductionDailyBoardAnswer(card, "g1f3"), "g1f3");
 }
 
 function testInitialProjectionDoesNotLeakTeaching(): void {
@@ -205,6 +230,7 @@ function testContinuationRevealUsesCurrentVerifiedStep(): void {
 }
 
 testTeachingMoveProjection();
+testOpaqueCandidateChoiceSupportsBoardInput();
 testInitialProjectionDoesNotLeakTeaching();
 testRevealProjectsTeachingAndRetryHidesItAgain();
 testContinuationRevealUsesCurrentVerifiedStep();
