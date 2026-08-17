@@ -231,6 +231,7 @@ import {
   withMaiaTimeout,
 } from "@/lib/blundr/maia/maiaOpponentProvider";
 import { applyMaiaMoveOnRequestFen } from "@/lib/blundr/maia/maiaLegalityRequestFenContract";
+import { shouldOfferMaiaOpponentRetry } from "@/lib/blundr/maia/maiaOpponentRetry";
 import {
   appendMaiaTimeline,
   createMaiaTimelineEvent,
@@ -3641,6 +3642,16 @@ function BlundrApp({
   const userColor: ChessColor = repertoire.color === "white" ? "w" : "b";
   const opponentColor: ChessColor = userColor === "w" ? "b" : "w";
   const isUserTurn = game.turn() === userColor;
+  const maiaOpponentRetryAvailable = shouldOfferMaiaOpponentRetry({
+    trainingMode,
+    trainerPhase,
+    maiaUnavailable: runtimeCriticalIssues.includes(
+      "maia_continuation_unavailable",
+    ),
+    hasPendingRequest: Boolean(pendingOpponentRequest),
+    gameOver: game.isGameOver(),
+    opponentToMove: game.turn() === opponentColor,
+  });
   const runtimeBackedRestrictedLineActive = Boolean(
     activeTab === "train" &&
       trainingMode === "restricted" &&
@@ -10871,7 +10882,7 @@ function BlundrApp({
         pushRuntimeCriticalIssue("maia_continuation_unavailable");
         setTrainerPhase("error");
         setFeedback(
-          "Maia is unavailable for this exact continuation position. No substitute opponent move was played; try again when Maia is ready.",
+          "Maia is unavailable for this exact continuation position. No substitute opponent move was played. Retry the opponent move when Maia is ready.",
         );
         setBrain((p) => ({
           ...p,
@@ -11032,6 +11043,58 @@ function BlundrApp({
       note: variationNote,
     }));
   }
+  function handleRetryMaiaOpponentMove() {
+    const retryFen = fenRef.current ?? fen;
+    let retryGame: Chess;
+    try {
+      retryGame = new Chess(retryFen);
+    } catch {
+      setFeedback(
+        "The opponent reply could not be retried because the current board position is invalid.",
+      );
+      return;
+    }
+
+    const retryAllowed = shouldOfferMaiaOpponentRetry({
+      trainingMode,
+      trainerPhase,
+      maiaUnavailable: runtimeCriticalIssues.includes(
+        "maia_continuation_unavailable",
+      ),
+      hasPendingRequest: Boolean(pendingOpponentRequestRef.current),
+      gameOver: retryGame.isGameOver(),
+      opponentToMove: retryGame.turn() === opponentColor,
+    });
+
+    if (!retryAllowed) {
+      setFeedback(
+        pendingOpponentRequestRef.current
+          ? "Opponent reply retry is already in progress."
+          : "Opponent reply retry is no longer available for this position.",
+      );
+      return;
+    }
+
+    setFeedback("Retrying Maia from the same continuation position…");
+    const scheduled = scheduleOpponentReply({
+      mode: "continuation",
+      delayMs: 0,
+      baseFen: retryFen,
+      continuationAuthorized: true,
+      hasUserContinuationMove: true,
+    });
+
+    if (!scheduled) {
+      setTrainerPhase("error");
+      setFeedback(
+        "Maia retry could not be scheduled for this position. No substitute opponent move was played.",
+      );
+      return;
+    }
+
+    clearRuntimeCriticalIssue("maia_continuation_unavailable");
+  }
+
   function handleTrainerViewChange(nextTrainerView: TrainerView) {
     if (nextTrainerView === trainerView) return;
     if (shouldClearProjectiveTacticsOnViewMode(nextTrainerView))
@@ -14616,6 +14679,16 @@ function BlundrApp({
                           : "Opponent thinking"}
                   </div>
                   <p className="text-sm leading-6 text-stone-600">{feedback}</p>
+                  {maiaOpponentRetryAvailable && (
+                    <button
+                      type="button"
+                      onClick={handleRetryMaiaOpponentMove}
+                      className="mt-3 inline-flex items-center gap-2 rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-800 shadow-sm transition hover:bg-stone-50"
+                    >
+                      <RotateCcw size={15} />
+                      Retry opponent move
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
