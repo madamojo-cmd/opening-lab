@@ -10,7 +10,14 @@ import {
 import { DailyBlundrBoard } from "@/components/daily/DailyBlundrBoard";
 import { DailyBlundrCardFeedback } from "@/components/daily/DailyBlundrCardFeedback";
 import type { DailyBlundrBoardMoveAttempt } from "@/lib/blundr/daily/dailyBlundrPlayerTypes";
-import type { ProductionDailyPublicSession } from "@/lib/blundr/daily/productionDailyTypes";
+import type {
+  ProductionDailyPublicSession,
+  ProductionDailyTeachingPayload,
+} from "@/lib/blundr/daily/productionDailyTypes";
+import {
+  buildProductionDailyTeachingPayload,
+  isProductionDailyUciMove,
+} from "@/lib/blundr/daily/productionDailyTeaching";
 import { BLUNDR_DAILY_RING_REFRESH_EVENT } from "@/lib/blundr/daily-rings/dailyRingRefreshSignal";
 import { notifyRewardPresentationRefresh } from "@/lib/blundr/rewards/rewardPresentationSignal";
 
@@ -21,6 +28,14 @@ type DailyResponse = {
   session: ProductionDailyPublicSession;
 };
 
+type PublicDailyCard = ProductionDailyPublicSession["publicCards"][number];
+
+type ResolvedCheckpoint = {
+  card: PublicDailyCard;
+  taskNumber: number | null;
+  teaching: ProductionDailyTeachingPayload;
+};
+
 export function ProductionDailyBlundrScreen() {
   const [session, setSession] = useState<ProductionDailyPublicSession | null>(
     null,
@@ -29,10 +44,8 @@ export function ProductionDailyBlundrScreen() {
     message: string;
     tone: "success" | "warning" | "neutral" | "complete";
   } | null>(null);
-  const [presentation, setPresentation] = useState<{
-    state: string;
-    message: string;
-  } | null>(null);
+  const [resolvedCheckpoint, setResolvedCheckpoint] =
+    useState<ResolvedCheckpoint | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recoveryHref, setRecoveryHref] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
@@ -45,6 +58,8 @@ export function ProductionDailyBlundrScreen() {
         { cache: "no-store" },
       );
       setSession(response.session);
+      setResolvedCheckpoint(null);
+      setFeedback(null);
       setError(null);
       setRecoveryHref(null);
     } catch (nextError) {
@@ -83,6 +98,7 @@ export function ProductionDailyBlundrScreen() {
       ) ?? null
     );
   }, [session]);
+
   const currentTaskNumber = useMemo(() => {
     if (!session || !currentCard) return null;
     const index = session.publicCards.findIndex(
@@ -92,12 +108,52 @@ export function ProductionDailyBlundrScreen() {
   }, [currentCard, session]);
 
   useEffect(() => {
-    setPresentation(null);
+    if (resolvedCheckpoint) return;
     setFeedback(null);
-  }, [currentCard?.cardFingerprint]);
+  }, [currentCard?.cardFingerprint, resolvedCheckpoint]);
 
-  async function action(kind: "attempt" | "reveal" | "retry", answer?: string) {
+  const displayCard = resolvedCheckpoint?.card ?? currentCard;
+  const displayTaskNumber =
+    resolvedCheckpoint?.taskNumber ?? currentTaskNumber;
+  const teaching =
+    resolvedCheckpoint?.teaching ?? displayCard?.teaching ?? null;
+  const boardFen = teaching?.resultFen ?? displayCard?.positionFen ?? null;
+
+  const teachingSquareStyles = useMemo(() => {
+    if (!teaching) return {};
+    return {
+      [teaching.from]: {
+        boxShadow: "inset 0 0 0 4px rgba(245, 158, 11, 0.92)",
+        backgroundColor: "rgba(253, 230, 138, 0.72)",
+      },
+      [teaching.to]: {
+        boxShadow: "inset 0 0 0 4px rgba(22, 163, 74, 0.92)",
+        backgroundColor: "rgba(187, 247, 208, 0.78)",
+      },
+    };
+  }, [teaching]);
+
+  const boardAcceptsMoveInput = Boolean(
+    displayCard &&
+      (displayCard.interaction === "move" ||
+        displayCard.options?.some((option) =>
+          isProductionDailyUciMove(option.id),
+        )),
+  );
+  const boardDisabled =
+    actionBusy ||
+    Boolean(resolvedCheckpoint) ||
+    Boolean(teaching) ||
+    !boardAcceptsMoveInput;
+
+  async function action(
+    kind: "attempt" | "reveal" | "retry",
+    answer?: string,
+  ) {
     if (!session || !currentCard || actionInFlightRef.current) return;
+    const actedCard = currentCard;
+    const actedTaskNumber = currentTaskNumber;
+
     actionInFlightRef.current = true;
     setActionBusy(true);
     setError(null);
@@ -115,22 +171,41 @@ export function ProductionDailyBlundrScreen() {
         {
           method: "POST",
           body: JSON.stringify({
-            cardFingerprint: currentCard.cardFingerprint,
-            actionId: currentCard.actionId,
+            cardFingerprint: actedCard.cardFingerprint,
+            actionId: actedCard.actionId,
             answer,
             expectedVersion: session.version,
           }),
         },
       );
+
+      const confirmedTeaching =
+        kind === "attempt" && response.correct && answer
+          ? buildProductionDailyTeachingPayload({
+              sourceFen: actedCard.positionFen,
+              moveUci: answer,
+              note: "Correct. Review the verified move before continuing.",
+            })
+          : null;
+
       setSession(response.session);
+      if (kind === "retry") {
+        setResolvedCheckpoint(null);
+      } else if (confirmedTeaching) {
+        setResolvedCheckpoint({
+          card: actedCard,
+          taskNumber: actedTaskNumber,
+          teaching: confirmedTeaching,
+        });
+      }
+
       const message =
         response.presentation?.feedback?.message ??
         (response.correct
           ? "Correct."
           : kind === "reveal"
-            ? "The verified explanation is now available."
+            ? "The verified move is now shown on the board."
             : "Recorded.");
-      setPresentation({ state: response.presentation?.state ?? kind, message });
       setFeedback({
         message,
         tone: response.correct
@@ -139,6 +214,7 @@ export function ProductionDailyBlundrScreen() {
             ? "warning"
             : "neutral",
       });
+
       if (response.session.completedAt) {
         window.dispatchEvent(new Event(BLUNDR_DAILY_RING_REFRESH_EVENT));
         notifyRewardPresentationRefresh();
@@ -161,6 +237,11 @@ export function ProductionDailyBlundrScreen() {
 
   async function handleMove(attempt: DailyBlundrBoardMoveAttempt) {
     await action("attempt", attempt.uci);
+  }
+
+  function handleContinue() {
+    setResolvedCheckpoint(null);
+    setFeedback(null);
   }
 
   return (
@@ -190,6 +271,7 @@ export function ProductionDailyBlundrScreen() {
             </Link>
           </div>
         </header>
+
         {error ? (
           <section className="mt-5 rounded-3xl border border-amber-200 bg-amber-50 p-5">
             <p
@@ -216,6 +298,7 @@ export function ProductionDailyBlundrScreen() {
             )}
           </section>
         ) : null}
+
         {!error && !session ? (
           <section className="mt-5 rounded-3xl border border-stone-200 bg-white p-5">
             <p className="text-sm text-stone-600">
@@ -223,7 +306,8 @@ export function ProductionDailyBlundrScreen() {
             </p>
           </section>
         ) : null}
-        {session && !currentCard ? (
+
+        {session && !currentCard && !resolvedCheckpoint ? (
           <section className="mt-5 rounded-3xl border border-green-200 bg-green-50 p-5">
             <Sparkles className="text-green-700" size={20} />
             <h2 className="mt-3 text-lg font-black">Daily complete</h2>
@@ -232,33 +316,73 @@ export function ProductionDailyBlundrScreen() {
             </p>
           </section>
         ) : null}
-        {session && currentCard ? (
+
+        {session && displayCard && boardFen ? (
           <section className="mt-5 space-y-4 rounded-3xl bg-stone-900 p-4 text-white">
             <div>
               <div className="text-xs font-black uppercase tracking-[0.18em] text-green-300">
-                {currentCard.activityId.replaceAll("_", " ")}
+                {displayCard.activityId.replaceAll("_", " ")}
               </div>
-              {currentTaskNumber ? (
+              {displayTaskNumber ? (
                 <div className="mt-2 text-xs font-bold text-stone-400">
-                  Task {currentTaskNumber} of {session.publicCards.length}
+                  Task {displayTaskNumber} of {session.publicCards.length}
                 </div>
               ) : null}
-              <h2 className="mt-2 text-xl font-black">{currentCard.title}</h2>
+              <h2 className="mt-2 text-xl font-black">{displayCard.title}</h2>
               <p className="mt-2 text-sm leading-6 text-stone-300">
-                {currentCard.prompt}
+                {displayCard.prompt}
               </p>
-              <p className="mt-2 text-xs text-stone-400">{currentCard.why}</p>
+              <p className="mt-2 text-xs text-stone-400">{displayCard.why}</p>
             </div>
-            {currentCard.interaction === "choice" && currentCard.options ? (
+
+            <DailyBlundrBoard
+              fen={boardFen}
+              disabled={boardDisabled}
+              onSquareClick={() => undefined}
+              onMoveAttempt={(attempt) => void handleMove(attempt)}
+              openingColor={displayCard.side}
+              forcedOrientation={displayCard.side}
+              boardVisuals={null}
+              squareStyles={teachingSquareStyles}
+              animationClassName={null}
+            />
+
+            {teaching ? (
+              <div
+                data-testid="daily-teaching-move"
+                className="rounded-2xl border border-green-700/50 bg-green-950/60 p-4"
+              >
+                <div className="text-xs font-black uppercase tracking-[0.18em] text-green-300">
+                  Verified move
+                </div>
+                <div className="mt-1 text-lg font-black text-white">
+                  {teaching.moveSan}
+                </div>
+                <div className="mt-1 text-xs font-bold text-green-200">
+                  {teaching.from} → {teaching.to}
+                </div>
+                {teaching.note ? (
+                  <p className="mt-2 text-sm leading-6 text-green-100">
+                    {teaching.note}
+                  </p>
+                ) : null}
+                <p className="mt-2 text-xs text-green-300">
+                  The board shows the resulting verified position.
+                </p>
+              </div>
+            ) : null}
+
+            {displayCard.interaction === "choice" &&
+            displayCard.options?.length ? (
               <div className="grid gap-2">
-                {currentCard.options.map((option) => (
+                {displayCard.options.map((option) => (
                   <button
                     key={option.id}
                     type="button"
                     disabled={
                       actionBusy ||
-                      presentation?.state === "revealed" ||
-                      presentation?.state === "committed"
+                      Boolean(resolvedCheckpoint) ||
+                      Boolean(teaching)
                     }
                     onClick={() => void action("attempt", option.id)}
                     className="min-h-12 rounded-2xl bg-white px-4 py-3 text-left text-sm font-black text-stone-900 disabled:opacity-60"
@@ -267,42 +391,39 @@ export function ProductionDailyBlundrScreen() {
                   </button>
                 ))}
               </div>
+            ) : null}
+
+            {resolvedCheckpoint ? (
+              <button
+                type="button"
+                disabled={actionBusy}
+                onClick={handleContinue}
+                className="min-h-11 w-full rounded-2xl bg-green-500 px-4 py-3 text-sm font-black text-stone-950 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Continue
+              </button>
             ) : (
-              <DailyBlundrBoard
-                fen={currentCard.positionFen}
-                disabled={
-                  actionBusy ||
-                  presentation?.state === "revealed" ||
-                  presentation?.state === "committed"
-                }
-                onSquareClick={() => undefined}
-                onMoveAttempt={(attempt) => void handleMove(attempt)}
-                openingColor={currentCard.side}
-                forcedOrientation={currentCard.side}
-                boardVisuals={null}
-                squareStyles={{}}
-                animationClassName={null}
-              />
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={actionBusy || Boolean(teaching)}
+                  onClick={() => void action("reveal")}
+                  className="min-h-11 rounded-2xl bg-white px-4 py-3 text-sm font-black text-green-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Reveal
+                </button>
+                <button
+                  type="button"
+                  disabled={actionBusy}
+                  onClick={() => void action("retry")}
+                  className="min-h-11 rounded-2xl bg-stone-700 px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <RefreshCw size={15} className="mr-1 inline" />
+                  Retry
+                </button>
+              </div>
             )}
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={actionBusy}
-                onClick={() => void action("reveal")}
-                className="min-h-11 rounded-2xl bg-white px-4 py-3 text-sm font-black text-green-800 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Reveal
-              </button>
-              <button
-                type="button"
-                disabled={actionBusy}
-                onClick={() => void action("retry")}
-                className="min-h-11 rounded-2xl bg-stone-700 px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <RefreshCw size={15} className="mr-1 inline" />
-                Retry
-              </button>
-            </div>
+
             {feedback ? (
               <DailyBlundrCardFeedback
                 message={feedback.message}
@@ -311,6 +432,7 @@ export function ProductionDailyBlundrScreen() {
             ) : null}
           </section>
         ) : null}
+
         <Link
           href="/review"
           className="mt-5 inline-flex items-center gap-2 text-sm font-black text-green-700"

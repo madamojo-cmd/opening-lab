@@ -7,6 +7,17 @@ export type DailyReservationIdentity = {
   profileVersion: string;
 };
 
+export type ProductionDailyTeachingPayload = {
+  sourceFen: string;
+  moveUci: string;
+  moveSan: string;
+  resultFen: string;
+  from: string;
+  to: string;
+  promotion: string | null;
+  note?: string;
+};
+
 export type ProductionDailyPublicStep = {
   stepIndex: number;
   positionFen: string;
@@ -35,6 +46,7 @@ export type ProductionDailyPublicCard = {
   interaction: "move" | "choice";
   options?: readonly { id: string; label: string }[];
   steps?: readonly ProductionDailyPublicStep[];
+  teaching?: ProductionDailyTeachingPayload;
 };
 
 export type ProductionDailyPrivateCard = ProductionDailyPublicCard & {
