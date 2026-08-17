@@ -464,7 +464,7 @@ async function buildReservation(
     prompt: string,
     acceptedMoves: readonly string[],
     explanation: string,
-    options?: readonly { id: string; label: string }[],
+    options?: readonly { id: string; label: string; moveUci?: string }[],
     acceptedAnswers?: readonly string[],
     privateSteps?: readonly ProductionDailyPrivateStep[],
   ) => {
@@ -541,6 +541,7 @@ async function buildReservation(
         choices: labels.map((move) => ({
           id: move.moveUci,
           label: legalByUci.get(move.moveUci) ?? move.moveUci,
+          moveUci: move.moveUci,
         })),
         acceptedIds: [primary.moveUci],
         validForFen: true,
@@ -590,6 +591,7 @@ async function buildReservation(
         const options = built.solution.candidates.map((candidate) => ({
           id: candidate.id,
           label: candidate.label,
+          moveUci: candidate.uci,
         }));
         addCard(
           entry,

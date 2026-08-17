@@ -175,8 +175,9 @@ test("the active Daily browser submits only reserved actions and never owns rewa
     ),
     "utf8",
   );
-  assert.match(screen, /cardFingerprint: currentCard\.cardFingerprint/);
-  assert.match(screen, /actionId: currentCard\.actionId/);
+  assert.match(screen, /const actedCard = currentCard/);
+  assert.match(screen, /cardFingerprint: actedCard\.cardFingerprint/);
+  assert.match(screen, /actionId: actedCard\.actionId/);
   assert.doesNotMatch(
     screen,
     /recordBlundrTaskCompleted|completeDailyRingActivity|applyRewardCompletion/,
