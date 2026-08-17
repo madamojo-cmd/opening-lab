@@ -65,7 +65,8 @@ export async function POST(request: Request) {
       trainerSessionId: body.trainerSessionId,
       pathUci: body.pathUci,
     });
-    await emitBlundrOperationalEvent("continuation_checkmate_accepted", {
+    await emitBlundrOperationalEvent("continuation_completion_accepted", {
+      kind: "checkmate",
       status: result.status,
     });
     return NextResponse.json(result, {
@@ -76,7 +77,8 @@ export async function POST(request: Request) {
       error instanceof Error
         ? text(error.message)
         : "continuation_checkmate_persistence_unavailable";
-    await emitBlundrOperationalEvent("continuation_checkmate_rejected", {
+    await emitBlundrOperationalEvent("continuation_completion_rejected", {
+      kind: "checkmate",
       reason: code,
     });
     return NextResponse.json(
