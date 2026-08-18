@@ -22,24 +22,17 @@ function normalizedUci(value: unknown): string {
 export function isBatteryCompletionEligible(input: {
   trainingMode: "restricted" | "continuation";
   userEnteredContinuation: boolean;
-  moveUci: string | null | undefined;
-  legal: boolean;
-  stale: boolean;
   completedFen: string;
   lastMoveUci: string | null | undefined;
   lastMoveColor: "w" | "b" | null | undefined;
   userColor: "w" | "b";
 }): boolean {
-  const moveUci = normalizedUci(input.moveUci);
   const lastMoveUci = normalizedUci(input.lastMoveUci);
   if (
     input.trainingMode !== "continuation" ||
     !input.userEnteredContinuation ||
-    !moveUci ||
-    !input.legal ||
-    input.stale ||
-    input.lastMoveColor !== input.userColor ||
-    lastMoveUci !== moveUci
+    !lastMoveUci ||
+    input.lastMoveColor !== input.userColor
   ) {
     return false;
   }

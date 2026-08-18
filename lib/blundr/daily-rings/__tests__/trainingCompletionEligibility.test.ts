@@ -33,16 +33,13 @@ test("authoritative restricted branch completion closes Tempo", () => {
   );
 });
 
-test("only learner-delivered verified checkmate is Battery eligible", () => {
+test("committed learner-delivered checkmate is Battery submission eligible", () => {
   const completedFen = resultFen(MATE_START_FEN, "f7h7");
   assert.equal(new Chess(completedFen).isCheckmate(), true);
   assert.equal(
     isBatteryCompletionEligible({
       trainingMode: "continuation",
       userEnteredContinuation: true,
-      moveUci: "f7h7",
-      legal: true,
-      stale: false,
       completedFen,
       lastMoveUci: "f7h7",
       lastMoveColor: "w",
@@ -52,18 +49,32 @@ test("only learner-delivered verified checkmate is Battery eligible", () => {
   );
 });
 
-test("legal non-mate, stalemate, opponent move, stale and mismatched moves cannot close Battery", () => {
+test("Battery submission does not depend on continuation move-rating availability", () => {
+  const completedFen = resultFen(MATE_START_FEN, "f7h7");
+
+  assert.equal(
+    isBatteryCompletionEligible({
+      trainingMode: "continuation",
+      userEnteredContinuation: true,
+      completedFen,
+      lastMoveUci: "f7h7",
+      lastMoveColor: "w",
+      userColor: "w",
+    }),
+    true,
+  );
+});
+
+test("non-mate, stalemate, opponent mate ownership and invalid state cannot submit Battery evidence", () => {
   const normalFen = resultFen(new Chess().fen(), "e2e4");
   const stalemateFen = resultFen(STALEMATE_START_FEN, "g5g6");
   assert.equal(new Chess(stalemateFen).isStalemate(), true);
 
+  const mateFen = resultFen(MATE_START_FEN, "f7h7");
   const base = {
     trainingMode: "continuation" as const,
     userEnteredContinuation: true,
-    moveUci: "f7h7",
-    legal: true,
-    stale: false,
-    completedFen: resultFen(MATE_START_FEN, "f7h7"),
+    completedFen: mateFen,
     lastMoveUci: "f7h7",
     lastMoveColor: "w" as const,
     userColor: "w" as const,
@@ -72,21 +83,9 @@ test("legal non-mate, stalemate, opponent move, stale and mismatched moves canno
   const cases = [
     { ...base, trainingMode: "restricted" as const },
     { ...base, userEnteredContinuation: false },
-    {
-      ...base,
-      moveUci: "e2e4",
-      lastMoveUci: "e2e4",
-      completedFen: normalFen,
-    },
-    {
-      ...base,
-      moveUci: "g5g6",
-      lastMoveUci: "g5g6",
-      completedFen: stalemateFen,
-    },
-    { ...base, legal: false },
-    { ...base, stale: true },
-    { ...base, lastMoveUci: "a2a3" },
+    { ...base, completedFen: normalFen, lastMoveUci: "e2e4" },
+    { ...base, completedFen: stalemateFen, lastMoveUci: "g5g6" },
+    { ...base, lastMoveUci: null },
     { ...base, lastMoveColor: "b" as const },
     { ...base, completedFen: "not-a-fen" },
   ];

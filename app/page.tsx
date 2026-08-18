@@ -9608,20 +9608,12 @@ function BlundrApp({
     const continuationMoveCompleted = isBatteryCompletionEligible({
       trainingMode,
       userEnteredContinuation: userExplicitlyEnteredContinuation,
-      moveUci: lastContinuationUserMoveRating?.moveUci,
-      legal: Boolean(lastContinuationUserMoveRating?.legal),
-      stale: Boolean(lastContinuationUserMoveRating?.stale),
       completedFen: fen,
       lastMoveUci: lastMove,
       lastMoveColor,
       userColor,
     });
-    if (
-      activeTab !== "train" ||
-      !continuationMoveCompleted ||
-      !lastContinuationUserMoveRating
-    )
-      return;
+    if (activeTab !== "train" || !continuationMoveCompleted || !lastMove) return;
     const trainerSessionId = continuationTrainerSessionIdRef.current;
     const continuationStartPly = continuationStartPlyRef.current;
     if (!trainerSessionId || continuationStartPly === null) return;
@@ -9634,7 +9626,7 @@ function BlundrApp({
       if (
         pathUci.length < 1 ||
         pathUci.length > 128 ||
-        pathUci.at(-1) !== lastContinuationUserMoveRating.moveUci
+        pathUci.at(-1) !== lastMove
       )
         return;
       completionPath = { trainerSessionId, pathUci };
@@ -9696,7 +9688,6 @@ function BlundrApp({
     activeTab,
     trainingMode,
     userExplicitlyEnteredContinuation,
-    lastContinuationUserMoveRating,
     selectedRepertoireId,
     moveHistoryUci,
     fen,
