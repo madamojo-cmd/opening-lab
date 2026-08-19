@@ -77,6 +77,12 @@ export function ReviewHub({
   );
   const enabledGameCount = productionGames.length;
   const hasUnavailableGames = capabilities !== null && enabledGameCount === 0;
+  const dailyAccessStatus =
+    capabilities === null
+      ? "Checking"
+      : capabilities.dailyEnabled === true
+        ? "On"
+        : "Off";
 
   return (
     <section className={classNames("w-full space-y-6", className)}>
@@ -123,26 +129,26 @@ export function ReviewHub({
       <section className="rounded-[2rem] border border-stone-200/80 bg-white/85 px-5 py-5 shadow-[0_18px_40px_rgba(52,40,24,0.08)] backdrop-blur sm:px-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-          <BlundrAssetImage
-            asset={BLUNDR_TEMPO_ASSETS.coach}
-            alt="Blundr coach"
-            variant="tempoCard"
-            className="mx-auto w-full max-w-[10rem] sm:mx-0 sm:w-32"
-          />
-          <div className="min-w-0 flex-1">
-            <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
-              Minigames
+            <BlundrAssetImage
+              asset={BLUNDR_TEMPO_ASSETS.coach}
+              alt="Blundr coach"
+              variant="tempoCard"
+              className="mx-auto w-full max-w-[10rem] sm:mx-0 sm:w-32"
+            />
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
+                Minigames
+              </div>
+              <h2 className="mt-2 text-xl font-semibold tracking-tight text-stone-950">
+                Exactly three deep practice games
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
+                Pick a verified multi-step scenario and practice outside the Daily
+                Blundr loop. The queue stays separate, and the production registry
+                still owns availability.
+              </p>
             </div>
-            <h2 className="mt-2 text-xl font-semibold tracking-tight text-stone-950">
-              Exactly three deep practice games
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
-              Pick a verified multi-step scenario and practice outside the Daily
-              Blundr loop. The queue stays separate, and the production registry
-              still owns availability.
-            </p>
           </div>
-        </div>
           <div className="grid grid-cols-2 gap-3 sm:min-w-[18rem]">
             <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
               <div className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">
@@ -157,7 +163,7 @@ export function ReviewHub({
                 Daily access
               </div>
               <div className="mt-1 text-2xl font-semibold tracking-tight text-stone-950">
-                {capabilities?.dailyEnabled === true ? "On" : "Quiet"}
+                {dailyAccessStatus}
               </div>
             </div>
           </div>

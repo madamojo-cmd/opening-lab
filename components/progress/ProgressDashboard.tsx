@@ -273,35 +273,33 @@ export function ProgressDashboard({
 
   return (
     <section className={classNames("w-full space-y-6 overflow-x-hidden", className)}>
-      {!embedded ? (
-        <header className="flex flex-col gap-5 rounded-[2rem] border border-stone-200/80 bg-white/85 px-5 py-5 shadow-[0_18px_40px_rgba(52,40,24,0.08)] backdrop-blur sm:px-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full bg-green-50 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-green-700">
-              <BarChart3 size={14} />
-              Progress
-            </div>
-            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-stone-950 sm:text-4xl">
-              Training momentum
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-600 sm:text-base">
-              {summary.today.nextBestAction}
-            </p>
+      <header className="flex flex-col gap-5 rounded-[2rem] border border-stone-200/80 bg-white/85 px-5 py-5 shadow-[0_18px_40px_rgba(52,40,24,0.08)] backdrop-blur sm:px-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="max-w-2xl">
+          <div className="inline-flex items-center gap-2 rounded-full bg-green-50 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-green-700">
+            <BarChart3 size={14} />
+            Progress
           </div>
-          <div className="flex items-center gap-2">
-            <ProfileSettingsIcon />
-            <button
-              type="button"
-              onClick={() => {
-                void refreshSummary();
-              }}
-              className="inline-flex min-h-11 items-center justify-center rounded-full border border-stone-200 bg-white px-4 py-3 text-sm font-semibold text-stone-700 shadow-sm transition hover:border-green-200 hover:text-green-700"
-              aria-label="Refresh progress"
-            >
-              <RefreshCw size={18} />
-            </button>
-          </div>
-        </header>
-      ) : null}
+          <h1 className="mt-4 text-3xl font-semibold tracking-tight text-stone-950 sm:text-4xl">
+            Training momentum
+          </h1>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-600 sm:text-base">
+            {summary.today.nextBestAction}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <ProfileSettingsIcon />
+          <button
+            type="button"
+            onClick={() => {
+              void refreshSummary();
+            }}
+            className="inline-flex min-h-11 items-center justify-center rounded-full border border-stone-200 bg-white px-4 py-3 text-sm font-semibold text-stone-700 shadow-sm transition hover:border-green-200 hover:text-green-700"
+            aria-label="Refresh progress"
+          >
+            <RefreshCw size={18} />
+          </button>
+        </div>
+      </header>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(18rem,0.75fr)]">
         <section className="rounded-[2rem] border border-stone-200/80 bg-white/85 px-5 py-5 shadow-[0_18px_40px_rgba(52,40,24,0.08)] backdrop-blur sm:px-6">

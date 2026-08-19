@@ -35,8 +35,19 @@ describe("Review and Progress presentation migration", () => {
   });
 
   it("keeps ProgressDashboard on the canonical rings and manual refresh control", () => {
+    expect(progressDashboard).not.toMatch(/!embedded\s*\?/);
+    expect(progressDashboard).toContain("ProfileSettingsIcon");
+    expect(progressDashboard).toContain('aria-label="Refresh progress"');
     expect(progressDashboard).toContain("NestedDailyRings");
-    expect(progressDashboard).toContain("Refresh progress");
     expect(progressDashboard).toContain("refreshSummary");
+  });
+
+  it("preserves the distinct Review daily access states and capability wiring", () => {
+    expect(reviewHub).toMatch(/capabilities === null\s*\?\s*"Checking"/);
+    expect(reviewHub).toMatch(/capabilities\.dailyEnabled === true\s*\?\s*"On"/);
+    expect(reviewHub).toMatch(/:\s*"Off"/);
+    expect(reviewHub).toContain(
+      "enabled={capabilities?.dailyEnabled ?? null}",
+    );
   });
 });
