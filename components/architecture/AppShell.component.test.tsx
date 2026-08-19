@@ -18,15 +18,15 @@ describe("AppShell", () => {
         task={<button type="button">Submit move</button>}
         context={<p>Due today</p>}
       >
-        <main>
+        <div>
           <p>Existing page content</p>
-        </main>
+        </div>
       </AppShell>,
     );
 
     expect(screen.getByRole("banner")).toBeInTheDocument();
     expect(screen.getAllByRole("navigation")).toHaveLength(1);
-    expect(screen.getAllByRole("main")).toHaveLength(1);
+    expect(screen.getByRole("main")).toBeInTheDocument();
     expect(screen.getByRole("main")).toContainElement(
       screen.getByText("Existing page content"),
     );
@@ -34,7 +34,7 @@ describe("AppShell", () => {
       screen.getByRole("region", { name: "Primary task" }),
     ).toContainElement(screen.getByRole("button", { name: "Submit move" }));
     expect(
-      screen.getByRole("complementary", { name: "Context" }),
+      screen.getByRole("region", { name: "Context" }),
     ).toContainElement(screen.getByText("Due today"));
     expect(
       within(screen.getByRole("navigation", { name: "Primary" })).getByRole(
@@ -46,20 +46,21 @@ describe("AppShell", () => {
 
   it("provides keyboard-sized links for every primary destination", () => {
     render(<AppShell />);
-    const links = within(
-      screen.getByRole("navigation", { name: "Primary" }),
-    ).getAllByRole("link");
-    expect(links).toHaveLength(5);
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    const links = within(nav).getAllByRole("link");
     expect(new Set(links.map((link) => link.getAttribute("href"))).size).toBe(
       5,
     );
-    expect(links.map((link) => link.textContent)).toEqual([
+    const items = within(nav).getAllByRole("listitem");
+    expect(items).toHaveLength(5);
+    expect(items.map((item) => item.textContent)).toEqual([
       "Home",
       "Train",
       "Review",
       "Progress",
       "Repertoire",
     ]);
+    expect(within(nav).getByText("B")).toBeInTheDocument();
   });
 
   it("keeps the standalone catalog limited to the three production games", () => {

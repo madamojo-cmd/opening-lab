@@ -34,12 +34,23 @@ describe("Review and Progress presentation migration", () => {
     expect(reviewHub).toContain("getDailyMiniGameDefinition");
   });
 
-  it("keeps ProgressDashboard on the canonical rings and manual refresh control", () => {
+  it("keeps ProgressDashboard on the canonical rings, lifecycle, and manual refresh control", () => {
     expect(progressDashboard).not.toMatch(/!embedded\s*\?/);
-    expect(progressDashboard).toContain("ProfileSettingsIcon");
     expect(progressDashboard).toContain('aria-label="Refresh progress"');
     expect(progressDashboard).toContain("NestedDailyRings");
     expect(progressDashboard).toContain("refreshSummary");
+    expect(progressDashboard).toContain("authenticatedApiFetch");
+    expect(progressDashboard).toContain("getLocalDateKey");
+    expect(progressDashboard).toContain("BLUNDR_DAILY_RING_REFRESH_EVENT");
+    expect(progressDashboard).toContain('window.addEventListener("storage"');
+    expect(progressDashboard).toContain('window.addEventListener("focus"');
+    expect(progressDashboard).toContain('window.removeEventListener("storage"');
+  });
+
+  it("keeps the Progress route shell-native", () => {
+    expect(progressPage).toContain("ProgressDashboard");
+    expect(progressPage).not.toContain("AppShell");
+    expect(progressPage).not.toContain("ResponsiveAppShellGate");
   });
 
   it("preserves the distinct Review daily access states and capability wiring", () => {
