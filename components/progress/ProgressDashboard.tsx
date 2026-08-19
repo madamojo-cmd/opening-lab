@@ -272,18 +272,18 @@ export function ProgressDashboard({
   }, []);
 
   return (
-    <section className={classNames("space-y-4 overflow-x-hidden", className)}>
-      <header className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
+    <section className={classNames("w-full space-y-6 overflow-x-hidden", className)}>
+      {!embedded ? (
+        <header className="flex flex-col gap-5 rounded-[2rem] border border-stone-200/80 bg-white/85 px-5 py-5 shadow-[0_18px_40px_rgba(52,40,24,0.08)] backdrop-blur sm:px-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-2xl">
             <div className="inline-flex items-center gap-2 rounded-full bg-green-50 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-green-700">
               <BarChart3 size={14} />
               Progress
             </div>
-            <h1 className="mt-3 text-2xl font-black tracking-tight text-stone-950">
+            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-stone-950 sm:text-4xl">
               Training momentum
             </h1>
-            <p className="mt-2 text-sm leading-6 text-stone-600">
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-600 sm:text-base">
               {summary.today.nextBestAction}
             </p>
           </div>
@@ -294,21 +294,23 @@ export function ProgressDashboard({
               onClick={() => {
                 void refreshSummary();
               }}
-              className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm"
+              className="inline-flex min-h-11 items-center justify-center rounded-full border border-stone-200 bg-white px-4 py-3 text-sm font-semibold text-stone-700 shadow-sm transition hover:border-green-200 hover:text-green-700"
               aria-label="Refresh progress"
             >
               <RefreshCw size={18} />
             </button>
           </div>
-        </div>
+        </header>
+      ) : null}
 
-        <div className="mt-4 rounded-[1.5rem] border border-stone-200 bg-[#fbfcf7] p-4 shadow-sm">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(18rem,0.75fr)]">
+        <section className="rounded-[2rem] border border-stone-200/80 bg-white/85 px-5 py-5 shadow-[0_18px_40px_rgba(52,40,24,0.08)] backdrop-blur sm:px-6">
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
                 Today
               </div>
-              <h2 className="mt-1 text-lg font-black tracking-tight text-stone-950">
+              <h2 className="mt-1 text-xl font-semibold tracking-tight text-stone-950">
                 Daily rings
               </h2>
             </div>
@@ -325,80 +327,141 @@ export function ProgressDashboard({
               {todayRingStatus}
             </div>
           </div>
-          <NestedDailyRings
-            className="mt-4"
-            rings={todayRingItems}
-            closedCount={todayClosedCount}
-            totalCount={todayRingItems.length}
-            allClosed={summary.today.allRingsClosed}
-            streakDays={summary.streak.currentDays}
-          />
-          <div className="mt-4 grid gap-2">
-            {todayRingItems.map((ring) => (
-              <div
-                key={ring.ringId}
-                className="flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-2 ring-1 ring-stone-100"
-              >
-                <div className="min-w-0">
-                  <div className="text-sm font-black text-stone-950">
-                    {ring.label}
-                  </div>
-                  <div className="mt-0.5 text-[11px] font-semibold text-stone-500">
-                    {ring.closed
-                      ? "Complete"
-                      : ring.percent > 0
-                        ? "In progress"
-                        : "Open"}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-black text-stone-950">
-                    {ring.goal > 0
-                      ? `${ring.progress}/${ring.goal}`
-                      : "Loading"}
-                  </div>
-                  <div
-                    className={classNames(
-                      "mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.14em]",
-                      ring.closed
-                        ? "bg-green-50 text-green-700"
-                        : ring.percent > 0
-                          ? "bg-blue-50 text-blue-700"
-                          : "bg-stone-100 text-stone-500",
-                    )}
-                  >
-                    {ring.closed
-                      ? "Complete"
-                      : ring.percent > 0
-                        ? "In progress"
-                        : "Open"}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
 
-        <div className="mt-4 grid gap-3">
-          <div className="rounded-[1.5rem] border border-stone-200 bg-white p-4 shadow-sm">
-            <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
-              Next step
+          <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(16rem,0.9fr)]">
+            <div>
+              <NestedDailyRings
+                className="w-full"
+                rings={todayRingItems}
+                closedCount={todayClosedCount}
+                totalCount={todayRingItems.length}
+                allClosed={summary.today.allRingsClosed}
+                streakDays={summary.streak.currentDays}
+              />
+              <div className="mt-4 grid gap-2">
+                {todayRingItems.map((ring) => (
+                  <div
+                    key={ring.ringId}
+                    className="flex items-center justify-between gap-3 rounded-2xl bg-stone-50 px-3 py-2 ring-1 ring-stone-200"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-stone-950">
+                        {ring.label}
+                      </div>
+                      <div className="mt-0.5 text-[11px] font-semibold text-stone-500">
+                        {ring.closed
+                          ? "Complete"
+                          : ring.percent > 0
+                            ? "In progress"
+                            : "Open"}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-semibold text-stone-950">
+                        {ring.goal > 0
+                          ? `${ring.progress}/${ring.goal}`
+                          : "Loading"}
+                      </div>
+                      <div
+                        className={classNames(
+                          "mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.14em]",
+                          ring.closed
+                            ? "bg-green-50 text-green-700"
+                            : ring.percent > 0
+                              ? "bg-blue-50 text-blue-700"
+                              : "bg-stone-100 text-stone-500",
+                        )}
+                      >
+                        {ring.closed
+                          ? "Complete"
+                          : ring.percent > 0
+                            ? "In progress"
+                            : "Open"}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <p className="mt-2 text-sm leading-6 text-stone-600">
-              {summary.today.nextBestAction}
-            </p>
+
+            <div className="space-y-3">
+              <div className="rounded-[1.5rem] border border-stone-200 bg-[#fbfcf7] p-4 shadow-sm">
+                <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
+                  Next step
+                </div>
+                <p className="mt-2 text-sm leading-6 text-stone-600">
+                  {summary.today.nextBestAction}
+                </p>
+              </div>
+              <div className="grid gap-3">
+                <div className="rounded-[1.5rem] bg-stone-50 p-4 ring-1 ring-stone-200">
+                  <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">
+                    Ring summary
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                    <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-stone-200">
+                      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">
+                        Closed
+                      </div>
+                      <div className="mt-1 text-lg font-semibold text-stone-950">
+                        {todayClosedCount}/{todayRingItems.length}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-stone-200">
+                      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">
+                        Streak
+                      </div>
+                      <div className="mt-1 text-lg font-semibold text-stone-950">
+                        {summary.streak.currentDays}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <Link
+                  href={summary.today.allRingsClosed ? "/daily" : "/"}
+                  className="inline-flex min-h-11 items-center justify-between gap-2 rounded-[1.5rem] bg-green-700 px-4 py-3 text-sm font-black text-white shadow-sm"
+                >
+                  {summary.today.allRingsClosed
+                    ? "Open Daily Blundr"
+                    : "Continue Training"}
+                  <ArrowRight size={16} />
+                </Link>
+              </div>
+            </div>
           </div>
-          <Link
-            href={summary.today.allRingsClosed ? "/daily" : "/"}
-            className="inline-flex items-center justify-center gap-2 rounded-[1.5rem] bg-green-700 px-4 py-3 text-sm font-black text-white shadow-sm"
-          >
-            {summary.today.allRingsClosed
-              ? "Open Daily Blundr"
-              : "Continue Training"}
-            <ArrowRight size={16} />
-          </Link>
-        </div>
-      </header>
+        </section>
+
+        <aside className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+          <ProgressStatCard
+            label="Current streak"
+            value={`${summary.streak.currentDays}`}
+            detail={`${summary.streak.daysTrainedThisWeek} training day${summary.streak.daysTrainedThisWeek === 1 ? "" : "s"} this week`}
+            icon={<Flame size={16} className="text-green-700" />}
+            tone="positive"
+          />
+          <ProgressStatCard
+            label="Best streak"
+            value={`${summary.streak.bestDays}`}
+            detail="Longest verified cadence"
+            icon={<Trophy size={16} className="text-green-700" />}
+          />
+          <ProgressStatCard
+            label="All-rings days"
+            value={`${summary.streak.totalAllRingsClosedDays}`}
+            detail="Total clean Daily completions"
+            icon={<Sparkles size={16} className="text-green-700" />}
+          />
+          <ProgressStatCard
+            label="Training days"
+            value={`${summary.streak.daysTrainedThisWeek}`}
+            detail="Distinct days with training this week"
+            icon={<Target size={16} className="text-green-700" />}
+            tone={
+              summary.streak.daysTrainedThisWeek > 0 ? "positive" : "neutral"
+            }
+          />
+        </aside>
+      </div>
 
       {loadError ? (
         <div
