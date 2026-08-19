@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-EXPECTED_BRANCH="feat/apple-sleek-ui-20260819"
+EXPECTED_BRANCH="${BLUNDR_UI_EXPECTED_BRANCH:-feat/apple-sleek-ui-20260819}"
 BASE_SHA="cf8bafd0be884c51a880504d4b82818c446a2fe6"
 
 BRANCH="$(git branch --show-current)"
