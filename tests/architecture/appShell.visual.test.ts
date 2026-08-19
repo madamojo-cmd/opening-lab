@@ -17,10 +17,11 @@ describe("AppShell responsive contract", () => {
     }
     expect(css).toContain("--shell-edge: 16px");
     expect(css).toContain("--shell-edge: 20px");
-    expect(css).toContain("--shell-edge: 32px");
-    expect(css).toContain("--shell-edge: 48px");
-    expect(css).toContain("--shell-rail: 88px");
-    expect(css).toContain("--shell-content-max: 1200px");
+    expect(css).toContain("--shell-edge: 28px");
+    expect(css).toContain("--shell-edge: 40px");
+    expect(css).toContain("--shell-edge: 64px");
+    expect(css).toContain("--shell-rail: 96px");
+    expect(css).toContain("--shell-content-max: 1360px");
   });
 
   it("uses one CSS-driven navigation tree and honors reduced motion", () => {

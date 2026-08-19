@@ -1,38 +1,86 @@
 .shell {
   --shell-edge: 16px;
   --shell-rail: 0px;
-  --shell-content-max: 1200px;
-  --shell-task-max: 720px;
-  --shell-context-width: 300px;
+  --shell-content-max: 1360px;
+  --shell-task-max: 780px;
+  --shell-context-width: 320px;
+  --shell-canvas: #f7f3eb;
+  --shell-surface: rgba(255, 255, 255, 0.66);
+  --shell-surface-strong: rgba(255, 255, 255, 0.84);
+  --shell-surface-subtle: rgba(249, 246, 239, 0.72);
+  --shell-text: #1f1a17;
+  --shell-text-muted: #6b6459;
+  --shell-accent: #166534;
+  --shell-accent-soft: rgba(22, 101, 52, 0.12);
+  --shell-border: rgba(96, 76, 49, 0.12);
+  --shell-shadow: 0 10px 30px rgba(55, 40, 24, 0.08);
+  --shell-radius: 24px;
+  --shell-radius-sm: 18px;
+  --shell-focus: #0f7a38;
+  position: relative;
+  isolation: isolate;
   min-height: 100vh;
-  color: #1c1917;
-  background: #fafaf9;
+  color: var(--shell-text);
+  background: var(--shell-canvas);
+}
+
+.shell::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.72), transparent 34%),
+    radial-gradient(circle at top right, rgba(22, 101, 52, 0.04), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 18%);
 }
 
 .header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 64px;
-  padding: 12px var(--shell-edge);
-  background: #ffffff;
-  border-bottom: 1px solid #e7e5e4;
+  min-height: 68px;
+  padding: 14px var(--shell-edge);
+  background: linear-gradient(180deg, var(--shell-surface-strong), var(--shell-surface));
+  border-bottom: 1px solid var(--shell-border);
+  box-shadow:
+    inset 0 -1px rgba(255, 255, 255, 0.5),
+    var(--shell-shadow);
+  backdrop-filter: blur(20px) saturate(1.04);
 }
 
 .wordmark {
+  display: inline-flex;
+  align-items: center;
   flex: 0 0 auto;
-  color: #166534;
-  font-size: 1.125rem;
-  font-weight: 800;
+  min-height: 44px;
+  color: var(--shell-accent);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
   text-decoration: none;
 }
 
 .headerCopy {
+  display: flex;
   min-width: 0;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .accountMenu {
   margin-left: auto;
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 999px;
+  background: var(--shell-surface);
+  box-shadow: inset 0 0 0 1px var(--shell-border), var(--shell-shadow);
+  color: var(--shell-text-muted);
 }
 
 .eyebrow,
@@ -41,34 +89,35 @@
 }
 
 .eyebrow {
-  color: #57534e;
-  font-size: 0.75rem;
+  color: var(--shell-text-muted);
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .title {
   overflow-wrap: anywhere;
-  font-size: clamp(1.125rem, 3vw, 1.5rem);
+  font-size: clamp(1.1rem, 2.1vw, 1.6rem);
+  font-weight: 650;
   line-height: 1.2;
 }
 
 .navigation {
   position: fixed;
-  z-index: 10;
+  z-index: 25;
   right: 0;
   bottom: 0;
   left: 0;
-  padding: 4px var(--shell-edge) calc(4px + env(safe-area-inset-bottom));
-  background: rgb(255 255 255 / 0.97);
-  border-top: 1px solid #e7e5e4;
+  padding: 10px var(--shell-edge) calc(10px + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, rgba(247, 243, 235, 0), rgba(247, 243, 235, 0.9) 20%, rgba(247, 243, 235, 0.98));
+  backdrop-filter: blur(20px) saturate(1.04);
 }
 
 .navigationList {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 2px;
+  gap: 8px;
   max-width: 560px;
   margin: 0 auto;
   padding: 0;
@@ -77,30 +126,37 @@
 
 .navigationLink {
   display: flex;
-  align-items: center;
-  justify-content: center;
   min-width: 44px;
   min-height: 44px;
-  padding: 4px 2px;
-  gap: 2px;
-  border-radius: 10px;
-  color: #57534e;
-  font-size: 0.625rem;
-  font-weight: 700;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 18px;
+  color: var(--shell-text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
   line-height: 1.1;
   text-align: center;
   text-decoration: none;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
 }
 
 .navigationLink:hover,
 .navigationLinkActive {
-  color: #166534;
-  background: #f0fdf4;
+  color: var(--shell-accent);
+  background: var(--shell-surface-strong);
+  box-shadow: inset 0 0 0 1px var(--shell-border), var(--shell-shadow);
+  transform: translateY(-1px);
 }
 
 .navigationLink:focus-visible,
-.wordmark:focus-visible {
-  outline: 3px solid #15803d;
+.wordmark:focus-visible,
+.accountMenu:focus-visible {
+  outline: 3px solid var(--shell-focus);
   outline-offset: 2px;
 }
 
@@ -116,7 +172,7 @@
   gap: 24px;
   width: min(100%, var(--shell-content-max));
   margin: 0 auto;
-  padding: 24px var(--shell-edge) 96px;
+  padding: 22px var(--shell-edge) 112px;
 }
 
 .contentColumn,
@@ -134,7 +190,7 @@
 .taskColumn {
   width: 100%;
   max-width: var(--shell-task-max);
-  margin-inline: auto;
+  margin-inline: 0;
 }
 
 .contextColumn {
@@ -146,12 +202,6 @@
   display: none;
 }
 
-@media (min-width: 320px) {
-  .shell {
-    --shell-edge: 16px;
-  }
-}
-
 @media (min-width: 390px) {
   .shell {
     --shell-edge: 20px;
@@ -160,8 +210,8 @@
 
 @media (min-width: 768px) {
   .shell {
-    --shell-edge: 32px;
-    --shell-rail: 72px;
+    --shell-edge: 28px;
+    --shell-rail: 84px;
   }
 
   .header {
@@ -172,21 +222,29 @@
   .navigation {
     top: 0;
     right: auto;
+    bottom: 0;
     width: var(--shell-rail);
-    padding: 16px 8px;
+    padding: 18px 10px 20px;
+    border-right: 1px solid var(--shell-border);
     border-top: 0;
-    border-right: 1px solid #e7e5e4;
+    background: linear-gradient(180deg, rgba(247, 243, 235, 0.98), rgba(252, 250, 245, 0.95));
   }
 
   .navigationList {
     grid-template-columns: 1fr;
-    gap: 6px;
+    gap: 8px;
+    max-width: none;
+    height: 100%;
+    margin: 0;
+    align-content: start;
   }
 
   .navigationLink {
     flex-direction: column;
-    min-height: 56px;
-    font-size: 0.6875rem;
+    min-height: 60px;
+    padding: 10px 8px;
+    border-radius: 20px;
+    font-size: 0.7rem;
   }
 
   .main {
@@ -199,25 +257,25 @@
           (100vw - var(--shell-rail) - var(--shell-content-max)) / 2
       )
     );
-    padding-bottom: 40px;
+    padding-bottom: 56px;
   }
 }
 
 @media (min-width: 1024px) {
   .shell {
-    --shell-edge: 48px;
-    --shell-rail: 72px;
+    --shell-edge: 40px;
+    --shell-rail: 88px;
   }
 
   .main {
     grid-template-columns: minmax(0, 1fr) minmax(0, var(--shell-context-width));
     align-items: start;
-    gap: 32px;
-    padding-top: 40px;
+    gap: 28px;
+    padding-top: 32px;
   }
 
   .contentColumn {
-    grid-column: 1 / -1;
+    grid-column: 1;
   }
 
   .taskColumn {
@@ -226,27 +284,27 @@
 
   .contextColumn {
     grid-column: 2;
-    grid-row: 2;
+    grid-row: 1 / span 2;
   }
 }
 
 @media (min-width: 1280px) {
   .shell {
-    --shell-rail: 88px;
+    --shell-rail: 96px;
   }
 
   .navigation {
-    padding-inline: 12px;
+    padding-inline: 14px;
   }
 
   .navigationLink {
-    min-height: 60px;
+    min-height: 64px;
     font-size: 0.75rem;
   }
 
   .main {
-    gap: 40px;
-    padding-top: 56px;
+    gap: 36px;
+    padding-top: 40px;
   }
 }
 
@@ -256,7 +314,7 @@
   }
 
   .main {
-    padding-top: 64px;
+    padding-top: 48px;
   }
 }
 
