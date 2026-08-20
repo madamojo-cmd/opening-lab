@@ -13464,8 +13464,8 @@ function BlundrApp({
     );
   }
   return (
-    <main className="blundr-page-bg min-h-screen text-stone-950">
-      <div className="mx-auto flex min-h-screen max-w-md flex-col px-4 pb-24 pt-5">
+    <main className="w-full text-stone-950">
+      <div className="mx-auto flex w-full max-w-[1340px] flex-col pb-24">
         {isActiveTab(activeTab, "home") && (
           <section className="space-y-5">
             <header className="rounded-[2rem] border border-stone-200 bg-white p-4 shadow-sm">
@@ -13644,13 +13644,16 @@ function BlundrApp({
           </section>
         )}
         {activeTab === "train" && (
-          <section className="space-y-4">
-            <header className="flex items-start justify-between gap-3">
+          <section className="grid gap-4 lg:grid-cols-[minmax(500px,650px)_minmax(330px,430px)] lg:items-start">
+            <header className="flex items-end justify-between gap-6 lg:col-span-2 max-[820px]:items-start">
               <div>
-                <h1 className="text-xl font-bold tracking-tight">
-                  {repertoire.name}
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-green-800">
+                  Train · {repertoire.name}
+                </div>
+                <h1 className="mt-3 text-[34px] font-black leading-[1.05] tracking-[-0.05em] text-stone-950 max-[820px]:text-[27px]">
+                  Find the move.
                 </h1>
-                <p className="text-sm font-semibold text-green-700">
+                <p className="mt-3 max-w-[720px] text-[13px] leading-[1.55] text-stone-600 max-[820px]:text-[11px]">
                   {trainingMode === "restricted"
                     ? "Restricted trainer"
                     : "Continuation"}{" "}
@@ -13688,7 +13691,7 @@ function BlundrApp({
                 />
               </>
             )}
-            <div className="rounded-3xl bg-white p-3 shadow-sm">
+            <div className="rounded-[22px] border border-stone-200/80 bg-white/90 p-3 shadow-[0_16px_36px_rgba(16,20,17,0.07)]">
               {blundrDebugEnabled && (
                 <div className="mb-3 grid grid-cols-4 gap-2">
                   {RATING_PRESETS.map((p) => (
@@ -13707,7 +13710,7 @@ function BlundrApp({
                   ))}
                 </div>
               )}
-              <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
                 {blundrDebugEnabled && (
                   <button
                     onClick={() => setActiveBoard(!activeBoard)}
@@ -13723,7 +13726,7 @@ function BlundrApp({
                 )}
                 <PipelineStatus step={thinkingStep} note={pipelineNote} />
               </div>
-              <div className="mb-3 rounded-2xl bg-stone-50 p-2">
+              <div className="mb-2 rounded-full bg-white p-1 shadow-sm ring-1 ring-stone-200">
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => handleTrainerViewChange("assisted")}
@@ -13748,11 +13751,6 @@ function BlundrApp({
                     Plain
                   </button>
                 </div>
-                <p className="mt-2 text-[11px] font-semibold text-stone-500">
-                  {trainerView === "assisted"
-                    ? "Shows the visual pattern cue before the move."
-                    : "Hides pre-move hints for independent recall."}
-                </p>
               </div>
               {blundrDebugEnabled && activeBoard && enabledViews.length > 0 && (
                 <div
@@ -14318,17 +14316,66 @@ function BlundrApp({
                 </div>
               </div>
             ) : surfaceCoachCardDecision?.shouldShowCoachCard ? (
-              <CoachCard
-                key={`${trainerFrameId}:surface:${convergedVisibleSurface.targetUci ?? "no-target"}`}
-                decision={surfaceCoachCardDecision}
-                onAction={handleCoachAction}
-                replayEnabled={
-                  visualRecipePlayback.replayAvailable &&
-                  trainerView !== "plain"
-                }
-                surfaceActions={v28CoachUiModel?.actions}
-                topRightBadge={continuationRatingBadge}
-              />
+              <div className="space-y-3">
+                <CoachCard
+                  key={`${trainerFrameId}:surface:${convergedVisibleSurface.targetUci ?? "no-target"}`}
+                  decision={surfaceCoachCardDecision}
+                  onAction={handleCoachAction}
+                  replayEnabled={
+                    visualRecipePlayback.replayAvailable &&
+                    trainerView !== "plain"
+                  }
+                  surfaceActions={v28CoachUiModel?.actions}
+                  topRightBadge={continuationRatingBadge}
+                />
+                <section className="rounded-[22px] border border-stone-200/80 bg-white/90 p-4 shadow-[0_16px_34px_rgba(16,20,17,0.07)]">
+                  <h2 className="text-lg font-black tracking-[-0.03em] text-stone-950">
+                    Session
+                  </h2>
+                  <p className="mt-1 text-xs leading-5 text-stone-500">
+                    The same trainer state with less visual chrome.
+                  </p>
+                  <div className="mt-4 divide-y divide-stone-100 text-xs">
+                    <div className="flex items-center justify-between gap-3 py-3">
+                      <div>
+                        <div className="font-black text-stone-900">Trainer</div>
+                        <div className="mt-1 text-stone-500">
+                          {trainingMode === "restricted"
+                            ? "Restricted runtime authority"
+                            : "Continuation runtime"}
+                        </div>
+                      </div>
+                      <span className="rounded-full bg-green-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-green-700">
+                        {thinkingStep === "ready" ? "Ready" : thinkingStep}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 py-3">
+                      <div>
+                        <div className="font-black text-stone-900">Recall mode</div>
+                        <div className="mt-1 text-stone-500">
+                          {trainerView === "plain"
+                            ? "Independent recall"
+                            : "Teaching cue available"}
+                        </div>
+                      </div>
+                      <span className="rounded-full bg-blue-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-blue-700">
+                        {trainerView}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 py-3">
+                      <div>
+                        <div className="font-black text-stone-900">Opening identity</div>
+                        <div className="mt-1 text-stone-500">
+                          {accountRatingBandLabel}
+                        </div>
+                      </div>
+                      <span className="rounded-full bg-green-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-green-700">
+                        {repertoire.name}
+                      </span>
+                    </div>
+                  </div>
+                </section>
+              </div>
             ) : null}
             {showDetails && visualRecipe && (
               <div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm">
@@ -14860,7 +14907,7 @@ function TapChessboard({
   const topColor: ChessColor = userColor === "w" ? "b" : "w";
   const bottomColor = userColor;
   return (
-    <div className="mx-auto w-full max-w-[450px]">
+    <div className="mx-auto w-full max-w-[720px]">
       {settings.showCaptured ? (
         <CapturedStrip
           color={topColor}

@@ -3,6 +3,11 @@ import path from "node:path";
 
 export default defineConfig({
   resolve: { alias: { "@": path.resolve(__dirname) } },
+  css: {
+    postcss: {
+      plugins: [],
+    },
+  },
   test: {
     environment: "jsdom",
     include: [

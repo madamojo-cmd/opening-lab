@@ -4,8 +4,8 @@ export const dynamic = "force-dynamic";
 
 export default function RepertoirePage() {
   return (
-    <main className="min-h-screen bg-[#f7f7f4] px-4 py-5 text-stone-950">
-      <div className="mx-auto max-w-md">
+    <main className="w-full px-4 py-5 text-stone-950 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[1340px]">
         <RepertoireProgressPanel homeHref="/" />
       </div>
     </main>

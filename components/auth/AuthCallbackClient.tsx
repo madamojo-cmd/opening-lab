@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { BLUNDR_TEMPO_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
+import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 import { createBlundrSupabaseBrowserClient } from "@/lib/blundr/backend/supabaseBrowserClient";
 import { normalizeAppNext } from "@/lib/blundr/routing/appRouteSafety";
 
@@ -91,14 +93,27 @@ export function AuthCallbackClient() {
   }, [isRecovery, next, router]);
 
   return (
-    <div className="mt-3">
-      <p className="text-stone-700" role="status">
-        {message}
-      </p>
+    <div className="mt-5 rounded-[22px] border border-stone-200 bg-[#fbfbf8] p-4 shadow-sm">
+      <div className="flex items-start gap-3">
+        <BlundrAssetImage
+          asset={
+            failed ? BLUNDR_TEMPO_ASSETS.sad : BLUNDR_TEMPO_ASSETS.thinking
+          }
+          alt="Tempo"
+          variant="tempoInline"
+          className="!h-12 !w-12 !rounded-2xl bg-white !p-0.5"
+        />
+        <p
+          className="min-w-0 flex-1 text-sm leading-6 text-stone-700"
+          role="status"
+        >
+          {message}
+        </p>
+      </div>
       {failed ? (
         <div className="mt-4 flex flex-wrap gap-3 text-sm">
           <Link
-            className="inline-flex min-h-11 items-center rounded-xl bg-green-800 px-4 font-bold text-white"
+            className="inline-flex min-h-12 items-center rounded-2xl bg-green-800 px-4 font-bold text-white shadow-[0_14px_30px_rgba(22,101,52,0.22)]"
             href={isRecovery ? "/forgot-password?next=/login" : "/login"}
           >
             {isRecovery

@@ -203,37 +203,35 @@ function HomeTrainingCard({
 }) {
   const closedCount = rings.filter((ring) => ring.closed).length;
   const totalCount = rings.length;
+  const remainingCount = Math.max(0, totalCount - closedCount);
+  const nextRing = rings.find((ring) => !ring.closed);
   return (
     <div
-      className="rounded-[24px] shrink-0 w-full overflow-hidden"
-      style={{ background: G.card, boxShadow: G.shadowCard }}
+      className="w-full overflow-hidden rounded-[22px] border border-stone-200/80 bg-white/90 shadow-[0_16px_36px_rgba(16,20,17,0.07)]"
     >
-      <div className="flex flex-col items-start p-5">
-        <p
-          style={{
-            fontFamily: G.inter, fontWeight: 700, fontSize: 11,
-            lineHeight: "16.5px", color: G.textMuted,
-            letterSpacing: "1.1px", textTransform: "uppercase",
-          }}
-        >
-          Today&apos;s training
-        </p>
-        <div className="pt-1">
-          <p style={{ fontFamily: G.inter, fontWeight: 700, fontSize: 20, lineHeight: "27.5px", color: G.textPrimary }}>
-            Close your daily rings
-          </p>
-        </div>
-        <div className="pt-1">
-          <p style={{ fontFamily: G.inter, fontWeight: 400, fontSize: 14, lineHeight: "20px", color: G.textMuted }}>
-            {`Close ${Math.max(0, totalCount - closedCount)} more ring${Math.max(0, totalCount - closedCount) === 1 ? "" : "s"} to keep your streak alive.`}
-          </p>
+      <div className="p-[25px] max-[820px]:p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-green-800">
+              Today&apos;s training
+            </p>
+            <h2 className="mt-1 text-[25px] font-black leading-tight tracking-[-0.045em] text-stone-950">
+              Close your daily rings.
+            </h2>
+            <p className="mt-2 max-w-xl text-[11px] leading-[1.55] text-stone-600">
+              The canonical three-ring widget stays intact while today&apos;s
+              real Tempo, Battery and Blundr progress stays visible.
+            </p>
+          </div>
+          <span className="rounded-full bg-amber-50 px-3 py-2 text-[11px] font-black text-amber-800 ring-1 ring-amber-200">
+            {streakDays === null ? "Loading streak" : `${streakDays}-day streak`}
+          </span>
         </div>
 
-        {/* Rings widget */}
-        <div className="flex w-full flex-col items-center gap-4 pt-4 pb-1">
-          <div className="rounded-[24px] bg-[#fbfcf7] px-4 py-4 ring-1 ring-stone-100">
+        <div className="mt-6 grid items-center gap-5 md:grid-cols-[280px_minmax(0,1fr)]">
+          <div className="flex justify-center">
             <NestedDailyRings
-              className="w-full max-w-[240px]"
+              className="w-full max-w-[250px] [&>div:nth-of-type(2)]:hidden"
               rings={rings}
               closedCount={closedCount}
               totalCount={totalCount}
@@ -241,74 +239,88 @@ function HomeTrainingCard({
               streakDays={streakDays ?? 0}
             />
           </div>
+          <div className="grid gap-2">
+            {rings.map((ring) => (
+              <div
+                key={ring.label}
+                className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-[14px] border border-stone-200 bg-[#f8f8f5] px-4 py-3"
+              >
+                <div className="min-w-0">
+                  <div className="text-sm font-black text-stone-950">
+                    {ring.label}
+                  </div>
+                  <div className="text-[11px] text-stone-600">
+                    {ring.closed
+                      ? "Complete"
+                      : ring.percent > 0
+                        ? "In progress"
+                        : "Open"}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-black text-stone-950">
+                    {ring.progress}/{ring.goal}
+                  </div>
+                  <div
+                    className={`mt-1 rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${
+                      ring.closed
+                        ? "bg-green-50 text-green-800"
+                        : ring.percent > 0
+                          ? "bg-blue-50 text-blue-700"
+                          : "bg-stone-100 text-stone-500"
+                    }`}
+                  >
+                    {ring.closed
+                      ? "Complete"
+                      : ring.percent > 0
+                        ? "In progress"
+                        : "Open"}
+                  </div>
+                </div>
+              </div>
+            ))}
+            <div className="mt-2 border-t border-stone-200 pt-3 text-[11px] font-black text-stone-600">
+              {closedCount >= totalCount
+                ? "All rings closed for today."
+                : `Close ${Math.max(0, totalCount - closedCount)} more ring${Math.max(0, totalCount - closedCount) === 1 ? "" : "s"} to keep the daily chain moving.`}
+            </div>
+          </div>
         </div>
 
-        {/* CTA */}
-        <div className="pt-5 w-full">
-          <Link href="/train" className="flex gap-2 items-center justify-center w-full rounded-2xl" style={{ background: G.green, height: 48 }}>
-            <p style={{ fontFamily: G.inter, fontWeight: 700, fontSize: 14, lineHeight: "20px", color: "#fff" }}>
-              Start training
-            </p>
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-              <path d={svgPaths.p5646280} stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.25" />
-            </svg>
-          </Link>
+        <div className="mt-5 rounded-[16px] border border-green-900/10 bg-[#eef7f1] p-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <span className="inline-flex rounded-full bg-green-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-green-800">
+                Next best action
+              </span>
+              <p className="mt-2 text-sm font-black text-stone-950">
+                {remainingCount === 0
+                  ? "All daily rings are closed."
+                  : `${nextRing?.label ?? "Daily training"} is the next ring to close.`}
+              </p>
+              <p className="mt-1 text-[11px] leading-[1.5] text-stone-600">
+                {remainingCount === 0
+                  ? "Keep the loop visible and return when the next day opens."
+                  : "Continue the production flow that owns this ring’s progress."}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Link
+                href={nextRing?.label === "Blundr" ? "/daily" : "/train"}
+                className="inline-flex min-h-11 items-center rounded-[13px] bg-green-800 px-4 text-sm font-black text-white shadow-sm"
+              >
+                {nextRing?.label === "Blundr" ? "Open Daily Blundr" : "Continue training"}
+              </Link>
+              <Link
+                href="/daily"
+                className="inline-flex min-h-11 items-center rounded-[13px] border border-stone-200 bg-white px-4 text-sm font-black text-stone-800 shadow-sm"
+              >
+                Daily Blundr
+              </Link>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function HomeProgressStrip({ rings }: { rings: HomeDailyRingItem[] }) {
-  const ringItems = rings.map((ring, index) => {
-    const palette = [
-      { trackColor: G.greenTrack, fillColor: G.greenLight },
-      { trackColor: "#F5E8C0", fillColor: G.gold },
-      { trackColor: "#CCDDF5", fillColor: G.blue },
-    ][index] ?? { trackColor: G.greenTrack, fillColor: G.greenLight };
-    return { ...ring, ...palette };
-  });
-
-  return (
-    <div className="grid w-full grid-cols-3 gap-2">
-      {ringItems.map((item) => (
-        <div
-          key={item.label}
-          className="flex min-w-0 flex-col gap-2 rounded-2xl bg-white p-3"
-          style={{ boxShadow: G.shadowCard }}
-        >
-          <div className="flex items-start justify-between gap-2">
-            <p style={{ fontFamily: G.inter, fontWeight: 700, fontSize: 11, lineHeight: "16.5px", color: G.textMuted, letterSpacing: "0.8px", textTransform: "uppercase" }}>
-              {item.label}
-            </p>
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <clipPath id={`clip-h-${item.label}`}><rect fill="white" height="10" width="10" /></clipPath>
-              <g clipPath={`url(#clip-h-${item.label})`}>
-                <path d={svgPaths.p225f5e00} stroke={G.textMuted} strokeLinecap="round" strokeLinejoin="round" strokeWidth="0.833333" />
-                <path d={svgPaths.p9062d00} stroke={G.textMuted} strokeLinecap="round" strokeLinejoin="round" strokeWidth="0.833333" />
-              </g>
-            </svg>
-          </div>
-          <div className="rounded-full w-full shrink-0 overflow-clip" style={{ height: 4, background: item.trackColor }}>
-            <div
-              className="h-full rounded-full shrink-0 transition-all duration-500 ease-out"
-              style={{ width: item.goal > 0 ? `${item.percent}%` : 0, background: item.fillColor }}
-              aria-hidden
-            />
-          </div>
-          <div className="flex items-end justify-between gap-2">
-            <div style={{ fontFamily: G.inter, fontWeight: 800, fontSize: 15, lineHeight: "18px", color: G.textPrimary }}>
-              {item.progress}
-              <span style={{ fontWeight: 500, fontSize: 11, lineHeight: "16px", color: G.textMuted }}>
-                /{item.goal}
-              </span>
-            </div>
-            <div style={{ fontFamily: G.inter, fontWeight: 700, fontSize: 10, lineHeight: "14px", color: item.closed ? G.green : item.percent > 0 ? G.blue : G.textMuted, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              {item.closed ? "Complete" : item.percent > 0 ? "In progress" : "Open"}
-            </div>
-          </div>
-        </div>
-      ))}
     </div>
   );
 }
@@ -318,16 +330,25 @@ function HomeTempoBanner({ remainingRingCount }: { remainingRingCount: number })
     ? "All rings closed. Your streak is closed for today."
     : `Close ${remainingRingCount} more ring${remainingRingCount === 1 ? "" : "s"} to keep your streak alive.`;
   return (
-    <div className="rounded-2xl shrink-0 w-full" style={{ background: G.greenBg }}>
-      <div className="flex items-center gap-3 px-4 py-3">
-        <p style={{ fontFamily: G.inter, fontSize: 20, lineHeight: "28px", color: G.textPrimary, flexShrink: 0 }}>♟</p>
-        <p style={{ fontFamily: G.inter, fontWeight: 500, fontSize: 14, lineHeight: "19.25px", color: G.green }}>
-          {message}
-        </p>
+    <div className="rounded-[22px] border border-stone-200/80 bg-white/90 p-5 shadow-[0_12px_30px_rgba(16,20,17,0.06)]">
+      <div className="flex items-center justify-between gap-5">
+        <div className="min-w-0">
+          <span className="inline-flex rounded-full bg-green-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-green-800">
+            Tempo
+          </span>
+          <h2 className="mt-3 text-xl font-black tracking-[-0.04em] text-stone-950">
+            Small cues. Clear next moves.
+          </h2>
+          <p className="mt-2 text-[12px] leading-[1.55] text-stone-600">
+            {message}
+          </p>
+        </div>
+        <TempoAvatar size={76} />
       </div>
     </div>
   );
 }
+
 function HomeStatsRow({
   streakDays,
   longestStreakDays,
@@ -351,59 +372,31 @@ function HomeStatsRow({
   const availablePointsLabel = formatRepertoirePoints(availablePoints);
   const unlockProgressLabel = formatProgressPercentage(clampedUnlockProgress);
 
-  return (
-    <div className="grid w-full gap-3 sm:grid-cols-2">
-      <div className="rounded-[24px] bg-white p-4" style={{ boxShadow: G.shadowCard }}>
-        <div className="flex items-center gap-1.5">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-            <path d={svgPaths.p1136b300} stroke={G.gold} strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.08333" />
-          </svg>
-          <p style={{ fontFamily: G.inter, fontWeight: 700, fontSize: 11, lineHeight: "16.5px", color: G.textMuted, letterSpacing: "1.1px", textTransform: "uppercase" }}>
-            Streak
-          </p>
-        </div>
-        <div className="mt-3 flex items-end justify-between gap-3">
-          <p style={{ fontFamily: G.inter, fontWeight: 800, fontSize: 30, lineHeight: "30px", color: G.textPrimary }}>{streakValue}</p>
-          <p style={{ fontFamily: G.inter, fontWeight: 600, fontSize: 12, lineHeight: "16.5px", color: G.textMuted }}>
-            days in a row
-          </p>
-        </div>
-        <div className="mt-3 grid gap-2 border-t border-stone-100 pt-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p style={{ fontFamily: G.inter, fontWeight: 600, fontSize: 10, lineHeight: "15px", color: G.textMuted, letterSpacing: "0.25px", textTransform: "uppercase" }}>Best</p>
-              <p style={{ fontFamily: G.inter, fontWeight: 700, fontSize: 14, lineHeight: "20px", color: G.textPrimary }}>{bestValue}</p>
-            </div>
-            <div className="text-right">
-              <p style={{ fontFamily: G.inter, fontWeight: 600, fontSize: 10, lineHeight: "15px", color: G.textMuted, letterSpacing: "0.25px", textTransform: "uppercase" }}>Closed days</p>
-              <p style={{ fontFamily: G.inter, fontWeight: 700, fontSize: 14, lineHeight: "20px", color: G.textPrimary }}>{allRingValue}</p>
-            </div>
-          </div>
-        </div>
-      </div>
+  const stats = [
+    ["Current streak", streakValue, "days in a row"],
+    ["Best streak", bestValue, "personal best"],
+    ["Repertoire points", availablePointsLabel, `${unlockProgressLabel} to next unlock`],
+    ["Today", closedRingsValue, `${allRingValue} all-ring days`],
+  ] as const;
 
-      <div className="rounded-[24px] bg-white p-4" style={{ boxShadow: G.shadowCard }}>
-        <div className="flex items-center gap-1.5">
-          <p style={{ fontFamily: G.inter, fontWeight: 400, fontSize: 13, lineHeight: "19.5px", color: G.gold }}>◆</p>
-          <p style={{ fontFamily: G.inter, fontWeight: 700, fontSize: 11, lineHeight: "16.5px", color: G.textMuted, letterSpacing: "1.1px", textTransform: "uppercase" }}>
-            Rep. Points
-          </p>
-        </div>
-        <div className="mt-3 flex items-end justify-between gap-3">
-          <p style={{ fontFamily: G.inter, fontWeight: 800, fontSize: 30, lineHeight: "30px", color: G.textPrimary }}>{availablePointsLabel}</p>
-          <p style={{ fontFamily: G.inter, fontWeight: 600, fontSize: 12, lineHeight: "16.5px", color: G.textMuted }}>
-            {`${unlockProgressLabel} to next unlock`}
-          </p>
-        </div>
-        <div className="mt-3">
-          <div className="rounded-full w-full overflow-clip" style={{ height: 6, background: "#eae7e1" }}>
-            <div className="rounded-full" style={{ width: `${clampedUnlockProgress}%`, height: 6, background: G.gold }} />
+  return (
+    <div className="grid w-full gap-3 md:grid-cols-4 max-[820px]:grid-cols-2">
+      {stats.map(([label, value, detail]) => (
+        <div
+          key={label}
+          className="rounded-[22px] border border-stone-200/80 bg-white/90 p-4 shadow-[0_12px_30px_rgba(16,20,17,0.06)]"
+        >
+          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">
+            {label}
+          </div>
+          <div className="mt-3 text-[28px] font-black leading-none tracking-[-0.04em] text-stone-950">
+            {value}
+          </div>
+          <div className="mt-2 text-[11px] leading-[1.45] text-stone-600">
+            {detail}
           </div>
         </div>
-        <div className="mt-2">
-          <p style={{ fontFamily: G.inter, fontWeight: 600, fontSize: 11, lineHeight: "16.5px", color: G.green }}>{closedRingsValue}</p>
-        </div>
-      </div>
+      ))}
     </div>
   );
 }
@@ -484,52 +477,59 @@ export function Figma5303HomeScreen({
   const streakLabel = currentStreakDays === null ? "Loading streak" : `${currentStreakDays}-day streak`;
 
   return (
-    <div className="mx-auto flex min-h-[100dvh] w-full max-w-[430px] flex-col overflow-x-hidden" style={{ background: G.bg, fontFamily: G.inter }}>
-      {/* Status bar spacer */}
-      <div style={{ height: 48, flexShrink: 0 }} />
-
-      {/* Header */}
-      <div className="flex items-center justify-between pb-4 px-4">
-        <div className="flex items-center gap-2">
-          <p style={{ fontFamily: G.inter, fontWeight: 900, fontSize: 20, lineHeight: "28px", color: G.green, letterSpacing: "-0.5px" }}>
-            Blundr
+    <section className="w-full text-stone-950" style={{ fontFamily: G.inter }}>
+      <header className="mb-[25px] flex items-end justify-between gap-6 max-[820px]:items-start">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-green-800">
+            Home
           </p>
-          <div
-            className="flex items-center gap-1 px-2 py-1 rounded-full"
-            style={{ background: G.greenBg }}
-          >
-            <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-              <path d={svgPaths.p659a0} stroke={G.gold} strokeLinecap="round" strokeLinejoin="round" strokeWidth="0.916667" />
-            </svg>
-            <p style={{ fontFamily: G.inter, fontWeight: 700, fontSize: 11, lineHeight: "16.5px", color: G.green, whiteSpace: "nowrap" }}>
-              {streakLabel}
-            </p>
-          </div>
+          <h1 className="mt-3 text-[34px] font-black leading-[1.05] tracking-[-0.05em] text-stone-950 max-[820px]:text-[27px]">
+            Your training, distilled.
+          </h1>
+          <p className="mt-3 max-w-[720px] text-[13px] leading-[1.55] text-stone-600 max-[820px]:text-[11px]">
+            A calm daily workspace that keeps the real Tempo, Battery and
+            Blundr rings at the center without the old phone-inside-a-page
+            frame.
+          </p>
         </div>
-        <ProfileSettingsIcon />
-      </div>
+        <div className="flex gap-2 max-[820px]:hidden">
+          <Link
+            href="/train"
+            className="inline-flex min-h-11 items-center rounded-[13px] bg-green-800 px-4 text-sm font-black text-white shadow-sm"
+          >
+            Start training
+          </Link>
+        </div>
+        <div className="min-[821px]:hidden">
+          <ProfileSettingsIcon />
+        </div>
+      </header>
 
-      {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden" style={{ scrollbarWidth: "none" }}>
-        <div className="flex flex-col items-start gap-4 px-4 pb-[calc(env(safe-area-inset-bottom)+8rem)]">
-          <HomeTrainingCard rings={dailyRingItems} streakDays={currentStreakDays} />
-          <HomeProgressStrip rings={dailyRingItems} />
-          <HomeTempoBanner remainingRingCount={remainingRingCount} />
-          <Link href="/daily" className="flex w-full items-center justify-between rounded-[24px] bg-white px-4 py-3" style={{ boxShadow: G.shadowCard }}>
+      <div className="grid gap-[18px] lg:grid-cols-[minmax(0,1.25fr)_minmax(310px,0.75fr)]">
+        <HomeTrainingCard rings={dailyRingItems} streakDays={currentStreakDays} />
+        <aside className="grid gap-3">
+          <Link
+            href="/daily"
+            className="flex items-center justify-between rounded-[22px] border border-stone-200/80 bg-white/90 px-5 py-4 text-stone-950 shadow-[0_12px_30px_rgba(16,20,17,0.06)]"
+          >
             <div className="min-w-0">
-              <p style={{ fontFamily: G.inter, fontWeight: 700, fontSize: 11, lineHeight: "16.5px", color: G.textMuted, letterSpacing: "1.1px", textTransform: "uppercase" }}>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-green-800">
                 Daily Blundr
               </p>
-              <p style={{ fontFamily: G.inter, fontWeight: 700, fontSize: 16, lineHeight: "22px", color: G.textPrimary, marginTop: 2 }}>
+              <p className="mt-2 text-base font-black tracking-[-0.02em]">
                 Complete Daily Blundr
               </p>
             </div>
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-              <path d={svgPaths.p5646280} stroke={G.green} strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.25" />
-            </svg>
+            <span className="grid h-9 w-9 place-items-center rounded-full bg-green-50 text-green-800">
+              →
+            </span>
           </Link>
+          <HomeTempoBanner remainingRingCount={remainingRingCount} />
           {currentProgress ? (
-            <HomeCurrentOpeningsCard progress={currentProgress} onPlayOpening={handlePlayOpening} />
+            <HomeCurrentOpeningsCard
+              progress={currentProgress}
+              onPlayOpening={handlePlayOpening}
+            />
           ) : (
             <BlundrStateCard
               kind="loading"
@@ -538,20 +538,20 @@ export function Figma5303HomeScreen({
               copy="Blundr is checking which openings are ready to train."
             />
           )}
-          <HomeStatsRow
-            streakDays={currentStreakDays}
-            longestStreakDays={longestStreakDays}
-            allRingDays={totalAllRingDays}
-            availablePoints={currentProgress?.availablePoints ?? 0}
-            nextUnlockProgressPct={currentProgress?.nextUnlockProgressPct ?? 0}
-            closedRingCount={closedRingCount}
-          />
-          <div style={{ height: 8 }} />
-        </div>
+        </aside>
       </div>
 
-      <BottomNav active="home" onNav={onNav} />
-    </div>
+      <div className="mt-3">
+        <HomeStatsRow
+          streakDays={currentStreakDays}
+          longestStreakDays={longestStreakDays}
+          allRingDays={totalAllRingDays}
+          availablePoints={currentProgress?.availablePoints ?? 0}
+          nextUnlockProgressPct={currentProgress?.nextUnlockProgressPct ?? 0}
+          closedRingCount={closedRingCount}
+        />
+      </div>
+    </section>
   );
 }
 

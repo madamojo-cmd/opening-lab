@@ -1,0 +1,234 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background:
+    radial-gradient(
+      circle at 50% 18%,
+      rgba(255, 255, 255, 0.72),
+      transparent 34%
+    ),
+    rgba(20, 21, 18, 0.42);
+  backdrop-filter: blur(18px) saturate(1.15);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+}
+
+.modal {
+  position: relative;
+  width: min(520px, 100%);
+  max-height: 86vh;
+  overflow: hidden auto;
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.66);
+  border-radius: 26px;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.94),
+      rgba(247, 249, 243, 0.82)
+    ),
+    rgba(255, 255, 255, 0.82);
+  box-shadow:
+    0 28px 70px rgba(20, 21, 18, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.modal::before {
+  position: absolute;
+  inset: 1px;
+  z-index: 0;
+  pointer-events: none;
+  content: "";
+  border-radius: 25px;
+  background:
+    radial-gradient(
+      circle at 12% 18%,
+      rgba(132, 204, 22, 0.16),
+      transparent 35%
+    ),
+    radial-gradient(
+      circle at 88% 82%,
+      rgba(245, 158, 11, 0.14),
+      transparent 38%
+    );
+}
+
+.artRail {
+  position: relative;
+  z-index: 1;
+  min-height: 195px;
+  display: grid;
+  place-items: center;
+}
+
+.animation {
+  width: 195px;
+  max-width: 100%;
+  border: 0;
+  border-radius: 24px;
+  background: transparent;
+  padding: 0;
+  filter: drop-shadow(0 18px 24px rgba(20, 21, 18, 0.16));
+}
+
+.icon {
+  position: absolute;
+  right: 0;
+  bottom: 5px;
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.68);
+  padding: 8px;
+  box-shadow: 0 14px 32px rgba(20, 21, 18, 0.14);
+}
+
+.copy {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.eyebrow {
+  margin: 0;
+  color: #2f6f3d;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 9px 0 0;
+  color: #151610;
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1.05;
+}
+
+.body {
+  margin: 10px 0 0;
+  color: #55584c;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.55;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.pill {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  border: 1px solid rgba(47, 111, 61, 0.16);
+  border-radius: 999px;
+  background: rgba(245, 248, 239, 0.74);
+  padding: 6px 10px;
+  color: #48503f;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 16px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 850;
+  letter-spacing: 0;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
+}
+
+.button:hover {
+  transform: translateY(-1px);
+}
+
+.secondaryButton {
+  background: rgba(255, 255, 255, 0.74);
+  color: #373a31;
+  box-shadow:
+    inset 0 0 0 1px rgba(20, 21, 18, 0.1),
+    0 8px 18px rgba(20, 21, 18, 0.08);
+}
+
+.primaryButton {
+  background: linear-gradient(180deg, #2f7d3f, #1f6330);
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 12px 22px rgba(47, 125, 63, 0.28);
+}
+
+@media (max-width: 560px) {
+  .overlay {
+    align-items: flex-end;
+    padding: 12px;
+  }
+
+  .modal {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .artRail {
+    min-height: 150px;
+  }
+
+  .animation {
+    width: 150px;
+  }
+
+  .icon {
+    right: calc(50% - 88px);
+    bottom: 0;
+    width: 56px;
+    height: 56px;
+  }
+
+  .title {
+    font-size: 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .modal,
+  .animation,
+  .button {
+    transition: none;
+    animation: none;
+  }
+
+  .button:hover {
+    transform: none;
+  }
+}

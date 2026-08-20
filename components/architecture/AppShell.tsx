@@ -48,7 +48,7 @@ export type AppShellProps = {
   children: ReactNode;
   task?: ReactNode;
   context?: ReactNode;
-  activeNav?: AppShellNavKey;
+  activeNav?: AppShellNavKey | null;
   title?: string;
   eyebrow?: string;
   className?: string;
@@ -63,8 +63,11 @@ function joinClasses(...classes: Array<string | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-function getActiveNavItem(activeNav: AppShellNavKey) {
-  return APP_SHELL_NAV_ITEMS.find((item) => item.key === activeNav) ?? APP_SHELL_NAV_ITEMS[0];
+function getActiveNavItem(activeNav: AppShellNavKey | null) {
+  return (
+    APP_SHELL_NAV_ITEMS.find((item) => item.key === activeNav) ??
+    APP_SHELL_NAV_ITEMS[0]
+  );
 }
 
 export function AppShell({

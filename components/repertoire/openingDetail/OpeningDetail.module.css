@@ -1,0 +1,476 @@
+.page {
+  --detail-ink: #101411;
+  --detail-muted: #70766f;
+  --detail-green: #185c38;
+  --detail-border: rgba(16, 20, 17, 0.08);
+  min-height: 100vh;
+  background: transparent;
+  color: var(--detail-ink);
+  padding: 0;
+}
+
+.inner {
+  width: min(100%, 1340px);
+  margin-inline: auto;
+  display: grid;
+  gap: 14px;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 11px;
+}
+
+.pageKicker {
+  margin: 0;
+  color: var(--detail-green);
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.pageTitle {
+  margin: 10px 0 0;
+  color: var(--detail-ink);
+  font-size: 2.125rem;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 1.05;
+}
+
+.pageCopy {
+  max-width: 720px;
+  margin: 12px 0 0;
+  color: var(--detail-muted);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+
+.pageActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.headerButton,
+.headerPrimary {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  padding: 0 16px;
+  text-decoration: none;
+}
+
+.headerButton {
+  border: 1px solid var(--detail-border);
+  background: #ffffff;
+  color: var(--detail-ink);
+}
+
+.headerPrimary {
+  background: var(--detail-green);
+  color: #ffffff;
+}
+
+.masteryHero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 14px;
+  align-items: stretch;
+  padding: 0;
+}
+
+.heroMain,
+.heroAside {
+  min-width: 0;
+  border: 1px solid rgba(16, 20, 17, 0.1);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 14px 28px rgba(16, 20, 17, 0.06);
+}
+
+.heroMain {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px;
+  align-items: center;
+  gap: 18px;
+  overflow: hidden;
+  padding: 18px 22px;
+}
+
+.heroAside {
+  display: grid;
+  align-content: center;
+  padding: 18px;
+  text-align: left;
+}
+
+.heroCopy {
+  min-width: 0;
+}
+
+.kicker {
+  margin: 0;
+  color: var(--detail-green);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.heroTitle {
+  margin: 8px 0 0;
+  color: var(--detail-green);
+  font-size: clamp(2.8rem, 5vw, 4.6rem);
+  font-weight: 800;
+  letter-spacing: -0.06em;
+  line-height: 0.95;
+}
+
+.heroMeta {
+  margin: 8px 0 0;
+  color: var(--detail-muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.heroProgressTrack {
+  width: 100%;
+  height: 8px;
+  margin-top: 18px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e6e7e1;
+}
+
+.heroProgressTrack span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--detail-green);
+}
+
+.heroMascot {
+  justify-self: end;
+  width: 120px !important;
+  height: 120px !important;
+  filter: drop-shadow(0 12px 22px rgba(16, 20, 17, 0.12));
+}
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.primaryAction,
+.secondaryAction {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 650;
+  padding: 0 16px;
+  text-decoration: none;
+}
+
+.primaryAction {
+  background: #185c38;
+  color: #ffffff;
+}
+
+.secondaryAction {
+  border: 1px solid var(--detail-border);
+  color: var(--detail-ink);
+}
+
+.scoreValue {
+  color: var(--detail-green);
+  font-size: clamp(2.5rem, 5vw, 4.6rem);
+  font-weight: 650;
+  letter-spacing: -0.07em;
+  line-height: 0.95;
+}
+
+.scoreLabel {
+  margin-top: 8px;
+  color: var(--detail-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.accessName {
+  margin-top: 10px;
+  color: var(--detail-ink);
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.accessCopy {
+  margin: 8px 0 0;
+  color: var(--detail-muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.readyPill {
+  justify-self: start;
+  margin-top: 14px;
+  border-radius: 999px;
+  background: #e8f2eb;
+  color: var(--detail-green);
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  padding: 7px 11px;
+  text-transform: uppercase;
+}
+
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metricCard,
+.panel,
+.stateCard,
+.statusShell {
+  border: 1px solid var(--detail-border);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 14px 28px rgba(16, 20, 17, 0.06);
+  padding: 16px;
+}
+
+.metricCard {
+  min-width: 0;
+}
+
+.metricLabel,
+.sectionKicker,
+.microLabel {
+  color: var(--detail-muted);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.metricValue {
+  margin-top: 10px;
+  color: var(--detail-ink);
+  font-size: 1.65rem;
+  font-weight: 650;
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+
+.sectionHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.sectionTitle {
+  margin: 0;
+  color: var(--detail-ink);
+  font-size: 1.2rem;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.sectionCopy,
+.bodyCopy,
+.timelineCopy {
+  margin: 6px 0 0;
+  color: var(--detail-muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.toggleButton,
+.dailyButton {
+  min-height: 40px;
+  border: 1px solid var(--detail-border);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--detail-ink);
+  font-size: 0.86rem;
+  font-weight: 650;
+  padding: 0 13px;
+}
+
+.dailyButton {
+  margin-top: 12px;
+  background: #185c38;
+  color: #ffffff;
+}
+
+.branchList,
+.weakGrid,
+.timelineGrid {
+  display: grid;
+  gap: 10px;
+}
+
+.branchRow,
+.weakCard,
+.intelligenceBody,
+.timelineItem {
+  border: 1px solid var(--detail-border);
+  border-radius: 18px;
+  background: #f8f8f5;
+  padding: 13px;
+}
+
+.branchSummary,
+.branchMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.branchName,
+.weakName {
+  color: var(--detail-ink);
+  font-size: 0.95rem;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.branchMeta {
+  justify-content: flex-start;
+  margin-top: 10px;
+  color: var(--detail-muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.weakGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.weakActivity,
+.statusMessage {
+  color: var(--detail-green);
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.statusMessage {
+  margin-top: 12px;
+  border-radius: 16px;
+  background: #e8f2eb;
+  padding: 12px;
+  text-transform: none;
+}
+
+.badge {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  border: 1px solid var(--detail-border);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--detail-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0 10px;
+  text-transform: capitalize;
+}
+
+.timelineGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.statusShell {
+  width: min(100%, 760px);
+  margin-inline: auto;
+}
+
+.skeleton {
+  min-height: 150px;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.74;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 980px) {
+  .masteryHero,
+  .metricsGrid,
+  .weakGrid,
+  .timelineGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .heroAside {
+    text-align: left;
+  }
+}
+
+@media (max-width: 560px) {
+  .page {
+    padding: 20px 12px 32px;
+  }
+
+  .masteryHero,
+  .metricCard,
+  .panel,
+  .stateCard,
+  .statusShell {
+    padding: 14px;
+  }
+
+  .masteryHero {
+    padding: 0;
+  }
+
+  .heroMain {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 16px;
+  }
+
+  .heroMascot {
+    justify-self: start;
+    width: 82px !important;
+    height: 82px !important;
+  }
+}

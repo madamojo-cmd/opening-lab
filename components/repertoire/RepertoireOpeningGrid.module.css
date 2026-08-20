@@ -1,0 +1,84 @@
+.section {
+  display: grid;
+  gap: 12px;
+}
+
+.inventoryBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-inline: 2px;
+}
+
+.inventoryCopy {
+  min-width: min(100%, 20rem);
+}
+
+.kicker {
+  color: #185c38;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.kickerMuted {
+  color: #70766f;
+}
+
+.title {
+  margin-top: 5px;
+  color: #101411;
+  font-size: 0.98rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.repGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.orderPill {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(16, 20, 17, 0.08);
+  border-radius: 999px;
+  background: #f8f8f5;
+  color: #70766f;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 0 10px;
+  text-transform: uppercase;
+}
+
+.emptyCard {
+  border: 1px solid rgba(16, 20, 17, 0.08);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 14px 28px rgba(16, 20, 17, 0.06);
+  color: #70766f;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  padding: 16px;
+}
+
+@media (max-width: 1120px) {
+  .repGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .repGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -19,7 +19,7 @@ const EXEMPT = [
   "/account-deletion",
 ];
 
-function activeNav(pathname: string): AppShellNavKey {
+function activeNav(pathname: string): AppShellNavKey | null {
   if (pathname.startsWith("/train")) return "train";
   if (
     pathname.startsWith("/daily") ||
@@ -29,7 +29,18 @@ function activeNav(pathname: string): AppShellNavKey {
     return "review";
   if (pathname.startsWith("/progress")) return "progress";
   if (pathname.startsWith("/repertoire")) return "repertoire";
+  if (pathname.startsWith("/settings") || pathname.startsWith("/profile"))
+    return null;
   return "home";
+}
+
+function routeEyebrow(pathname: string): string | undefined {
+  if (pathname.startsWith("/daily")) return "Review · Daily Blundr";
+  if (pathname.startsWith("/review/minigames")) return "Review · Minigame";
+  if (pathname.startsWith("/repertoire/")) return "Repertoire · Opening";
+  if (pathname.startsWith("/settings")) return "Settings";
+  if (pathname.startsWith("/profile")) return "Profile";
+  return undefined;
 }
 
 export function ResponsiveAppShellGate({ children }: { children: ReactNode }) {
@@ -40,5 +51,9 @@ export function ResponsiveAppShellGate({ children }: { children: ReactNode }) {
     )
   )
     return <>{children}</>;
-  return <AppShell activeNav={activeNav(pathname)}>{children}</AppShell>;
+  return (
+    <AppShell activeNav={activeNav(pathname)} eyebrow={routeEyebrow(pathname)}>
+      {children}
+    </AppShell>
+  );
 }

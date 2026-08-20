@@ -38,6 +38,10 @@ vi.mock("@/lib/blundr/api/authenticatedApiClient", () => {
   };
 });
 
+vi.mock("./BlundrProfilePage.module.css", () => ({
+  default: new Proxy({}, { get: (_target, property) => String(property) }),
+}));
+
 import { AuthenticatedApiError } from "@/lib/blundr/api/authenticatedApiClient";
 import { BlundrProfilePage } from "./BlundrProfilePage";
 

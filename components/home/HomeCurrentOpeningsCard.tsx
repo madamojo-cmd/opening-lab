@@ -1,7 +1,8 @@
 "use client";
 
 import { CheckCircle2, ChevronRight, PlayCircle } from "lucide-react";
-import { BlundrButton, BlundrSectionHeader, BlundrStateCard } from "@/components/blundr/ui";
+import Link from "next/link";
+import { BlundrStateCard } from "@/components/blundr/ui";
 import { getUnlockedOpeningCards } from "@/lib/blundr/repertoire/repertoireUnlockService";
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
 
@@ -14,53 +15,73 @@ type HomeCurrentOpeningsCardProps = {
 export function HomeCurrentOpeningsCard({ progress, onPlayOpening, className }: HomeCurrentOpeningsCardProps) {
   const openings = getUnlockedOpeningCards(progress);
   const title = openings.length === 1 ? "Current Opening" : "Current Openings";
+  const primaryOpening = openings[0] ?? null;
 
   return (
-    <section className={className}>
-      <BlundrSectionHeader
-        eyebrow="Openings"
-        title={title}
-        copy="Tap Play to launch opening reps for any current opening."
-        action={<BlundrButton href="/repertoire" variant="secondary" size="md" iconTrailing={<ChevronRight size={14} />}>View repertoire</BlundrButton>}
-      />
+    <section
+      className={[
+        "rounded-[20px] border border-stone-200/80 bg-white/90 p-4 shadow-[0_10px_24px_rgba(16,20,17,0.06)]",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <div className="flex items-start justify-between gap-3 border-b border-stone-200 pb-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-green-800">
+            Openings
+          </p>
+          <h2 className="mt-1.5 text-[15px] font-black tracking-[-0.03em] text-stone-950">
+            {title}
+          </h2>
+        </div>
+        <Link
+          href="/repertoire"
+          className="inline-flex min-h-9 shrink-0 items-center gap-2 rounded-full border border-stone-200 bg-white px-3 text-[11px] font-black text-stone-800 shadow-sm"
+        >
+          View repertoire
+          <ChevronRight size={14} />
+        </Link>
+      </div>
 
       {openings.length > 0 ? (
-        <div className="mt-4 grid gap-3">
+        <div className="divide-y divide-stone-200">
           {openings.map((opening) => (
-            <article key={opening.openingId} className="rounded-[1.25rem] border border-stone-200 bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 className="text-base font-black tracking-tight text-stone-950">{opening.openingName}</h3>
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <span
-                      className={
-                        opening.side === "black"
-                          ? "inline-flex items-center rounded-full bg-stone-900 px-2 py-1 text-[11px] font-semibold text-white"
-                          : "inline-flex items-center rounded-full bg-[#f4f1e8] px-2 py-1 text-[11px] font-semibold text-stone-700 ring-1 ring-stone-200"
-                      }
-                    >
-                      {opening.side === "white" ? "White" : opening.side === "black" ? "Black" : "Any side"}
-                    </span>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-[#ebf5ef] px-2 py-1 text-[11px] font-semibold text-[#2e6b4f]">
-                      <CheckCircle2 size={11} />
-                      Ready
-                    </span>
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-stone-500">{opening.description ?? "Ready to train."}</p>
+            <article
+              key={opening.openingId}
+              className="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 py-3.5"
+            >
+              <div
+                className={
+                  opening.side === "black"
+                    ? "grid h-[34px] w-[34px] place-items-center rounded-[11px] bg-stone-950 text-white"
+                    : "grid h-[34px] w-[34px] place-items-center rounded-[11px] bg-[#f8f8f5] text-stone-950 ring-1 ring-stone-200"
+                }
+                aria-hidden="true"
+              >
+                {opening.side === "black" ? "♟" : "♙"}
+              </div>
+              <div className="min-w-0">
+                <h3 className="truncate text-[13px] font-black tracking-[-0.02em] text-stone-950">
+                  {opening.openingName}
+                </h3>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-semibold text-stone-600">
+                  <span>{opening.side === "black" ? "Black" : "White"}</span>
+                  <span aria-hidden="true">·</span>
+                  <span className="inline-flex items-center gap-1 text-green-700">
+                    <CheckCircle2 size={11} />
+                    Ready
+                  </span>
                 </div>
               </div>
-              <div className="mt-4">
-                <BlundrButton
-                  fullWidth
-                  variant="primary"
-                  size="md"
-                  iconLeading={<PlayCircle size={16} />}
-                  iconTrailing={<ChevronRight size={14} />}
-                  onClick={() => onPlayOpening(opening.openingId)}
-                >
-                  Play
-                </BlundrButton>
-              </div>
+              <button
+                type="button"
+                onClick={() => onPlayOpening(opening.openingId)}
+                className="inline-flex min-h-9 items-center gap-2 rounded-full bg-green-800 px-3.5 text-[11px] font-black text-white shadow-sm"
+              >
+                <PlayCircle size={15} />
+                Train
+              </button>
             </article>
           ))}
         </div>
@@ -74,6 +95,32 @@ export function HomeCurrentOpeningsCard({ progress, onPlayOpening, className }: 
           cta={{ label: "Open repertoire", href: "/repertoire" }}
         />
       )}
+
+      {primaryOpening ? (
+        <div className="mt-4 rounded-[16px] border border-green-900/10 bg-[#eef7f1] px-4 py-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <span className="inline-flex rounded-full bg-green-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-green-800">
+                Next action
+              </span>
+              <p className="mt-2 text-sm font-black text-stone-950">
+                Continue {primaryOpening.openingName}.
+              </p>
+              <p className="mt-1 text-[11px] leading-[1.45] text-stone-600">
+                Open the first ready line from Home or go to the full repertoire.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onPlayOpening(primaryOpening.openingId)}
+              className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-[13px] bg-green-800 px-4 text-sm font-black text-white shadow-sm"
+            >
+              Train now
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -2,32 +2,23 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import {
-  ArrowLeft,
-  BookOpen,
-  RefreshCw,
-  Settings,
-  Sparkles,
-} from "lucide-react";
+import { ArrowLeft, BookOpen, RefreshCw, Settings } from "lucide-react";
 import {
   BLUNDR_EMPTY_STATE_ASSETS,
-  BLUNDR_TEMPO_ASSETS,
 } from "@/lib/blundr/assets/blundrAssetManifest";
 import { BLUNDR_ANALYTICS_EVENTS } from "@/lib/blundr/analytics/blundrAnalyticsEvents";
 import { trackBlundrAnalyticsEvent } from "@/lib/blundr/analytics/blundrAnalyticsService";
-import { getStarterPackById } from "@/lib/blundr/onboarding/starterPacks";
 import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
+import { getStarterPackById } from "@/lib/blundr/onboarding/starterPacks";
 import { RepertoireOpeningGrid } from "./RepertoireOpeningGrid";
-import { RepertoirePointsSummary } from "./RepertoirePointsSummary";
 import { RepertoireTempoCallout } from "./RepertoireTempoCallout";
-import { RepertoireUnlockProgress } from "./RepertoireUnlockProgress";
 import { RewardHistoryList } from "@/components/rewards/RewardHistoryList";
 import {
   authenticatedApiFetch,
   AuthenticatedApiError,
 } from "@/lib/blundr/api/authenticatedApiClient";
 import { useDurableRepertoireProgress } from "./useDurableRepertoireProgress";
-import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
+import styles from "./RepertoireProgressPanel.module.css";
 
 type RepertoireProgressPanelProps = {
   onTrainOpening?: (openingId: string) => void;
@@ -128,44 +119,42 @@ export function RepertoireProgressPanel({
   }
 
   return (
-    <section className={classNames("space-y-4", className)}>
-      <header className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-green-50 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-green-700">
+    <section className={classNames(styles.panel, styles.stack, className)}>
+      <header className={styles.hero}>
+        <div className={styles.repHeader}>
+          <div className={styles.heroCopy}>
+            <div className={styles.eyebrow}>
               <BookOpen size={13} />
-              Repertoire progress
+              Repertoire
             </div>
-            <h1 className="mt-3 text-2xl font-black tracking-tight text-stone-950">
-              Build your repertoire
-            </h1>
-            <p className="mt-2 text-sm leading-6 text-stone-600">
-              Earn repertoire points by training. Use them to unlock more
-              openings when you are ready.
+            <h1 className={styles.title}>Your opening library.</h1>
+            <p className={styles.copy}>
+              Points, unlock intelligence, starter pack, active lines and
+              reward history—all without burying the openings.
             </p>
           </div>
           {!embedded ? (
-            <div className="flex items-center gap-2">
+            <div className={styles.actions}>
               <Link
                 href="/settings"
-                className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm"
+                className={styles.iconButton}
                 aria-label="Open settings"
               >
                 <Settings size={18} />
               </Link>
               <Link
                 href={homeHref}
-                className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm"
+                className={styles.iconButton}
                 aria-label="Back to home"
               >
                 <ArrowLeft size={18} />
               </Link>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
+            <div className={styles.actions}>
               <Link
                 href="/settings"
-                className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm"
+                className={styles.iconButton}
                 aria-label="Open settings"
               >
                 <Settings size={18} />
@@ -173,7 +162,7 @@ export function RepertoireProgressPanel({
               <button
                 type="button"
                 onClick={() => void refreshRepertoire()}
-                className="rounded-2xl bg-stone-100 p-3 text-stone-600 shadow-sm"
+                className={styles.iconButton}
                 aria-label="Refresh repertoire"
               >
                 <RefreshCw size={18} />
@@ -182,183 +171,118 @@ export function RepertoireProgressPanel({
           )}
         </div>
 
-        <div className="mt-4 rounded-2xl bg-[#fbfcf7] p-3">
-          <div className="grid gap-3 sm:grid-cols-[auto,1fr] sm:items-center">
-            <BlundrAssetImage
-              asset={BLUNDR_TEMPO_ASSETS.coach}
-              alt="Tempo coach"
-              variant="tempoInline"
-              className="mx-auto sm:mx-0"
-            />
-            <div className="min-w-0 flex-1">
-              <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
-                Tempo says
-              </div>
-              <p className="mt-1 text-sm leading-6 text-stone-700">
-                Every rep makes your repertoire wider. Start with your pack,
-                then unlock the lines you want next.
-              </p>
-              {starterPack ? (
-                <p className="mt-2 text-xs font-semibold text-stone-500">
-                  Current pack:{" "}
-                  <span className="font-black text-stone-700">
-                    {starterPack.displayName}
-                  </span>
-                  {" • "}
-                  {starterPack.styleSummary}
-                </p>
-              ) : null}
-            </div>
-          </div>
-        </div>
       </header>
 
       {statusMessage ? (
-        <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-900 shadow-sm">
-          {statusMessage}
-        </div>
+        <div className={styles.statusBanner}>{statusMessage}</div>
       ) : null}
       {errorMessage ? (
-        <div className="rounded-2xl border border-stone-200 bg-white p-4 text-sm font-semibold text-stone-700 shadow-sm">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <div className={styles.stateCard}>
+          <div className={styles.errorBody}>
             <BlundrAssetImage
               asset={BLUNDR_EMPTY_STATE_ASSETS.errorSafeFallback}
               alt="Safe fallback"
               variant="emptyState"
-              className="mx-auto sm:mx-0 sm:shrink-0"
             />
-            <div>
-              <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">
-                Safe fallback
-              </div>
-              <p className="mt-2 text-sm leading-6 text-stone-700">
-                {errorMessage}
-              </p>
+            <div className={styles.errorCopy}>
+              <div className={styles.kicker}>Safe fallback</div>
+              <p className={styles.stateText}>{errorMessage}</p>
             </div>
           </div>
         </div>
       ) : null}
 
       {repertoireState.status === "loading" ? (
-        <div className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
-          <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
-            Loading
-          </div>
-          <p className="mt-2 text-sm leading-6 text-stone-600">
+        <div className={styles.stateCard}>
+          <div className={styles.kicker}>Loading</div>
+          <p className={styles.stateText}>
             Tempo is loading your durable repertoire state.
           </p>
         </div>
       ) : repertoireState.status === "signed_out" ? (
-        <div className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
-          <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
-            Signed out
-          </div>
-          <p className="mt-2 text-sm leading-6 text-stone-600">
+        <div className={styles.stateCard}>
+          <div className={styles.kicker}>Signed out</div>
+          <p className={styles.stateText}>
             Sign in to load your repertoire from server authority.
           </p>
         </div>
       ) : repertoireState.status === "error" ? (
-        <div className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
-          <div className="text-xs font-black uppercase tracking-[0.18em] text-amber-700">
-            Unavailable
-          </div>
-          <p className="mt-2 text-sm leading-6 text-stone-600">
-            {repertoireState.error}
-          </p>
+        <div
+          className={classNames(styles.stateCard, styles.stateCardUnavailable)}
+        >
+          <div className={styles.kicker}>Unavailable</div>
+          <p className={styles.stateText}>{repertoireState.error}</p>
           <button
             type="button"
             onClick={() => void refreshRepertoire()}
-            className="mt-3 rounded-2xl bg-stone-100 px-4 py-2 text-sm font-black text-stone-700"
+            className={styles.stateAction}
           >
             Retry
           </button>
         </div>
       ) : (
         <>
-          <RepertoirePointsSummary progress={progress} />
-          <RepertoireUnlockProgress progress={progress} />
-
-          <RepertoireTempoCallout />
-          <RewardHistoryList />
-
-          <div className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">
-                  Current state
-                </div>
-                <div className="mt-1 text-sm font-semibold text-stone-600">
-                  {unlockedCount} unlocked, {lockedCount} locked
-                </div>
-              </div>
-              <div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-600">
+          <article className={styles.summaryCard}>
+            <div className={styles.summaryPoints}>
+              <div className={styles.kicker}>Available points</div>
+              <div className={styles.summaryBig}>{progress.availablePoints}</div>
+            </div>
+            <div className={styles.summaryUnlock}>
+              <div className={styles.stateTitle}>
                 {progress.nextUnlockCost > 0
-                  ? `${progress.nextUnlockCost} points next`
+                  ? `Next unlock · ${progress.availablePoints} / ${progress.nextUnlockCost}`
                   : "All MVP lines unlocked"}
               </div>
+              <div className={styles.summaryTrack} aria-hidden="true">
+                <div
+                  className={styles.summaryFill}
+                  style={{ width: `${progress.nextUnlockProgressPct}%` }}
+                />
+              </div>
+              <p className={styles.stateText}>
+                {progress.nextUnlockCost > 0
+                  ? `${Math.max(0, progress.nextUnlockCost - progress.availablePoints)} points remaining`
+                  : "Keep training for future repertoire packs."}
+              </p>
             </div>
-          </div>
+            <div className={classNames(styles.pill, styles.pillGreen)}>
+              {unlockedCount} unlocked · {lockedCount} locked
+            </div>
+          </article>
 
           <RepertoireOpeningGrid
             progress={progress}
             onUnlock={handleUnlock}
             onTrainOpening={handleTrainOpening}
             unlockingOpeningId={unlockingOpeningId}
-            emptyLockedState={
-              <div className="rounded-[1.5rem] border border-stone-200 bg-white p-4 text-sm leading-6 text-stone-600 shadow-sm">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                  <BlundrAssetImage
-                    asset={BLUNDR_EMPTY_STATE_ASSETS.emptyRepertoire}
-                    alt="Empty repertoire"
-                    variant="emptyState"
-                    className="mx-auto sm:mx-0 sm:shrink-0"
-                  />
-                  <div>
-                    <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
-                      All set
-                    </div>
-                    <p className="mt-2">
-                      All eligible MVP openings are unlocked. Keep training to
-                      build points for future packs.
-                    </p>
-                    <p className="mt-2 text-xs font-semibold text-stone-500">
-                      Tempo will widen the pool when new repertoire is ready.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            }
           />
 
-          <div className="rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
+          <RewardHistoryList className={styles.stack} />
+          <RepertoireTempoCallout />
+
+          <div className={styles.starterCard}>
+            <div className={styles.currentRow}>
               <div>
-                <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
-                  Starter pack
-                </div>
-                <div className="mt-1 text-lg font-black tracking-tight text-stone-950">
+                <div className={styles.kicker}>Starter pack</div>
+                <div className={styles.starterTitle}>
                   {starterPack?.displayName ?? "Starter pack"}
                 </div>
               </div>
-              <div className="rounded-full bg-green-50 px-3 py-1 text-xs font-black text-green-700">
+              <div className={classNames(styles.pill, styles.pillGreen)}>
                 {starterPack?.shortName ?? "Tempo"}
               </div>
             </div>
             {starterPack ? (
-              <div className="mt-3 grid gap-2 text-sm text-stone-600 sm:grid-cols-2">
-                <div className="rounded-2xl bg-stone-50 p-3">
-                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">
-                    White
-                  </div>
-                  <div className="mt-1 font-black text-stone-900">
+              <div className={styles.starterGrid}>
+                <div className={styles.starterTile}>
+                  <div className={styles.tileLabel}>White</div>
+                  <div className={styles.tileValue}>
                     {starterPack.whiteOpeningName}
                   </div>
                 </div>
-                <div className="rounded-2xl bg-stone-50 p-3">
-                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">
-                    Black
-                  </div>
-                  <div className="mt-1 font-black text-stone-900">
+                <div className={styles.starterTile}>
+                  <div className={styles.tileLabel}>Black</div>
+                  <div className={styles.tileValue}>
                     {starterPack.blackOpeningName}
                   </div>
                 </div>

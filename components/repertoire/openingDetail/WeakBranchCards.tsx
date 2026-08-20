@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { authenticatedApiFetch } from "@/lib/blundr/api/authenticatedApiClient";
 import type { WeakBranch } from "@/lib/blundr/masteryMap";
+import styles from "./OpeningDetail.module.css";
 export function WeakBranchCards({
   branches,
   openingId,
@@ -32,26 +33,28 @@ export function WeakBranchCards({
     }
   }
   return (
-    <section className="rounded-[1.75rem] border border-stone-200 bg-white p-5">
-      <h2 className="text-xl font-black">Practice next</h2>
+    <section className={styles.panel}>
+      <div className={styles.sectionHeader}>
+        <div>
+          <h2 className={styles.sectionTitle}>Practice next</h2>
+          <p className={styles.sectionCopy}>
+            Weak branches are ranked from the current mastery evidence.
+          </p>
+        </div>
+      </div>
       {branches.length ? (
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className={styles.weakGrid}>
           {branches.map((branch) => (
-            <article
-              key={branch.positionKey}
-              className="rounded-2xl bg-stone-50 p-4"
-            >
-              <p className="font-bold">{branch.sanSequence.join(" ")}</p>
-              <p className="mt-2 text-sm text-stone-600">
-                {branch.explanation}
-              </p>
-              <p className="mt-3 text-xs font-black uppercase tracking-wide text-green-700">
+            <article key={branch.positionKey} className={styles.weakCard}>
+              <p className={styles.weakName}>{branch.sanSequence.join(" ")}</p>
+              <p className={styles.bodyCopy}>{branch.explanation}</p>
+              <p className={styles.weakActivity}>
                 {branch.recommendedActivity.replaceAll("_", " ")}
               </p>
               <button
                 type="button"
                 onClick={() => void addToToday(branch)}
-                className="mt-3 min-h-11 rounded-2xl bg-green-700 px-3 py-2 text-sm font-black text-white"
+                className={styles.dailyButton}
               >
                 Add to today
               </button>
@@ -59,15 +62,12 @@ export function WeakBranchCards({
           ))}
         </div>
       ) : (
-        <p className="mt-2 text-sm text-stone-600">
+        <p className={styles.bodyCopy}>
           No sufficiently evidenced weak branches.
         </p>
       )}
       {message ? (
-        <p
-          role="status"
-          className="mt-4 rounded-2xl bg-green-50 p-3 text-sm font-semibold text-green-900"
-        >
+        <p role="status" className={styles.statusMessage}>
           {message}
         </p>
       ) : null}

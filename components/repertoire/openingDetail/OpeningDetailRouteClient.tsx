@@ -8,6 +8,7 @@ import {
 import type { MasteryMapReadModel } from "@/lib/blundr/masteryMap";
 import { OpeningDetailPage } from "./OpeningDetailPage";
 import { useOnboardingAuthSession } from "@/lib/blundr/onboarding/useOnboardingAuthSession";
+import styles from "./OpeningDetail.module.css";
 
 export function OpeningDetailRouteClient({ openingId }: { openingId: string }) {
   const [model, setModel] = useState<MasteryMapReadModel | null>(null);
@@ -49,9 +50,9 @@ export function OpeningDetailRouteClient({ openingId }: { openingId: string }) {
   }, [auth.status, openingId]);
   if (model) return <OpeningDetailPage model={model} />;
   return (
-    <main className="min-h-screen bg-[#f7f7f4] p-4 text-stone-900 sm:p-8">
-      <div className="mx-auto max-w-3xl rounded-3xl border border-stone-200 bg-white p-6 shadow-sm">
-        <p role="status" className="text-sm font-semibold text-stone-600">
+    <main className={styles.page}>
+      <div className={styles.statusShell}>
+        <p role="status" className={styles.bodyCopy}>
           {message}
         </p>
       </div>

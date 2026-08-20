@@ -15,7 +15,7 @@ export function KnightRouteBoard({
   return (
     <div
       aria-label="Knight route board"
-      className="mt-3 rounded-2xl bg-stone-50 p-2"
+      className="mt-3 rounded-[1.75rem] bg-stone-950 p-3 shadow-[0_22px_55px_rgba(20,17,12,0.24)]"
     >
       <DailyBlundrBoard
         fen={fen}

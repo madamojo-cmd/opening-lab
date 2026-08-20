@@ -3,11 +3,28 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { authenticatedApiFetch } from "@/lib/blundr/api/authenticatedApiClient";
 import { BLUNDR_REWARD_PRESENTATION_REFRESH_EVENT } from "@/lib/blundr/rewards/rewardPresentationSignal";
+import type {
+  RewardRarity,
+  VariableRewardType,
+} from "@/lib/blundr/accounts/accountTypes";
+import { RewardAnimation } from "./RewardAnimation";
+import { RewardIcon } from "./RewardIcon";
+import { RewardRarityBadge } from "./RewardRarityBadge";
+import styles from "./RewardPresentationHost.module.css";
 
 type RewardPresentation = {
   id: string;
   presentation_kind?: string;
   envelope?: Record<string, unknown>;
+};
+
+type RewardPresentationCopy = {
+  title: string;
+  body: string;
+  amountLabel: string | null;
+  kindLabel: string;
+  rarity: RewardRarity;
+  rewardType: VariableRewardType;
 };
 
 const CLAIMANT_KEY = "blundr.reward-presentations.v2.claimant";
@@ -24,27 +41,60 @@ function claimantId(): string {
   }
 }
 
-function displayText(presentation: RewardPresentation): {
-  title: string;
-  body: string;
-} {
+function normalizeToken(value: unknown): string {
+  return String(value ?? "")
+    .replaceAll("_", " ")
+    .trim();
+}
+
+function displayText(presentation: RewardPresentation): RewardPresentationCopy {
   const envelope = presentation.envelope ?? {};
   const quantity = Number(envelope.quantity ?? envelope.amount ?? 0);
-  const grantType = String(
+  const grantType = normalizeToken(
     envelope.grantType ?? envelope.inventoryKind ?? "reward",
+  );
+  const rarity = resolveRarity(envelope.rarity);
+  const rewardType = resolveRewardType(
+    envelope.rewardType ?? envelope.grantType,
   );
   if (presentation.presentation_kind === "unlock")
     return {
       title: "Opening unlocked",
       body: "Your opening is now available to train.",
+      amountLabel: null,
+      kindLabel: "Unlock",
+      rarity,
+      rewardType,
     };
   return {
     title: "Reward earned",
     body:
       quantity > 0
-        ? `${quantity} ${grantType.replaceAll("_", " ")} added.`
+        ? `${quantity} ${grantType} added.`
         : "Your reward is ready.",
+    amountLabel: quantity > 0 ? `+${quantity}` : null,
+    kindLabel: grantType || "Reward",
+    rarity,
+    rewardType,
   };
+}
+
+function resolveRarity(value: unknown): RewardRarity {
+  return value === "uncommon" || value === "rare" || value === "epic"
+    ? value
+    : "common";
+}
+
+function resolveRewardType(value: unknown): VariableRewardType {
+  if (
+    value === "opening_fragment" ||
+    value === "opening_preview_card" ||
+    value === "choice_token" ||
+    value === "style_pack_progress"
+  ) {
+    return value;
+  }
+  return "unlock_points";
 }
 
 /** The sole authenticated, server-leased Rewards v2 presentation owner. */
@@ -139,41 +189,64 @@ export function RewardPresentationHost() {
     ) : null;
   const copy = displayText(active);
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-end justify-center bg-stone-950/30 p-4 sm:items-center"
-      role="presentation"
-    >
+    <div className={styles.overlay} role="presentation">
       <section
-        className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-xl"
+        className={styles.modal}
         role="dialog"
         aria-modal="true"
         aria-labelledby="reward-presentation-title"
       >
-        <p className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
-          Blundr reward
-        </p>
-        <h2
-          id="reward-presentation-title"
-          className="mt-2 text-xl font-black text-stone-900"
-        >
-          {copy.title}
-        </h2>
-        <p className="mt-2 text-sm text-stone-700">{copy.body}</p>
-        <div className="mt-6 flex gap-3">
-          <button
-            type="button"
-            className="min-h-11 flex-1 rounded-xl bg-stone-100 px-4 font-semibold text-stone-800"
-            onClick={() => void finish("dismissed")}
-          >
-            Dismiss
-          </button>
-          <button
-            type="button"
-            className="min-h-11 flex-1 rounded-xl bg-green-800 px-4 font-semibold text-white"
-            onClick={() => void finish("acknowledged")}
-          >
-            Done
-          </button>
+        <div className={styles.artRail} aria-hidden="true">
+          <RewardAnimation
+            kind={
+              active.presentation_kind === "unlock"
+                ? "streakFlare"
+                : "rewardPop"
+            }
+            ariaLabel="Reward reveal animation"
+            className={styles.animation}
+          />
+          <RewardIcon
+            reward={{
+              rarity: copy.rarity,
+              rewardType: copy.rewardType,
+              displayName: copy.title,
+              description: copy.body,
+            }}
+            alt=""
+            variant="rewardIcon"
+            className={styles.icon}
+          />
+        </div>
+        <div className={styles.copy}>
+          <p className={styles.eyebrow}>Blundr reward</p>
+          <h2 id="reward-presentation-title" className={styles.title}>
+            {copy.title}
+          </h2>
+          <p className={styles.body}>{copy.body}</p>
+          <div className={styles.meta}>
+            <RewardRarityBadge rarity={copy.rarity} />
+            <span className={styles.pill}>{copy.kindLabel}</span>
+            {copy.amountLabel ? (
+              <span className={styles.pill}>{copy.amountLabel}</span>
+            ) : null}
+          </div>
+          <div className={styles.actions}>
+            <button
+              type="button"
+              className={`${styles.button} ${styles.secondaryButton}`}
+              onClick={() => void finish("dismissed")}
+            >
+              Dismiss
+            </button>
+            <button
+              type="button"
+              className={`${styles.button} ${styles.primaryButton}`}
+              onClick={() => void finish("acknowledged")}
+            >
+              Done
+            </button>
+          </div>
         </div>
       </section>
     </div>

@@ -1,42 +1,45 @@
-import Link from "next/link";
 import type { MasteryMapReadModel } from "@/lib/blundr/masteryMap";
+import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
+import { BLUNDR_TEMPO_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
+import styles from "./OpeningDetail.module.css";
 
 export function OpeningHeroCard({ model }: { model: MasteryMapReadModel }) {
   const mastery = model.nodes.length
     ? Math.round((model.masteredPositions / model.nodes.length) * 100)
     : null;
+  const masteryPct = mastery ?? 0;
   return (
-    <header className="rounded-[1.75rem] bg-stone-900 p-6 text-stone-50 shadow-sm">
-      <p className="text-xs font-black uppercase tracking-[0.2em] text-green-300">
-        Unlocked repertoire opening
-      </p>
-      <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-black">{model.openingName}</h1>
-          <p className="mt-1 text-sm text-stone-300">
-            {model.side} · Active access
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-3xl font-black text-green-300">
+    <header className={styles.masteryHero}>
+      <div className={styles.heroMain}>
+        <div className={styles.heroCopy}>
+          <p className={styles.kicker}>Unlocked repertoire opening</p>
+          <h2 className={styles.heroTitle}>
             {mastery === null ? "—" : `${mastery}%`}
+          </h2>
+          <p className={styles.heroMeta}>
+            {model.side} · Active access · current durable mastery evidence.
           </p>
-          <p className="text-xs text-stone-300">mastery</p>
+          <div
+            className={styles.heroProgressTrack}
+            role="presentation"
+            aria-hidden="true"
+          >
+            <span style={{ width: `${masteryPct}%` }} />
+          </div>
         </div>
+        <BlundrAssetImage
+          asset={BLUNDR_TEMPO_ASSETS.coach}
+          alt=""
+          aria-hidden="true"
+          variant="tempoHero"
+          className={styles.heroMascot}
+        />
       </div>
-      <div className="mt-5 flex flex-wrap gap-2">
-        <Link
-          href={`/train?openingId=${encodeURIComponent(model.openingId)}`}
-          className="rounded-2xl bg-green-600 px-4 py-3 text-sm font-black text-white"
-        >
-          Train opening
-        </Link>
-        <Link
-          href="/daily"
-          className="rounded-2xl border border-stone-600 px-4 py-3 text-sm font-black"
-        >
-          Practice today&apos;s weaknesses
-        </Link>
+      <div className={styles.heroAside}>
+        <div className={styles.scoreLabel}>Access</div>
+        <div className={styles.accessName}>{model.openingName}</div>
+        <p className={styles.accessCopy}>Unlocked · active · ready for mastery detail.</p>
+        <span className={styles.readyPill}>Ready</span>
       </div>
     </header>
   );
