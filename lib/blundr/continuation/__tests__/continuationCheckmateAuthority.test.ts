@@ -91,3 +91,31 @@ test("PR20 migration rewires Battery evidence away from generic continuation row
     /Generic continuation evidence is deliberately not accepted for Battery/,
   );
 });
+
+test("Battery authority repair migration keeps PR20 evidence durable", () => {
+  const sql = readFileSync(
+    resolve(
+      process.cwd(),
+      "supabase/migrations/20260820203000_blundr_battery_checkmate_authority_repair.sql",
+    ),
+    "utf8",
+  );
+  assert.match(
+    sql,
+    /public\.blundr_apply_reward_transaction_v2_core\(uuid,text,text,text,text,text,text\)/,
+  );
+  assert.match(sql, /from public\.blundr_continuation_checkmates_v1 c/);
+  assert.match(sql, /from public\.blundr_continuation_completions_v1 c/);
+  assert.match(
+    sql,
+    /battery_checkmate_authority_repair_definition_mismatch/,
+  );
+  assert.match(
+    sql,
+    /battery_checkmate_authority_repair_verification_failed/,
+  );
+  assert.match(
+    sql,
+    /position\('from public\.blundr_continuation_checkmates_v1 c' in v_definition\)>0[\s\S]*return;/,
+  );
+});
