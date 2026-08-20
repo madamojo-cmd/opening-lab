@@ -24,6 +24,13 @@ const checkpointBMigration = readFileSync(
   ),
   "utf8",
 );
+const simpleAllRingsMigration = readFileSync(
+  resolve(
+    process.cwd(),
+    "supabase/migrations/20260820193000_blundr_rewards_vault_hmac_simple_all_rings.sql",
+  ),
+  "utf8",
+);
 const completionRoute = readFileSync(
   resolve(process.cwd(), "app/api/blundr/rewards/complete/route.ts"),
   "utf8",
@@ -152,6 +159,43 @@ test("v2 rewards use one atomic writer, an inventory ledger, and leased presenta
   assert.match(checkpointBMigration, /blundr_completion_grants/i);
   assert.match(checkpointBMigration, /'dayRecord'/i);
   assert.match(checkpointBMigration, /'streakRecord'/i);
+});
+
+test("v2 reward randomness comes from Vault and all-rings reward is guaranteed", () => {
+  assert.match(simpleAllRingsMigration, /from vault\.decrypted_secrets/i);
+  assert.match(
+    simpleAllRingsMigration,
+    /where name = 'blundr_rewards_hmac_secret'/i,
+  );
+  assert.match(simpleAllRingsMigration, /if v_secret is null then return null/i);
+  assert.match(simpleAllRingsMigration, /hmac\(p_payload, v_secret, 'sha256'\)/i);
+  assert.match(
+    simpleAllRingsMigration,
+    /v_randomness_available and v_all_closed_this_action/i,
+  );
+  assert.match(
+    simpleAllRingsMigration,
+    /else v_reward_trigger:='all_rings_closed'; v_reward_mode:='random_bonus'; v_should_reward:=true; end if/i,
+  );
+  assert.doesNotMatch(simpleAllRingsMigration, /daily_tempo_ring_closed/i);
+  assert.doesNotMatch(simpleAllRingsMigration, /daily_battery_ring_closed/i);
+  assert.doesNotMatch(simpleAllRingsMigration, /daily_blundr_ring_closed/i);
+  assert.doesNotMatch(simpleAllRingsMigration, /three_all_rings_completions/i);
+  assert.doesNotMatch(simpleAllRingsMigration, /v_all_rings_random < \.08/i);
+  assert.doesNotMatch(simpleAllRingsMigration, /v_random < \.12/i);
+  assert.match(simpleAllRingsMigration, /v_rarity_random < 0\.72/i);
+  assert.match(simpleAllRingsMigration, /v_rarity_random < 0\.92/i);
+  assert.match(simpleAllRingsMigration, /v_rarity_random < 0\.99/i);
+  assert.match(simpleAllRingsMigration, /then 5 else 10 end/i);
+  assert.match(simpleAllRingsMigration, /monthly_cache/i);
+  assert.match(simpleAllRingsMigration, /weekly_cache/i);
+  assert.match(simpleAllRingsMigration, /pity_bonus/i);
+  assert.match(simpleAllRingsMigration, /if v_should_reward then[\s\S]*blundr_reward_presentations_v2/i);
+  assert.doesNotMatch(
+    simpleAllRingsMigration,
+    /'completion:' \|\| v_completion_id,'toast'/i,
+  );
+  assert.match(simpleAllRingsMigration, /'presentation_kind',v_row\.presentation_kind/i);
 });
 
 test("v2 reward authority is account-scoped and deletion-safe by contract", () => {
