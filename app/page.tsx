@@ -13678,6 +13678,7 @@ function BlundrApp({
                 </button>
               </div>
             </header>
+            <div data-train-board-column className="flex min-h-0 flex-col gap-4">
             {blundrDebugEnabled && (
               <>
                 <LiveBrain brain={brain} />
@@ -13698,7 +13699,11 @@ function BlundrApp({
                 />
               </>
             )}
-            <div className="rounded-[22px] border border-stone-200/80 bg-white/90 p-3 shadow-[0_16px_36px_rgba(16,20,17,0.07)]">
+            <div
+              data-train-board-workspace
+              className="rounded-[22px] border border-stone-200/80 bg-white/90 p-3 shadow-[0_16px_36px_rgba(16,20,17,0.07)]"
+              style={{ maxWidth: "min(100%, calc(100dvh - 16rem))" }}
+            >
               {blundrDebugEnabled && (
                 <div className="mb-3 grid grid-cols-4 gap-2">
                   {RATING_PRESETS.map((p) => (
@@ -13727,11 +13732,10 @@ function BlundrApp({
                         ? "bg-stone-950 text-white"
                         : "bg-stone-100 text-stone-600",
                     )}
-                  >
-                    Active Board {activeBoard ? "ON" : "OFF"}
-                  </button>
+                    >
+                      Active Board {activeBoard ? "ON" : "OFF"}
+                    </button>
                 )}
-                <PipelineStatus step={thinkingStep} note={pipelineNote} />
               </div>
               {blundrDebugEnabled && activeBoard && enabledViews.length > 0 && (
                 <div
@@ -13794,7 +13798,9 @@ function BlundrApp({
                 onForward={() => jumpHistory(1)}
               />
               </div>
-              <section className="rounded-[22px] border border-stone-200/80 bg-white/90 p-3 shadow-[0_16px_36px_rgba(16,20,17,0.07)] lg:col-start-2">
+            </div>
+            <aside data-train-aside className="flex min-h-0 flex-col gap-4">
+              <section className="rounded-[22px] border border-stone-200/80 bg-white/90 p-3 shadow-[0_16px_36px_rgba(16,20,17,0.07)]">
                 <div className="rounded-full bg-white p-1 shadow-sm ring-1 ring-stone-200">
                   <div className="grid grid-cols-2 gap-2">
                     <button
@@ -14287,7 +14293,7 @@ function BlundrApp({
          They remain in memo deps for legacy input to surface (bypass detection only). */}
             {surfaceCoachCardDecision?.shouldShowCoachCard &&
             v28VisibleSurface?.mode === "branch_complete" ? (
-              <div className="rounded-3xl border border-green-200 bg-gradient-to-b from-green-50 to-white p-4 shadow-sm lg:col-start-2">
+              <div className="rounded-3xl border border-green-200 bg-gradient-to-b from-green-50 to-white p-4 shadow-sm">
                 <div className="text-xs font-black uppercase tracking-wide text-green-700">
                   Line Complete
                 </div>
@@ -14325,7 +14331,7 @@ function BlundrApp({
                 </div>
               </div>
             ) : surfaceCoachCardDecision?.shouldShowCoachCard ? (
-              <div className="space-y-3 lg:col-start-2">
+              <div className="space-y-3">
                 <CoachCard
                   key={`${trainerFrameId}:surface:${convergedVisibleSurface.targetUci ?? "no-target"}`}
                   decision={surfaceCoachCardDecision}
@@ -14724,7 +14730,7 @@ function BlundrApp({
                 </div>
               </div>
             )}
-            <div className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm lg:col-start-2">
+            <div className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm">
               <div className="flex items-start gap-3">
                 {feedback.toLowerCase().includes("correct") ? (
                   <CheckCircle2 className="mt-0.5 text-green-700" size={24} />
@@ -14758,6 +14764,7 @@ function BlundrApp({
                 </div>
               </div>
             </div>
+            </aside>
           </section>
         )}
         {isActiveTab(activeTab, "review") && (
@@ -14927,10 +14934,7 @@ function TapChessboard({
   const topColor: ChessColor = userColor === "w" ? "b" : "w";
   const bottomColor = userColor;
   return (
-    <div
-      className="mx-auto w-full max-w-[720px]"
-      style={{ maxWidth: "min(100%, calc(100vh - 16rem))" }}
-    >
+    <div className="mx-auto w-full max-w-[720px]">
       {settings.showCaptured ? (
         <CapturedStrip
           color={topColor}
