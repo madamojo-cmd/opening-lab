@@ -4,6 +4,15 @@ export type TrainerEvaluationDisplay = {
   label: string;
 };
 
+export type TrainerEvaluationBarState = "ready" | "pending" | "unavailable";
+
+export type TrainerEvaluationBarDisplay = {
+  state: TrainerEvaluationBarState;
+  label: string;
+  whitePercent?: number;
+  blackPercent?: number;
+};
+
 export function resolveTrainerEvaluationDisplay(
   cpWhite: number | null | undefined,
 ): TrainerEvaluationDisplay | null {
@@ -24,5 +33,47 @@ export function resolveTrainerEvaluationDisplay(
     whitePercent,
     blackPercent: 100 - whitePercent,
     label,
+  };
+}
+
+function normalizeFen(value: string | null | undefined): string {
+  return String(value ?? "").trim();
+}
+
+export function resolveTrainerEvaluationBarDisplay(input: {
+  enabled: boolean;
+  currentFen: string;
+  evaluationFen: string | null | undefined;
+  evaluation: TrainerEvaluationDisplay | null;
+  state: TrainerEvaluationBarState;
+}): TrainerEvaluationBarDisplay | null {
+  if (!input.enabled) return null;
+
+  const currentFen = normalizeFen(input.currentFen);
+  const evaluationFen = normalizeFen(input.evaluationFen);
+  if (
+    input.evaluation &&
+    input.state === "ready" &&
+    currentFen.length > 0 &&
+    currentFen === evaluationFen
+  ) {
+    return {
+      state: "ready",
+      label: input.evaluation.label,
+      whitePercent: input.evaluation.whitePercent,
+      blackPercent: input.evaluation.blackPercent,
+    };
+  }
+
+  if (input.state === "unavailable") {
+    return {
+      state: "unavailable",
+      label: "Unavailable",
+    };
+  }
+
+  return {
+    state: "pending",
+    label: "Analyzing",
   };
 }

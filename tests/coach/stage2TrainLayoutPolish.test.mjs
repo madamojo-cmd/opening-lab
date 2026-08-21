@@ -66,15 +66,29 @@ function testStage2TrainLayoutPolish() {
   const asideSection = trainSection.slice(asideStart, asideEnd);
 
   assert.equal(
-    boardWorkspaceSlice.includes('style={{ maxWidth: "min(100%, calc(100dvh - 16rem))" }}'),
+    pageSource.includes(
+      "resolveTrainBoardWorkspaceMaxWidth(settings.showEvalBar)",
+    ),
     true,
-    "board_workspace_missing_viewport_height_constraint",
+    "board_workspace_missing_viewport_height_helper",
   );
   assert.equal(
     boardWorkspaceSlice.includes("TapChessboard") &&
       boardWorkspaceSlice.includes("HistoryControls"),
     true,
     "board_workspace_missing_board_or_history_controls",
+  );
+  assert.equal(
+    boardWorkspaceSlice.includes("evaluationBar={evaluationBarDisplay}"),
+    true,
+    "board_workspace_missing_eval_bar_mount",
+  );
+  assert.equal(
+    pageSource.includes("resolveTrainBoardWorkspaceMaxWidth(settings.showEvalBar)") &&
+      pageSource.includes("settings.showEvalBar ?") &&
+      pageSource.includes("evaluationBar={evaluationBarDisplay}"),
+    true,
+    "board_workspace_should_gate_eval_bar_only_on_show_setting",
   );
 
   const assistedIndex = asideSection.indexOf('handleTrainerViewChange("assisted")');

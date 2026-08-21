@@ -116,8 +116,10 @@ import { computeTrainerPresentationFrame } from "@/lib/blundr/presentation/train
 import { buildOpponentReplyFeedback } from "@/lib/blundr/presentation/opponentReplyCopy";
 import {
   resolveTrainerEvaluationDisplay,
-  type TrainerEvaluationDisplay,
+  resolveTrainerEvaluationBarDisplay,
+  type TrainerEvaluationBarDisplay,
 } from "@/lib/blundr/presentation/trainerEvaluationDisplay";
+import { resolveTrainBoardWorkspaceMaxWidth } from "@/lib/blundr/presentation/trainBoardLayout";
 import {
   attributeLastMove,
   decideTrainerPhaseActionGate,
@@ -854,8 +856,7 @@ type BoardSettings = {
   showEvalBar: boolean;
   showCaptured: boolean;
   showOpponentCue: boolean;
-  projectiveTacticLinesEnabled: boolean;
-  projectiveTacticLabelsEnabled: boolean;
+  tacticalHighlightsEnabled: boolean;
 };
 type CapturedSummary = {
   whiteCaptured: string[];
@@ -898,9 +899,57 @@ const DEFAULT_BOARD_SETTINGS: BoardSettings = {
   showEvalBar: true,
   showCaptured: true,
   showOpponentCue: true,
-  projectiveTacticLinesEnabled: true,
-  projectiveTacticLabelsEnabled: true,
+  tacticalHighlightsEnabled: true,
 };
+function normalizeBoardSettings(value: unknown): BoardSettings {
+  const record =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  const legacyHighlightsDisabled =
+    record.projectiveTacticLinesEnabled === false ||
+    record.projectiveTacticLabelsEnabled === false;
+  return {
+    boardTheme: normalizeHomeBoardTheme(record.boardTheme ?? record.boardThemeId),
+    pieceStyle: normalizeHomeBoardPieceStyle(
+      record.pieceStyle ?? record.pieceSetId,
+    ),
+    showAttack:
+      typeof record.showAttack === "boolean"
+        ? record.showAttack
+        : DEFAULT_BOARD_SETTINGS.showAttack,
+    showDefense:
+      typeof record.showDefense === "boolean"
+        ? record.showDefense
+        : DEFAULT_BOARD_SETTINGS.showDefense,
+    showPlan:
+      typeof record.showPlan === "boolean"
+        ? record.showPlan
+        : DEFAULT_BOARD_SETTINGS.showPlan,
+    showMoveDots:
+      typeof record.showMoveDots === "boolean"
+        ? record.showMoveDots
+        : DEFAULT_BOARD_SETTINGS.showMoveDots,
+    showEvalBar:
+      typeof record.showEvalBar === "boolean"
+        ? record.showEvalBar
+        : DEFAULT_BOARD_SETTINGS.showEvalBar,
+    showCaptured:
+      typeof record.showCaptured === "boolean"
+        ? record.showCaptured
+        : DEFAULT_BOARD_SETTINGS.showCaptured,
+    showOpponentCue:
+      typeof record.showOpponentCue === "boolean"
+        ? record.showOpponentCue
+        : DEFAULT_BOARD_SETTINGS.showOpponentCue,
+    tacticalHighlightsEnabled:
+      typeof record.tacticalHighlightsEnabled === "boolean"
+        ? record.tacticalHighlightsEnabled
+        : legacyHighlightsDisabled
+          ? false
+          : DEFAULT_BOARD_SETTINGS.tacticalHighlightsEnabled,
+  };
+}
 function isHomeDefaultBoardTheme(theme: BoardTheme): boolean {
   return theme === "default" || theme === "classic" || theme === "slate";
 }
@@ -3050,6 +3099,9 @@ function BlundrApp({
   const [boardSettings, setBoardSettings] = useState<BoardSettings>(
     DEFAULT_BOARD_SETTINGS,
   );
+  const [boardEvaluationStatus, setBoardEvaluationStatus] = useState<
+    "idle" | "pending" | "ready" | "unavailable"
+  >("idle");
   const [ratingFilter, setRatingFilter] = useState(
     () => getStage2RatingBandByFilterValue(DEFAULT_STAGE2_RATING_BAND_ID).value,
   );
@@ -3386,6 +3438,8 @@ function BlundrApp({
   const opponentReplyTimeoutRef = useRef<number | null>(null);
   const brainAbortRef = useRef<AbortController | null>(null);
   const visualAbortRef = useRef<AbortController | null>(null);
+  const boardEvaluationAbortRef = useRef<AbortController | null>(null);
+  const boardEvaluationSeqRef = useRef(0);
   useEffect(() => {
     setBlundrDebugEnabled(isBlundrDebugEnabled());
   }, []);
@@ -3415,6 +3469,11 @@ function BlundrApp({
       clearProjectiveTacticOverlay("feature_disabled");
     return () => clearProjectiveTacticOverlay("unmount");
   }, []);
+  useEffect(() => {
+    if (!PROJECTIVE_TACTICS_ENABLED || !boardSettings.tacticalHighlightsEnabled) {
+      clearProjectiveTacticOverlay("feature_disabled");
+    }
+  }, [boardSettings.tacticalHighlightsEnabled]);
   useEffect(() => {
     if (shouldClearProjectiveTacticsOnViewMode(trainerView))
       clearProjectiveTacticOverlay("view_mode_switch");
@@ -7508,6 +7567,24 @@ function BlundrApp({
   );
   const cpWhite = evalForWhite(engineLines[0]?.cp, game.turn() as ChessColor);
   const evaluationDisplay = resolveTrainerEvaluationDisplay(cpWhite);
+  const evaluationBarDisplay = resolveTrainerEvaluationBarDisplay({
+    enabled: boardSettings.showEvalBar,
+    currentFen: normalizeFen(fen),
+    evaluationFen: enginePreview?.fen ?? null,
+    evaluation: evaluationDisplay,
+    state:
+      evaluationDisplay &&
+      enginePreview &&
+      normalizeFen(enginePreview.fen) === normalizeFen(fen)
+        ? "ready"
+        : trainingMode === "continuation" &&
+            userExplicitlyEnteredContinuation &&
+            continuationAnalysisStatus === "error"
+          ? "unavailable"
+          : boardEvaluationStatus === "unavailable"
+            ? "unavailable"
+            : "pending",
+  });
   const captured = capturedSummary(game);
   const adaptiveOpeningMoveHistoryUci = (
     buildRuntimePlayKeyBeforeFromSanHistory(moveHistory) ?? ""
@@ -7979,17 +8056,18 @@ function BlundrApp({
   const projectiveTacticDisplay = useMemo(
     () =>
       resolveProjectiveTacticDisplay({
-        enabled: PROJECTIVE_TACTICS_ENABLED,
+        enabled:
+          PROJECTIVE_TACTICS_ENABLED &&
+          boardSettings.tacticalHighlightsEnabled,
         viewMode: trainerView,
         visuals: projectiveTacticVisuals,
-        showLines: boardSettings.projectiveTacticLinesEnabled,
-        showLabels: boardSettings.projectiveTacticLabelsEnabled,
+        showLines: boardSettings.tacticalHighlightsEnabled,
+        showLabels: boardSettings.tacticalHighlightsEnabled,
       }),
     [
       trainerView,
       projectiveTacticVisuals,
-      boardSettings.projectiveTacticLinesEnabled,
-      boardSettings.projectiveTacticLabelsEnabled,
+      boardSettings.tacticalHighlightsEnabled,
     ],
   );
   const projectiveTacticsVisualPriorityActive =
@@ -8258,16 +8336,18 @@ function BlundrApp({
   }
   function showProjectiveTacticOverlay(visuals: ProjectiveTacticVisual[]) {
     const filtered = filterProjectiveTacticsForViewMode({
-      enabled: PROJECTIVE_TACTICS_ENABLED,
+      enabled:
+        PROJECTIVE_TACTICS_ENABLED && boardSettings.tacticalHighlightsEnabled,
       viewMode: trainerView,
       visuals,
     });
     const display = resolveProjectiveTacticDisplay({
-      enabled: PROJECTIVE_TACTICS_ENABLED,
+      enabled:
+        PROJECTIVE_TACTICS_ENABLED && boardSettings.tacticalHighlightsEnabled,
       viewMode: trainerView,
       visuals: filtered,
-      showLines: boardSettings.projectiveTacticLinesEnabled,
-      showLabels: boardSettings.projectiveTacticLabelsEnabled,
+      showLines: boardSettings.tacticalHighlightsEnabled,
+      showLabels: boardSettings.tacticalHighlightsEnabled,
     });
     if (!filtered.length || !display.shouldRender) {
       clearProjectiveTacticOverlay(
@@ -8483,18 +8563,7 @@ function BlundrApp({
     if (savedSettings)
       try {
         const parsed = JSON.parse(savedSettings);
-        const canonicalBoardPreferences =
-          readLocalBoardPreferences(localStorage);
-        setBoardSettings({
-          ...DEFAULT_BOARD_SETTINGS,
-          ...parsed,
-          boardTheme: normalizeHomeBoardTheme(
-            canonicalBoardPreferences.boardThemeId,
-          ),
-          pieceStyle: normalizeHomeBoardPieceStyle(
-            canonicalBoardPreferences.pieceSetId,
-          ),
-        });
+        setBoardSettings(normalizeBoardSettings(parsed));
       } catch {}
     if (savedTelemetry)
       try {
@@ -8601,6 +8670,25 @@ function BlundrApp({
       updatedAt: nowIso(),
     };
     writeLocalBoardPreferences(nextPreferences, localStorage);
+    try {
+      const existing = localStorage.getItem("blundr-board-settings");
+      const parsed = existing ? JSON.parse(existing) : {};
+      localStorage.setItem(
+        "blundr-board-settings",
+        JSON.stringify({
+          ...parsed,
+          ...boardSettings,
+          boardTheme: boardSettings.boardTheme,
+          pieceStyle: boardSettings.pieceStyle,
+          boardThemeId: nextPreferences.boardThemeId,
+          pieceSetId: nextPreferences.pieceSetId,
+          showCoordinates: nextPreferences.showCoordinates,
+          boardOrientation: nextPreferences.boardOrientation,
+          source: nextPreferences.source,
+          updatedAt: nextPreferences.updatedAt,
+        }),
+      );
+    } catch {}
   }, [boardSettings]);
   useEffect(
     () => localStorage.setItem("blundr-stage2-rating-band", rating.id),
@@ -8617,22 +8705,11 @@ function BlundrApp({
   useEffect(() => {
     if (typeof window === "undefined") return;
     const handleBoardPreferencesChanged = () => {
-      const canonical = readLocalBoardPreferences(window.localStorage);
-      const nextTheme = normalizeHomeBoardTheme(canonical.boardThemeId);
-      const nextPiece = normalizeHomeBoardPieceStyle(canonical.pieceSetId);
-      setBoardSettings((current) => {
-        if (
-          current.boardTheme === nextTheme &&
-          current.pieceStyle === nextPiece
-        ) {
-          return current;
-        }
-        return {
-          ...current,
-          boardTheme: nextTheme,
-          pieceStyle: nextPiece,
-        };
-      });
+      try {
+        const raw = window.localStorage.getItem("blundr-board-settings");
+        if (!raw) return;
+        setBoardSettings(normalizeBoardSettings(JSON.parse(raw)));
+      } catch {}
     };
     const handleRingRefresh = () => {
       setRepertoireProgress(
@@ -8915,6 +8992,104 @@ function BlundrApp({
     }));
     setOverlayClearedOnPhaseChange(true);
   }, [fen]);
+  useEffect(() => {
+    const currentFen = normalizeFen(fen);
+    const currentEvaluationPreview =
+      enginePreview &&
+      normalizeFen(enginePreview.fen) === currentFen &&
+      enginePreview.pvs.length > 0
+        ? enginePreview
+        : null;
+
+    if (!boardSettings.showEvalBar || activeTab !== "train") {
+      boardEvaluationAbortRef.current?.abort();
+      boardEvaluationAbortRef.current = null;
+      boardEvaluationSeqRef.current += 1;
+      setBoardEvaluationStatus("idle");
+      return;
+    }
+
+    if (currentEvaluationPreview) {
+      boardEvaluationAbortRef.current?.abort();
+      boardEvaluationAbortRef.current = null;
+      boardEvaluationSeqRef.current += 1;
+      setBoardEvaluationStatus("ready");
+      return;
+    }
+
+    if (
+      trainingMode === "continuation" &&
+      userExplicitlyEnteredContinuation
+    ) {
+      boardEvaluationAbortRef.current?.abort();
+      boardEvaluationAbortRef.current = null;
+      boardEvaluationSeqRef.current += 1;
+      setBoardEvaluationStatus(
+        continuationAnalysisStatus === "error" ? "unavailable" : "pending",
+      );
+      return;
+    }
+
+    const cacheKey = `${currentFen}|${rating.skill}|10`;
+    const cached = continuationEngineCacheRef.current[cacheKey];
+    if (cached && normalizeFen(cached.fen) === currentFen && cached.pvs.length) {
+      boardEvaluationAbortRef.current?.abort();
+      boardEvaluationAbortRef.current = null;
+      boardEvaluationSeqRef.current += 1;
+      setEnginePreview(cached);
+      setBoardEvaluationStatus("ready");
+      return;
+    }
+
+    boardEvaluationAbortRef.current?.abort();
+    const controller = new AbortController();
+    boardEvaluationAbortRef.current = controller;
+    const requestSeq = ++boardEvaluationSeqRef.current;
+    setBoardEvaluationStatus("pending");
+
+    void runBrowserStockfish(fen, rating.skill, 700, 10, controller.signal)
+      .then((result) => {
+        if (
+          controller.signal.aborted ||
+          requestSeq !== boardEvaluationSeqRef.current ||
+          normalizeFen(fenRef.current) !== currentFen
+        ) {
+          return;
+        }
+        if (!result?.pvs?.length) {
+          setBoardEvaluationStatus("unavailable");
+          return;
+        }
+        const next = { fen, pvs: result.pvs, source: result.source };
+        continuationEngineCacheRef.current[cacheKey] = next;
+        setEnginePreview(next);
+        setBoardEvaluationStatus("ready");
+      })
+      .catch(() => {
+        if (
+          controller.signal.aborted ||
+          requestSeq !== boardEvaluationSeqRef.current ||
+          normalizeFen(fenRef.current) !== currentFen
+        ) {
+          return;
+        }
+        setBoardEvaluationStatus("unavailable");
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [
+    activeTab,
+    boardSettings.showEvalBar,
+    continuationAnalysisStatus,
+    enginePreview?.fen,
+    enginePreview?.pvs?.length,
+    fen,
+    rating.skill,
+    trainingMode,
+    userExplicitlyEnteredContinuation,
+  ]);
   useEffect(() => {
     if (activeTab !== "train") return;
     if (trainingMode !== "continuation") {
@@ -13776,7 +13951,7 @@ function BlundrApp({
                 projectiveTacticShowLines={projectiveTacticDisplay.showLines}
                 projectiveTacticShowLabels={projectiveTacticDisplay.showLabels}
                 onSquareTap={handleSquareTap}
-                evaluation={evaluationDisplay}
+                evaluationBar={evaluationBarDisplay}
                 settings={boardSettings}
                 captured={captured}
                 userColor={userColor}
@@ -14888,7 +15063,7 @@ function TapChessboard({
   projectiveTacticShowLines,
   projectiveTacticShowLabels,
   onSquareTap,
-  evaluation,
+  evaluationBar,
   settings,
   captured,
   userColor,
@@ -14909,7 +15084,7 @@ function TapChessboard({
   projectiveTacticShowLines: boolean;
   projectiveTacticShowLabels: boolean;
   onSquareTap: (s: string) => void;
-  evaluation: TrainerEvaluationDisplay | null;
+  evaluationBar: TrainerEvaluationBarDisplay | null;
   settings: BoardSettings;
   captured: CapturedSummary;
   userColor: ChessColor;
@@ -14934,7 +15109,12 @@ function TapChessboard({
   const topColor: ChessColor = userColor === "w" ? "b" : "w";
   const bottomColor = userColor;
   return (
-    <div className="mx-auto w-full max-w-[720px]">
+    <div
+      className="mx-auto w-full max-w-[720px]"
+      style={{
+        maxWidth: resolveTrainBoardWorkspaceMaxWidth(settings.showEvalBar),
+      }}
+    >
       {settings.showCaptured ? (
         <CapturedStrip
           color={topColor}
@@ -14951,8 +15131,8 @@ function TapChessboard({
         />
       ) : null}
       <div className="flex items-stretch gap-2">
-        {settings.showEvalBar && evaluation ? (
-          <EvalBar evaluation={evaluation} />
+        {settings.showEvalBar ? (
+          <EvalBar display={evaluationBar} />
         ) : null}
         <div className="flex-1 rounded-[28px] bg-white p-3 shadow-xl shadow-stone-300/40 ring-1 ring-stone-200">
           <div
@@ -15203,29 +15383,54 @@ function CapturedStrip({
   );
 }
 
-function EvalBar({ evaluation }: { evaluation: TrainerEvaluationDisplay }) {
+function EvalBar({
+  display,
+}: {
+  display: TrainerEvaluationBarDisplay | null;
+}) {
+  const nextDisplay =
+    display ?? ({ state: "pending", label: "Analyzing" } as const);
   return (
     <div className="flex w-14 shrink-0 flex-col gap-2">
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-stone-950 shadow-sm ring-1 ring-stone-200">
-        <div
-          className="flex items-center justify-center bg-stone-950 text-[10px] font-black text-white transition-all duration-500"
-          style={{ height: `${evaluation.blackPercent}%`, minHeight: "8%" }}
-        >
-          {evaluation.blackPercent > 34 ? (
-            <span className="rotate-90 tracking-tight">Black</span>
-          ) : null}
-        </div>
-        <div
-          className="flex items-center justify-center bg-stone-50 text-[10px] font-black text-stone-950 transition-all duration-500"
-          style={{ height: `${evaluation.whitePercent}%`, minHeight: "8%" }}
-        >
-          {evaluation.whitePercent > 34 ? (
-            <span className="-rotate-90 tracking-tight">White</span>
-          ) : null}
-        </div>
+      <div
+        className={classNames(
+          "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl shadow-sm ring-1 ring-stone-200",
+          nextDisplay.state === "ready" ? "bg-stone-950" : "bg-stone-100",
+        )}
+      >
+        {nextDisplay.state === "ready" && typeof nextDisplay.whitePercent === "number" && typeof nextDisplay.blackPercent === "number" ? (
+          <>
+            <div
+              className="flex items-center justify-center bg-stone-950 text-[10px] font-black text-white transition-all duration-500"
+              style={{
+                height: `${nextDisplay.blackPercent}%`,
+                minHeight: "8%",
+              }}
+            >
+              {nextDisplay.blackPercent > 34 ? (
+                <span className="rotate-90 tracking-tight">Black</span>
+              ) : null}
+            </div>
+            <div
+              className="flex items-center justify-center bg-stone-50 text-[10px] font-black text-stone-950 transition-all duration-500"
+              style={{
+                height: `${nextDisplay.whitePercent}%`,
+                minHeight: "8%",
+              }}
+            >
+              {nextDisplay.whitePercent > 34 ? (
+                <span className="-rotate-90 tracking-tight">White</span>
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <div className="flex h-full items-center justify-center px-2 text-center text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">
+            {nextDisplay.label}
+          </div>
+        )}
       </div>
       <div className="rounded-xl bg-white px-1 py-1 text-center text-[9px] font-black leading-3 text-stone-700 shadow-sm ring-1 ring-stone-200">
-        {evaluation.label}
+        {nextDisplay.label}
       </div>
     </div>
   );
@@ -15474,8 +15679,7 @@ function SettingsPanel({
       | "showEvalBar"
       | "showCaptured"
       | "showOpponentCue"
-      | "projectiveTacticLinesEnabled"
-      | "projectiveTacticLabelsEnabled"
+      | "tacticalHighlightsEnabled"
     >,
   ) => setSettings({ ...settings, [key]: !settings[key] });
   const OptionButton = ({
@@ -15510,8 +15714,7 @@ function SettingsPanel({
       | "showEvalBar"
       | "showCaptured"
       | "showOpponentCue"
-      | "projectiveTacticLinesEnabled"
-      | "projectiveTacticLabelsEnabled"
+      | "tacticalHighlightsEnabled"
     >;
     label: string;
   }) => (
@@ -15609,16 +15812,27 @@ function SettingsPanel({
               <Toggle id="showCaptured" label="Captured pieces" />
               <Toggle id="showOpponentCue" label="Show Last Opponent Move" />
               {PROJECTIVE_TACTICS_ENABLED ? (
-                <>
-                  <Toggle
-                    id="projectiveTacticLinesEnabled"
-                    label="Tactic lines"
-                  />
-                  <Toggle
-                    id="projectiveTacticLabelsEnabled"
-                    label="Tactic labels"
-                  />
-                </>
+                <button
+                  type="button"
+                  onClick={() => toggle("tacticalHighlightsEnabled")}
+                  className={classNames(
+                    "col-span-2 rounded-2xl px-3 py-3 text-left text-sm font-black",
+                    settings.tacticalHighlightsEnabled
+                      ? "bg-green-50 text-green-800"
+                      : "bg-stone-100 text-stone-500",
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Tactical highlights</span>
+                    <span>
+                      {settings.tacticalHighlightsEnabled ? "ON" : "OFF"}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs font-semibold leading-5 text-current/70">
+                    Show visual cues when Blundr detects tactical patterns such
+                    as forks and pins.
+                  </p>
+                </button>
               ) : null}
             </div>
           </div>
