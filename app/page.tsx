@@ -78,6 +78,7 @@ import {
   reserveAuthoritativeTrainerSession,
   type AuthoritativeTrainerSession,
 } from "@/lib/blundr/trainerCompletion/trainerCompletionClient";
+import { loadDailyRingSnapshot } from "@/lib/blundr/daily-rings/dailyRingService";
 import { persistContinuationCheckmate } from "@/lib/blundr/continuation/continuationCheckmateClient";
 import {
   loadOpponentVariationMemory,
@@ -2966,6 +2967,9 @@ function BlundrApp({
     useState<RepertoireProgress>(() =>
       loadRepertoireProgress({ userId: getLocalAccountCurrentUserId() }),
     );
+  const [dailyRingSnapshot, setDailyRingSnapshot] = useState(() =>
+    loadDailyRingSnapshot({ userId: getLocalAccountCurrentUserId() }),
+  );
   const [latestCompletionResult, setLatestCompletionResult] =
     useState<DailyRingCompletionResultLike | null>(null);
   const [customRepertoires, setCustomRepertoires] = useState<Repertoire[]>([]);
@@ -3094,7 +3098,7 @@ function BlundrApp({
     [],
   );
   const [thinkingStep, setThinkingStep] = useState<ThinkingStep>("idle");
-  const [pipelineNote, setPipelineNote] = useState("Ready");
+  const [pipelineNote, setPipelineNote] = useState("Cue prepared.");
   const [visualReady, setVisualReady] = useState(false);
   const [brain, setBrain] = useState<LiveBrain>({
     ratingLabel: "Club",
@@ -8634,6 +8638,9 @@ function BlundrApp({
       setRepertoireProgress(
         loadRepertoireProgress({ userId: getLocalAccountCurrentUserId() }),
       );
+      setDailyRingSnapshot(
+        loadDailyRingSnapshot({ userId: getLocalAccountCurrentUserId() }),
+      );
     };
     window.addEventListener("storage", handleBoardPreferencesChanged);
     window.addEventListener(
@@ -9453,7 +9460,7 @@ function BlundrApp({
         ? continuationAnalysisStatus === "analyzing"
           ? "Analyzing continuation candidate."
           : "Continuation candidate ready."
-        : "Teaching cue ready.",
+        : "Cue prepared.",
     );
     setBrain((p) => ({
       ...p,
@@ -9479,7 +9486,7 @@ function BlundrApp({
       moveQuality?.status === "verified_top1" ||
       moveQuality?.status === "verified_top2"
     ) {
-      setPipelineNote("Teaching cue ready.");
+      setPipelineNote("Cue prepared.");
       return;
     }
     if (moveQuality?.status === "rejected") {
@@ -13644,7 +13651,7 @@ function BlundrApp({
           </section>
         )}
         {activeTab === "train" && (
-          <section className="grid gap-4 lg:grid-cols-[minmax(500px,650px)_minmax(330px,430px)] lg:items-start">
+          <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(340px,400px)] lg:items-start">
             <header className="flex items-end justify-between gap-6 lg:col-span-2 max-[820px]:items-start">
               <div>
                 <div className="text-[10px] font-black uppercase tracking-[0.18em] text-green-800">
@@ -13726,32 +13733,6 @@ function BlundrApp({
                 )}
                 <PipelineStatus step={thinkingStep} note={pipelineNote} />
               </div>
-              <div className="mb-2 rounded-full bg-white p-1 shadow-sm ring-1 ring-stone-200">
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => handleTrainerViewChange("assisted")}
-                    className={classNames(
-                      "rounded-full px-3 py-2 text-xs font-black",
-                      trainerView === "assisted"
-                        ? "bg-green-700 text-white"
-                        : "bg-white text-stone-600 ring-1 ring-stone-200",
-                    )}
-                  >
-                    Assisted
-                  </button>
-                  <button
-                    onClick={() => handleTrainerViewChange("plain")}
-                    className={classNames(
-                      "rounded-full px-3 py-2 text-xs font-black",
-                      trainerView === "plain"
-                        ? "bg-green-700 text-white"
-                        : "bg-white text-stone-600 ring-1 ring-stone-200",
-                    )}
-                  >
-                    Plain
-                  </button>
-                </div>
-              </div>
               {blundrDebugEnabled && activeBoard && enabledViews.length > 0 && (
                 <div
                   className="mb-3 grid gap-2"
@@ -13812,9 +13793,37 @@ function BlundrApp({
                 onBack={() => jumpHistory(-1)}
                 onForward={() => jumpHistory(1)}
               />
-            </div>
-            {showDetails && (
-              <div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm">
+              </div>
+              <section className="rounded-[22px] border border-stone-200/80 bg-white/90 p-3 shadow-[0_16px_36px_rgba(16,20,17,0.07)] lg:col-start-2">
+                <div className="rounded-full bg-white p-1 shadow-sm ring-1 ring-stone-200">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => handleTrainerViewChange("assisted")}
+                      className={classNames(
+                        "rounded-full px-3 py-2 text-xs font-black",
+                        trainerView === "assisted"
+                          ? "bg-green-700 text-white"
+                          : "bg-white text-stone-600 ring-1 ring-stone-200",
+                      )}
+                    >
+                      Assisted
+                    </button>
+                    <button
+                      onClick={() => handleTrainerViewChange("plain")}
+                      className={classNames(
+                        "rounded-full px-3 py-2 text-xs font-black",
+                        trainerView === "plain"
+                          ? "bg-green-700 text-white"
+                          : "bg-white text-stone-600 ring-1 ring-stone-200",
+                      )}
+                    >
+                      Plain
+                    </button>
+                  </div>
+                </div>
+              </section>
+              {showDetails && (
+                <div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm">
                 <div className="font-black text-stone-800">Coach Debug</div>
                 <div className="mt-2">coachMode: {coachDecision.mode}</div>
                 <div>coachAction: {coachDecision.action}</div>
@@ -14278,7 +14287,7 @@ function BlundrApp({
          They remain in memo deps for legacy input to surface (bypass detection only). */}
             {surfaceCoachCardDecision?.shouldShowCoachCard &&
             v28VisibleSurface?.mode === "branch_complete" ? (
-              <div className="rounded-3xl border border-green-200 bg-gradient-to-b from-green-50 to-white p-4 shadow-sm">
+              <div className="rounded-3xl border border-green-200 bg-gradient-to-b from-green-50 to-white p-4 shadow-sm lg:col-start-2">
                 <div className="text-xs font-black uppercase tracking-wide text-green-700">
                   Line Complete
                 </div>
@@ -14316,7 +14325,7 @@ function BlundrApp({
                 </div>
               </div>
             ) : surfaceCoachCardDecision?.shouldShowCoachCard ? (
-              <div className="space-y-3">
+              <div className="space-y-3 lg:col-start-2">
                 <CoachCard
                   key={`${trainerFrameId}:surface:${convergedVisibleSurface.targetUci ?? "no-target"}`}
                   decision={surfaceCoachCardDecision}
@@ -14333,44 +14342,55 @@ function BlundrApp({
                     Session
                   </h2>
                   <p className="mt-1 text-xs leading-5 text-stone-500">
-                    The same trainer state with less visual chrome.
+                    Authoritative daily rings for this training run.
                   </p>
-                  <div className="mt-4 divide-y divide-stone-100 text-xs">
-                    <div className="flex items-center justify-between gap-3 py-3">
-                      <div>
-                        <div className="font-black text-stone-900">Trainer</div>
-                        <div className="mt-1 text-stone-500">
-                          {trainingMode === "restricted"
-                            ? "Restricted runtime authority"
-                            : "Continuation runtime"}
-                        </div>
+                  <div className="mt-4 grid gap-2 text-xs font-black sm:grid-cols-2 lg:grid-cols-1">
+                    <div className="rounded-2xl bg-stone-50 px-3 py-3 text-stone-700">
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-green-700">
+                        Tempo
                       </div>
-                      <span className="rounded-full bg-green-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-green-700">
-                        {thinkingStep === "ready" ? "Ready" : thinkingStep}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3 py-3">
-                      <div>
-                        <div className="font-black text-stone-900">Recall mode</div>
-                        <div className="mt-1 text-stone-500">
-                          {trainerView === "plain"
-                            ? "Independent recall"
-                            : "Teaching cue available"}
+                      <div className="mt-2 flex items-end justify-between gap-3">
+                        <div className="text-base font-black text-stone-950">
+                          {dailyRingSnapshot.tempo.current}/
+                          {dailyRingSnapshot.tempo.target}
                         </div>
+                        <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-stone-500 ring-1 ring-stone-200">
+                          {dailyRingSnapshot.tempo.percent}%
+                        </span>
                       </div>
-                      <span className="rounded-full bg-blue-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-blue-700">
-                        {trainerView}
-                      </span>
                     </div>
-                    <div className="flex items-center justify-between gap-3 py-3">
+                    <div className="rounded-2xl bg-stone-50 px-3 py-3 text-stone-700">
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-green-700">
+                        Battery
+                      </div>
+                      <div className="mt-2 flex items-end justify-between gap-3">
+                        <div className="text-base font-black text-stone-950">
+                          {dailyRingSnapshot.battery.current}/
+                          {dailyRingSnapshot.battery.target}
+                        </div>
+                        <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-stone-500 ring-1 ring-stone-200">
+                          {dailyRingSnapshot.battery.percent}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4 rounded-2xl border border-stone-200 bg-[#fbfcf7] px-4 py-3">
+                    <div className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">
+                      Opening context
+                    </div>
+                    <div className="mt-2 flex items-start justify-between gap-3">
                       <div>
-                        <div className="font-black text-stone-900">Opening identity</div>
-                        <div className="mt-1 text-stone-500">
+                        <div className="text-sm font-black text-stone-950">
+                          {repertoire.name}
+                        </div>
+                        <div className="mt-1 text-xs leading-5 text-stone-500">
                           {accountRatingBandLabel}
                         </div>
                       </div>
                       <span className="rounded-full bg-green-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-green-700">
-                        {repertoire.name}
+                        {trainingMode === "restricted"
+                          ? "Restricted"
+                          : "Continuation"}
                       </span>
                     </div>
                   </div>
@@ -14704,7 +14724,7 @@ function BlundrApp({
                 </div>
               </div>
             )}
-            <div className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm">
+            <div className="rounded-3xl border border-stone-200 bg-white p-4 shadow-sm lg:col-start-2">
               <div className="flex items-start gap-3">
                 {feedback.toLowerCase().includes("correct") ? (
                   <CheckCircle2 className="mt-0.5 text-green-700" size={24} />
@@ -14907,7 +14927,10 @@ function TapChessboard({
   const topColor: ChessColor = userColor === "w" ? "b" : "w";
   const bottomColor = userColor;
   return (
-    <div className="mx-auto w-full max-w-[720px]">
+    <div
+      className="mx-auto w-full max-w-[720px]"
+      style={{ maxWidth: "min(100%, calc(100vh - 16rem))" }}
+    >
       {settings.showCaptured ? (
         <CapturedStrip
           color={topColor}
@@ -15609,13 +15632,13 @@ function SettingsPanel({
 
 function PipelineStatus({ step, note }: { step: ThinkingStep; note: string }) {
   const labels: Record<ThinkingStep, string> = {
-    idle: "Ready",
+    idle: "Live",
     facts: "Analyzing",
     engine: "Engine",
     brain: "Blundr Brain",
     "gpt-receive": "Receiving",
     "visual-update": "Updating",
-    ready: "Ready",
+    ready: "Live",
     error: "Error",
   };
   const tone =
