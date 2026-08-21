@@ -106,9 +106,19 @@ export async function claimRewardPresentation(input: {
       p_lease_seconds: 60,
     },
   );
-  return error
-    ? failure(error)
-    : { ok: true as const, data: data as Record<string, unknown> | null };
+  if (error) return failure(error);
+  const claimed = data as Record<string, unknown> | null;
+  if (!claimed?.id) return { ok: true as const, data: claimed };
+  const { data: presentation } = await client.admin
+    .from("blundr_reward_presentations_v2")
+    .select("presentation_kind,presentation_key,priority")
+    .eq("id", String(claimed.id))
+    .eq("user_id", input.userId)
+    .maybeSingle();
+  return {
+    ok: true as const,
+    data: presentation ? { ...claimed, ...presentation } : claimed,
+  };
 }
 
 export async function markRewardPresentation(input: {
