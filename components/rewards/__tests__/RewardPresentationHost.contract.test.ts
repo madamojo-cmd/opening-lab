@@ -16,9 +16,13 @@ assert.match(hydration, /<RewardPresentationHost \/>/);
 assert.match(host, /sessionStorage/);
 assert.match(host, /x-blundr-presentation-client/);
 assert.match(host, /presentations\/claim/);
+assert.match(host, /HOME_PRESENTATION_DELAY_MS = 2_000/);
+assert.match(host, /pathname === "\/"/);
 assert.match(host, /action: "rendered"/);
 assert.match(host, /action: "acknowledged"/);
-assert.match(host, /finish\("dismissed"\)/);
+assert.doesNotMatch(host, />Dismiss</);
+assert.doesNotMatch(host, /finish\("dismissed"\)/);
+assert.match(host, />\s*Collect\s*</);
 assert.doesNotMatch(
   host,
   /applyRewardCompletion|spendInventoryAndUnlock|recordBlundrTaskCompleted/,
