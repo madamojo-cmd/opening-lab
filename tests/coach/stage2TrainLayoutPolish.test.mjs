@@ -79,6 +79,11 @@ function testStage2TrainLayoutPolish() {
     "board_workspace_missing_board_or_history_controls",
   );
   assert.equal(
+    boardWorkspaceSlice.includes("AdaptiveOpeningIdentityBadge"),
+    false,
+    "board_workspace_still_renders_opening_identity_badge",
+  );
+  assert.equal(
     boardWorkspaceSlice.includes("evaluationBar={evaluationBarDisplay}"),
     true,
     "board_workspace_missing_eval_bar_mount",
@@ -94,11 +99,24 @@ function testStage2TrainLayoutPolish() {
   const assistedIndex = asideSection.indexOf('handleTrainerViewChange("assisted")');
   const coachCardIndex = asideSection.indexOf("<CoachCard");
   const sessionIndex = asideSection.indexOf("Authoritative daily rings for this training run.");
+  const footerOpeningIndex = pageSource.indexOf("OPENING");
+  const footerOpponentIndex = pageSource.indexOf("OPPONENT");
   const taskIndex = asideSection.indexOf('? "Your move"');
 
   assert.notEqual(assistedIndex, -1, "right_aside_toggle_not_found");
   assert.notEqual(coachCardIndex, -1, "right_aside_coach_card_not_found");
   assert.notEqual(sessionIndex, -1, "right_aside_session_card_not_found");
+  assert.notEqual(footerOpeningIndex, -1, "coach_card_footer_opening_missing");
+  assert.equal(
+    footerOpponentIndex === -1 || footerOpponentIndex > footerOpeningIndex,
+    true,
+    "coach_card_footer_opponent_missing_or_out_of_order",
+  );
+  assert.notEqual(
+    asideSection.indexOf("footer={coachCardFooter}"),
+    -1,
+    "coach_card_footer_binding_missing",
+  );
   assert.notEqual(taskIndex, -1, "right_aside_task_card_not_found");
   assert.ok(assistedIndex < coachCardIndex, "toggle_should_precede_coach_card");
   assert.ok(coachCardIndex < sessionIndex, "coach_card_should_precede_session_card");
@@ -110,6 +128,17 @@ function testStage2TrainLayoutPolish() {
       asideSection.includes("dailyRingSnapshot.battery.target"),
     true,
     "right_aside_should_use_daily_ring_snapshot_source",
+  );
+  assert.equal(
+    asideSection.includes("Run context"),
+    true,
+    "right_aside_should_render_compact_run_context",
+  );
+  assert.equal(
+    pageSource.includes("Opening context") &&
+      pageSource.includes("footer={coachCardFooter}"),
+    true,
+    "coach_card_footer_definition_missing",
   );
   assert.equal(
     asideSection.includes("lg:col-start-2"),

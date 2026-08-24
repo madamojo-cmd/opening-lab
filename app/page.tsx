@@ -117,6 +117,7 @@ import { buildOpponentReplyFeedback } from "@/lib/blundr/presentation/opponentRe
 import {
   resolveTrainerEvaluationDisplay,
   resolveTrainerEvaluationBarDisplay,
+  type TrainerEvaluationDisplay,
   type TrainerEvaluationBarDisplay,
 } from "@/lib/blundr/presentation/trainerEvaluationDisplay";
 import { resolveTrainBoardWorkspaceMaxWidth } from "@/lib/blundr/presentation/trainBoardLayout";
@@ -258,6 +259,7 @@ import { BLUNDR_LOCAL_DEMO_USER_ID } from "@/lib/blundr/persistence/persistenceK
 import { BLUNDR_BOARD_PREFERENCES_CHANGED_EVENT } from "@/lib/blundr/board/boardPreferenceEvents";
 import {
   readLocalBoardPreferences,
+  areBoardPreferencesEquivalent,
   writeLocalBoardPreferences,
 } from "@/lib/blundr/board/boardPreferenceService";
 import { shouldShowOnboarding } from "@/lib/blundr/onboarding/onboardingRouting";
@@ -949,6 +951,21 @@ function normalizeBoardSettings(value: unknown): BoardSettings {
           ? false
           : DEFAULT_BOARD_SETTINGS.tacticalHighlightsEnabled,
   };
+}
+
+function areBoardSettingsEquivalent(a: BoardSettings, b: BoardSettings): boolean {
+  return (
+    a.boardTheme === b.boardTheme &&
+    a.pieceStyle === b.pieceStyle &&
+    a.showAttack === b.showAttack &&
+    a.showDefense === b.showDefense &&
+    a.showPlan === b.showPlan &&
+    a.showMoveDots === b.showMoveDots &&
+    a.showEvalBar === b.showEvalBar &&
+    a.showCaptured === b.showCaptured &&
+    a.showOpponentCue === b.showOpponentCue &&
+    a.tacticalHighlightsEnabled === b.tacticalHighlightsEnabled
+  );
 }
 function isHomeDefaultBoardTheme(theme: BoardTheme): boolean {
   return theme === "default" || theme === "classic" || theme === "slate";
@@ -3102,6 +3119,8 @@ function BlundrApp({
   const [boardEvaluationStatus, setBoardEvaluationStatus] = useState<
     "idle" | "pending" | "ready" | "unavailable"
   >("idle");
+  const [boardEvaluationDisplay, setBoardEvaluationDisplay] =
+    useState<TrainerEvaluationDisplay | null>(null);
   const [ratingFilter, setRatingFilter] = useState(
     () => getStage2RatingBandByFilterValue(DEFAULT_STAGE2_RATING_BAND_ID).value,
   );
@@ -7565,24 +7584,18 @@ function BlundrApp({
   const mistakes = Object.values(progress.mistakes).sort(
     (a, b) => b.count - a.count,
   );
-  const cpWhite = evalForWhite(engineLines[0]?.cp, game.turn() as ChessColor);
-  const evaluationDisplay = resolveTrainerEvaluationDisplay(cpWhite);
   const evaluationBarDisplay = resolveTrainerEvaluationBarDisplay({
     enabled: boardSettings.showEvalBar,
-    currentFen: normalizeFen(fen),
-    evaluationFen: enginePreview?.fen ?? null,
-    evaluation: evaluationDisplay,
+    confirmedEvaluation: boardEvaluationDisplay,
     state:
-      evaluationDisplay &&
-      enginePreview &&
-      normalizeFen(enginePreview.fen) === normalizeFen(fen)
-        ? "ready"
-        : trainingMode === "continuation" &&
-            userExplicitlyEnteredContinuation &&
-            continuationAnalysisStatus === "error"
+      trainingMode === "continuation" &&
+      userExplicitlyEnteredContinuation &&
+      continuationAnalysisStatus === "error"
+        ? "unavailable"
+        : boardEvaluationStatus === "unavailable"
           ? "unavailable"
-          : boardEvaluationStatus === "unavailable"
-            ? "unavailable"
+          : boardEvaluationStatus === "ready"
+            ? "ready"
             : "pending",
   });
   const captured = capturedSummary(game);
@@ -8043,6 +8056,41 @@ function BlundrApp({
         ariaLabel: `Last move rating: ${lastContinuationUserMoveRating?.visibleBadgeLabel ?? "Best"}`,
       }
     : null;
+  const coachCardFooter = adaptiveOpeningIdentity ? (
+    <div className="space-y-3">
+      <div className="text-[10px] font-black uppercase tracking-[0.18em] text-green-100/75">
+        Opening context
+      </div>
+      <div
+        className={classNames(
+          "grid gap-2",
+          adaptiveOpeningIdentity.opponentOpeningName
+            ? "md:grid-cols-2"
+            : "grid-cols-1",
+        )}
+      >
+        <div className="rounded-[16px] bg-white/10 px-3 py-2">
+          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-green-100/75">
+            OPENING
+          </div>
+          <div className="mt-1 text-sm font-black leading-5 text-white">
+            {adaptiveOpeningIdentity.openingFamilyName ??
+              adaptiveOpeningIdentity.currentOpeningName}
+          </div>
+        </div>
+        {adaptiveOpeningIdentity.opponentOpeningName ? (
+          <div className="rounded-[16px] bg-white/10 px-3 py-2">
+            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-green-100/75">
+              OPPONENT
+            </div>
+            <div className="mt-1 text-sm font-black leading-5 text-white">
+              {adaptiveOpeningIdentity.opponentOpeningName}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  ) : null;
 
   const isReviewingHistory = historyIndex < positionHistory.length - 1;
   const selectedLegalMoves =
@@ -8657,6 +8705,18 @@ function BlundrApp({
     [customRepertoires],
   );
   useEffect(() => {
+    let existingBoardSettings: BoardSettings | null = null;
+    try {
+      const raw = localStorage.getItem("blundr-board-settings");
+      existingBoardSettings = raw ? normalizeBoardSettings(JSON.parse(raw)) : null;
+    } catch {
+      existingBoardSettings = null;
+    }
+
+    if (existingBoardSettings && areBoardSettingsEquivalent(boardSettings, existingBoardSettings)) {
+      return;
+    }
+
     const currentPreferences = readLocalBoardPreferences(localStorage);
     const nextPreferences: BlundrBoardPreferences = {
       ...currentPreferences,
@@ -8669,10 +8729,12 @@ function BlundrApp({
       pieceSetId: normalizeHomeBoardPieceStyle(boardSettings.pieceStyle),
       updatedAt: nowIso(),
     };
+    if (areBoardPreferencesEquivalent(currentPreferences, nextPreferences)) {
+      return;
+    }
     writeLocalBoardPreferences(nextPreferences, localStorage);
     try {
-      const existing = localStorage.getItem("blundr-board-settings");
-      const parsed = existing ? JSON.parse(existing) : {};
+      const parsed = existingBoardSettings ? { ...existingBoardSettings } : {};
       localStorage.setItem(
         "blundr-board-settings",
         JSON.stringify({
@@ -8708,7 +8770,12 @@ function BlundrApp({
       try {
         const raw = window.localStorage.getItem("blundr-board-settings");
         if (!raw) return;
-        setBoardSettings(normalizeBoardSettings(JSON.parse(raw)));
+        const nextBoardSettings = normalizeBoardSettings(JSON.parse(raw));
+        setBoardSettings((current) =>
+          areBoardSettingsEquivalent(current, nextBoardSettings)
+            ? current
+            : nextBoardSettings,
+        );
       } catch {}
     };
     const handleRingRefresh = () => {
@@ -9000,6 +9067,11 @@ function BlundrApp({
       enginePreview.pvs.length > 0
         ? enginePreview
         : null;
+    const currentEvaluationDisplay = currentEvaluationPreview
+      ? resolveTrainerEvaluationDisplay(
+          evalForWhite(currentEvaluationPreview.pvs[0]?.cp, game.turn() as ChessColor),
+        )
+      : null;
 
     if (!boardSettings.showEvalBar || activeTab !== "train") {
       boardEvaluationAbortRef.current?.abort();
@@ -9013,6 +9085,15 @@ function BlundrApp({
       boardEvaluationAbortRef.current?.abort();
       boardEvaluationAbortRef.current = null;
       boardEvaluationSeqRef.current += 1;
+      setBoardEvaluationDisplay((prev) =>
+        prev &&
+        currentEvaluationDisplay &&
+        prev.label === currentEvaluationDisplay.label &&
+        prev.whitePercent === currentEvaluationDisplay.whitePercent &&
+        prev.blackPercent === currentEvaluationDisplay.blackPercent
+          ? prev
+          : currentEvaluationDisplay,
+      );
       setBoardEvaluationStatus("ready");
       return;
     }
@@ -9037,6 +9118,18 @@ function BlundrApp({
       boardEvaluationAbortRef.current = null;
       boardEvaluationSeqRef.current += 1;
       setEnginePreview(cached);
+      const cachedDisplay = resolveTrainerEvaluationDisplay(
+        evalForWhite(cached.pvs[0]?.cp, game.turn() as ChessColor),
+      );
+      setBoardEvaluationDisplay((prev) =>
+        prev &&
+        cachedDisplay &&
+        prev.label === cachedDisplay.label &&
+        prev.whitePercent === cachedDisplay.whitePercent &&
+        prev.blackPercent === cachedDisplay.blackPercent
+          ? prev
+          : cachedDisplay,
+      );
       setBoardEvaluationStatus("ready");
       return;
     }
@@ -9061,8 +9154,20 @@ function BlundrApp({
           return;
         }
         const next = { fen, pvs: result.pvs, source: result.source };
+        const nextDisplay = resolveTrainerEvaluationDisplay(
+          evalForWhite(next.pvs[0]?.cp, game.turn() as ChessColor),
+        );
         continuationEngineCacheRef.current[cacheKey] = next;
         setEnginePreview(next);
+        setBoardEvaluationDisplay((prev) =>
+          prev &&
+          nextDisplay &&
+          prev.label === nextDisplay.label &&
+          prev.whitePercent === nextDisplay.whitePercent &&
+          prev.blackPercent === nextDisplay.blackPercent
+            ? prev
+            : nextDisplay,
+        );
         setBoardEvaluationStatus("ready");
       })
       .catch(() => {
@@ -9086,6 +9191,7 @@ function BlundrApp({
     enginePreview?.fen,
     enginePreview?.pvs?.length,
     fen,
+    game.turn(),
     rating.skill,
     trainingMode,
     userExplicitlyEnteredContinuation,
@@ -13956,7 +14062,6 @@ function BlundrApp({
                 captured={captured}
                 userColor={userColor}
                 animationName={visualAnimationName}
-                adaptiveOpeningIdentity={adaptiveOpeningIdentity}
                 pendingPromotion={pendingPromotion}
                 onPromotionSelect={handlePromotionPieceSelection}
                 onPromotionCancel={cancelPromotionSelection}
@@ -14517,6 +14622,7 @@ function BlundrApp({
                   }
                   surfaceActions={v28CoachUiModel?.actions}
                   topRightBadge={continuationRatingBadge}
+                  footer={coachCardFooter}
                 />
                 <section className="rounded-[22px] border border-stone-200/80 bg-white/90 p-4 shadow-[0_16px_34px_rgba(16,20,17,0.07)]">
                   <h2 className="text-lg font-black tracking-[-0.03em] text-stone-950">
@@ -14557,18 +14663,13 @@ function BlundrApp({
                   </div>
                   <div className="mt-4 rounded-2xl border border-stone-200 bg-[#fbfcf7] px-4 py-3">
                     <div className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">
-                      Opening context
+                      Run context
                     </div>
-                    <div className="mt-2 flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-black text-stone-950">
-                          {repertoire.name}
-                        </div>
-                        <div className="mt-1 text-xs leading-5 text-stone-500">
-                          {accountRatingBandLabel}
-                        </div>
-                      </div>
-                      <span className="rounded-full bg-green-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-green-700">
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-stone-600">
+                      <span className="rounded-full bg-white px-2 py-1 ring-1 ring-stone-200">
+                        {accountRatingBandLabel}
+                      </span>
+                      <span className="rounded-full bg-white px-2 py-1 ring-1 ring-stone-200">
                         {trainingMode === "restricted"
                           ? "Restricted"
                           : "Continuation"}
@@ -15068,7 +15169,6 @@ function TapChessboard({
   captured,
   userColor,
   animationName,
-  adaptiveOpeningIdentity,
   pendingPromotion,
   onPromotionSelect,
   onPromotionCancel,
@@ -15089,7 +15189,6 @@ function TapChessboard({
   captured: CapturedSummary;
   userColor: ChessColor;
   animationName?: string;
-  adaptiveOpeningIdentity: AdaptiveOpeningIdentity | null;
   pendingPromotion: PendingPromotion | null;
   onPromotionSelect: (piece: PromotionPiece) => void;
   onPromotionCancel: () => void;
@@ -15313,30 +15412,6 @@ function TapChessboard({
           settings={settings}
         />
       ) : null}
-      <AdaptiveOpeningIdentityBadge identity={adaptiveOpeningIdentity} />
-    </div>
-  );
-}
-
-function AdaptiveOpeningIdentityBadge({
-  identity,
-}: {
-  identity: AdaptiveOpeningIdentity | null;
-}) {
-  if (!identity) return null;
-  const openingName = identity.openingFamilyName ?? identity.currentOpeningName;
-  return (
-    <div className="mx-1 mt-2 rounded-2xl border border-stone-200 bg-white/90 px-3 py-2 text-xs leading-5 text-stone-600 shadow-sm">
-      <div>
-        <span className="font-black text-stone-900">Opening: </span>
-        {openingName}
-      </div>
-      {identity.opponentOpeningName ? (
-        <div>
-          <span className="font-black text-stone-900">Opponent: </span>
-          {identity.opponentOpeningName}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -15388,46 +15463,61 @@ function EvalBar({
 }: {
   display: TrainerEvaluationBarDisplay | null;
 }) {
-  const nextDisplay =
-    display ?? ({ state: "pending", label: "Analyzing" } as const);
+  const nextDisplay = display ?? ({ state: "pending", label: "—" } as const);
+  const nextBarDisplay = nextDisplay as TrainerEvaluationBarDisplay;
+  const hasBar =
+    typeof nextBarDisplay.whitePercent === "number" &&
+    typeof nextBarDisplay.blackPercent === "number";
+  const barDisplay = hasBar
+    ? (nextBarDisplay as TrainerEvaluationBarDisplay & {
+        whitePercent: number;
+        blackPercent: number;
+      })
+    : null;
+  const isMuted = nextDisplay.state !== "ready";
   return (
-    <div className="flex w-14 shrink-0 flex-col gap-2">
+    <div className="flex w-8 shrink-0 flex-col gap-1.5 sm:w-9">
       <div
         className={classNames(
           "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl shadow-sm ring-1 ring-stone-200",
-          nextDisplay.state === "ready" ? "bg-stone-950" : "bg-stone-100",
+          hasBar ? "bg-stone-950" : "bg-stone-100",
         )}
       >
-        {nextDisplay.state === "ready" && typeof nextDisplay.whitePercent === "number" && typeof nextDisplay.blackPercent === "number" ? (
+        {barDisplay ? (
           <>
             <div
-              className="flex items-center justify-center bg-stone-950 text-[10px] font-black text-white transition-all duration-500"
+              className={classNames(
+                "transition-all duration-500",
+                isMuted ? "bg-stone-900/90" : "bg-stone-950",
+              )}
               style={{
-                height: `${nextDisplay.blackPercent}%`,
+                height: `${barDisplay.blackPercent}%`,
                 minHeight: "8%",
               }}
             >
-              {nextDisplay.blackPercent > 34 ? (
-                <span className="rotate-90 tracking-tight">Black</span>
-              ) : null}
             </div>
             <div
-              className="flex items-center justify-center bg-stone-50 text-[10px] font-black text-stone-950 transition-all duration-500"
+              className={classNames(
+                "transition-all duration-500",
+                isMuted ? "bg-stone-50/90" : "bg-stone-50",
+              )}
               style={{
-                height: `${nextDisplay.whitePercent}%`,
+                height: `${barDisplay.whitePercent}%`,
                 minHeight: "8%",
               }}
             >
-              {nextDisplay.whitePercent > 34 ? (
-                <span className="-rotate-90 tracking-tight">White</span>
-              ) : null}
             </div>
           </>
         ) : (
-          <div className="flex h-full items-center justify-center px-2 text-center text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">
+          <div className="flex h-full items-center justify-center px-1 text-center text-[10px] font-black uppercase tracking-[0.14em] text-stone-500">
             {nextDisplay.label}
           </div>
         )}
+        {barDisplay && nextDisplay.state !== "ready" ? (
+          <div className="absolute inset-x-0 bottom-1 flex justify-center">
+            <span className="h-1 w-1 rounded-full bg-white/75 shadow-[0_0_0_1px_rgba(0,0,0,.12)]" />
+          </div>
+        ) : null}
       </div>
       <div className="rounded-xl bg-white px-1 py-1 text-center text-[9px] font-black leading-3 text-stone-700 shadow-sm ring-1 ring-stone-200">
         {nextDisplay.label}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import type { CoachDecision, CoachButton } from "@/lib/blundr/coach/coachTypes";
 import { getVisibleActionLabel, filterToVisibleCoachActions, type VisibleCoachAction } from "@/lib/blundr/presentation/visibleActionPolicy";
 import { getBranchTransitionIntent, isBranchTransitionActionSurface, resolveCoachActionStyle } from "@/lib/blundr/presentation/coachActionStylePolicy";
@@ -21,9 +21,10 @@ type Props = {
     severity: "positive" | "neutral" | "warning" | "danger" | "unknown";
     ariaLabel: string;
   } | null;
+  footer?: ReactNode;
 };
 
-export function CoachCard({ decision, onAction, replayEnabled = true, surfaceActions, topRightBadge = null }: Props): ReactElement | null {
+export function CoachCard({ decision, onAction, replayEnabled = true, surfaceActions, topRightBadge = null, footer = null }: Props): ReactElement | null {
   const [showWhy, setShowWhy] = useState(false);
   if (!decision.shouldShowCoachCard) return null;
   const visibleActions = filterToVisibleCoachActions(decision.buttons as string[]);
@@ -74,6 +75,7 @@ export function CoachCard({ decision, onAction, replayEnabled = true, surfaceAct
         </ul>
       ) : null}
       {showWhy && decision.why ? <p className="mt-3 rounded-2xl bg-white/10 p-3 text-sm text-green-50 ring-1 ring-white/15">{decision.why}</p> : null}
+      {footer ? <div className="mt-4 border-t border-white/15 pt-4">{footer}</div> : null}
       <div className={`mt-4 ${isBranchSurface ? "grid grid-cols-2 gap-3" : "flex flex-wrap gap-2"}`}>
         {shouldUseSurfaceActions ? surfaceVisibleActions.map((surfaceAction) => {
           const className = `rounded-[13px] px-4 py-3 text-xs font-black ${surfaceAction.enabled ? "bg-white text-green-900" : "bg-white/20 text-white/60"}`;

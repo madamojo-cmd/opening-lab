@@ -36,36 +36,47 @@ export function resolveTrainerEvaluationDisplay(
   };
 }
 
-function normalizeFen(value: string | null | undefined): string {
-  return String(value ?? "").trim();
-}
-
 export function resolveTrainerEvaluationBarDisplay(input: {
   enabled: boolean;
-  currentFen: string;
-  evaluationFen: string | null | undefined;
-  evaluation: TrainerEvaluationDisplay | null;
+  confirmedEvaluation: TrainerEvaluationDisplay | null;
   state: TrainerEvaluationBarState;
 }): TrainerEvaluationBarDisplay | null {
   if (!input.enabled) return null;
 
-  const currentFen = normalizeFen(input.currentFen);
-  const evaluationFen = normalizeFen(input.evaluationFen);
-  if (
-    input.evaluation &&
-    input.state === "ready" &&
-    currentFen.length > 0 &&
-    currentFen === evaluationFen
-  ) {
+  const confirmed = input.confirmedEvaluation;
+  if (input.state === "ready" && confirmed) {
     return {
       state: "ready",
-      label: input.evaluation.label,
-      whitePercent: input.evaluation.whitePercent,
-      blackPercent: input.evaluation.blackPercent,
+      label: confirmed.label,
+      whitePercent: confirmed.whitePercent,
+      blackPercent: confirmed.blackPercent,
+    };
+  }
+
+  if (input.state === "pending") {
+    if (confirmed) {
+      return {
+        state: "pending",
+        label: "Updating",
+        whitePercent: confirmed.whitePercent,
+        blackPercent: confirmed.blackPercent,
+      };
+    }
+    return {
+      state: "pending",
+      label: "—",
     };
   }
 
   if (input.state === "unavailable") {
+    if (confirmed) {
+      return {
+        state: "unavailable",
+        label: "Unavailable",
+        whitePercent: confirmed.whitePercent,
+        blackPercent: confirmed.blackPercent,
+      };
+    }
     return {
       state: "unavailable",
       label: "Unavailable",
@@ -74,6 +85,12 @@ export function resolveTrainerEvaluationBarDisplay(input: {
 
   return {
     state: "pending",
-    label: "Analyzing",
+    label: confirmed ? "Updating" : "—",
+    ...(confirmed
+      ? {
+          whitePercent: confirmed.whitePercent,
+          blackPercent: confirmed.blackPercent,
+        }
+      : {}),
   };
 }

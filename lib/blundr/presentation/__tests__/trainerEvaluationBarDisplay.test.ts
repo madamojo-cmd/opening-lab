@@ -3,17 +3,14 @@ import assert from "node:assert/strict";
 import {
   resolveTrainerEvaluationBarDisplay,
   resolveTrainerEvaluationDisplay,
-} from "../trainerEvaluationDisplay";
+} from "../trainerEvaluationDisplay.ts";
 
-const currentFen = "8/8/8/8/8/8/8/K6k w - - 0 1";
-const readyEvaluation = resolveTrainerEvaluationDisplay(0);
+const readyEvaluation = resolveTrainerEvaluationDisplay(0)!;
 
 assert.deepEqual(
   resolveTrainerEvaluationBarDisplay({
     enabled: true,
-    currentFen,
-    evaluationFen: currentFen,
-    evaluation: readyEvaluation,
+    confirmedEvaluation: readyEvaluation,
     state: "ready",
   }),
   {
@@ -27,33 +24,27 @@ assert.deepEqual(
 assert.deepEqual(
   resolveTrainerEvaluationBarDisplay({
     enabled: true,
-    currentFen,
-    evaluationFen: currentFen,
-    evaluation: null,
+    confirmedEvaluation: null,
     state: "pending",
   }),
   {
     state: "pending",
-    label: "Analyzing",
+    label: "—",
   },
 );
 
 assert.equal(
   resolveTrainerEvaluationBarDisplay({
     enabled: true,
-    currentFen,
-    evaluationFen: currentFen,
-    evaluation: null,
+    confirmedEvaluation: null,
     state: "pending",
   })?.label,
-  "Analyzing",
+  "—",
 );
 assert.equal(
   resolveTrainerEvaluationBarDisplay({
     enabled: true,
-    currentFen,
-    evaluationFen: currentFen,
-    evaluation: null,
+    confirmedEvaluation: null,
     state: "pending",
   })?.label.includes("Equal"),
   false,
@@ -61,32 +52,28 @@ assert.equal(
 assert.equal(
   resolveTrainerEvaluationBarDisplay({
     enabled: true,
-    currentFen,
-    evaluationFen: "8/8/8/8/8/8/8/K6k b - - 1 1",
-    evaluation: readyEvaluation,
+    confirmedEvaluation: readyEvaluation,
     state: "ready",
   })?.state,
-  "pending",
+  "ready",
 );
 assert.deepEqual(
   resolveTrainerEvaluationBarDisplay({
     enabled: true,
-    currentFen,
-    evaluationFen: currentFen,
-    evaluation: null,
+    confirmedEvaluation: readyEvaluation,
     state: "unavailable",
   }),
   {
     state: "unavailable",
     label: "Unavailable",
+    whitePercent: readyEvaluation!.whitePercent,
+    blackPercent: readyEvaluation!.blackPercent,
   },
 );
 assert.equal(
   resolveTrainerEvaluationBarDisplay({
     enabled: false,
-    currentFen,
-    evaluationFen: currentFen,
-    evaluation: readyEvaluation,
+    confirmedEvaluation: readyEvaluation,
     state: "ready",
   }),
   null,
