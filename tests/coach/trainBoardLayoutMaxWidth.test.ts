@@ -4,15 +4,23 @@ import { resolveTrainBoardWorkspaceMaxWidth } from "../../lib/blundr/presentatio
 
 assert.equal(
   resolveTrainBoardWorkspaceMaxWidth(true),
-  "min(100%, calc(100dvh - 21.5rem))",
+  "min(720px, 100%, calc(100dvh - 21rem))",
 );
 assert.equal(
   resolveTrainBoardWorkspaceMaxWidth(false),
-  "min(100%, calc(100dvh - 17.5rem))",
+  "min(720px, 100%, calc(100dvh - 17.5rem))",
 );
 assert.notEqual(
   resolveTrainBoardWorkspaceMaxWidth(true),
   resolveTrainBoardWorkspaceMaxWidth(false),
+);
+assert.equal(
+  resolveTrainBoardWorkspaceMaxWidth(true).includes("100dvh"),
+  true,
+);
+assert.equal(
+  resolveTrainBoardWorkspaceMaxWidth(true).includes("720px"),
+  true,
 );
 
 console.log("trainBoardLayoutMaxWidth ok");

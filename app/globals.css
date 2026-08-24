@@ -176,6 +176,15 @@ button {
   opacity: 0;
 }
 
+@media (max-width: 639px) {
+  .train-board-mobile-bleed {
+    margin-left: calc(50% - 50dvw);
+    margin-right: calc(50% - 50dvw);
+    max-width: 100dvw;
+    width: 100dvw;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .blundr-intent-line,
   .blundr-opponent-line,

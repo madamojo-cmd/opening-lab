@@ -66,9 +66,8 @@ function testStage2TrainLayoutPolish() {
   const asideSection = trainSection.slice(asideStart, asideEnd);
 
   assert.equal(
-    pageSource.includes(
-      "resolveTrainBoardWorkspaceMaxWidth(settings.showEvalBar)",
-    ),
+    pageSource.includes("resolveTrainBoardWorkspaceMaxWidth") &&
+      pageSource.includes("settings.showEvalBar"),
     true,
     "board_workspace_missing_viewport_height_helper",
   );
@@ -89,7 +88,7 @@ function testStage2TrainLayoutPolish() {
     "board_workspace_missing_eval_bar_mount",
   );
   assert.equal(
-    pageSource.includes("resolveTrainBoardWorkspaceMaxWidth(settings.showEvalBar)") &&
+    pageSource.includes("resolveTrainBoardWorkspaceMaxWidth") &&
       pageSource.includes("settings.showEvalBar ?") &&
       pageSource.includes("evaluationBar={evaluationBarDisplay}"),
     true,

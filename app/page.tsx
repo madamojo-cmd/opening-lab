@@ -13982,8 +13982,13 @@ function BlundrApp({
             )}
             <div
               data-train-board-workspace
-              className="rounded-[22px] border border-stone-200/80 bg-white/90 p-3 shadow-[0_16px_36px_rgba(16,20,17,0.07)]"
-              style={{ maxWidth: "min(100%, calc(100dvh - 16rem))" }}
+              className="w-full max-w-none rounded-none border-0 bg-transparent p-0 shadow-none sm:rounded-[22px] sm:border sm:border-stone-200/80 sm:bg-white/90 sm:p-3 sm:shadow-[0_16px_36px_rgba(16,20,17,0.07)] sm:max-w-[var(--train-board-workspace-max-width)]"
+              style={
+                {
+                  "--train-board-workspace-max-width":
+                    "min(100%, calc(100dvh - 16rem))",
+                } as CSSProperties
+              }
             >
               {blundrDebugEnabled && (
                 <div className="mb-3 grid grid-cols-4 gap-2">
@@ -14066,17 +14071,19 @@ function BlundrApp({
                 onPromotionSelect={handlePromotionPieceSelection}
                 onPromotionCancel={cancelPromotionSelection}
               />
-              <HistoryControls
-                index={historyIndex}
-                total={positionHistory.length}
-                lessonProgress={
-                  trainingMode === "restricted"
-                    ? selectedRuntimeLineLearnerProgress
-                    : null
-                }
-                onBack={() => jumpHistory(-1)}
-                onForward={() => jumpHistory(1)}
-              />
+              <div className="px-3 sm:px-0">
+                <HistoryControls
+                  index={historyIndex}
+                  total={positionHistory.length}
+                  lessonProgress={
+                    trainingMode === "restricted"
+                      ? selectedRuntimeLineLearnerProgress
+                      : null
+                  }
+                  onBack={() => jumpHistory(-1)}
+                  onForward={() => jumpHistory(1)}
+                />
+              </div>
               </div>
             </div>
             <aside data-train-aside className="flex min-h-0 flex-col gap-4">
@@ -15209,34 +15216,44 @@ function TapChessboard({
   const bottomColor = userColor;
   return (
     <div
-      className="mx-auto w-full max-w-[720px]"
-      style={{
-        maxWidth: resolveTrainBoardWorkspaceMaxWidth(settings.showEvalBar),
-      }}
+      className="mx-auto w-full max-w-none sm:max-w-[var(--train-board-unit-max-width)]"
+      style={
+        {
+          "--train-board-unit-max-width": resolveTrainBoardWorkspaceMaxWidth(
+            settings.showEvalBar,
+          ),
+        } as CSSProperties
+      }
     >
       {settings.showCaptured ? (
-        <CapturedStrip
-          color={topColor}
-          captured={
-            topColor === "w" ? captured.blackCaptured : captured.whiteCaptured
-          }
-          advantage={
-            captured.materialAdvantage.side === topColor
-              ? captured.materialAdvantage.value
-              : 0
-          }
-          label="Opponent"
-          settings={settings}
-        />
+        <div className="px-3 sm:px-0">
+          <CapturedStrip
+            color={topColor}
+            captured={
+              topColor === "w" ? captured.blackCaptured : captured.whiteCaptured
+            }
+            advantage={
+              captured.materialAdvantage.side === topColor
+                ? captured.materialAdvantage.value
+                : 0
+            }
+            label="Opponent"
+            settings={settings}
+          />
+        </div>
       ) : null}
-      <div className="flex items-stretch gap-2">
+      <div data-train-board-bleed className="train-board-mobile-bleed">
         {settings.showEvalBar ? (
-          <EvalBar display={evaluationBar} />
+          <EvalBar display={evaluationBar} orientation="horizontal" />
         ) : null}
-        <div className="flex-1 rounded-[28px] bg-white p-3 shadow-xl shadow-stone-300/40 ring-1 ring-stone-200">
+        <div className="flex items-stretch gap-0 sm:gap-1.5">
+          {settings.showEvalBar ? (
+            <EvalBar display={evaluationBar} orientation="vertical" />
+          ) : null}
+          <div className="flex-1 rounded-none bg-white p-0 shadow-none ring-0 sm:rounded-[24px] sm:p-2 sm:shadow-xl sm:shadow-stone-300/40 sm:ring-1 sm:ring-stone-200">
           <div
             className={classNames(
-              "relative aspect-square w-full overflow-hidden rounded-[18px] border border-stone-300 bg-stone-200",
+              "relative aspect-square w-full overflow-hidden rounded-none border-0 bg-stone-200 sm:rounded-[18px] sm:border sm:border-stone-300",
               visualAnimationClass(animationName),
             )}
           >
@@ -15395,22 +15412,25 @@ function TapChessboard({
           </div>
         </div>
       </div>
+      </div>
       {settings.showCaptured ? (
-        <CapturedStrip
-          color={bottomColor}
-          captured={
-            bottomColor === "w"
-              ? captured.blackCaptured
-              : captured.whiteCaptured
-          }
-          advantage={
-            captured.materialAdvantage.side === bottomColor
-              ? captured.materialAdvantage.value
-              : 0
-          }
-          label="You"
-          settings={settings}
-        />
+        <div className="px-3 sm:px-0">
+          <CapturedStrip
+            color={bottomColor}
+            captured={
+              bottomColor === "w"
+                ? captured.blackCaptured
+                : captured.whiteCaptured
+            }
+            advantage={
+              captured.materialAdvantage.side === bottomColor
+                ? captured.materialAdvantage.value
+                : 0
+            }
+            label="You"
+            settings={settings}
+          />
+        </div>
       ) : null}
     </div>
   );
@@ -15460,8 +15480,10 @@ function CapturedStrip({
 
 function EvalBar({
   display,
+  orientation,
 }: {
   display: TrainerEvaluationBarDisplay | null;
+  orientation: "horizontal" | "vertical";
 }) {
   const nextDisplay = display ?? ({ state: "pending", label: "—" } as const);
   const nextBarDisplay = nextDisplay as TrainerEvaluationBarDisplay;
@@ -15475,8 +15497,66 @@ function EvalBar({
       })
     : null;
   const isMuted = nextDisplay.state !== "ready";
+  const accessibleLabel = `Advantage evaluation: ${nextDisplay.label}`;
+  const compactLabel = compactEvaluationLabel(nextDisplay.label);
+
+  if (orientation === "horizontal") {
+    return (
+      <div
+        data-eval-bar-mobile
+        aria-label={accessibleLabel}
+        className="flex items-center gap-2 px-3 pb-1.5 sm:hidden"
+      >
+        <div className="min-w-[4.5rem] text-[11px] font-black leading-none text-stone-700">
+          {nextDisplay.label}
+        </div>
+        <div
+          className={classNames(
+            "relative h-[6px] min-w-0 flex-1 overflow-hidden rounded-full ring-1 ring-stone-200",
+            hasBar ? "bg-stone-950" : "bg-stone-200",
+          )}
+        >
+          {barDisplay ? (
+            <div className="flex h-full w-full">
+              <div
+                className={classNames(
+                  "h-full transition-all duration-500",
+                  isMuted ? "bg-stone-900/90" : "bg-stone-950",
+                )}
+                style={{
+                  width: `${barDisplay.blackPercent}%`,
+                  minWidth: "8%",
+                }}
+              />
+              <div
+                className={classNames(
+                  "h-full transition-all duration-500",
+                  isMuted ? "bg-stone-50/90" : "bg-stone-50",
+                )}
+                style={{
+                  width: `${barDisplay.whitePercent}%`,
+                  minWidth: "8%",
+                }}
+              />
+            </div>
+          ) : (
+            <div className="h-full w-full bg-stone-200" />
+          )}
+          {barDisplay && nextDisplay.state !== "ready" ? (
+            <span className="absolute right-1 top-1/2 h-1 w-1 -translate-y-1/2 rounded-full bg-stone-500/70" />
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex w-8 shrink-0 flex-col gap-1.5 sm:w-9">
+    <div
+      data-eval-bar-desktop
+      aria-label={accessibleLabel}
+      className="hidden w-5 shrink-0 flex-col gap-1 sm:flex sm:w-6"
+      title={nextDisplay.label}
+    >
       <div
         className={classNames(
           "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl shadow-sm ring-1 ring-stone-200",
@@ -15519,11 +15599,22 @@ function EvalBar({
           </div>
         ) : null}
       </div>
-      <div className="rounded-xl bg-white px-1 py-1 text-center text-[9px] font-black leading-3 text-stone-700 shadow-sm ring-1 ring-stone-200">
-        {nextDisplay.label}
+      <div className="rounded-lg bg-white px-0.5 py-1 text-center text-[8px] font-black leading-none text-stone-700 shadow-sm ring-1 ring-stone-200">
+        {compactLabel}
       </div>
     </div>
   );
+}
+
+function compactEvaluationLabel(label: string) {
+  if (label.startsWith("White +")) return `+${label.slice("White +".length)}`;
+  if (label.startsWith("Black +")) return `-${label.slice("Black +".length)}`;
+  if (label === "Equal") return "0.0";
+  if (label === "White mate") return "M";
+  if (label === "Black mate") return "-M";
+  if (label === "Updating") return "…";
+  if (label === "Unavailable") return "—";
+  return label;
 }
 
 function temporalGateColor(line: ActiveLine, transient: boolean) {
