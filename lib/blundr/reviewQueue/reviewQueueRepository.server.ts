@@ -19,6 +19,14 @@ function number(value: unknown): number {
   return Math.max(0, Number(value) || 0);
 }
 
+function repertoireSide(
+  value: unknown,
+): ReviewQueueItem["repertoireSide"] {
+  const side = text(value) as ReviewQueueItem["repertoireSide"];
+  if (side === "white" || side === "black" || side === "unknown") return side;
+  return "unknown";
+}
+
 function lifecycle(value: unknown): ReviewQueueLifecycleState {
   const state = text(value) as ReviewQueueLifecycleState;
   if (
@@ -69,7 +77,7 @@ export async function loadReviewQueuePage(input: {
     client
       .from("blundr_weakness_projection")
       .select(
-        "position_key,opening_id,play_key,category,score,confidence,explanation,recommended_daily_intervention,lifecycle_state,updated_at",
+        "position_key,opening_id,play_key,category,score,confidence,explanation,recommended_daily_intervention,lifecycle_state,updated_at,lapse_count,last_evidence_at",
       )
       .eq("user_id", input.userId)
       .eq("access_decision", "active")
@@ -90,18 +98,45 @@ export async function loadReviewQueuePage(input: {
   const weaknessRows = (weaknesses.data ?? []) as unknown as Row[];
   const items: ReviewQueueItem[] = weaknessRows
     .map((row) => ({
+      mistakeId: text(row.position_key),
       positionKey: text(row.position_key),
       openingId: row.opening_id === null ? null : text(row.opening_id),
       playKey: row.play_key === null ? null : text(row.play_key),
+      repertoireSide: "unknown",
       category: text(row.category),
       score: number(row.score),
       confidence: number(row.confidence),
       explanation: text(row.explanation),
       recommendedDailyIntervention: text(row.recommended_daily_intervention),
       lifecycleState: lifecycle(row.lifecycle_state),
+      missCount: number(row.lapse_count),
+      lastMissedAt: row.last_evidence_at === null ? null : text(row.last_evidence_at),
       updatedAt: text(row.updated_at),
     }))
     .filter((item) => Boolean(item.positionKey));
+
+  if (items.length) {
+    const positionKeys = [...new Set(items.map((item) => item.positionKey))];
+    const events = await client
+      .from("blundr_learning_events")
+      .select("position_key,repertoire_side,occurred_at,deleted_at")
+      .eq("user_id", input.userId)
+      .in("position_key", positionKeys)
+      .is("deleted_at", null)
+      .order("occurred_at", { ascending: false });
+    if (!events.error) {
+      const rows = (events.data ?? []) as unknown as Row[];
+      const byPositionKey = new Map<string, ReviewQueueItem["repertoireSide"]>();
+      for (const row of rows) {
+        const key = text(row.position_key);
+        if (!key || byPositionKey.has(key)) continue;
+        byPositionKey.set(key, repertoireSide(row.repertoire_side));
+      }
+      for (const item of items) {
+        item.repertoireSide = byPositionKey.get(item.positionKey) ?? "unknown";
+      }
+    }
+  }
 
   const lastSyncAt = jobs.data?.[0]?.updated_at
     ? String(jobs.data[0].updated_at)
