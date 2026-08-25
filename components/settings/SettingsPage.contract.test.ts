@@ -16,9 +16,11 @@ assert.match(settings, />\s*Rating band\s*</);
 assert.match(settings, /getAllRatingBands\(\)\.map/);
 assert.match(settings, /\/api\/blundr\/account\/preferences/);
 assert.match(settings, /ratingBandId: nextBand/);
+assert.match(settings, /Daily Blundr cards/);
+assert.match(settings, /dailyBlundrCardGoal/);
 assert.match(preferencesRoute, /getCurrentBlundrUser/);
 assert.match(preferencesRoute, /updateOwnedTrainingPreferences/);
 assert.match(preferencesRoute, /validation\.ok === false/);
 assert.doesNotMatch(preferencesRoute, /allowLocalFallback:\s*true/);
 
-console.log("settings rating-band contract ok");
+console.log("settings rating-band + daily-goal contract ok");

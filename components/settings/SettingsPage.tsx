@@ -216,6 +216,9 @@ export function SettingsPage({ className }: SettingsPageProps) {
   const [trainingGoalBlundr, setTrainingGoalBlundr] = useState(
     snapshot.profile.dailyBlundrGoal,
   );
+  const [trainingGoalBlundrCards, setTrainingGoalBlundrCards] = useState(
+    snapshot.profile.dailyBlundrCardGoal,
+  );
   const [preferredTrainingMode, setPreferredTrainingMode] = useState(
     snapshot.profile.preferredTrainingMode,
   );
@@ -257,6 +260,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
       setTrainingGoalTempo(nextSnapshot.profile.dailyTempoGoal);
       setTrainingGoalBattery(nextSnapshot.profile.dailyBatteryGoal);
       setTrainingGoalBlundr(nextSnapshot.profile.dailyBlundrGoal);
+      setTrainingGoalBlundrCards(nextSnapshot.profile.dailyBlundrCardGoal);
       setPreferredTrainingMode(nextSnapshot.profile.preferredTrainingMode);
       setRatingBandId(nextSnapshot.profile.ratingBandId);
       setSelectedStarterPackId(
@@ -355,6 +359,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
     setTrainingGoalTempo(nextSnapshot.profile.dailyTempoGoal);
     setTrainingGoalBattery(nextSnapshot.profile.dailyBatteryGoal);
     setTrainingGoalBlundr(nextSnapshot.profile.dailyBlundrGoal);
+    setTrainingGoalBlundrCards(nextSnapshot.profile.dailyBlundrCardGoal);
     setPreferredTrainingMode(nextSnapshot.profile.preferredTrainingMode);
     setRatingBandId(nextSnapshot.profile.ratingBandId);
     setSelectedStarterPackId(
@@ -362,17 +367,22 @@ export function SettingsPage({ className }: SettingsPageProps) {
     );
   }
 
+  function formatDailyGoalSummary(profile: UserTrainingProfile): string {
+    return `${profile.dailyTempoGoal} Tempo, ${profile.dailyBatteryGoal} Battery, ${profile.dailyBlundrGoal} Daily Blundr, ${profile.dailyBlundrCardGoal} Blundr cards`;
+  }
+
   function applyProfile(profile: UserTrainingProfile) {
     const nextProfile = upsertLocalTrainingProfile(profile);
     setSnapshot((previous) => ({
       ...previous,
       profile: nextProfile,
-      dailyGoalSummary: `${nextProfile.dailyTempoGoal} Tempo, ${nextProfile.dailyBatteryGoal} Battery, ${nextProfile.dailyBlundrGoal} Daily Blundr`,
+      dailyGoalSummary: formatDailyGoalSummary(nextProfile),
     }));
     setRatingBandId(nextProfile.ratingBandId);
     setTrainingGoalTempo(nextProfile.dailyTempoGoal);
     setTrainingGoalBattery(nextProfile.dailyBatteryGoal);
     setTrainingGoalBlundr(nextProfile.dailyBlundrGoal);
+    setTrainingGoalBlundrCards(nextProfile.dailyBlundrCardGoal);
     setPreferredTrainingMode(nextProfile.preferredTrainingMode);
   }
 
@@ -398,6 +408,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
         setTrainingGoalTempo(snapshot.profile.dailyTempoGoal);
         setTrainingGoalBattery(snapshot.profile.dailyBatteryGoal);
         setTrainingGoalBlundr(snapshot.profile.dailyBlundrGoal);
+        setTrainingGoalBlundrCards(snapshot.profile.dailyBlundrCardGoal);
         setPreferredTrainingMode(snapshot.profile.preferredTrainingMode);
         setStatusMessage(
           error instanceof AuthenticatedApiError
@@ -418,7 +429,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
     setSnapshot((previous) => ({
       ...previous,
       profile: nextProfile,
-      dailyGoalSummary: `${nextProfile.dailyTempoGoal} Tempo, ${nextProfile.dailyBatteryGoal} Battery, ${nextProfile.dailyBlundrGoal} Daily Blundr`,
+      dailyGoalSummary: formatDailyGoalSummary(nextProfile),
     }));
     setStatusMessage("Saved local training preferences.");
   }
@@ -1033,7 +1044,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
               copy="Keep your targets visible and simple."
               active={activeSectionId === "daily_goals"}
             >
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <label className="grid gap-2 text-sm font-bold text-stone-700">
                   Tempo
                   <input
@@ -1098,6 +1109,29 @@ export function SettingsPage({ className }: SettingsPageProps) {
                     onBlur={() =>
                       void saveProfilePatch({
                         dailyBlundrGoal: trainingGoalBlundr,
+                      })
+                    }
+                    className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-black text-stone-950 shadow-sm outline-none focus:border-green-300 disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm font-bold text-stone-700">
+                  Daily Blundr cards
+                  <input
+                    type="number"
+                    min={1}
+                    max={99}
+                    disabled={profileBusy}
+                    value={trainingGoalBlundrCards}
+                    onChange={(event) => {
+                      const value = Math.min(
+                        99,
+                        Math.max(1, Number(event.target.value) || 1),
+                      );
+                      setTrainingGoalBlundrCards(value);
+                    }}
+                    onBlur={() =>
+                      void saveProfilePatch({
+                        dailyBlundrCardGoal: trainingGoalBlundrCards,
                       })
                     }
                     className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-black text-stone-950 shadow-sm outline-none focus:border-green-300 disabled:cursor-not-allowed disabled:opacity-60"
