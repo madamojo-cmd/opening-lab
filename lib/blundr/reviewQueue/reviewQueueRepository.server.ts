@@ -102,7 +102,7 @@ export async function loadReviewQueuePage(input: {
       positionKey: text(row.position_key),
       openingId: row.opening_id === null ? null : text(row.opening_id),
       playKey: row.play_key === null ? null : text(row.play_key),
-      repertoireSide: "unknown",
+      repertoireSide: "unknown" as const,
       category: text(row.category),
       score: number(row.score),
       confidence: number(row.confidence),
