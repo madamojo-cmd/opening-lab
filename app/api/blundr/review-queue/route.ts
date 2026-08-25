@@ -22,10 +22,11 @@ export async function GET(request: Request) {
     includeResolved: query.includeResolved,
   });
 
-  if (!result.ok) {
+  if (result.ok === false) {
+    const error = result.error;
     if (
-      result.error === "feature_disabled" ||
-      result.error === "persistence_unavailable"
+      error === "feature_disabled" ||
+      error === "persistence_unavailable"
     ) {
       return NextResponse.json({
         ok: true,
@@ -37,13 +38,13 @@ export async function GET(request: Request) {
           limit: query.limit,
           nextPage: null,
           items: [],
-          warnings: [result.error],
+          warnings: [error],
         },
       });
     }
 
-    const status = result.error === "invalid_request" ? 400 : 503;
-    return NextResponse.json({ ok: false, error: result.error }, { status });
+    const status = error === "invalid_request" ? 400 : 503;
+    return NextResponse.json({ ok: false, error }, { status });
   }
 
   return NextResponse.json({ ok: true, data: result.data });
