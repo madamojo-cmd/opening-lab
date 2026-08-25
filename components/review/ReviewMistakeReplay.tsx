@@ -78,13 +78,9 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
         const payload = (await response.json()) as
           | { ok: true; data: Snapshot }
           | { ok: false; error: string };
-        if (!response.ok || !payload.ok)
-          throw new Error(
-            !payload || typeof payload !== "object"
-              ? "unknown_error"
-              : (payload as { ok: false; error: string }).error ??
-                  "unknown_error",
-          );
+        if (payload.ok === false)
+          throw new Error(payload.error || "unknown_error");
+        if (!response.ok) throw new Error("unknown_error");
         setState({ kind: "ready", data: payload.data });
       })
       .catch((error: unknown) => {
@@ -187,12 +183,9 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
       const payload = (await response.json()) as
         | { ok: true; data: AttemptResult }
         | { ok: false; error: string };
-      if (!response.ok || !payload.ok)
-        throw new Error(
-          !payload || typeof payload !== "object"
-            ? "unknown_error"
-            : (payload as { ok: false; error: string }).error ?? "unknown_error",
-        );
+      if (payload.ok === false)
+        throw new Error(payload.error || "unknown_error");
+      if (!response.ok) throw new Error("unknown_error");
       attemptCount.current += 1;
       setAttempt(payload.data);
       if (payload.data.correct && payload.data.resolved) {
@@ -230,12 +223,9 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
       const payload = (await response.json()) as
         | { ok: true; data: RevealResult }
         | { ok: false; error: string };
-      if (!response.ok || !payload.ok)
-        throw new Error(
-          !payload || typeof payload !== "object"
-            ? "unknown_error"
-            : (payload as { ok: false; error: string }).error ?? "unknown_error",
-        );
+      if (payload.ok === false)
+        throw new Error(payload.error || "unknown_error");
+      if (!response.ok) throw new Error("unknown_error");
       setReveal(payload.data);
     } finally {
       setBusy(false);

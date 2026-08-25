@@ -73,13 +73,9 @@ export function ReviewQueueInbox() {
           | { ok: true; data: InboxPayload }
           | { ok: false; error: string };
         if (currentRequest !== requestId.current) return;
-        if (!response.ok || !payload.ok)
-          throw new Error(
-            !payload || typeof payload !== "object"
-              ? "unknown_error"
-              : (payload as { ok: false; error: string }).error ??
-                  "unknown_error",
-          );
+        if (payload.ok === false)
+          throw new Error(payload.error || "unknown_error");
+        if (!response.ok) throw new Error("unknown_error");
         setState({ kind: "ready", data: payload.data });
       })
       .catch((error: unknown) => {

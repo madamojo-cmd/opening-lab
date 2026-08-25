@@ -21,14 +21,15 @@ export async function GET(
     userId: user.userId,
     mistakeId,
   });
-  if (!result.ok) {
+  if (result.ok === false) {
+    const error = result.error;
     const status =
-      result.error === "invalid_request"
+      error === "invalid_request"
         ? 400
-        : result.error === "not_found"
+        : error === "not_found"
           ? 404
           : 503;
-    return NextResponse.json({ ok: false, error: result.error }, { status });
+    return NextResponse.json({ ok: false, error }, { status });
   }
 
   return NextResponse.json({ ok: true, data: result.data });

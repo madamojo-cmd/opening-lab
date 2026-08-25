@@ -44,14 +44,15 @@ export async function POST(
     userId: user.userId,
     mistakeId,
   });
-  if (!solution.ok) {
+  if (solution.ok === false) {
+    const error = solution.error;
     const status =
-      solution.error === "invalid_request"
+      error === "invalid_request"
         ? 400
-        : solution.error === "not_found"
+        : error === "not_found"
           ? 404
           : 503;
-    return NextResponse.json({ ok: false, error: solution.error }, { status });
+    return NextResponse.json({ ok: false, error }, { status });
   }
 
   const accessRepo = await loadOpeningAccess(user);
