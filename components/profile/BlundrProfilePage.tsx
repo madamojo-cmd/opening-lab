@@ -19,7 +19,18 @@ import {
   validateBlundrUsername,
   type BlundrProfilePublic,
 } from "@/lib/blundr/profile/profileTypes";
+import type { UserTrainingProfile } from "@/lib/blundr/accounts/accountTypes";
+import { upsertLocalTrainingProfile } from "@/lib/blundr/accounts/localAccountStorage";
 import styles from "./BlundrProfilePage.module.css";
+
+function clampDailyBlundrCardGoal(value: unknown, fallback = 10): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  const next = Math.trunc(parsed);
+  if (next < 1) return 1;
+  if (next > 99) return 99;
+  return next;
+}
 
 export function BlundrProfilePage() {
   const auth = useOnboardingAuthSession();
@@ -28,6 +39,11 @@ export function BlundrProfilePage() {
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [dailyCardGoal, setDailyCardGoal] = useState<number>(10);
+  const [dailyCardGoalBusy, setDailyCardGoalBusy] = useState(false);
+  const [dailyCardGoalMessage, setDailyCardGoalMessage] = useState<
+    string | null
+  >(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
@@ -39,22 +55,39 @@ export function BlundrProfilePage() {
     let cancelled = false;
     setLoading(true);
     setLoadError(null);
-    void authenticatedApiFetch<BlundrProfilePublic>("/api/blundr/profile", {
-      cache: "no-store",
-    })
-      .then((nextProfile) => {
-        if (cancelled) return;
-        setProfile(nextProfile);
-        setUsernameDraft(nextProfile.username ?? "");
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setLoadError("Your profile could not be loaded. Try again.");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    void (async () => {
+      const [profileResult, preferencesResult] = await Promise.allSettled([
+        authenticatedApiFetch<BlundrProfilePublic>("/api/blundr/profile", {
+          cache: "no-store",
+        }),
+        authenticatedApiFetch<{ ok: true; data: UserTrainingProfile }>(
+          "/api/blundr/account/preferences",
+          { cache: "no-store" },
+        ),
+      ]);
+
+      if (cancelled) return;
+
+      if (profileResult.status === "fulfilled") {
+        setProfile(profileResult.value);
+        setUsernameDraft(profileResult.value.username ?? "");
+      } else {
+        setLoadError("Your profile could not be loaded. Try again.");
+      }
+
+      if (preferencesResult.status === "fulfilled") {
+        const next = preferencesResult.value.data;
+        upsertLocalTrainingProfile(next);
+        setDailyCardGoal(clampDailyBlundrCardGoal(next.dailyBlundrCardGoal, 10));
+      } else {
+        setDailyCardGoal(10);
+        setDailyCardGoalMessage(
+          "Daily goals could not be loaded. You can still adjust them in Settings.",
+        );
+      }
+
+      setLoading(false);
+    })();
     return () => {
       cancelled = true;
     };
@@ -90,6 +123,37 @@ export function BlundrProfilePage() {
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveDailyCardGoal() {
+    if (auth.status !== "authenticated") return;
+    setDailyCardGoalBusy(true);
+    setDailyCardGoalMessage(null);
+    try {
+      const response = await authenticatedApiFetch<{
+        ok: true;
+        data: UserTrainingProfile;
+      }>("/api/blundr/account/preferences", {
+        method: "PATCH",
+        body: JSON.stringify({
+          dailyBlundrCardGoal: dailyCardGoal,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }),
+      });
+      upsertLocalTrainingProfile(response.data);
+      setDailyCardGoal(
+        clampDailyBlundrCardGoal(response.data.dailyBlundrCardGoal, 10),
+      );
+      setDailyCardGoalMessage("Daily Blundr cards goal saved.");
+    } catch (error) {
+      setDailyCardGoalMessage(
+        error instanceof AuthenticatedApiError
+          ? error.message
+          : "Daily goals could not be saved. Try again.",
+      );
+    } finally {
+      setDailyCardGoalBusy(false);
     }
   }
 
@@ -265,6 +329,51 @@ export function BlundrProfilePage() {
                 Your email is used for sign-in and account recovery. It is not
                 shown as your public Blundr identity.
               </p>
+            </section>
+
+            <section className={styles.panel}>
+              <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
+                Daily goals
+              </div>
+              <label className="mt-3 grid gap-2 text-sm font-bold text-stone-700">
+                Daily Blundr cards
+                <input
+                  type="number"
+                  min={1}
+                  max={99}
+                  value={dailyCardGoal}
+                  disabled={dailyCardGoalBusy}
+                  onChange={(event) => {
+                    const value = Math.min(
+                      99,
+                      Math.max(1, Number(event.target.value) || 1),
+                    );
+                    setDailyCardGoal(value);
+                    setDailyCardGoalMessage(null);
+                  }}
+                  onBlur={() => void saveDailyCardGoal()}
+                  className="min-h-11 rounded-xl border border-stone-200 bg-white px-3 text-sm font-black text-stone-950 outline-none focus:border-green-700 disabled:opacity-70"
+                />
+              </label>
+              <p className="mt-2 text-xs leading-5 text-stone-500">
+                Controls how many cards Daily Blundr expects each day.
+              </p>
+              <div className="mt-3">
+                {dailyCardGoalMessage === "Daily Blundr cards goal saved." ? (
+                  <span className="inline-flex items-center gap-2 rounded-full bg-green-50 px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-green-700">
+                    <CheckCircle2 size={14} />
+                    Saved
+                  </span>
+                ) : null}
+                {dailyCardGoalMessage ? (
+                  <p
+                    role="status"
+                    className="mt-2 text-xs leading-5 text-stone-500"
+                  >
+                    {dailyCardGoalMessage}
+                  </p>
+                ) : null}
+              </div>
             </section>
 
             <Link href="/settings" className={styles.settingsLink}>
