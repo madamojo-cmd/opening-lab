@@ -38,6 +38,31 @@ function validCardGoal(value: unknown): value is number {
   return Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 99;
 }
 
+export function normalizeDailyBlundrCardGoalPreference(
+  input: {
+    dailyBlundrCardGoal?: unknown;
+    dailyBlundrGoal?: unknown;
+  },
+  fallback = 10,
+): number {
+  const direct = Number(input.dailyBlundrCardGoal);
+  if (Number.isFinite(direct)) {
+    const next = Math.trunc(direct);
+    if (next >= 1 && next <= 99) return next;
+  }
+
+  // Back-compat: some older local payloads stored a daily-card preference in the
+  // legacy `dailyBlundrGoal` slot. Avoid treating the common legacy default (1)
+  // as a card-goal to prevent surprising resets for existing users.
+  const legacy = Number(input.dailyBlundrGoal);
+  if (Number.isFinite(legacy)) {
+    const next = Math.trunc(legacy);
+    if (next >= 2) return Math.max(1, Math.min(99, next));
+  }
+
+  return Math.max(1, Math.min(99, Math.trunc(Number(fallback) || 10)));
+}
+
 export function normalizeIanaTimeZone(value: unknown): string | null {
   const timeZone = String(value ?? "").trim();
   if (!timeZone || timeZone.length > 80) return null;

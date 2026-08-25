@@ -54,10 +54,6 @@ describe("BlundrProfilePage", () => {
   it("loads private identity and saves a validated unique username", async () => {
     mocks.apiFetch
       .mockResolvedValueOnce({ username: "adam" })
-      .mockResolvedValueOnce({
-        ok: true,
-        data: { userId: "user-a", dailyBlundrCardGoal: 10 },
-      })
       .mockResolvedValueOnce({ username: "new_name" });
     render(<BlundrProfilePage />);
 
@@ -89,12 +85,7 @@ describe("BlundrProfilePage", () => {
   });
 
   it("surfaces server uniqueness conflicts without replacing the current username", async () => {
-    mocks.apiFetch
-      .mockResolvedValueOnce({ username: "adam" })
-      .mockResolvedValueOnce({
-        ok: true,
-        data: { userId: "user-a", dailyBlundrCardGoal: 10 },
-      });
+    mocks.apiFetch.mockResolvedValueOnce({ username: "adam" });
     mocks.apiFetch.mockRejectedValueOnce(
       new AuthenticatedApiError(
         "api_error",
@@ -112,33 +103,5 @@ describe("BlundrProfilePage", () => {
       await screen.findByText("That username is unavailable."),
     ).toBeInTheDocument();
     expect(screen.getByText("@adam")).toBeInTheDocument();
-  });
-
-  it("saves Daily Blundr card goals via the shared preferences contract", async () => {
-    mocks.apiFetch
-      .mockResolvedValueOnce({ username: "adam" })
-      .mockResolvedValueOnce({
-        ok: true,
-        data: { userId: "user-a", dailyBlundrCardGoal: 10 },
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        data: { userId: "user-a", dailyBlundrCardGoal: 12 },
-      });
-
-    render(<BlundrProfilePage />);
-    const input = await screen.findByLabelText("Daily Blundr cards");
-    fireEvent.change(input, { target: { value: "12" } });
-    fireEvent.blur(input);
-
-    await waitFor(() =>
-      expect(mocks.apiFetch).toHaveBeenLastCalledWith(
-        "/api/blundr/account/preferences",
-        expect.objectContaining({
-          method: "PATCH",
-          body: expect.stringContaining("\"dailyBlundrCardGoal\":12"),
-        }),
-      ),
-    );
   });
 });

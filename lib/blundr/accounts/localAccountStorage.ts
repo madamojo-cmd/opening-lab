@@ -24,6 +24,7 @@ import type {
   UserTrainingProfile,
   ValidationSnapshot,
 } from "./accountTypes";
+import { normalizeDailyBlundrCardGoalPreference } from "./trainingPreferences";
 import { BLUNDR_LOCAL_ACCOUNT_STORAGE_KEY, BLUNDR_LOCAL_DEMO_USER_ID } from "../persistence/persistenceKeys";
 import { normalizeRepertoirePointEvent, normalizeRepertoireUnlockEvent, sortRepertoirePointEvents, sortRepertoireUnlockEvents } from "../repertoire/repertoireEvents";
 import type { RepertoirePointEvent, RepertoireUnlockEvent } from "../repertoire/repertoireTypes";
@@ -124,7 +125,13 @@ function normalizeTrainingProfile(raw: unknown): UserTrainingProfile | null {
     dailyTempoGoal: Math.max(1, Number(raw.dailyTempoGoal) || base.dailyTempoGoal),
     dailyBatteryGoal: Math.max(1, Number(raw.dailyBatteryGoal) || base.dailyBatteryGoal),
     dailyBlundrGoal: Math.max(1, Number(raw.dailyBlundrGoal) || base.dailyBlundrGoal),
-    dailyBlundrCardGoal: Math.max(1, Math.min(99, Number(raw.dailyBlundrCardGoal) || base.dailyBlundrCardGoal)),
+    dailyBlundrCardGoal: normalizeDailyBlundrCardGoalPreference(
+      {
+        dailyBlundrCardGoal: raw.dailyBlundrCardGoal,
+        dailyBlundrGoal: raw.dailyBlundrGoal,
+      },
+      base.dailyBlundrCardGoal,
+    ),
     selectedStarterPackId: normalizeStarterPackId(raw.selectedStarterPackId),
     createdAt: normalizeText(raw.createdAt) || base.createdAt,
     updatedAt: normalizeText(raw.updatedAt) || base.updatedAt,

@@ -74,7 +74,7 @@ export function buildAccountSettingsSnapshot(input: {
     isLocalDemo: !session,
     accountStatusLabel: session?.email ? `Signed in as ${session.email}` : "Local demo on this device",
     currentUserId: userId,
-    dailyGoalSummary: `${profile.dailyTempoGoal} Tempo, ${profile.dailyBatteryGoal} Battery, ${profile.dailyBlundrGoal} Daily Blundr, ${profile.dailyBlundrCardGoal} Blundr cards`,
+    dailyGoalSummary: `${profile.dailyTempoGoal} Tempo \u00b7 ${profile.dailyBatteryGoal} Battery \u00b7 ${profile.dailyBlundrCardGoal} Daily cards`,
     devToolsEnabled: isClientDevToolsEnabled(),
   };
 }

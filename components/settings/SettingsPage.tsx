@@ -213,9 +213,6 @@ export function SettingsPage({ className }: SettingsPageProps) {
   const [trainingGoalBattery, setTrainingGoalBattery] = useState(
     snapshot.profile.dailyBatteryGoal,
   );
-  const [trainingGoalBlundr, setTrainingGoalBlundr] = useState(
-    snapshot.profile.dailyBlundrGoal,
-  );
   const [trainingGoalBlundrCards, setTrainingGoalBlundrCards] = useState(
     snapshot.profile.dailyBlundrCardGoal,
   );
@@ -259,7 +256,6 @@ export function SettingsPage({ className }: SettingsPageProps) {
       setSnapshot(nextSnapshot);
       setTrainingGoalTempo(nextSnapshot.profile.dailyTempoGoal);
       setTrainingGoalBattery(nextSnapshot.profile.dailyBatteryGoal);
-      setTrainingGoalBlundr(nextSnapshot.profile.dailyBlundrGoal);
       setTrainingGoalBlundrCards(nextSnapshot.profile.dailyBlundrCardGoal);
       setPreferredTrainingMode(nextSnapshot.profile.preferredTrainingMode);
       setRatingBandId(nextSnapshot.profile.ratingBandId);
@@ -358,7 +354,6 @@ export function SettingsPage({ className }: SettingsPageProps) {
     setBoardPreferences(nextSnapshot.boardPreferences);
     setTrainingGoalTempo(nextSnapshot.profile.dailyTempoGoal);
     setTrainingGoalBattery(nextSnapshot.profile.dailyBatteryGoal);
-    setTrainingGoalBlundr(nextSnapshot.profile.dailyBlundrGoal);
     setTrainingGoalBlundrCards(nextSnapshot.profile.dailyBlundrCardGoal);
     setPreferredTrainingMode(nextSnapshot.profile.preferredTrainingMode);
     setRatingBandId(nextSnapshot.profile.ratingBandId);
@@ -368,7 +363,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
   }
 
   function formatDailyGoalSummary(profile: UserTrainingProfile): string {
-    return `${profile.dailyTempoGoal} Tempo, ${profile.dailyBatteryGoal} Battery, ${profile.dailyBlundrGoal} Daily Blundr, ${profile.dailyBlundrCardGoal} Blundr cards`;
+    return `${profile.dailyTempoGoal} Tempo \u00b7 ${profile.dailyBatteryGoal} Battery \u00b7 ${profile.dailyBlundrCardGoal} Daily cards`;
   }
 
   function applyProfile(profile: UserTrainingProfile) {
@@ -381,7 +376,6 @@ export function SettingsPage({ className }: SettingsPageProps) {
     setRatingBandId(nextProfile.ratingBandId);
     setTrainingGoalTempo(nextProfile.dailyTempoGoal);
     setTrainingGoalBattery(nextProfile.dailyBatteryGoal);
-    setTrainingGoalBlundr(nextProfile.dailyBlundrGoal);
     setTrainingGoalBlundrCards(nextProfile.dailyBlundrCardGoal);
     setPreferredTrainingMode(nextProfile.preferredTrainingMode);
   }
@@ -407,7 +401,6 @@ export function SettingsPage({ className }: SettingsPageProps) {
         setRatingBandId(snapshot.profile.ratingBandId);
         setTrainingGoalTempo(snapshot.profile.dailyTempoGoal);
         setTrainingGoalBattery(snapshot.profile.dailyBatteryGoal);
-        setTrainingGoalBlundr(snapshot.profile.dailyBlundrGoal);
         setTrainingGoalBlundrCards(snapshot.profile.dailyBlundrCardGoal);
         setPreferredTrainingMode(snapshot.profile.preferredTrainingMode);
         setStatusMessage(
@@ -1044,7 +1037,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
               copy="Keep your targets visible and simple."
               active={activeSectionId === "daily_goals"}
             >
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-3">
                 <label className="grid gap-2 text-sm font-bold text-stone-700">
                   Tempo
                   <input
@@ -1092,30 +1085,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
                   />
                 </label>
                 <label className="grid gap-2 text-sm font-bold text-stone-700">
-                  Daily Blundr
-                  <input
-                    type="number"
-                    min={1}
-                    max={100}
-                    disabled={profileBusy}
-                    value={trainingGoalBlundr}
-                    onChange={(event) => {
-                      const value = Math.min(
-                        100,
-                        Math.max(1, Number(event.target.value) || 1),
-                      );
-                      setTrainingGoalBlundr(value);
-                    }}
-                    onBlur={() =>
-                      void saveProfilePatch({
-                        dailyBlundrGoal: trainingGoalBlundr,
-                      })
-                    }
-                    className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-black text-stone-950 shadow-sm outline-none focus:border-green-300 disabled:cursor-not-allowed disabled:opacity-60"
-                  />
-                </label>
-                <label className="grid gap-2 text-sm font-bold text-stone-700">
-                  Daily Blundr cards
+                  Daily cards
                   <input
                     type="number"
                     min={1}
