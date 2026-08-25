@@ -7,6 +7,7 @@ export type DailyGoalPreset = {
   dailyTempoGoal: number;
   dailyBatteryGoal: number;
   dailyBlundrGoal: number;
+  dailyBlundrCardGoal: number;
   sortOrder: number;
   isDefault?: boolean;
 };
@@ -19,6 +20,7 @@ const DAILY_GOAL_PRESETS: readonly DailyGoalPreset[] = [
     dailyTempoGoal: 5,
     dailyBatteryGoal: 1,
     dailyBlundrGoal: 1,
+    dailyBlundrCardGoal: 10,
     sortOrder: 0,
   },
   {
@@ -28,6 +30,7 @@ const DAILY_GOAL_PRESETS: readonly DailyGoalPreset[] = [
     dailyTempoGoal: 10,
     dailyBatteryGoal: 3,
     dailyBlundrGoal: 1,
+    dailyBlundrCardGoal: 10,
     sortOrder: 1,
     isDefault: true,
   },
@@ -38,6 +41,7 @@ const DAILY_GOAL_PRESETS: readonly DailyGoalPreset[] = [
     dailyTempoGoal: 20,
     dailyBatteryGoal: 5,
     dailyBlundrGoal: 1,
+    dailyBlundrCardGoal: 10,
     sortOrder: 2,
   },
 ] as const;
@@ -63,4 +67,3 @@ export function normalizeDailyGoalPreset(input: unknown): DailyGoalPresetId {
   const preset = DAILY_GOAL_PRESETS.find((entry) => entry.id === normalized || entry.label.toLowerCase() === normalized);
   return preset?.id ?? getDefaultDailyGoalPreset().id;
 }
-

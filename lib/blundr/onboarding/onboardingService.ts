@@ -131,6 +131,7 @@ export function selectDailyGoalPreset(state: BlundrOnboardingState, presetId: un
     dailyTempoGoal: preset.dailyTempoGoal,
     dailyBatteryGoal: preset.dailyBatteryGoal,
     dailyBlundrGoal: preset.dailyBlundrGoal,
+    dailyBlundrCardGoal: preset.dailyBlundrCardGoal,
     updatedAt: nowIso(),
   });
 }
@@ -159,7 +160,7 @@ export function buildTrainingProfileFromOnboarding(state: BlundrOnboardingState,
     dailyTempoGoal: Math.max(1, Number(normalized.dailyTempoGoal) || preset.dailyTempoGoal),
     dailyBatteryGoal: Math.max(1, Number(normalized.dailyBatteryGoal) || preset.dailyBatteryGoal),
     dailyBlundrGoal: Math.max(1, Number(normalized.dailyBlundrGoal) || preset.dailyBlundrGoal),
-    dailyBlundrCardGoal: Math.max(1, Math.min(99, Number(normalized.dailyBlundrCardGoal) || 10)),
+    dailyBlundrCardGoal: Math.max(1, Math.min(99, Number(normalized.dailyBlundrCardGoal) || preset.dailyBlundrCardGoal)),
     selectedStarterPackId: starterPack.id,
     createdAt: timestamp,
     updatedAt: timestamp,

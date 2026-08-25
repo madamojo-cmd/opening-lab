@@ -226,7 +226,7 @@ function buildFinalSummary(state: BlundrOnboardingState): ReactNode {
         <div className="mt-2 text-sm font-black text-stone-950">{getRatingBandLabel(ratingBand.id)}</div>
         <p className="mt-1 text-sm leading-6 text-stone-600">{getRatingBandTrainingDescription(ratingBand.id)}</p>
         <p className="mt-3 text-sm leading-6 text-stone-600">
-          {dailyGoalPreset.label} goals: {state.dailyTempoGoal} Tempo, {state.dailyBatteryGoal} Battery, {state.dailyBlundrGoal} Daily Blundr.
+          {dailyGoalPreset.label} goals: {state.dailyTempoGoal} Tempo · {state.dailyBatteryGoal} Battery · {state.dailyBlundrCardGoal} Daily cards.
         </p>
       </div>
     </div>
