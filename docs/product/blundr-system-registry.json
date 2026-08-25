@@ -128,7 +128,7 @@
       "entryPoints": ["/train", "/review", "/daily", "/api/blundr/review-queue"],
       "persistence": ["Learning items", "review events", "future immutable learning evidence, FSRS state, Mastery, and weakness projections"],
       "dependencies": ["AUTH-ACCOUNT-001"],
-      "featureFlags": ["BLUNDR_FEATURE_LEARNING_CORE_V2"],
+      "featureFlags": ["BLUNDR_FEATURE_LEARNING_CORE_V2", "BLUNDR_FEATURE_LEARNING_CORE_V2_READ"],
       "fallback": "Unavailable acknowledgement, projection, or persistence is visible and prevents a durable completion rather than writing local authenticated state or showing data as unseen.",
       "requiredTests": ["lib/blundr/reviewQueue/__tests__", "lib/blundr/daily/bridges/mistakeToReview/__tests__/mistakeToReview.test.ts", "lib/blundr/learning/__tests__", "lib/blundr/daily/__tests__/productionDailyRuntimeComposition.test.ts", "tests/integration", "tests/security"],
       "lastVerifiedSha": null,
