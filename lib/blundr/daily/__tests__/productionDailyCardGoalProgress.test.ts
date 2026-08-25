@@ -47,7 +47,7 @@ test("returns null without a reserved session", () => {
   assert.equal(resolveProductionDailyCardGoalProgress(null, 10), null);
 });
 
-test("counts completed cards and clamps goal to the reserved deck size", () => {
+test("counts completed cards without capping the goal to the reserved deck size", () => {
   const progress = resolveProductionDailyCardGoalProgress(
     session({
       publicCards: [card, { ...card, cardFingerprint: "card-2" }],

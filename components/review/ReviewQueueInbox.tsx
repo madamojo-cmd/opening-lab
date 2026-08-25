@@ -185,7 +185,7 @@ export function ReviewQueueInbox() {
             Review queue unavailable
           </div>
           <p className="mt-2 text-[12px] leading-[1.5] text-stone-600">
-            Review Queue isn't available in this build.
+            Review Queue is not available in this build.
           </p>
         </div>
       ) : isEmpty ? (

@@ -492,11 +492,11 @@ export function SettingsPage({ className }: SettingsPageProps) {
   }
 
   async function saveBlundrUsername() {
-    if (!usernameChanged) return;
     if (usernameValidation.ok === false) {
       setUsernameMessage(usernameValidation.message);
       return;
     }
+    if (usernameValidation.username === (blundrUsername ?? "")) return;
     setUsernameBusy(true);
     setUsernameMessage(null);
     try {

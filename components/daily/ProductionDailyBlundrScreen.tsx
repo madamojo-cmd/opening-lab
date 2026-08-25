@@ -308,7 +308,7 @@ export function ProductionDailyBlundrScreen() {
                 First try counts
               </span>
               <span className="inline-flex min-h-8 items-center rounded-full border border-stone-200 bg-white/80 px-3 text-[10px] font-black uppercase tracking-[0.16em] text-stone-600">
-                Reveal doesn't change scoring
+                Reveal does not change scoring
               </span>
             </div>
           </div>
@@ -365,7 +365,7 @@ export function ProductionDailyBlundrScreen() {
               <Sparkles className="text-green-700" size={20} />
               <h2 className="mt-3 text-lg font-black">Daily complete</h2>
               <p className="mt-2 text-sm leading-6 text-green-900">
-                Today's Daily goal is complete. Your first try is what counts.
+                Daily goal complete. Your first try is what counts.
               </p>
             </section>
           ) : (
@@ -373,7 +373,7 @@ export function ProductionDailyBlundrScreen() {
               <Sparkles className="text-green-700" size={20} />
               <h2 className="mt-3 text-lg font-black">Deck complete</h2>
               <p className="mt-2 text-sm leading-6 text-stone-700">
-                Today's reserved Daily deck is complete. Refresh to check for more cards.
+                Reserved Daily deck complete. Refresh to check for more cards.
               </p>
               <button
                 type="button"
