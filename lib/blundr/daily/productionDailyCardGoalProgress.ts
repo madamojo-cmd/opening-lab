@@ -32,15 +32,14 @@ export function resolveProductionDailyCardGoalProgress(
 ): ProductionDailyCardGoalProgress | null {
   if (!session) return null;
   const totalCards = session.publicCards.length;
-  const completedFingerprints = new Set(session.state.completedCardIds);
-  const completedCards = session.publicCards.reduce((count, card) => {
-    return completedFingerprints.has(card.cardFingerprint) ? count + 1 : count;
-  }, 0);
+  const completedCards = Number.isFinite(session.cardsCompletedToday)
+    ? Math.max(0, Math.trunc(Number(session.cardsCompletedToday)))
+    : session.state.completedCardIds.length;
 
   const requestedGoal = clampCardGoal(Number(cardGoal ?? 10), 10);
-  const goalCards = totalCards > 0 ? Math.min(requestedGoal, totalCards) : requestedGoal;
+  const goalCards = requestedGoal;
   const progressCards = Math.min(goalCards, completedCards);
-  const completed = goalCards > 0 && progressCards >= goalCards;
+  const completed = goalCards > 0 && completedCards >= goalCards;
   return {
     totalCards,
     completedCards,
@@ -50,4 +49,3 @@ export function resolveProductionDailyCardGoalProgress(
     completed,
   };
 }
-

@@ -36,7 +36,10 @@ test("progress summary is authenticated and fail-closed", () => {
 test("durable progress derives every primary signal from server-owned tables", () => {
   for (const table of [
     "blundr_completion_grants",
+    "blundr_daily_decks",
+    "blundr_daily_sessions",
     "blundr_daily_retention_progress",
+    "blundr_daily_task_evidence_v3",
     "blundr_learning_events",
     "blundr_minigame_instances",
     "blundr_streak_records",
@@ -48,6 +51,7 @@ test("durable progress derives every primary signal from server-owned tables", (
   assert.match(service, /first_attempt/);
   assert.match(service, /move_correct/);
   assert.match(service, /move_incorrect/);
+  assert.match(service, /daily_blundr_card_goal/);
 });
 
 test("the dashboard never falls back to local progress after an API failure", () => {

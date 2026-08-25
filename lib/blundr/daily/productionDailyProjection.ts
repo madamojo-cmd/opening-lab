@@ -53,6 +53,7 @@ function revealedTeachingForCard(input: {
 
 export function toPublicDailySession(
   session: ProductionDailySession,
+  options: { cardsCompletedToday?: number } = {},
 ): ProductionDailyPublicSession {
   const completedCardIds = session.state.attempts
     .filter((attempt) => attempt.outcome === "correct")
@@ -93,6 +94,7 @@ export function toPublicDailySession(
     sessionId: session.sessionId,
     deckId: session.deckId,
     dateKey: session.dateKey,
+    cardsCompletedToday: options.cardsCompletedToday,
     publicCards: publicCards.map((card) => ({
       ...card,
       actionId: productionDailyActionId({

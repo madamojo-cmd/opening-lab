@@ -349,11 +349,12 @@ async function buildReservation(
   const weaknessScores = new Map<string, number>();
   const priorityOpenings = new Set<string>();
   const priorityPositions = new Set<string>();
+  let dailyBlundrCardGoal = 10;
   for (const review of await readDueReviewKeys(user.userId, now))
     priorityPositions.add(`${review.openingId}:${review.playKey}`);
   const admin = createBlundrSupabaseAdminClient();
   if (admin) {
-    const [projectionResult, priorityResult] = await Promise.all([
+    const [projectionResult, priorityResult, profileResult] = await Promise.all([
       admin
         .from("blundr_weakness_projection")
         .select(
@@ -367,9 +368,20 @@ async function buildReservation(
         .eq("user_id", user.userId)
         .in("status", ["queued", "added_today"])
         .lte("requested_for", dateKey),
+      admin
+        .from("blundr_user_profiles")
+        .select("daily_blundr_card_goal")
+        .eq("user_id", user.userId)
+        .maybeSingle(),
     ]);
-    if (projectionResult.error || priorityResult.error)
+    if (projectionResult.error || priorityResult.error || profileResult.error)
       throw new Error("daily_priority_projection_unavailable");
+    {
+      const parsed = Number(profileResult.data?.daily_blundr_card_goal);
+      if (Number.isFinite(parsed)) {
+        dailyBlundrCardGoal = Math.max(1, Math.min(99, Math.trunc(parsed)));
+      }
+    }
     {
       for (const projection of projectionResult.data ?? []) {
         const score = Number(projection.score);
@@ -746,8 +758,15 @@ async function buildReservation(
 
   if (!eligibleNodes.length)
     throw new Error("daily_opening_selection_required");
-  const taskCount = resolveServerDailyTaskCount({});
-  const selected = selectProductionDailyBoardCards(cards, taskCount);
+  const desiredTaskCount = Math.max(
+    resolveServerDailyTaskCount({}),
+    dailyBlundrCardGoal,
+  );
+  const reservationTaskCount = Math.max(
+    1,
+    Math.min(desiredTaskCount, cards.length),
+  );
+  const selected = selectProductionDailyBoardCards(cards, reservationTaskCount);
   const deck = buildDeterministicDailyDeck({
     userId: user.userId,
     dateKey,
@@ -761,7 +780,7 @@ async function buildReservation(
       stableKey,
       cardFingerprint: publicCard.cardFingerprint,
     })),
-    limit: taskCount,
+    limit: desiredTaskCount,
   });
   const privateById = new Map(
     selected.map((entry) => [
@@ -1162,6 +1181,7 @@ export async function applyDailyAction(input: {
 
 export function publicDailySession(
   session: ProductionDailySession,
+  options: { cardsCompletedToday?: number } = {},
 ): ProductionDailyPublicSession {
-  return toPublicDailySession(session);
+  return toPublicDailySession(session, options);
 }

@@ -53,6 +53,60 @@ function ensureQuery(result: { error: unknown }, label: string): void {
   if (result.error) throw new Error(`progress_${label}_unavailable`);
 }
 
+async function loadDailyCardsCompletedToday(input: {
+  admin: ReturnType<typeof createBlundrSupabaseAdminClient>;
+  userId: string;
+  todayDateKey: string;
+}): Promise<number> {
+  const { admin, userId, todayDateKey } = input;
+  if (!admin) throw new Error("progress_persistence_unavailable");
+
+  const decksResult = await admin
+    .from("blundr_daily_decks")
+    .select("deck_id")
+    .eq("user_id", userId)
+    .eq("local_date", todayDateKey);
+  if (decksResult.error) throw new Error("progress_daily_decks_unavailable");
+
+  const deckIds = (decksResult.data ?? [])
+    .map((row: Row) => String(row.deck_id ?? "").trim())
+    .filter(Boolean);
+  if (!deckIds.length) return 0;
+
+  const sessionsQuery = admin
+    .from("blundr_daily_sessions")
+    .select("session_id,deck_id")
+    .eq("user_id", userId);
+  const sessionsResult =
+    deckIds.length === 1
+      ? await sessionsQuery.eq("deck_id", deckIds[0])
+      : await sessionsQuery.in("deck_id", deckIds);
+  if (sessionsResult.error)
+    throw new Error("progress_daily_sessions_unavailable");
+
+  const sessionIds = (sessionsResult.data ?? [])
+    .map((row: Row) => String(row.session_id ?? "").trim())
+    .filter(Boolean);
+  if (!sessionIds.length) return 0;
+
+  const evidenceResult = await admin
+    .from("blundr_daily_task_evidence_v3")
+    .select("card_fingerprint,session_id,outcome")
+    .eq("user_id", userId)
+    .eq("outcome", "correct")
+    .in("session_id", sessionIds);
+  if (evidenceResult.error)
+    throw new Error("progress_daily_task_evidence_unavailable");
+
+  return Array.from(
+    new Set(
+      (evidenceResult.data ?? [])
+        .map((row: Row) => String(row.card_fingerprint ?? "").trim())
+        .filter(Boolean),
+    ),
+  ).length;
+}
+
 export async function loadDurableProgressSummary(input: {
   userId: string;
   todayDateKey: string;
@@ -81,7 +135,7 @@ export async function loadDurableProgressSummary(input: {
     admin
       .from("blundr_user_profiles")
       .select(
-        "daily_tempo_goal,daily_battery_goal,daily_blundr_goal,selected_starter_pack_id",
+        "daily_tempo_goal,daily_battery_goal,daily_blundr_goal,daily_blundr_card_goal,selected_starter_pack_id",
       )
       .eq("user_id", input.userId)
       .maybeSingle(),
@@ -173,6 +227,15 @@ export async function loadDurableProgressSummary(input: {
   const rewardRows = (rewardRolls.data ?? []) as Row[];
   const today =
     dayRows.find((row) => String(row.local_date) === input.todayDateKey) ?? {};
+  const cardsCompletedToday = await loadDailyCardsCompletedToday({
+    admin,
+    userId: input.userId,
+    todayDateKey: input.todayDateKey,
+  });
+  const dailyBlundrCardGoal = Math.max(
+    1,
+    Math.min(99, Number(profileRow.daily_blundr_card_goal) || 10),
+  );
 
   const ring = (
     id: "daily_tempo" | "daily_battery" | "daily_blundr",
@@ -198,9 +261,23 @@ export async function loadDurableProgressSummary(input: {
   const rings = [
     ring("daily_tempo", "Daily Tempo", "daily_tempo", 10),
     ring("daily_battery", "Daily Battery", "daily_battery", 3),
-    ring("daily_blundr", "Daily Blundr", "daily_blundr", 1),
+    {
+      ringId: "daily_blundr" as const,
+      label: "Daily Blundr",
+      progress: cardsCompletedToday,
+      goal: dailyBlundrCardGoal,
+      percent: Math.min(
+        100,
+        Math.round(
+          (Math.min(cardsCompletedToday, dailyBlundrCardGoal) /
+            dailyBlundrCardGoal) *
+            100,
+        ),
+      ),
+      closed: cardsCompletedToday >= dailyBlundrCardGoal,
+    },
   ];
-  const todayClosed = Boolean(today.all_rings_closed);
+  const todayClosed = rings.every((item) => item.closed);
 
   const grantOn = (row: Row, date: string, source?: string) =>
     String(row.local_date) === date && (!source || row.source === source);

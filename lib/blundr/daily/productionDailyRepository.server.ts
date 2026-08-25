@@ -34,6 +34,70 @@ function rowToSession(row: Record<string, unknown>): ProductionDailySession {
 }
 
 export class ProductionDailyRepository {
+  async countUniqueCompletedCardsForDate(
+    userId: string,
+    dateKey: string,
+  ): Promise<number> {
+    const client = requireProductionPersistence(
+      createBlundrSupabaseAdminClient(),
+    );
+    if (!client) {
+      const completed = new Set<string>();
+      for (const session of localSessions.values()) {
+        if (session.userId !== userId || session.dateKey !== dateKey) continue;
+        for (const attempt of session.state.attempts ?? []) {
+          if (attempt.outcome === "correct")
+            completed.add(String(attempt.card.cardFingerprint));
+        }
+      }
+      return completed.size;
+    }
+
+    const decksResult = await client
+      .from("blundr_daily_decks")
+      .select("deck_id")
+      .eq("user_id", userId)
+      .eq("local_date", dateKey);
+    if (decksResult.error) throw new Error("daily_deck_persistence_unavailable");
+
+    const deckIds = (decksResult.data ?? [])
+      .map((row) => String(row.deck_id ?? "").trim())
+      .filter(Boolean);
+    if (!deckIds.length) return 0;
+
+    const sessionsQuery = client
+      .from("blundr_daily_sessions")
+      .select("session_id,deck_id")
+      .eq("user_id", userId);
+    const sessionsResult =
+      deckIds.length === 1
+        ? await sessionsQuery.eq("deck_id", deckIds[0])
+        : await sessionsQuery.in("deck_id", deckIds);
+    if (sessionsResult.error)
+      throw new Error("daily_session_persistence_unavailable");
+
+    const sessionIds = (sessionsResult.data ?? [])
+      .map((row) => String(row.session_id ?? "").trim())
+      .filter(Boolean);
+    if (!sessionIds.length) return 0;
+
+    const evidenceResult = await client
+      .from("blundr_daily_task_evidence_v3")
+      .select("card_fingerprint,session_id,outcome")
+      .eq("user_id", userId)
+      .eq("outcome", "correct")
+      .in("session_id", sessionIds);
+    if (evidenceResult.error)
+      throw new Error("daily_task_evidence_persistence_unavailable");
+
+    const completed = new Set<string>();
+    for (const row of evidenceResult.data ?? []) {
+      const fingerprint = String(row.card_fingerprint ?? "").trim();
+      if (fingerprint) completed.add(fingerprint);
+    }
+    return completed.size;
+  }
+
   async getByDate(
     userId: string,
     dateKey: string,

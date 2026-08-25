@@ -63,27 +63,28 @@ test("counts completed cards and clamps goal to the reserved deck size", () => {
   if (!progress) return;
   assert.equal(progress.totalCards, 2);
   assert.equal(progress.completedCards, 1);
-  assert.equal(progress.goalCards, 2);
+  assert.equal(progress.goalCards, 10);
   assert.equal(progress.progressCards, 1);
   assert.equal(progress.completed, false);
-  assert.equal(progress.percent, 50);
+  assert.equal(progress.percent, 10);
 });
 
-test("treats a card-goal as complete once the clamped goal count is reached", () => {
+test("treats the card-goal as complete once the configured goal is reached", () => {
   const progress = resolveProductionDailyCardGoalProgress(
     session({
       publicCards: [card, { ...card, cardFingerprint: "card-2" }],
+      cardsCompletedToday: 11,
       state: {
         currentIndex: 2,
         completedCardIds: ["card-1", "card-2"],
         revealedCardIds: [],
       },
     }),
-    99,
+    10,
   );
   assert.ok(progress);
   if (!progress) return;
-  assert.equal(progress.goalCards, 2);
+  assert.equal(progress.goalCards, 10);
   assert.equal(progress.completed, true);
   assert.equal(progress.percent, 100);
 });
