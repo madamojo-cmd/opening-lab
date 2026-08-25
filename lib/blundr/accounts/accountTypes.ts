@@ -26,6 +26,8 @@ export type UserTrainingProfile = {
   rawRating?: number;
   ratingTimeControl?: "rapid" | "blitz" | "classical" | "bullet" | "unknown";
   preferredTrainingMode: "assisted" | "plain";
+  /** Account-owned visual teaching aid toggle, synced cross-device when authenticated. */
+  tacticalHighlightsEnabled: boolean;
   dailyTempoGoal: number;
   dailyBatteryGoal: number;
   dailyBlundrGoal: number;

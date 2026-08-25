@@ -14,6 +14,7 @@ export type TrainingPreferencesPatch = Partial<
     UserTrainingProfile,
     | "ratingBandId"
     | "preferredTrainingMode"
+    | "tacticalHighlightsEnabled"
     | "dailyTempoGoal"
     | "dailyBatteryGoal"
     | "dailyBlundrGoal"
@@ -92,6 +93,7 @@ export function validateTrainingPreferencesPatch(
   const allowed = new Set([
     "ratingBandId",
     "preferredTrainingMode",
+    "tacticalHighlightsEnabled",
     "dailyTempoGoal",
     "dailyBatteryGoal",
     "dailyBlundrGoal",
@@ -126,6 +128,15 @@ export function validateTrainingPreferencesPatch(
         message: "Choose Assisted or Plain training.",
       };
     patch.preferredTrainingMode = input.preferredTrainingMode;
+  }
+  if (hasOwn(input, "tacticalHighlightsEnabled")) {
+    if (typeof input.tacticalHighlightsEnabled !== "boolean")
+      return {
+        ok: false,
+        code: "invalid_teaching_aid",
+        message: "Teaching aid preferences must be true or false.",
+      };
+    patch.tacticalHighlightsEnabled = input.tacticalHighlightsEnabled;
   }
   for (const key of [
     "dailyTempoGoal",

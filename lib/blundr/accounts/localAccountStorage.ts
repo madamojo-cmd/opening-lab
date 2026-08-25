@@ -122,6 +122,10 @@ function normalizeTrainingProfile(raw: unknown): UserTrainingProfile | null {
         ? raw.ratingTimeControl
         : undefined,
     preferredTrainingMode: raw.preferredTrainingMode === "plain" ? "plain" : "assisted",
+    tacticalHighlightsEnabled:
+      typeof raw.tacticalHighlightsEnabled === "boolean"
+        ? raw.tacticalHighlightsEnabled
+        : base.tacticalHighlightsEnabled,
     dailyTempoGoal: Math.max(1, Number(raw.dailyTempoGoal) || base.dailyTempoGoal),
     dailyBatteryGoal: Math.max(1, Number(raw.dailyBatteryGoal) || base.dailyBatteryGoal),
     dailyBlundrGoal: Math.max(1, Number(raw.dailyBlundrGoal) || base.dailyBlundrGoal),

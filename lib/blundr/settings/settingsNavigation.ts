@@ -1,13 +1,11 @@
 export type BlundrSettingsSectionId =
   | "account"
-  | "connected_game_data"
-  | "subscription"
   | "training_preferences"
   | "daily_goals"
-  | "display_accessibility"
-  | "data_privacy"
-  | "support_about"
-  | "developer_tools";
+  | "visual_teaching_aids"
+  | "billing"
+  | "privacy"
+  | "account_management";
 
 export type BlundrMajorAppLink = {
   id: "home" | "daily" | "repertoire" | "progress" | "review";
@@ -50,12 +48,10 @@ export const BLUNDR_SETTINGS_BOARD_PIECE_OPTIONS: readonly BlundrBoardPieceSetOp
 
 export const BLUNDR_SETTINGS_SECTION_IDS: readonly BlundrSettingsSectionId[] = [
   "account",
-  "connected_game_data",
-  "subscription",
   "training_preferences",
   "daily_goals",
-  "display_accessibility",
-  "data_privacy",
-  "support_about",
-  "developer_tools",
+  "visual_teaching_aids",
+  "billing",
+  "privacy",
+  "account_management",
 ] as const;
