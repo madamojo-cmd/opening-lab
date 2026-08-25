@@ -9,4 +9,3 @@ alter table public.blundr_user_profiles
 alter table public.blundr_user_profiles
   add constraint blundr_user_profiles_daily_blundr_card_goal_check
   check (daily_blundr_card_goal >= 1 and daily_blundr_card_goal <= 99);
-
