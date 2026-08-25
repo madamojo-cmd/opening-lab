@@ -43,6 +43,7 @@ export function createDefaultTrainingProfile(userId: string, now = nowIso()): Us
     dailyTempoGoal: 10,
     dailyBatteryGoal: 3,
     dailyBlundrGoal: 1,
+    dailyBlundrCardGoal: 10,
     // Authentication creates an account profile, not a repertoire. The real
     // onboarding confirmation path is the only authority that selects and
     // persists starter-opening access.

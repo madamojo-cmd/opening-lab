@@ -46,6 +46,7 @@ type ProfileRow = {
   daily_tempo_goal?: unknown;
   daily_battery_goal?: unknown;
   daily_blundr_goal?: unknown;
+  daily_blundr_card_goal?: unknown;
   selected_starter_pack_id?: unknown;
   preferred_training_mode?: unknown;
 };
@@ -190,6 +191,7 @@ async function ensureProfile(
       daily_tempo_goal: fallback.dailyTempoGoal,
       daily_battery_goal: fallback.dailyBatteryGoal,
       daily_blundr_goal: fallback.dailyBlundrGoal,
+      daily_blundr_card_goal: fallback.dailyBlundrCardGoal,
       age_confirmed_at: user.age13Confirmed ? nowIso() : null,
     })
     .select("*")
