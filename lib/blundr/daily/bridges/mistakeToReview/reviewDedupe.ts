@@ -1,4 +1,4 @@
-import type { ReviewSeed } from "./reviewSeedFactory.ts";
+import type { ReviewSeed } from "./reviewSeedFactory";
 export function dedupeReviewSeeds(seeds: readonly ReviewSeed[]): ReviewSeed[] {
   const map = new Map<string, ReviewSeed>();
   for (const seed of seeds) {

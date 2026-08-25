@@ -2,7 +2,7 @@ import {
   createDeterministicIdentity,
   type CardFingerprint,
   type LearningFinding,
-} from "../../../contracts/index.ts";
+} from "@/lib/blundr/contracts";
 export type ReviewSeed = {
   reviewCardId: string;
   cardFingerprint: CardFingerprint;

@@ -7,7 +7,7 @@ import type {
   ReviewQueueLifecycleState,
   ReviewQueuePage,
   ReviewQueueSyncState,
-} from "./reviewQueueTypes.ts";
+} from "./reviewQueueTypes";
 
 type Row = Record<string, unknown>;
 
