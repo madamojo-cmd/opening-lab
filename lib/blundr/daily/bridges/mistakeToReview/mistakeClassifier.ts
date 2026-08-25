@@ -1,8 +1,8 @@
 import type {
   LearningEventV2,
   LearningFindingCategory,
-} from "@/lib/blundr/contracts";
-import type { ReviewReason } from "./reviewReason";
+} from "../../../contracts/index.ts";
+import type { ReviewReason } from "./reviewReason.ts";
 
 export type ClassifiedMistake = {
   positionKey: string;

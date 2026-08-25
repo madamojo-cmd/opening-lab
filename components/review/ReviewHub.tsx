@@ -9,6 +9,7 @@ import {
   getDailyMiniGameDefinition,
 } from "@/lib/blundr/daily/miniGames/dailyMiniGameRegistry";
 import { ReviewTabDailyBlundrPanel } from "@/components/daily/ReviewTabDailyBlundrPanel";
+import { ReviewQueueInbox } from "@/components/review/ReviewQueueInbox";
 
 type ReviewHubProps = {
   embedded?: boolean;
@@ -67,12 +68,6 @@ export function ReviewHub({
   );
   const enabledGameCount = productionGames.length;
   const hasUnavailableGames = capabilities !== null && enabledGameCount === 0;
-  const dailyAccessStatus =
-    capabilities === null
-      ? "Checking"
-      : capabilities.dailyEnabled === true
-        ? "On"
-        : "Off";
 
   return (
     <section className={classNames("w-full space-y-[17px]", className)}>
@@ -116,28 +111,13 @@ export function ReviewHub({
             Review queue
           </div>
           <h2 className="mt-2 text-base font-black tracking-[-0.02em] text-stone-950">
-            Standalone practice stays separate.
+            Mistakes to revisit.
           </h2>
-          <div className="mt-5 grid overflow-hidden rounded-[16px] border border-stone-200 bg-[#f8f8f5] text-center">
-            <div className="grid grid-cols-2 divide-x divide-stone-200">
-              <div className="px-4 py-4">
-                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">
-                  Production games
-                </div>
-                <div className="mt-1 text-2xl font-black text-stone-950">
-                  {enabledGameCount}
-                </div>
-              </div>
-              <div className="px-4 py-4">
-                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">
-                  Daily access
-                </div>
-                <div className="mt-1 text-2xl font-black text-stone-950">
-                  {dailyAccessStatus}
-                </div>
-              </div>
-            </div>
-          </div>
+          <p className="mt-2 text-[12px] leading-[1.5] text-stone-600">
+            This inbox is backed by durable weakness projections tied to your
+            imported and learned evidence.
+          </p>
+          <ReviewQueueInbox />
         </section>
       </div>
 

@@ -124,16 +124,16 @@
       "userPromise": "Learning acknowledgement/outbox, canonical FSRS scheduling, and Mastery/weakness projections are durable, truthful, and never manufactured from telemetry or failed writes.",
       "status": "partial",
       "releaseRequired": true,
-      "authority": ["lib/blundr/learning", "lib/blundr/daily", "components/review", "future server learning acknowledgement/outbox and FSRS projection authority"],
-      "entryPoints": ["/train", "/review", "/daily"],
+      "authority": ["app/api/blundr/review-queue", "lib/blundr/reviewQueue", "lib/blundr/learning", "lib/blundr/daily", "components/review", "components/review/ReviewQueueInbox.tsx", "future server learning acknowledgement/outbox and FSRS projection authority"],
+      "entryPoints": ["/train", "/review", "/daily", "/api/blundr/review-queue"],
       "persistence": ["Learning items", "review events", "future immutable learning evidence, FSRS state, Mastery, and weakness projections"],
       "dependencies": ["AUTH-ACCOUNT-001"],
       "featureFlags": ["BLUNDR_FEATURE_LEARNING_CORE_V2"],
       "fallback": "Unavailable acknowledgement, projection, or persistence is visible and prevents a durable completion rather than writing local authenticated state or showing data as unseen.",
-      "requiredTests": ["lib/blundr/learning/__tests__", "lib/blundr/daily/__tests__/productionDailyRuntimeComposition.test.ts", "tests/integration", "tests/security"],
+      "requiredTests": ["lib/blundr/reviewQueue/__tests__", "lib/blundr/daily/bridges/mistakeToReview/__tests__/mistakeToReview.test.ts", "lib/blundr/learning/__tests__", "lib/blundr/daily/__tests__/productionDailyRuntimeComposition.test.ts", "tests/integration", "tests/security"],
       "lastVerifiedSha": null,
       "evidence": [],
-      "blockers": ["The durable learning acknowledgement/outbox, canonical FSRS scheduler, and truthful Mastery/weakness projection authority are not implemented.", "Complete deployed review-to-progress evidence is not recorded."]
+      "blockers": ["The durable learning acknowledgement/outbox, canonical FSRS scheduler, and truthful Mastery/weakness projection authority are not implemented.", "The Review Queue inbox is read-only; lifecycle changes depend on projection writers and are not mutated by the client.", "Complete deployed review-to-progress evidence is not recorded."]
     },
     {
       "id": "DAILY-ADAPTIVE-001",
