@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ArrowRight, RefreshCcw, Timer } from "lucide-react";
 
 import type { ReviewQueueItem } from "@/lib/blundr/reviewQueue/reviewQueueTypes";
+import { authenticatedApiFetch } from "@/lib/blundr/api/authenticatedApiClient";
 import {
   buildReviewQueuePracticeActionHref,
   formatLifecycleLabel,
@@ -67,15 +68,14 @@ export function ReviewQueueInbox() {
   const load = () => {
     const currentRequest = (requestId.current += 1);
     setState({ kind: "loading" });
-    void fetch(`/api/blundr/review-queue?${query}`, { cache: "no-store" })
-      .then(async (response) => {
-        const payload = (await response.json()) as
-          | { ok: true; data: InboxPayload }
-          | { ok: false; error: string };
+    void authenticatedApiFetch<
+      | { ok: true; data: InboxPayload }
+      | { ok: false; error: string }
+    >(`/api/blundr/review-queue?${query}`, { cache: "no-store" })
+      .then((payload) => {
         if (currentRequest !== requestId.current) return;
         if (payload.ok === false)
           throw new Error(payload.error || "unknown_error");
-        if (!response.ok) throw new Error("unknown_error");
         setState({ kind: "ready", data: payload.data });
       })
       .catch((error: unknown) => {

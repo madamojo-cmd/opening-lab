@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Eye, RefreshCcw } from "lucide-react";
 
 import { DailyBlundrBoard } from "@/components/daily/DailyBlundrBoard";
+import { authenticatedApiFetch } from "@/lib/blundr/api/authenticatedApiClient";
 import type { DailyBlundrBoardMoveAttempt } from "@/lib/blundr/daily/dailyBlundrPlayerTypes";
 import { formatLifecycleLabel } from "@/lib/blundr/reviewQueue/reviewQueueModel";
 
@@ -71,16 +72,15 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
 
   const load = () => {
     setState({ kind: "loading" });
-    void fetch(`/api/blundr/review-mistakes/${encodeURIComponent(mistakeId)}`, {
+    void authenticatedApiFetch<
+      | { ok: true; data: Snapshot }
+      | { ok: false; error: string }
+    >(`/api/blundr/review-mistakes/${encodeURIComponent(mistakeId)}`, {
       cache: "no-store",
     })
-      .then(async (response) => {
-        const payload = (await response.json()) as
-          | { ok: true; data: Snapshot }
-          | { ok: false; error: string };
+      .then((payload) => {
         if (payload.ok === false)
           throw new Error(payload.error || "unknown_error");
-        if (!response.ok) throw new Error("unknown_error");
         setState({ kind: "ready", data: payload.data });
       })
       .catch((error: unknown) => {
@@ -169,27 +169,25 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
     if (busy) return;
     setBusy(true);
     try {
-      const response = await fetch(
+      const payload = await authenticatedApiFetch<
+        | { ok: true; data: AttemptResult }
+        | { ok: false; error: string }
+      >(
         `/api/blundr/review-mistakes/${encodeURIComponent(snapshot.mistakeId)}/attempt`,
         {
           method: "POST",
-          headers: { "content-type": "application/json" },
           body: JSON.stringify({
             uci,
             retry: attemptCount.current > 0,
           }),
         },
       );
-      const payload = (await response.json()) as
-        | { ok: true; data: AttemptResult }
-        | { ok: false; error: string };
       if (payload.ok === false)
         throw new Error(payload.error || "unknown_error");
-      if (!response.ok) throw new Error("unknown_error");
       attemptCount.current += 1;
       setAttempt(payload.data);
       if (payload.data.correct && payload.data.resolved) {
-        void fetch("/api/blundr/review-queue?limit=1&page=0", {
+        void authenticatedApiFetch("/api/blundr/review-queue?limit=1&page=0", {
           cache: "no-store",
         }).catch(() => null);
         router.replace("/review");
@@ -216,16 +214,15 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
     if (busy) return;
     setBusy(true);
     try {
-      const response = await fetch(
+      const payload = await authenticatedApiFetch<
+        | { ok: true; data: RevealResult }
+        | { ok: false; error: string }
+      >(
         `/api/blundr/review-mistakes/${encodeURIComponent(snapshot.mistakeId)}/reveal`,
         { method: "POST" },
       );
-      const payload = (await response.json()) as
-        | { ok: true; data: RevealResult }
-        | { ok: false; error: string };
       if (payload.ok === false)
         throw new Error(payload.error || "unknown_error");
-      if (!response.ok) throw new Error("unknown_error");
       setReveal(payload.data);
     } finally {
       setBusy(false);
@@ -344,4 +341,3 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
     </section>
   );
 }
-
