@@ -131,7 +131,7 @@ export function ProfileSettingsIcon({ className }: ProfileSettingsIconProps) {
             ref={(node) => {
               itemRefs.current[2] = node;
             }}
-            href="/settings#support_about"
+            href="/settings#account_management"
             role="menuitem"
             onClick={() => setOpen(false)}
             className="flex items-center gap-2 border-t border-stone-100 px-4 py-3 text-sm font-semibold text-stone-700 transition hover:bg-green-50 hover:text-green-700"

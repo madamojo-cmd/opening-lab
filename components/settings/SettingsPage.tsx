@@ -1,28 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
   Cloud,
-  ExternalLink,
-  Globe,
-  Laptop,
   LogOut,
-  MoonStar,
-  RefreshCw,
   Shield,
-  Settings,
-  Sparkles,
   SlidersHorizontal,
-  UserCircle2,
-  WandSparkles,
 } from "lucide-react";
 
-import {
-  BLUNDR_EMPTY_STATE_ASSETS,
-  BLUNDR_TEMPO_ASSETS,
-} from "@/lib/blundr/assets/blundrAssetManifest";
+import { BLUNDR_TEMPO_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
 import {
   BLUNDR_SETTINGS_BOARD_PIECE_OPTIONS,
   BLUNDR_SETTINGS_BOARD_THEME_OPTIONS,
@@ -36,7 +24,6 @@ import {
 } from "@/lib/blundr/settings/accountSettingsState";
 import { BLUNDR_LOCAL_DEMO_USER_ID } from "@/lib/blundr/persistence/persistenceKeys";
 import {
-  getLocalAccountCurrentUserId,
   resetLocalAccountState,
   upsertLocalTrainingProfile,
 } from "@/lib/blundr/accounts/localAccountStorage";
@@ -55,12 +42,14 @@ import {
 } from "@/lib/blundr/onboarding/onboardingAuth";
 import { PasswordField } from "@/components/auth/PasswordField";
 import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
-import { ConnectedGameDataPanel } from "./gameData/ConnectedGameDataPanel";
 import {
   authenticatedApiFetch,
   AuthenticatedApiError,
 } from "@/lib/blundr/api/authenticatedApiClient";
-import type { BlundrProfilePublic } from "@/lib/blundr/profile/profileTypes";
+import {
+  validateBlundrUsername,
+  type BlundrProfilePublic,
+} from "@/lib/blundr/profile/profileTypes";
 import styles from "./SettingsPage.module.css";
 
 type SettingsPageProps = {
@@ -83,14 +72,12 @@ type SectionLink = {
 
 const SETTINGS_SECTION_LINKS: readonly SectionLink[] = [
   { id: "account", label: "Account" },
-  { id: "connected_game_data", label: "Game data" },
-  { id: "subscription", label: "Subscription" },
-  { id: "training_preferences", label: "Training" },
+  { id: "training_preferences", label: "Training preferences" },
   { id: "daily_goals", label: "Daily goals" },
-  { id: "display_accessibility", label: "Display" },
-  { id: "data_privacy", label: "Privacy" },
-  { id: "support_about", label: "Support" },
-  { id: "developer_tools", label: "Developer tools" },
+  { id: "visual_teaching_aids", label: "Visual & teaching aids" },
+  { id: "billing", label: "Billing" },
+  { id: "privacy", label: "Privacy" },
+  { id: "account_management", label: "Account management" },
 ] as const;
 
 function isSettingsSectionId(value: string): value is BlundrSettingsSectionId {
@@ -219,6 +206,9 @@ export function SettingsPage({ className }: SettingsPageProps) {
   const [preferredTrainingMode, setPreferredTrainingMode] = useState(
     snapshot.profile.preferredTrainingMode,
   );
+  const [tacticalHighlightsEnabled, setTacticalHighlightsEnabled] = useState(
+    snapshot.profile.tacticalHighlightsEnabled,
+  );
   const [selectedStarterPackId, setSelectedStarterPackId] = useState(
     snapshot.profile.selectedStarterPackId ?? "classical_attacker",
   );
@@ -235,6 +225,13 @@ export function SettingsPage({ className }: SettingsPageProps) {
 
   const isAuthenticated = authResolved && Boolean(authSession);
   const isLocalDemo = authResolved && !authSession;
+  const usernameValidation = useMemo(
+    () => validateBlundrUsername(usernameDraft),
+    [usernameDraft],
+  );
+  const usernameChanged =
+    usernameValidation.ok &&
+    usernameValidation.username !== (blundrUsername ?? "");
   const accountLabel = !authResolved
     ? "Checking your account session…"
     : authSession
@@ -258,6 +255,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
       setTrainingGoalBattery(nextSnapshot.profile.dailyBatteryGoal);
       setTrainingGoalBlundrCards(nextSnapshot.profile.dailyBlundrCardGoal);
       setPreferredTrainingMode(nextSnapshot.profile.preferredTrainingMode);
+      setTacticalHighlightsEnabled(nextSnapshot.profile.tacticalHighlightsEnabled);
       setRatingBandId(nextSnapshot.profile.ratingBandId);
       setSelectedStarterPackId(
         nextSnapshot.profile.selectedStarterPackId ?? "classical_attacker",
@@ -356,6 +354,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
     setTrainingGoalBattery(nextSnapshot.profile.dailyBatteryGoal);
     setTrainingGoalBlundrCards(nextSnapshot.profile.dailyBlundrCardGoal);
     setPreferredTrainingMode(nextSnapshot.profile.preferredTrainingMode);
+    setTacticalHighlightsEnabled(nextSnapshot.profile.tacticalHighlightsEnabled);
     setRatingBandId(nextSnapshot.profile.ratingBandId);
     setSelectedStarterPackId(
       nextSnapshot.profile.selectedStarterPackId ?? "classical_attacker",
@@ -378,6 +377,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
     setTrainingGoalBattery(nextProfile.dailyBatteryGoal);
     setTrainingGoalBlundrCards(nextProfile.dailyBlundrCardGoal);
     setPreferredTrainingMode(nextProfile.preferredTrainingMode);
+    setTacticalHighlightsEnabled(nextProfile.tacticalHighlightsEnabled);
   }
 
   async function saveProfilePatch(patch: TrainingPreferencesPatch) {
@@ -403,6 +403,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
         setTrainingGoalBattery(snapshot.profile.dailyBatteryGoal);
         setTrainingGoalBlundrCards(snapshot.profile.dailyBlundrCardGoal);
         setPreferredTrainingMode(snapshot.profile.preferredTrainingMode);
+        setTacticalHighlightsEnabled(snapshot.profile.tacticalHighlightsEnabled);
         setStatusMessage(
           error instanceof AuthenticatedApiError
             ? error.message
@@ -424,6 +425,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
       profile: nextProfile,
       dailyGoalSummary: formatDailyGoalSummary(nextProfile),
     }));
+    setTacticalHighlightsEnabled(nextProfile.tacticalHighlightsEnabled);
     setStatusMessage("Saved local training preferences.");
   }
 
@@ -490,6 +492,11 @@ export function SettingsPage({ className }: SettingsPageProps) {
   }
 
   async function saveBlundrUsername() {
+    if (!usernameChanged) return;
+    if (usernameValidation.ok === false) {
+      setUsernameMessage(usernameValidation.message);
+      return;
+    }
     setUsernameBusy(true);
     setUsernameMessage(null);
     try {
@@ -497,7 +504,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
         "/api/blundr/profile",
         {
           method: "PATCH",
-          body: JSON.stringify({ username: usernameDraft }),
+          body: JSON.stringify({ username: usernameValidation.username }),
         },
       );
       setBlundrUsername(profile.username);
@@ -538,11 +545,10 @@ export function SettingsPage({ className }: SettingsPageProps) {
                 Settings
               </div>
               <h1 className="mt-3 text-[34px] font-black leading-[1.05] tracking-[-0.05em] text-stone-950 max-[820px]:text-[27px]">
-                Account &amp; training.
+                Account settings.
               </h1>
               <p className="mt-3 max-w-[720px] text-[13px] leading-[1.55] text-stone-600 max-[820px]:text-[11px]">
-                All nine production settings areas, reorganized without
-                inventing unwired product behavior.
+                Manage your identity, training preferences, and daily goals.
               </p>
             </div>
             <Link href="/profile" className={styles.profileLink}>
@@ -616,7 +622,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
             <Section
               id="account"
               title="Account"
-              copy="Keep track of whether Tempo is in local demo or authenticated mode."
+              copy="Manage your sign-in state and public username."
               active={activeSectionId === "account"}
             >
               <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
@@ -624,7 +630,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
                   <div className="flex items-start gap-3">
                     <BlundrAssetImage
                       asset={BLUNDR_TEMPO_ASSETS.avatar}
-                      alt="Tempo avatar"
+                      alt="Blundr avatar"
                       variant="tempoAvatar"
                       className="shrink-0"
                     />
@@ -637,8 +643,8 @@ export function SettingsPage({ className }: SettingsPageProps) {
                       </div>
                       <p className="mt-2 text-sm leading-6 text-stone-600">
                         {isAuthenticated
-                          ? "Your cloud account is active. Tempo will keep using authenticated sync where it is configured."
-                          : "Local demo keeps working without Supabase credentials. Sign in or create an account when you are ready."}
+                          ? "Your account is active. Supported preferences and progress can sync across devices."
+                          : "Local demo stores progress on this device. Sign in or create an account when you want cross-device sync."}
                       </p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <span className="rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-stone-500 ring-1 ring-stone-200">
@@ -665,18 +671,13 @@ export function SettingsPage({ className }: SettingsPageProps) {
                         <LogOut size={16} />
                         Sign out
                       </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setStatusMessage(
-                            "Account deletion comes later. Tempo keeps the local demo safe for now.",
-                          )
-                        }
+                      <Link
+                        href="/settings#account_management"
                         className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-black text-stone-700 ring-1 ring-stone-200"
                       >
                         <Shield size={16} />
-                        Delete account later
-                      </button>
+                        Account management
+                      </Link>
                     </div>
                   ) : (
                     <div className="mt-4 rounded-2xl bg-white p-4 ring-1 ring-stone-200">
@@ -771,7 +772,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
                       "No starter pack"}
                   </div>
                   <p className="mt-2 text-sm leading-6 text-stone-600">
-                    Tempo remembers your starter pack, daily goals, and
+                    Blundr remembers your starter pack, daily goals, and
                     preferred training mode on this device.
                   </p>
                   <div className="mt-4 grid gap-2 text-sm text-stone-600">
@@ -780,36 +781,74 @@ export function SettingsPage({ className }: SettingsPageProps) {
                         Blundr username
                       </div>
                       {isAuthenticated ? (
-                        <div className="mt-2 flex gap-2">
-                          <input
-                            aria-label="Blundr username"
-                            value={usernameDraft}
-                            onChange={(event) =>
-                              setUsernameDraft(event.target.value)
-                            }
-                            placeholder="Choose a username"
-                            className="min-w-0 flex-1 rounded-xl border border-stone-200 px-3 py-2 text-sm font-bold"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => void saveBlundrUsername()}
-                            disabled={usernameBusy || !usernameDraft.trim()}
-                            className="rounded-xl bg-stone-950 px-3 py-2 text-xs font-black text-white disabled:opacity-50"
-                          >
-                            {usernameBusy ? "Saving…" : "Save"}
-                          </button>
-                        </div>
+                        <>
+                          <div className="mt-1 font-black text-stone-950">
+                            {blundrUsername ? `@${blundrUsername}` : "Not set"}
+                          </div>
+                          <div className="mt-2 flex gap-2">
+                            <input
+                              aria-label="Blundr username"
+                              value={usernameDraft}
+                              onChange={(event) => {
+                                setUsernameDraft(event.target.value);
+                                setUsernameMessage(null);
+                              }}
+                              placeholder="username"
+                              autoCapitalize="none"
+                              autoComplete="username"
+                              spellCheck={false}
+                              aria-invalid={
+                                Boolean(usernameDraft.trim()) &&
+                                usernameValidation.ok === false
+                              }
+                              className={classNames(
+                                "min-w-0 flex-1 rounded-xl border px-3 py-2 text-sm font-bold outline-none",
+                                usernameValidation.ok
+                                  ? "border-stone-200 focus:border-green-300"
+                                  : "border-red-200 focus:border-red-400",
+                              )}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => void saveBlundrUsername()}
+                              disabled={
+                                usernameBusy ||
+                                usernameValidation.ok === false ||
+                                !usernameChanged
+                              }
+                              className="rounded-xl bg-stone-950 px-3 py-2 text-xs font-black text-white disabled:opacity-50"
+                            >
+                              {usernameBusy ? "Saving…" : "Save"}
+                            </button>
+                          </div>
+                        </>
                       ) : (
                         <div className="mt-1 font-black text-stone-950">
                           Local demo
                         </div>
                       )}
-                      {usernameMessage ? (
+                      {isAuthenticated ? (
                         <p
                           role="status"
-                          className="mt-2 text-xs leading-5 text-stone-600"
+                          className={classNames(
+                            "mt-2 text-xs leading-5",
+                            usernameValidation.ok
+                              ? "text-stone-600"
+                              : "text-red-700",
+                          )}
                         >
-                          {usernameMessage}
+                          {usernameMessage ??
+                            (usernameDraft.trim()
+                              ? usernameValidation.ok
+                                ? usernameChanged
+                                  ? "Looks good. Save to claim it."
+                                  : "This is already your current username."
+                                : "message" in usernameValidation
+                                  ? usernameValidation.message
+                                  : "Choose a valid username."
+                              : blundrUsername
+                                ? "Use 3–24 characters: a letter first, then lowercase letters, numbers, or underscores."
+                                : "Choose a username to finish account setup.")}
                         </p>
                       ) : null}
                     </div>
@@ -837,35 +876,6 @@ export function SettingsPage({ className }: SettingsPageProps) {
                   {authError}
                 </div>
               ) : null}
-            </Section>
-
-            <section
-              id="connected_game_data"
-              className={classNames(
-                styles.settingPanel,
-                activeSectionId !== "connected_game_data" &&
-                  styles.settingPanelHidden,
-              )}
-              aria-hidden={activeSectionId !== "connected_game_data"}
-            >
-              <ConnectedGameDataPanel />
-            </section>
-
-            <Section
-              id="subscription"
-              title="Subscription"
-              copy="Billing is intentionally not wired in this stage."
-              active={activeSectionId === "subscription"}
-            >
-              <div className="rounded-[1.5rem] border border-stone-200 bg-[#fbfcf7] p-4">
-                <div className="text-sm font-black text-stone-950">
-                  Blundr Pro billing coming soon on web.
-                </div>
-                <p className="mt-2 text-sm leading-6 text-stone-600">
-                  Tempo Cache, training, and local demo work without payment
-                  logic in Stage 8J.
-                </p>
-              </div>
             </Section>
 
             <Section
@@ -1115,49 +1125,88 @@ export function SettingsPage({ className }: SettingsPageProps) {
                 <p className="mt-2 text-sm leading-6 text-stone-600">
                   {snapshot.dailyGoalSummary}
                 </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <span className="rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-stone-500 ring-1 ring-stone-200">
-                    Starter pack: {selectedStarterPackId}
-                  </span>
-                </div>
               </div>
             </Section>
 
             <Section
-              id="display_accessibility"
-              title="Display and accessibility"
-              copy="Keep the interface readable and calm."
-              active={activeSectionId === "display_accessibility"}
+              id="visual_teaching_aids"
+              title="Visual & teaching aids"
+              copy="Control optional teaching overlays and cues."
+              active={activeSectionId === "visual_teaching_aids"}
             >
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 lg:grid-cols-2">
                 <div className="rounded-[1.5rem] bg-stone-50 p-4 ring-1 ring-stone-200">
-                  <div className="flex items-center gap-2 text-sm font-black text-stone-950">
-                    <MoonStar size={16} className="text-green-700" />
-                    Reduced motion
+                  <div className="text-sm font-black text-stone-950">
+                    Tactical highlights
                   </div>
                   <p className="mt-2 text-sm leading-6 text-stone-600">
-                    Tempo respects your system motion settings. Static fallbacks
-                    are used automatically for reward animations.
+                    Show visual cues when Blundr detects tactical patterns such
+                    as forks and pins.
                   </p>
+                  <button
+                    type="button"
+                    disabled={profileBusy}
+                    onClick={() => {
+                      const next = !tacticalHighlightsEnabled;
+                      setTacticalHighlightsEnabled(next);
+                      void saveProfilePatch({ tacticalHighlightsEnabled: next });
+                    }}
+                    className={classNames(
+                      "mt-3 inline-flex items-center justify-between gap-3 rounded-2xl px-4 py-3 text-sm font-black shadow-sm ring-1",
+                      profileBusy && "cursor-not-allowed opacity-60",
+                      tacticalHighlightsEnabled
+                        ? "bg-green-50 text-green-800 ring-green-200"
+                        : "bg-white text-stone-700 ring-stone-200",
+                    )}
+                    aria-pressed={tacticalHighlightsEnabled}
+                  >
+                    <span>{tacticalHighlightsEnabled ? "On" : "Off"}</span>
+                    <span className="text-xs font-black uppercase tracking-[0.18em] text-current/70">
+                      {tacticalHighlightsEnabled ? "Enabled" : "Disabled"}
+                    </span>
+                  </button>
                 </div>
+
                 <div className="rounded-[1.5rem] bg-stone-50 p-4 ring-1 ring-stone-200">
-                  <div className="flex items-center gap-2 text-sm font-black text-stone-950">
-                    <Laptop size={16} className="text-green-700" />
-                    Compact mode
+                  <div className="text-sm font-black text-stone-950">
+                    Motion and readability
                   </div>
                   <p className="mt-2 text-sm leading-6 text-stone-600">
-                    A compact mode is not wired as a separate preference yet.
-                    Tempo keeps the mobile layout tight by default.
+                    The interface respects your system motion and contrast
+                    preferences, and adapts layout for smaller screens.
                   </p>
                 </div>
               </div>
             </Section>
 
             <Section
-              id="data_privacy"
-              title="Data and privacy"
-              copy="Local demo should feel safe and understandable."
-              active={activeSectionId === "data_privacy"}
+              id="billing"
+              title="Billing"
+              copy="Subscriptions are not managed in this beta build."
+              active={activeSectionId === "billing"}
+            >
+              <div className="rounded-[1.5rem] border border-stone-200 bg-[#fbfcf7] p-4">
+                <div className="text-sm font-black text-stone-950">
+                  No web billing controls
+                </div>
+                <p className="mt-2 text-sm leading-6 text-stone-600">
+                  This build does not start, change, or cancel subscriptions
+                  from Settings.
+                </p>
+                <Link
+                  href="/subscription-terms"
+                  className="mt-3 inline-flex text-sm font-black text-green-700 underline underline-offset-4"
+                >
+                  Read subscription terms
+                </Link>
+              </div>
+            </Section>
+
+            <Section
+              id="privacy"
+              title="Privacy"
+              copy="Understand what is stored on this device and in your account."
+              active={activeSectionId === "privacy"}
             >
               <div className="grid gap-3 lg:grid-cols-2">
                 <div className="rounded-[1.5rem] bg-[#fbfcf7] p-4 ring-1 ring-stone-200">
@@ -1167,125 +1216,72 @@ export function SettingsPage({ className }: SettingsPageProps) {
                   </div>
                   <p className="mt-2 text-sm leading-6 text-stone-600">
                     {isLocalDemo
-                      ? "Local demo stores progress on this device. Sign in when you want cloud sync."
-                      : "Your signed-in account can sync when the backend is configured. Local data still stays on this device."}
+                      ? "Local demo stores progress on this device. Sign in when you want cross-device sync."
+                      : "Your signed-in account stores preferences and progress in your Blundr account. Local data still stays on this device."}
                   </p>
                 </div>
                 <div className="rounded-[1.5rem] bg-stone-50 p-4 ring-1 ring-stone-200">
                   <div className="flex items-center gap-2 text-sm font-black text-stone-950">
                     <Shield size={16} className="text-green-700" />
-                    Device data
+                    Policies
                   </div>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                    <button
-                      type="button"
-                      onClick={handleResetLocalData}
-                      className="rounded-2xl bg-white px-4 py-3 text-sm font-black text-stone-700 ring-1 ring-stone-200"
-                    >
-                      Reset local data
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setStatusMessage(
-                          "Export data is a follow-up item. Tempo keeps the copy simple for now.",
-                        )
-                      }
-                      className="rounded-2xl bg-white px-4 py-3 text-sm font-black text-stone-700 ring-1 ring-stone-200"
-                    >
-                      Export later
-                    </button>
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-stone-600">
-                    Delete account remains a support flow later. Tempo does not
-                    add billing or destructive cloud actions in this stage.
+                  <p className="mt-2 text-sm leading-6 text-stone-600">
+                    Read how Blundr handles account data, connected providers,
+                    and diagnostics.
                   </p>
                   <Link
                     href="/privacy"
                     className="mt-3 inline-flex text-sm font-black text-green-700 underline underline-offset-4"
                   >
-                    Read the full Privacy Policy
+                    Read the privacy policy
                   </Link>
                 </div>
               </div>
             </Section>
 
             <Section
-              id="support_about"
-              title="Support and about"
-              copy="Keep the about surface lightweight and honest."
-              active={activeSectionId === "support_about"}
+              id="account_management"
+              title="Account management"
+              copy="Manage local demo data and account recovery flows."
+              active={activeSectionId === "account_management"}
             >
-              <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+              <div className="grid gap-3 lg:grid-cols-2">
                 <div className="rounded-[1.5rem] bg-stone-50 p-4 ring-1 ring-stone-200">
                   <div className="text-sm font-black text-stone-950">
-                    Blundr Stage 8J checkpoint
+                    Device data
                   </div>
                   <p className="mt-2 text-sm leading-6 text-stone-600">
-                    The app is still in pre-paywall polish. Tempo keeps the UI
-                    calm while the product moves toward launch QA.
+                    Reset clears local demo progress on this device. It does not
+                    delete your authenticated account data.
                   </p>
+                  <button
+                    type="button"
+                    onClick={handleResetLocalData}
+                    disabled={!isLocalDemo}
+                    className={classNames(
+                      "mt-3 rounded-2xl bg-white px-4 py-3 text-sm font-black text-stone-700 ring-1 ring-stone-200",
+                      !isLocalDemo && "cursor-not-allowed opacity-60",
+                    )}
+                  >
+                    Reset local demo data
+                  </button>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="rounded-[1.5rem] bg-[#fbfcf7] p-4 ring-1 ring-stone-200">
+                  <div className="text-sm font-black text-stone-950">
+                    Export and deletion
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-stone-600">
+                    Data export and account deletion requests follow the policy
+                    process for this beta build.
+                  </p>
                   <Link
-                    href="/dev/ui-screens"
-                    className="inline-flex items-center gap-2 rounded-2xl bg-green-700 px-4 py-3 text-sm font-black text-white shadow-sm"
+                    href="/privacy"
+                    className="mt-3 inline-flex text-sm font-black text-green-700 underline underline-offset-4"
                   >
-                    <Sparkles size={16} />
-                    UI studio
-                  </Link>
-                  <Link
-                    href="/dev/admin"
-                    className="inline-flex items-center gap-2 rounded-2xl bg-stone-100 px-4 py-3 text-sm font-black text-stone-700 shadow-sm"
-                  >
-                    <Settings size={16} />
-                    Dev admin
+                    Review privacy policy details
                   </Link>
                 </div>
               </div>
-            </Section>
-
-            <Section
-              id="developer_tools"
-              title="Developer tools"
-              copy="Visible only when developer tools are enabled."
-              active={activeSectionId === "developer_tools"}
-            >
-              {snapshot.devToolsEnabled ? (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Link
-                    href="/dev/admin"
-                    className="rounded-[1.5rem] border border-stone-200 bg-[#fbfcf7] p-4 shadow-sm"
-                  >
-                    <div className="text-sm font-black text-stone-950">
-                      Admin gate
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-stone-600">
-                      Open the gated developer tools page.
-                    </p>
-                  </Link>
-                  <Link
-                    href="/api/blundr/dev/game-data-health"
-                    className="rounded-[1.5rem] border border-stone-200 bg-[#fbfcf7] p-4 shadow-sm"
-                  >
-                    <div className="text-sm font-black text-stone-950">
-                      Game data health
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-stone-600">
-                      Inspect runtime book, repertoire, and minigame health.
-                    </p>
-                  </Link>
-                </div>
-              ) : (
-                <div className="rounded-[1.5rem] border border-stone-200 bg-[#fbfcf7] p-4 shadow-sm">
-                  <div className="text-sm font-black text-stone-950">
-                    Developer tools disabled
-                  </div>
-                  <p className="mt-2 text-sm leading-6 text-stone-600">
-                    This build keeps developer-only surfaces unavailable.
-                  </p>
-                </div>
-              )}
             </Section>
           </div>
         </div>

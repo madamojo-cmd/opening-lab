@@ -40,6 +40,7 @@ export function createDefaultTrainingProfile(userId: string, now = nowIso()): Us
     ratingBandId: "1200-1600",
     ratingSource: "default",
     preferredTrainingMode: "assisted",
+    tacticalHighlightsEnabled: true,
     dailyTempoGoal: 10,
     dailyBatteryGoal: 3,
     dailyBlundrGoal: 1,

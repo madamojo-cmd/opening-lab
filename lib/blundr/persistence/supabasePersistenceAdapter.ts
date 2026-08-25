@@ -27,6 +27,7 @@ type SupabaseUserProfileRow = {
   raw_rating: number | null;
   rating_time_control: string | null;
   preferred_training_mode: string;
+  tactical_highlights_enabled: boolean | null;
   daily_tempo_goal: number;
   daily_battery_goal: number;
   daily_blundr_goal: number;
@@ -186,6 +187,7 @@ function mapTrainingProfileRow(profile: UserTrainingProfile): SupabaseUserProfil
     raw_rating: typeof profile.rawRating === "number" && Number.isFinite(profile.rawRating) ? profile.rawRating : null,
     rating_time_control: profile.ratingTimeControl ?? null,
     preferred_training_mode: profile.preferredTrainingMode,
+    tactical_highlights_enabled: Boolean(profile.tacticalHighlightsEnabled),
     daily_tempo_goal: Math.max(1, Number(profile.dailyTempoGoal) || 1),
     daily_battery_goal: Math.max(1, Number(profile.dailyBatteryGoal) || 1),
     daily_blundr_goal: Math.max(1, Number(profile.dailyBlundrGoal) || 1),
@@ -215,6 +217,10 @@ function mapTrainingProfileRowToModel(row: SupabaseUserProfileRow | null): UserT
         ? row.rating_time_control
         : undefined,
     preferredTrainingMode: row.preferred_training_mode === "plain" ? "plain" : "assisted",
+    tacticalHighlightsEnabled:
+      typeof row.tactical_highlights_enabled === "boolean"
+        ? row.tactical_highlights_enabled
+        : base.tacticalHighlightsEnabled,
     dailyTempoGoal: Math.max(1, Number(row.daily_tempo_goal) || 1),
     dailyBatteryGoal: Math.max(1, Number(row.daily_battery_goal) || 1),
     dailyBlundrGoal: Math.max(1, Number(row.daily_blundr_goal) || 1),

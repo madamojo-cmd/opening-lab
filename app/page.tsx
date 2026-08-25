@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from "react";
 import { Chess } from "chess.js";
 import {
   BarChart3,
@@ -250,10 +250,16 @@ import type {
   TrainerDebugSnapshot,
 } from "@/lib/blundr/debug/trainerDebugTypes";
 import type { UserTrainingProfile } from "@/lib/blundr/accounts/accountTypes";
+import { createDefaultTrainingProfile } from "@/lib/blundr/accounts/accountDefaults";
 import {
   getLocalAccountCurrentUserId,
   getLocalTrainingProfile,
+  upsertLocalTrainingProfile,
 } from "@/lib/blundr/accounts/localAccountStorage";
+import {
+  authenticatedApiFetch,
+  AuthenticatedApiError,
+} from "@/lib/blundr/api/authenticatedApiClient";
 import { getBlundrStorageModeSetting } from "@/lib/blundr/backend/backendEnv";
 import { BLUNDR_LOCAL_DEMO_USER_ID } from "@/lib/blundr/persistence/persistenceKeys";
 import { BLUNDR_BOARD_PREFERENCES_CHANGED_EVENT } from "@/lib/blundr/board/boardPreferenceEvents";
@@ -8656,6 +8662,20 @@ function BlundrApp({
     const currentUserId = getLocalAccountCurrentUserId();
     const profile = getLocalTrainingProfile(currentUserId);
     setOnboardingProfile(profile);
+    if (
+      profile &&
+      typeof profile.tacticalHighlightsEnabled === "boolean"
+    ) {
+      setBoardSettings((current) =>
+        current.tacticalHighlightsEnabled ===
+        profile.tacticalHighlightsEnabled
+          ? current
+          : {
+              ...current,
+              tacticalHighlightsEnabled: profile.tacticalHighlightsEnabled,
+            },
+      );
+    }
     if (profile) {
       setRatingFilter(
         getStage2RatingBandForAccountRatingBand(profile.ratingBandId).value,
@@ -15841,15 +15861,22 @@ function SettingsPanel({
   onClose,
 }: {
   settings: BoardSettings;
-  setSettings: (s: BoardSettings) => void;
+  setSettings: Dispatch<SetStateAction<BoardSettings>>;
   rating: Stage2RatingBand;
   ratingBandLabel: string;
   onClose: () => void;
 }) {
+  const [tacticalBusy, setTacticalBusy] = useState(false);
+  const [tacticalMessage, setTacticalMessage] = useState<string | null>(null);
+
   const update = <K extends keyof BoardSettings>(
     key: K,
     value: BoardSettings[K],
-  ) => setSettings({ ...settings, [key]: value });
+  ) =>
+    setSettings((previous) => ({
+      ...previous,
+      [key]: value,
+    }));
   const toggle = (
     key: keyof Pick<
       BoardSettings,
@@ -15862,7 +15889,56 @@ function SettingsPanel({
       | "showOpponentCue"
       | "tacticalHighlightsEnabled"
     >,
-  ) => setSettings({ ...settings, [key]: !settings[key] });
+  ) =>
+    setSettings((previous) => ({
+      ...previous,
+      [key]: !previous[key],
+    }));
+
+  async function persistTacticalHighlightsEnabled(next: boolean) {
+    setTacticalBusy(true);
+    setTacticalMessage(null);
+    try {
+      const response = await authenticatedApiFetch<{
+        ok: true;
+        data: UserTrainingProfile;
+      }>("/api/blundr/account/preferences", {
+        method: "PATCH",
+        body: JSON.stringify({
+          tacticalHighlightsEnabled: next,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }),
+      });
+      upsertLocalTrainingProfile(response.data);
+      setTacticalMessage("Saved to your account.");
+      return true;
+    } catch (error) {
+      if (
+        error instanceof AuthenticatedApiError &&
+        error.code === "authentication_required"
+      ) {
+        const userId = getLocalAccountCurrentUserId();
+        const current =
+          getLocalTrainingProfile(userId) ?? createDefaultTrainingProfile(userId);
+        upsertLocalTrainingProfile({
+          ...current,
+          userId,
+          tacticalHighlightsEnabled: next,
+          updatedAt: nowIso(),
+        });
+        setTacticalMessage("Saved on this device.");
+        return true;
+      }
+      setTacticalMessage(
+        error instanceof AuthenticatedApiError
+          ? error.message
+          : "Tactical highlight preference could not be saved.",
+      );
+      return false;
+    } finally {
+      setTacticalBusy(false);
+    }
+  }
   const OptionButton = ({
     active,
     label,
@@ -15995,9 +16071,24 @@ function SettingsPanel({
               {PROJECTIVE_TACTICS_ENABLED ? (
                 <button
                   type="button"
-                  onClick={() => toggle("tacticalHighlightsEnabled")}
+                  disabled={tacticalBusy}
+                  onClick={async () => {
+                    const next = !settings.tacticalHighlightsEnabled;
+                    setSettings((previous) => ({
+                      ...previous,
+                      tacticalHighlightsEnabled: next,
+                    }));
+                    const ok = await persistTacticalHighlightsEnabled(next);
+                    if (!ok) {
+                      setSettings((previous) => ({
+                        ...previous,
+                        tacticalHighlightsEnabled: !next,
+                      }));
+                    }
+                  }}
                   className={classNames(
                     "col-span-2 rounded-2xl px-3 py-3 text-left text-sm font-black",
+                    tacticalBusy && "cursor-not-allowed opacity-60",
                     settings.tacticalHighlightsEnabled
                       ? "bg-green-50 text-green-800"
                       : "bg-stone-100 text-stone-500",
@@ -16013,6 +16104,11 @@ function SettingsPanel({
                     Show visual cues when Blundr detects tactical patterns such
                     as forks and pins.
                   </p>
+                  {tacticalMessage ? (
+                    <p className="mt-2 text-xs font-semibold text-current/70" role="status">
+                      {tacticalMessage}
+                    </p>
+                  ) : null}
                 </button>
               ) : null}
             </div>
