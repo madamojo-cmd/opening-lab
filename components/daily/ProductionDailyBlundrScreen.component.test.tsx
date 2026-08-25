@@ -123,7 +123,12 @@ afterEach(() => {
 describe("ProductionDailyBlundrScreen", () => {
   for (const count of [3, 4, 5, 8]) {
     it(`renders the authoritative ${count}-task reservation without a five-card assumption`, async () => {
-      mocks.apiFetch.mockResolvedValueOnce(dailyResponse(count));
+      mocks.apiFetch
+        .mockResolvedValueOnce(dailyResponse(count))
+        .mockResolvedValueOnce({
+          ok: true,
+          data: { dailyBlundrCardGoal: 10 },
+        });
       render(<ProductionDailyBlundrScreen />);
       expect(await screen.findByText(`Task 1 of ${count}`)).toBeInTheDocument();
       expect(screen.getByTestId("daily-board")).toBeInTheDocument();
@@ -151,16 +156,22 @@ describe("ProductionDailyBlundrScreen", () => {
 
   it("submits a board move against the exact reserved card and version", async () => {
     const initial = dailyResponse(3);
-    mocks.apiFetch.mockResolvedValueOnce(initial).mockResolvedValueOnce({
-      ...initial,
-      session: { ...initial.session, version: 1 },
-      correct: true,
-    });
+    mocks.apiFetch
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValueOnce({
+        ok: true,
+        data: { dailyBlundrCardGoal: 10 },
+      })
+      .mockResolvedValueOnce({
+        ...initial,
+        session: { ...initial.session, version: 1 },
+        correct: true,
+      });
     render(<ProductionDailyBlundrScreen />);
     fireEvent.click(await screen.findByTestId("daily-board"));
 
-    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledTimes(2));
-    const [requestPath, init] = mocks.apiFetch.mock.calls[1] as [
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledTimes(3));
+    const [requestPath, init] = mocks.apiFetch.mock.calls[2] as [
       string,
       RequestInit,
     ];
@@ -175,22 +186,28 @@ describe("ProductionDailyBlundrScreen", () => {
 
   it("reveals the exact reserved card without discarding the session", async () => {
     const initial = dailyResponse(3);
-    mocks.apiFetch.mockResolvedValueOnce(initial).mockResolvedValueOnce({
-      ...initial,
-      session: {
-        ...initial.session,
-        version: 1,
-        state: {
-          ...initial.session.state,
-          revealedCardIds: ["card-0"],
+    mocks.apiFetch
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValueOnce({
+        ok: true,
+        data: { dailyBlundrCardGoal: 10 },
+      })
+      .mockResolvedValueOnce({
+        ...initial,
+        session: {
+          ...initial.session,
+          version: 1,
+          state: {
+            ...initial.session.state,
+            revealedCardIds: ["card-0"],
+          },
         },
-      },
-    });
+      });
     render(<ProductionDailyBlundrScreen />);
     fireEvent.click(await screen.findByRole("button", { name: "Reveal" }));
 
-    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledTimes(2));
-    const [requestPath, init] = mocks.apiFetch.mock.calls[1] as [
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledTimes(3));
+    const [requestPath, init] = mocks.apiFetch.mock.calls[2] as [
       string,
       RequestInit,
     ];
@@ -206,6 +223,10 @@ describe("ProductionDailyBlundrScreen", () => {
   it("shows the safe server failure and preserves the reserved card for retry", async () => {
     mocks.apiFetch
       .mockResolvedValueOnce(dailyResponse(3))
+      .mockResolvedValueOnce({
+        ok: true,
+        data: { dailyBlundrCardGoal: 10 },
+      })
       .mockRejectedValueOnce(
         new AuthenticatedApiError(
           "persistence_unavailable" as never,

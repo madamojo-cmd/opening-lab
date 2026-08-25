@@ -29,6 +29,8 @@ export type UserTrainingProfile = {
   dailyTempoGoal: number;
   dailyBatteryGoal: number;
   dailyBlundrGoal: number;
+  /** Target number of Daily Blundr cards per day (1-99). */
+  dailyBlundrCardGoal: number;
   selectedStarterPackId?: StarterPackId;
   createdAt: string;
   updatedAt: string;
@@ -222,6 +224,6 @@ export type UserAccountSyncState = {
   validationSnapshot?: ValidationSnapshot | null;
 };
 
-export type DailyTrainingSettings = Pick<UserTrainingProfile, "dailyTempoGoal" | "dailyBatteryGoal" | "dailyBlundrGoal" | "preferredTrainingMode" | "ratingBandId" | "ratingSource" | "selectedStarterPackId"> & {
+export type DailyTrainingSettings = Pick<UserTrainingProfile, "dailyTempoGoal" | "dailyBatteryGoal" | "dailyBlundrGoal" | "dailyBlundrCardGoal" | "preferredTrainingMode" | "ratingBandId" | "ratingSource" | "selectedStarterPackId"> & {
   difficulty?: DailyBlundrDifficulty;
 };

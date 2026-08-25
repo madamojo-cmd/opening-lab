@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, BadgeCheck, RefreshCw, Sparkles } from "lucide-react";
+import { ArrowLeft, BadgeCheck, RefreshCw, Sparkles, Target } from "lucide-react";
 import {
   authenticatedApiFetch,
   AuthenticatedApiError,
@@ -22,12 +22,20 @@ import {
 } from "@/lib/blundr/daily/productionDailyTeaching";
 import { BLUNDR_DAILY_RING_REFRESH_EVENT } from "@/lib/blundr/daily-rings/dailyRingRefreshSignal";
 import { notifyRewardPresentationRefresh } from "@/lib/blundr/rewards/rewardPresentationSignal";
+import { resolveProductionDailyCardGoalProgress } from "@/lib/blundr/daily/productionDailyCardGoalProgress";
 
 type DailyResponse = {
   dateKey: string;
   status: string;
   explanation: string;
   session: ProductionDailyPublicSession;
+};
+
+type PreferencesResponse = {
+  ok: true;
+  data: {
+    dailyBlundrCardGoal?: unknown;
+  };
 };
 
 type PublicDailyCard = ProductionDailyPublicSession["publicCards"][number];
@@ -38,10 +46,20 @@ type ResolvedCheckpoint = {
   teaching: ProductionDailyTeachingPayload;
 };
 
+function clampDailyCardGoal(value: unknown, fallback = 10): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  const next = Math.trunc(parsed);
+  if (next < 1) return 1;
+  if (next > 99) return 99;
+  return next;
+}
+
 export function ProductionDailyBlundrScreen() {
   const [session, setSession] = useState<ProductionDailyPublicSession | null>(
     null,
   );
+  const [dailyCardGoal, setDailyCardGoal] = useState<number>(10);
   const [feedback, setFeedback] = useState<{
     message: string;
     tone: "success" | "warning" | "neutral" | "complete";
@@ -60,6 +78,17 @@ export function ProductionDailyBlundrScreen() {
         { cache: "no-store" },
       );
       setSession(response.session);
+      try {
+        const preferences = await authenticatedApiFetch<PreferencesResponse>(
+          "/api/blundr/account/preferences",
+          { cache: "no-store" },
+        );
+        setDailyCardGoal(
+          clampDailyCardGoal(preferences.data?.dailyBlundrCardGoal, 10),
+        );
+      } catch {
+        setDailyCardGoal(10);
+      }
       setResolvedCheckpoint(null);
       setFeedback(null);
       setError(null);
@@ -82,6 +111,7 @@ export function ProductionDailyBlundrScreen() {
       setRecoveryHref(
         openingSelectionRequired ? "/onboarding/starter-pack" : null,
       );
+      setDailyCardGoal(10);
     }
   }, []);
 
@@ -119,6 +149,10 @@ export function ProductionDailyBlundrScreen() {
   const teaching =
     resolvedCheckpoint?.teaching ?? displayCard?.teaching ?? null;
   const boardFen = teaching?.resultFen ?? displayCard?.positionFen ?? null;
+  const cardGoalProgress = useMemo(
+    () => resolveProductionDailyCardGoalProgress(session, dailyCardGoal),
+    [dailyCardGoal, session],
+  );
 
   const teachingSquareStyles = useMemo(() => {
     if (!teaching) return {};
@@ -342,11 +376,19 @@ export function ProductionDailyBlundrScreen() {
                 <div className="text-xs font-black uppercase tracking-[0.18em] text-green-800">
                   Daily board
                 </div>
-                {displayTaskNumber ? (
-                  <div className="rounded-full bg-[#f8f8f5] px-3 py-1 text-xs font-bold text-stone-600 ring-1 ring-stone-200">
-                    {displayTaskNumber} / {session.publicCards.length}
-                  </div>
-                ) : null}
+                <div className="flex items-center gap-2">
+                  {cardGoalProgress ? (
+                    <div className="inline-flex items-center gap-1 rounded-full bg-[#f8f8f5] px-3 py-1 text-xs font-bold text-stone-600 ring-1 ring-stone-200">
+                      <Target size={13} className={cardGoalProgress.completed ? "text-green-700" : "text-stone-500"} />
+                      {cardGoalProgress.progressCards} / {cardGoalProgress.goalCards}
+                    </div>
+                  ) : null}
+                  {displayTaskNumber ? (
+                    <div className="rounded-full bg-[#f8f8f5] px-3 py-1 text-xs font-bold text-stone-600 ring-1 ring-stone-200">
+                      {displayTaskNumber} / {session.publicCards.length}
+                    </div>
+                  ) : null}
+                </div>
               </div>
 
               <DailyBlundrBoard

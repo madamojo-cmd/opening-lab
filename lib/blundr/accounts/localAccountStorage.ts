@@ -124,6 +124,7 @@ function normalizeTrainingProfile(raw: unknown): UserTrainingProfile | null {
     dailyTempoGoal: Math.max(1, Number(raw.dailyTempoGoal) || base.dailyTempoGoal),
     dailyBatteryGoal: Math.max(1, Number(raw.dailyBatteryGoal) || base.dailyBatteryGoal),
     dailyBlundrGoal: Math.max(1, Number(raw.dailyBlundrGoal) || base.dailyBlundrGoal),
+    dailyBlundrCardGoal: Math.max(1, Math.min(99, Number(raw.dailyBlundrCardGoal) || base.dailyBlundrCardGoal)),
     selectedStarterPackId: normalizeStarterPackId(raw.selectedStarterPackId),
     createdAt: normalizeText(raw.createdAt) || base.createdAt,
     updatedAt: normalizeText(raw.updatedAt) || base.updatedAt,

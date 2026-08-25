@@ -30,6 +30,7 @@ type SupabaseUserProfileRow = {
   daily_tempo_goal: number;
   daily_battery_goal: number;
   daily_blundr_goal: number;
+  daily_blundr_card_goal: number;
   selected_starter_pack_id: string | null;
   created_at: string;
   updated_at: string;
@@ -188,6 +189,7 @@ function mapTrainingProfileRow(profile: UserTrainingProfile): SupabaseUserProfil
     daily_tempo_goal: Math.max(1, Number(profile.dailyTempoGoal) || 1),
     daily_battery_goal: Math.max(1, Number(profile.dailyBatteryGoal) || 1),
     daily_blundr_goal: Math.max(1, Number(profile.dailyBlundrGoal) || 1),
+    daily_blundr_card_goal: Math.max(1, Math.min(99, Number(profile.dailyBlundrCardGoal) || 10)),
     selected_starter_pack_id: normalizeStarterPackId(profile.selectedStarterPackId) ?? null,
     created_at: normalizeText(profile.createdAt) || nowIso(),
     updated_at: normalizeText(profile.updatedAt) || nowIso(),
@@ -216,6 +218,7 @@ function mapTrainingProfileRowToModel(row: SupabaseUserProfileRow | null): UserT
     dailyTempoGoal: Math.max(1, Number(row.daily_tempo_goal) || 1),
     dailyBatteryGoal: Math.max(1, Number(row.daily_battery_goal) || 1),
     dailyBlundrGoal: Math.max(1, Number(row.daily_blundr_goal) || 1),
+    dailyBlundrCardGoal: Math.max(1, Math.min(99, Number(row.daily_blundr_card_goal) || base.dailyBlundrCardGoal)),
     selectedStarterPackId: normalizeStarterPackId(row.selected_starter_pack_id),
     createdAt: row.created_at || base.createdAt,
     updatedAt: row.updated_at || base.updatedAt,

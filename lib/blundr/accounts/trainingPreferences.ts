@@ -17,6 +17,7 @@ export type TrainingPreferencesPatch = Partial<
     | "dailyTempoGoal"
     | "dailyBatteryGoal"
     | "dailyBlundrGoal"
+    | "dailyBlundrCardGoal"
     | "timeZone"
   >
 >;
@@ -31,6 +32,10 @@ function hasOwn(input: object, key: string): boolean {
 
 function validGoal(value: unknown): value is number {
   return Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 100;
+}
+
+function validCardGoal(value: unknown): value is number {
+  return Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 99;
 }
 
 export function normalizeIanaTimeZone(value: unknown): string | null {
@@ -65,6 +70,7 @@ export function validateTrainingPreferencesPatch(
     "dailyTempoGoal",
     "dailyBatteryGoal",
     "dailyBlundrGoal",
+    "dailyBlundrCardGoal",
     "timeZone",
   ]);
   if (Object.keys(input).some((key) => !allowed.has(key)))
@@ -109,6 +115,15 @@ export function validateTrainingPreferencesPatch(
         message: "Daily goals must be whole numbers from 1 to 100.",
       };
     patch[key] = Number(input[key]);
+  }
+  if (hasOwn(input, "dailyBlundrCardGoal")) {
+    if (!validCardGoal(input.dailyBlundrCardGoal))
+      return {
+        ok: false,
+        code: "invalid_daily_card_goal",
+        message: "Daily card goals must be whole numbers from 1 to 99.",
+      };
+    patch.dailyBlundrCardGoal = Number(input.dailyBlundrCardGoal);
   }
   if (hasOwn(input, "timeZone")) {
     const timeZone = normalizeIanaTimeZone(input.timeZone);

@@ -38,6 +38,7 @@ export type BlundrOnboardingState = {
   dailyTempoGoal: number;
   dailyBatteryGoal: number;
   dailyBlundrGoal: number;
+  dailyBlundrCardGoal: number;
   preferredTrainingMode: OnboardingTrainingModeChoice;
   onboardingCompleted: boolean;
   updatedAt: string;
