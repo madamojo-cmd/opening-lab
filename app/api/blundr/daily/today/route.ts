@@ -6,6 +6,7 @@ import {
   getOrReserveDaily,
   publicDailySession,
 } from "@/lib/blundr/daily/productionDailyService.server";
+import { ProductionDailyRepository } from "@/lib/blundr/daily/productionDailyRepository.server";
 import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTelemetry.server";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,10 @@ export async function GET(request: Request) {
   const dateKey = new Date().toISOString().slice(0, 10);
   try {
     const session = await getOrReserveDaily(user, dateKey);
+    const cardsCompletedToday = await new ProductionDailyRepository().countUniqueCompletedCardsForDate(
+      user.userId,
+      dateKey,
+    );
     await emitBlundrOperationalEvent("daily_composed", {
       status: session.publicCards.length ? "ready" : "empty",
       cardCount: session.publicCards.length,
@@ -32,7 +37,7 @@ export async function GET(request: Request) {
       status: session.publicCards.length ? "ready" : "empty",
       explanation:
         "Selected from unlocked openings and current learning evidence.",
-      session: publicDailySession(session),
+      session: publicDailySession(session, { cardsCompletedToday }),
     });
   } catch (error) {
     const code =

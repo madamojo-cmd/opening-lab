@@ -6,6 +6,15 @@ import { ArrowRight, BadgeCheck, CheckCircle2, Target } from "lucide-react";
 import { authenticatedApiFetch } from "@/lib/blundr/api/authenticatedApiClient";
 import type { ProductionDailyPublicSession } from "@/lib/blundr/daily/productionDailyTypes";
 
+function clampDailyCardGoal(value: unknown, fallback = 10): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  const next = Math.trunc(parsed);
+  if (next < 1) return 1;
+  if (next > 99) return 99;
+  return next;
+}
+
 function resolvePrimaryLabel(
   hasCards: boolean,
   started: boolean,
@@ -26,12 +35,14 @@ export function ReviewTabDailyBlundrPanel({
     null,
   );
   const [loadFailed, setLoadFailed] = useState(false);
+  const [dailyCardGoal, setDailyCardGoal] = useState(10);
 
   useEffect(() => {
     let active = true;
     if (enabled !== true) {
       setSession(null);
       setLoadFailed(false);
+      setDailyCardGoal(10);
       return () => {
         active = false;
       };
@@ -51,6 +62,20 @@ export function ReviewTabDailyBlundrPanel({
           setLoadFailed(true);
         }
       });
+    void authenticatedApiFetch<{
+      ok: true;
+      data: { dailyBlundrCardGoal?: unknown };
+    }>("/api/blundr/account/preferences", { cache: "no-store" })
+      .then((payload) => {
+        if (active) {
+          setDailyCardGoal(
+            clampDailyCardGoal(payload.data?.dailyBlundrCardGoal, 10),
+          );
+        }
+      })
+      .catch(() => {
+        if (active) setDailyCardGoal(10);
+      });
     return () => {
       active = false;
     };
@@ -58,12 +83,12 @@ export function ReviewTabDailyBlundrPanel({
 
   const deck = session?.publicCards ?? [];
   const hasCards = deck.length > 0;
-  const completedCount = session?.state.completedCardIds.length ?? 0;
-  const remainingCount = Math.max(0, deck.length - completedCount);
-  const started = completedCount > 0;
-  const complete = Boolean(
-    session && deck.length > 0 && completedCount >= deck.length,
-  );
+  const completedToday = Number.isFinite(session?.cardsCompletedToday)
+    ? Math.max(0, Math.trunc(Number(session?.cardsCompletedToday)))
+    : session?.state.completedCardIds.length ?? 0;
+  const remainingCount = Math.max(0, dailyCardGoal - completedToday);
+  const started = completedToday > 0;
+  const complete = completedToday >= dailyCardGoal;
   const primaryLabel = resolvePrimaryLabel(
     hasCards,
     started,
@@ -77,9 +102,9 @@ export function ReviewTabDailyBlundrPanel({
         : loadFailed
           ? "Daily Blundr couldn't load today's deck."
           : complete
-            ? "Today's Daily deck is complete."
+            ? "Today's Daily goal is complete."
             : hasCards
-              ? `${remainingCount} Daily card${remainingCount === 1 ? "" : "s"} ready.`
+              ? `${remainingCount} Daily card${remainingCount === 1 ? "" : "s"} remaining today.`
               : "Preparing today's Daily deck…";
 
   return (
@@ -104,7 +129,7 @@ export function ReviewTabDailyBlundrPanel({
       <div className="mt-5 grid overflow-hidden rounded-[1.1rem] border border-stone-200 bg-stone-50/90 text-center text-xs font-black sm:grid-cols-4">
         <div className="px-2 py-3 text-stone-700 sm:border-r sm:border-stone-200">
           <Target size={15} className="mx-auto mb-1 text-green-700" />
-          {completedCount} done
+          {completedToday} done today
         </div>
         <div className="px-2 py-3 text-stone-700 sm:border-r sm:border-stone-200">
           <Target size={15} className="mx-auto mb-1 text-orange-600" />

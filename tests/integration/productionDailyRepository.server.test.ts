@@ -20,10 +20,15 @@ function createQuery(result: QueryResult) {
   const builder = {
     select: vi.fn(),
     eq: vi.fn(),
+    in: vi.fn(),
     maybeSingle: vi.fn(async () => result),
+    then: vi.fn((onFulfilled: (value: QueryResult) => unknown, onRejected?: (reason: unknown) => unknown) =>
+      Promise.resolve(result).then(onFulfilled, onRejected),
+    ),
   };
   builder.select.mockReturnValue(builder);
   builder.eq.mockReturnValue(builder);
+  builder.in.mockReturnValue(builder);
   return builder;
 }
 
@@ -124,5 +129,55 @@ describe("ProductionDailyRepository owned-session lookup", () => {
     await expect(
       new ProductionDailyRepository().getOwned("session-1", "user-1"),
     ).rejects.toThrow("daily_session_persistence_unavailable");
+  });
+});
+
+describe("ProductionDailyRepository Daily card completion authority", () => {
+  it("counts unique correct cards across multiple sessions on the same local date", async () => {
+    const client = createClient([
+      {
+        data: [{ deck_id: "deck-1" }, { deck_id: "deck-2" }],
+        error: null,
+      },
+      {
+        data: [
+          { session_id: "session-a", deck_id: "deck-1" },
+          { session_id: "session-b", deck_id: "deck-2" },
+        ],
+        error: null,
+      },
+      {
+        data: [
+          { session_id: "session-a", outcome: "correct", card_fingerprint: "card-1" },
+          { session_id: "session-a", outcome: "correct", card_fingerprint: "card-1" },
+          { session_id: "session-b", outcome: "correct", card_fingerprint: "card-2" },
+        ],
+        error: null,
+      },
+    ]);
+    mocks.createClient.mockReturnValue(client);
+
+    const count = await new ProductionDailyRepository().countUniqueCompletedCardsForDate(
+      "user-1",
+      "2026-08-14",
+    );
+
+    expect(client.from.mock.calls.map(([table]) => table)).toEqual([
+      "blundr_daily_decks",
+      "blundr_daily_sessions",
+      "blundr_daily_task_evidence_v3",
+    ]);
+    expect(count).toBe(2);
+  });
+
+  it("returns 0 when the user has no reserved deck row for that date", async () => {
+    const client = createClient([{ data: [], error: null }]);
+    mocks.createClient.mockReturnValue(client);
+
+    const count = await new ProductionDailyRepository().countUniqueCompletedCardsForDate(
+      "user-1",
+      "2026-08-14",
+    );
+    expect(count).toBe(0);
   });
 });

@@ -360,13 +360,32 @@ export function ProductionDailyBlundrScreen() {
         ) : null}
 
         {session && !currentCard && !resolvedCheckpoint ? (
-          <section className="mt-2 rounded-[1.75rem] border border-green-200/80 bg-green-50/90 p-5 shadow-[0_16px_36px_rgba(20,100,56,0.08)]">
-            <Sparkles className="text-green-700" size={20} />
-            <h2 className="mt-3 text-lg font-black">Daily complete</h2>
-            <p className="mt-2 text-sm leading-6 text-green-900">
-              Today's Daily deck is complete. Your first try is what counts.
-            </p>
-          </section>
+          cardGoalProgress?.completed ? (
+            <section className="mt-2 rounded-[1.75rem] border border-green-200/80 bg-green-50/90 p-5 shadow-[0_16px_36px_rgba(20,100,56,0.08)]">
+              <Sparkles className="text-green-700" size={20} />
+              <h2 className="mt-3 text-lg font-black">Daily complete</h2>
+              <p className="mt-2 text-sm leading-6 text-green-900">
+                Today's Daily goal is complete. Your first try is what counts.
+              </p>
+            </section>
+          ) : (
+            <section className="mt-2 rounded-[1.75rem] border border-stone-200/80 bg-white/92 p-5 shadow-[0_16px_36px_rgba(16,20,17,0.06)]">
+              <Sparkles className="text-green-700" size={20} />
+              <h2 className="mt-3 text-lg font-black">Deck complete</h2>
+              <p className="mt-2 text-sm leading-6 text-stone-700">
+                Today's reserved Daily deck is complete. Refresh to check for more cards.
+              </p>
+              <button
+                type="button"
+                disabled={actionBusy}
+                onClick={() => void load()}
+                className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-2xl bg-stone-950 px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshCw size={16} />
+                Refresh
+              </button>
+            </section>
+          )
         ) : null}
 
         {session && displayCard && boardFen ? (
