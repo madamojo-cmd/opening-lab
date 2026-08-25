@@ -71,16 +71,16 @@ export function ReviewTabDailyBlundrPanel({
   );
   const statusMessage =
     enabled === null
-      ? "Confirming Daily Blundr availability…"
+      ? "Checking Daily Blundr…"
       : enabled === false
         ? "Daily Blundr is unavailable in this environment."
         : loadFailed
-          ? "Daily Blundr could not confirm today’s reserved deck."
+          ? "Daily Blundr couldn't load today's deck."
           : complete
-            ? "Today’s server-owned Daily deck is complete."
+            ? "Today's Daily deck is complete."
             : hasCards
-              ? `${remainingCount} server-reserved task${remainingCount === 1 ? "" : "s"} ready.`
-              : "Preparing today’s server-owned Daily deck…";
+              ? `${remainingCount} Daily card${remainingCount === 1 ? "" : "s"} ready.`
+              : "Preparing today's Daily deck…";
 
   return (
     <section className="overflow-hidden rounded-[1.75rem] border border-stone-200/80 bg-white/92 p-5 shadow-[0_18px_42px_rgba(16,20,17,0.08)] backdrop-blur-xl">
@@ -90,7 +90,7 @@ export function ReviewTabDailyBlundrPanel({
             Daily Blundr
           </div>
           <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] text-stone-950">
-            Your reserved practice.
+            Your Daily deck.
           </h2>
           <p className="mt-2 text-[13px] leading-[1.55] text-stone-600">
             {statusMessage}
@@ -112,11 +112,11 @@ export function ReviewTabDailyBlundrPanel({
         </div>
         <div className="px-2 py-3 text-stone-700 sm:border-r sm:border-stone-200">
           <CheckCircle2 size={15} className="mx-auto mb-1 text-green-700" />
-          {deck.length} reserved
+          {deck.length} cards
         </div>
         <div className="px-2 py-3 text-stone-700">
           <BadgeCheck size={15} className="mx-auto mb-1 text-green-700" />
-          Server owned
+          Account saved
         </div>
       </div>
 

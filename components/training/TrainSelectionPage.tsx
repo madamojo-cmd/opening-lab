@@ -52,7 +52,7 @@ export function TrainSelectionPage() {
               kind="offline"
               eyebrow="Train"
               title="Sign in to load your openings."
-              copy="Tempo needs your authenticated repertoire state before training can begin."
+              copy="Sign in to load your saved repertoire before training can begin."
             />
           </div>
         </div>
@@ -71,7 +71,7 @@ export function TrainSelectionPage() {
               title="Opening list unavailable."
               copy={
                 repertoireState.error ??
-                "Tempo could not load your durable repertoire state."
+                "Tempo couldn't load your saved repertoire."
               }
             />
           </div>
@@ -94,8 +94,8 @@ export function TrainSelectionPage() {
               Choose an opening.
             </h1>
             <p className="mt-3 max-w-[720px] text-[13px] leading-[1.55] text-stone-600 max-[820px]:text-[11px]">
-              Unlocked repertoire only. Rating band, preferred mode and opening
-              authority stay exactly as configured.
+              Unlocked openings only. Your rating band and training mode stay as
+              you set them.
             </p>
           </div>
           <div className="flex items-center gap-2 max-[820px]:hidden">

@@ -200,7 +200,7 @@ function LiveConnectedGameDataPanel() {
       );
       setMessage(
         deleteSource
-          ? "Imported data deleted and projections rebuilt."
+          ? "Imported data deleted. Blundr will rebuild your insights."
           : "Provider disconnected.",
       );
       await refresh();

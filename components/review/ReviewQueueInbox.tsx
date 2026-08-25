@@ -189,7 +189,7 @@ export function ReviewQueueInbox() {
             Review queue unavailable
           </div>
           <p className="mt-2 text-[12px] leading-[1.5] text-stone-600">
-            This environment does not have the durable learning reader enabled.
+            Review Queue isn't available in this build.
           </p>
         </div>
       ) : isEmpty ? (
@@ -199,7 +199,7 @@ export function ReviewQueueInbox() {
             No queued mistakes
           </div>
           <p className="mt-2 text-[12px] leading-[1.5] text-stone-600">
-            When genuine weakness projections exist, they appear here.
+            When Blundr spots positions you keep missing, they show up here.
           </p>
         </div>
       ) : (
@@ -276,4 +276,3 @@ export function ReviewQueueInbox() {
     </div>
   );
 }
-

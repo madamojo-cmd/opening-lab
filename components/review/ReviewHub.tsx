@@ -114,8 +114,8 @@ export function ReviewHub({
             Mistakes to revisit.
           </h2>
           <p className="mt-2 text-[12px] leading-[1.5] text-stone-600">
-            This inbox is backed by durable weakness projections tied to your
-            imported and learned evidence.
+            This inbox is built from your saved misses in training and imported
+            games.
           </p>
           <ReviewQueueInbox />
         </section>

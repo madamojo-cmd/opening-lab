@@ -196,14 +196,14 @@ export function RepertoireProgressPanel({
         <div className={styles.stateCard}>
           <div className={styles.kicker}>Loading</div>
           <p className={styles.stateText}>
-            Tempo is loading your durable repertoire state.
+            Tempo is loading your repertoire.
           </p>
         </div>
       ) : repertoireState.status === "signed_out" ? (
         <div className={styles.stateCard}>
           <div className={styles.kicker}>Signed out</div>
           <p className={styles.stateText}>
-            Sign in to load your repertoire from server authority.
+            Sign in to load your saved repertoire.
           </p>
         </div>
       ) : repertoireState.status === "error" ? (

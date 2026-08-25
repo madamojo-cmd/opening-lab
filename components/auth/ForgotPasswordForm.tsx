@@ -156,8 +156,7 @@ function ForgotBrandPanel() {
       </div>
       <div className="relative z-10 flex items-end justify-between gap-4">
         <div className="rounded-[22px] border border-white/20 bg-white/12 p-4 text-sm leading-6 text-green-50 shadow-sm backdrop-blur">
-          We keep reset responses neutral while preserving the account routing
-          path.
+          For security, we cannot confirm whether an email matches an account.
         </div>
         <BlundrAssetImage
           asset={BLUNDR_TEMPO_ASSETS.thinking}

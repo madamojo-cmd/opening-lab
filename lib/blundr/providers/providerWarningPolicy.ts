@@ -433,24 +433,24 @@ export function resolveStage2ProviderWarnings(context: Stage2ProviderWarningCont
   if (maiaProviderStatus === "ready" || maiaRuntimeStatus === "ready") {
     if (!maiaAllowedThisFrame) {
       addWarning(warnings, "maia", "maia_opponent_reply_only", "info", "Maia may only participate in allowed opponent-reply roles.", false, "none", "continuation_authority");
-      addWarning(warnings, "maia", "maia_not_user_move_authority", "info", "Maia is not user-move authority.", false, "none", "continuation_authority");
+      addWarning(warnings, "maia", "maia_not_user_move_authority", "info", "Maia won't choose your moves.", false, "none", "continuation_authority");
     }
   } else if (trainingMode === "restricted") {
     addWarning(warnings, "maia", "maia_not_required_for_restricted_frame", "info", "Maia is not required for restricted frames.", false, "none", "restricted_frame");
   } else if (trainingMode === "continuation" && isUserTurn && visibleSurfaceMode === "assisted") {
-    addWarning(warnings, "maia", "maia_unavailable", "degraded", "Maia is unavailable for this optional continuation path; local training remains available.", maiaFallbackUsed, "blocked_non_authority_feature", "continuation_authority", true, false);
+    addWarning(warnings, "maia", "maia_unavailable", "degraded", "Maia is unavailable for this optional continuation path. Training continues without it.", maiaFallbackUsed, "blocked_non_authority_feature", "continuation_authority", true, false);
   }
 
   if (trainingMode === "continuation" && isUserTurn && visibleSurfaceMode === "assisted") {
     if (stockfishProviderStatus !== "ready") {
-      addWarning(warnings, "stockfish", "stockfish_unavailable", "degraded", "Stockfish is unavailable for optional continuation validation; safe fallback can preserve the lesson flow.", runtimeFallbackUsed, "blocked_non_authority_feature", "continuation_validation", true, false);
+      addWarning(warnings, "stockfish", "stockfish_unavailable", "degraded", "Stockfish is unavailable for optional continuation checks. Training continues with safe fallbacks.", runtimeFallbackUsed, "blocked_non_authority_feature", "continuation_validation", true, false);
     } else if (stockfishValidationStatus !== "ready") {
       addWarning(warnings, "stockfish", "stockfish_validation_unavailable", "degraded", "Stockfish validation is unavailable for this continuation frame.", runtimeFallbackUsed, "blocked_non_authority_feature", "continuation_validation", true, false);
     }
   }
 
   if (stockfishProviderStatus === "ready" || stockfishValidationStatus === "ready") {
-    addWarning(warnings, "stockfish", "stockfish_not_user_move_authority", "info", "Stockfish validates continuation candidates but never becomes user-move authority.", false, "none", "continuation_validation");
+    addWarning(warnings, "stockfish", "stockfish_not_user_move_authority", "info", "Stockfish checks continuation candidates, but it never chooses your moves.", false, "none", "continuation_validation");
   }
 
   if (approvedContentMatched === false) {

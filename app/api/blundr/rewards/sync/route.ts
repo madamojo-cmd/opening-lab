@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   return NextResponse.json(
     {
       error: "client_authored_rewards_disabled",
-      message: "Rewards are calculated only from durable completion evidence.",
+      message: "Rewards are calculated only from saved completions.",
     },
     { status: 405, headers: { Allow: "GET" } },
   );

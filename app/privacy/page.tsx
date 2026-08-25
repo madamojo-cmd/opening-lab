@@ -51,7 +51,7 @@ const sections = [
     "7. Data Retention and Deletion",
     [
       "We retain information only as reasonably necessary for the purposes described here, including service delivery, security, disputes, legal compliance, and backups. Account and training information is generally retained while your account is active unless you request deletion. Connected provider information and imported games are retained until disconnect-and-delete, account deletion, or another retention rule requires removal.",
-      "Disconnecting a provider stops future imports but may leave previously imported information. Disconnect-and-delete removes the provider account, import jobs, games, opening segments, and findings derived from that provider. Mastery and weakness projections are deleted or rebuilt without deleted source evidence.",
+      "Disconnecting a provider stops future imports but may leave previously imported information. Disconnect-and-delete removes the provider account, import jobs, games, opening segments, and findings derived from that provider. Mastery and weakness insights are deleted or rebuilt without deleted source evidence.",
     ],
   ],
   [
@@ -82,7 +82,7 @@ const sections = [
   [
     "12. Data Security",
     [
-      "We use safeguards including encrypted network transmission, authentication and authorization controls, row-level database access, user-data isolation, server-side ownership enforcement, restricted service credentials, answer separation for training solutions, access-controlled background processing, security testing, dependency and secret scanning, operational alerting, deletion controls, projection rebuilds, backups, and recovery practices. No system can be guaranteed completely secure.",
+      "We use safeguards including encrypted network transmission, authentication and authorization controls, row-level database access, user-data isolation, server-side ownership enforcement, restricted service credentials, answer separation for training solutions, access-controlled background processing, security testing, dependency and secret scanning, operational alerting, deletion controls, insight rebuilds, backups, and recovery practices. No system can be guaranteed completely secure.",
     ],
   ],
   [
