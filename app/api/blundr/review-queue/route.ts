@@ -23,15 +23,28 @@ export async function GET(request: Request) {
   });
 
   if (!result.ok) {
-    const status =
-      result.error === "invalid_request"
-        ? 400
-        : result.error === "feature_disabled"
-          ? 503
-          : 503;
+    if (
+      result.error === "feature_disabled" ||
+      result.error === "persistence_unavailable"
+    ) {
+      return NextResponse.json({
+        ok: true,
+        data: {
+          syncState: "unavailable",
+          generatedAt: new Date().toISOString(),
+          lastSyncAt: null,
+          page: query.page,
+          limit: query.limit,
+          nextPage: null,
+          items: [],
+          warnings: [result.error],
+        },
+      });
+    }
+
+    const status = result.error === "invalid_request" ? 400 : 503;
     return NextResponse.json({ ok: false, error: result.error }, { status });
   }
 
   return NextResponse.json({ ok: true, data: result.data });
 }
-
