@@ -151,7 +151,8 @@ export async function loadReviewMistakeSnapshot(input: {
     return { ok: false, error: "invalid_request" };
 
   const weakness = await readWeaknessRow(input);
-  if (!weakness.ok) return weakness;
+  if (weakness.ok === false)
+    return { ok: false, error: weakness.error };
 
   const weaknessRow = weakness.row;
   const openingId =
@@ -167,7 +168,8 @@ export async function loadReviewMistakeSnapshot(input: {
     playKey,
     includeExpectedMove: false,
   });
-  if (!event.ok) return event;
+  if (event.ok === false)
+    return { ok: false, error: event.error };
 
   const eventRow = event.row;
   const canonicalFen = text(eventRow.canonical_fen);
@@ -206,7 +208,8 @@ export async function loadReviewMistakeSolution(input: {
     return { ok: false, error: "invalid_request" };
 
   const weakness = await readWeaknessRow(input);
-  if (!weakness.ok) return weakness;
+  if (weakness.ok === false)
+    return { ok: false, error: weakness.error };
 
   const weaknessRow = weakness.row;
   const openingId =
@@ -222,7 +225,8 @@ export async function loadReviewMistakeSolution(input: {
     playKey,
     includeExpectedMove: true,
   });
-  if (!event.ok) return event;
+  if (event.ok === false)
+    return { ok: false, error: event.error };
 
   const eventRow = event.row;
   const canonicalFen = text(eventRow.canonical_fen);
