@@ -12,15 +12,20 @@ export type ReviewQueueSyncState =
   | "unavailable";
 
 export type ReviewQueueItem = {
+  /** Durable server-owned identity for the queued mistake. */
+  mistakeId: string;
   positionKey: string;
   openingId: string | null;
   playKey: string | null;
+  repertoireSide: "white" | "black" | "unknown";
   category: string;
   score: number;
   confidence: number;
   explanation: string;
   recommendedDailyIntervention: string;
   lifecycleState: ReviewQueueLifecycleState;
+  missCount: number;
+  lastMissedAt: string | null;
   updatedAt: string;
 };
 
@@ -41,4 +46,3 @@ export type ReviewQueueError =
   | "feature_disabled"
   | "persistence_unavailable"
   | "query_failed";
-

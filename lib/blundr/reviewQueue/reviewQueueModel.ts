@@ -22,19 +22,10 @@ export function parseReviewQueueQuery(params: URLSearchParams): ReviewQueueQuery
 }
 
 export function buildReviewQueuePracticeActionHref(
-  item: Pick<ReviewQueueItem, "openingId" | "playKey" | "positionKey">,
-  extraParams?: Record<string, string | null | undefined>,
+  item: Pick<ReviewQueueItem, "positionKey">,
 ): string | null {
-  if (!item.openingId || !item.playKey || !item.positionKey) return null;
-  const url = new URL("https://local.invalid/train");
-  url.searchParams.set("openingId", item.openingId);
-  url.searchParams.set("playKey", item.playKey);
-  url.searchParams.set("positionKey", item.positionKey);
-  url.searchParams.set("from", "review_queue");
-  for (const [key, value] of Object.entries(extraParams ?? {})) {
-    if (value) url.searchParams.set(key, value);
-  }
-  return `/train?${url.searchParams.toString()}`;
+  if (!item.positionKey) return null;
+  return `/review/mistakes/${encodeURIComponent(item.positionKey)}`;
 }
 
 export function formatLifecycleLabel(state: string): string {

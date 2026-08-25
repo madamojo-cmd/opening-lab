@@ -23,23 +23,11 @@ test("parseReviewQueueQuery clamps and defaults", () => {
 
 test("buildReviewQueuePracticeActionHref matches contract", () => {
   const href = buildReviewQueuePracticeActionHref({
-    openingId: "italian-white",
-    playKey: "mainline",
     positionKey: "pos-123",
   });
-  assert.equal(
-    href,
-    "/train?openingId=italian-white&playKey=mainline&positionKey=pos-123&from=review_queue",
-  );
+  assert.equal(href, "/review/mistakes/pos-123");
 });
 
-test("buildReviewQueuePracticeActionHref returns null when not eligible", () => {
-  assert.equal(
-    buildReviewQueuePracticeActionHref({
-      openingId: null,
-      playKey: "p",
-      positionKey: "k",
-    }),
-    null,
-  );
+test("buildReviewQueuePracticeActionHref returns null when missing key", () => {
+  assert.equal(buildReviewQueuePracticeActionHref({ positionKey: "" }), null);
 });

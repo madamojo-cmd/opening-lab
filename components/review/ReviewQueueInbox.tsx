@@ -208,7 +208,7 @@ export function ReviewQueueInbox() {
             const href = buildReviewQueuePracticeActionHref(item);
             return (
               <div
-                key={`${item.positionKey}:${item.category}`}
+                key={item.mistakeId}
                 className="rounded-[14px] border border-stone-200 bg-[#f8f8f5] p-3"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -219,16 +219,24 @@ export function ReviewQueueInbox() {
                       {formatLifecycleLabel(item.lifecycleState)}
                     </span>
                     <span className="text-[11px] font-black text-stone-900">
-                      {item.openingId ?? "Unknown opening"}
+                      {item.openingId ?? "Unknown opening"}{" "}
+                      <span className="text-stone-500">
+                        ·{" "}
+                        {item.repertoireSide === "unknown"
+                          ? "Unknown side"
+                          : item.repertoireSide === "white"
+                            ? "White"
+                            : "Black"}
+                      </span>
                     </span>
                   </div>
                   {href ? (
                     <Link
                       href={href}
                       className="inline-flex min-h-9 items-center gap-2 rounded-[12px] bg-green-800 px-3 text-[12px] font-black text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-green-900"
-                      aria-label="Practice this position"
+                      aria-label="Replay this mistake"
                     >
-                      Practice
+                      Replay
                       <ArrowRight size={14} />
                     </Link>
                   ) : (
@@ -242,10 +250,8 @@ export function ReviewQueueInbox() {
                   {item.explanation || "No explanation available."}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-stone-500">
-                  <span>Score {Math.round((item.score ?? 0) * 100)}%</span>
-                  <span>
-                    Confidence {Math.round((item.confidence ?? 0) * 100)}%
-                  </span>
+                  <span>Misses {Math.max(0, item.missCount ?? 0)}</span>
+                  <span>Last missed {formatTimestamp(item.lastMissedAt)}</span>
                   <span>Updated {formatTimestamp(item.updatedAt)}</span>
                 </div>
               </div>
