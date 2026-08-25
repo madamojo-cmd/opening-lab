@@ -3,8 +3,8 @@ import test from "node:test";
 import {
   createPositionIdentity,
   type LearningEventV2,
-} from "@/lib/blundr/contracts";
-import { buildReviewQueue } from "..";
+} from "../../../../contracts/index.ts";
+import { buildReviewQueue } from "../reviewQueueService.ts";
 const event = (id: string): LearningEventV2 => ({
   schemaVersion: "2026-07-13.v1",
   eventId: id as never,

@@ -1,5 +1,8 @@
-import type { LearningEventV2, LearningFinding } from "@/lib/blundr/contracts";
-import { classifyMistake } from "./mistakeClassifier";
+import type {
+  LearningEventV2,
+  LearningFinding,
+} from "../../../contracts/index.ts";
+import { classifyMistake } from "./mistakeClassifier.ts";
 export function adaptLearningEventToFinding(
   event: LearningEventV2,
 ): LearningFinding | null {
