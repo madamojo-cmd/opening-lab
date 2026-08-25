@@ -105,7 +105,7 @@ export function ProductionDailyBlundrScreen() {
             ? "Sign in to receive your personalized Daily Blundr deck."
             : nextError instanceof AuthenticatedApiError &&
                 nextError.code === "feature_disabled"
-              ? "Daily Blundr is unavailable because its production authority is disabled."
+              ? "Daily Blundr isn't available in this build."
               : "Daily Blundr could not load right now.",
       );
       setRecoveryHref(
@@ -260,9 +260,9 @@ export function ProductionDailyBlundrScreen() {
         nextError instanceof AuthenticatedApiError ? nextError : null;
       setError(
         authenticatedError?.status === 409
-          ? "This Daily session changed in another tab. Reloading the reserved deck."
+          ? "Daily changed in another tab. Reloading your deck."
           : authenticatedError?.message ||
-              "Daily could not safely save that action. Your deck is unchanged; try again.",
+              "Daily couldn't save that action. Your deck is unchanged. Try again.",
       );
       if (authenticatedError && authenticatedError.status === 409) void load();
     } finally {
@@ -293,22 +293,22 @@ export function ProductionDailyBlundrScreen() {
               Review · Daily Blundr
             </div>
             <h1 className="mt-3 text-[34px] font-black leading-[1.05] tracking-[-0.05em] text-stone-950 max-[820px]:text-[27px]">
-              Your reserved practice.
+              Your Daily deck.
             </h1>
             <p className="mt-3 max-w-[720px] text-[13px] leading-[1.55] text-stone-600 max-[820px]:text-[11px]">
-              Board-first adaptive review. First attempts stay immutable; Reveal
-              teaches after persistence; Retry restores the original state.
+              Board-first adaptive review. Your first try is what counts. Reveal
+              teaches after your answer; Retry restores the original position.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <span className="inline-flex min-h-8 items-center rounded-full border border-green-200 bg-green-50 px-3 text-[10px] font-black uppercase tracking-[0.16em] text-green-800">
                 <BadgeCheck size={12} className="mr-1.5" />
-                Server owned
+                Account saved
               </span>
               <span className="inline-flex min-h-8 items-center rounded-full border border-stone-200 bg-white/80 px-3 text-[10px] font-black uppercase tracking-[0.16em] text-stone-600">
-                First attempts immutable
+                First try counts
               </span>
               <span className="inline-flex min-h-8 items-center rounded-full border border-stone-200 bg-white/80 px-3 text-[10px] font-black uppercase tracking-[0.16em] text-stone-600">
-                Reveal keeps the deck safe
+                Reveal doesn't change scoring
               </span>
             </div>
           </div>
@@ -354,7 +354,7 @@ export function ProductionDailyBlundrScreen() {
         {!error && !session ? (
           <section className="mt-2 rounded-[1.75rem] border border-stone-200/80 bg-white/92 p-5 shadow-[0_16px_36px_rgba(16,20,17,0.06)]">
             <p className="text-sm text-stone-600">
-              Loading your server-owned Daily deck…
+              Loading your Daily deck…
             </p>
           </section>
         ) : null}
@@ -364,7 +364,7 @@ export function ProductionDailyBlundrScreen() {
             <Sparkles className="text-green-700" size={20} />
             <h2 className="mt-3 text-lg font-black">Daily complete</h2>
             <p className="mt-2 text-sm leading-6 text-green-900">
-              Your reserved deck is complete. First attempts remain immutable.
+              Today's Daily deck is complete. Your first try is what counts.
             </p>
           </section>
         ) : null}
@@ -422,9 +422,9 @@ export function ProductionDailyBlundrScreen() {
                 </div>
                 <div>
                   <div className="text-[9px] font-black uppercase tracking-[0.16em] text-stone-500">
-                    Authority
+                    Saved
                   </div>
-                  <div className="mt-1 text-stone-900">Server owned</div>
+                  <div className="mt-1 text-stone-900">Account</div>
                 </div>
               </div>
             </article>

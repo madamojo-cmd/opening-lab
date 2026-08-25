@@ -40,7 +40,7 @@ export function AuthCallbackClient() {
     if (!client) {
       setFailed(true);
       setMessage(
-        "Authentication is temporarily unavailable. Return to login and try again.",
+        "Sign-in is unavailable right now. Go back to login and try again.",
       );
       return;
     }

@@ -17,7 +17,7 @@ export function KnightGymnasiumCard({
         Knight Gymnasium
       </h2>
       <p className="mt-2 text-sm leading-6 text-stone-600">
-        Keep the route clean while the server-owned state advances.
+        Keep the route clean while your progress advances.
       </p>
       <KnightRouteProgress moves={state.userMoveIndex} total={targetCount} />
     </article>

@@ -34,8 +34,8 @@ export function DeepTacticShotsCard({
             Find the forcing sequence.
           </div>
           <p className="mt-2 text-sm leading-6 text-stone-600">
-            The route stays server-owned and the committed move count stays
-            visible while you work.
+            Your progress is saved as you go, and the move count stays visible
+            while you work.
           </p>
         </div>
         <DeepTacticSequence moves={state.moves} />

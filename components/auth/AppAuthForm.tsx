@@ -88,8 +88,8 @@ export function AppAuthForm({ mode }: { mode: "login" | "signup" }) {
           </h1>
           <p className="mt-2 text-stone-600">
             {mode === "signup"
-              ? "Create your account before choosing your first training plan."
-              : "Sign in to load your durable repertoire, Daily deck and progress."}
+              ? "Create your account to save your repertoire and goals."
+              : "Sign in to load your saved repertoire, Daily deck, and progress."}
           </p>
 
           {passwordResetSuccess ? (

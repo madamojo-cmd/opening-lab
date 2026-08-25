@@ -23,13 +23,13 @@ export function classifyDailyActionHttpFailure(
     return {
       code: "daily_session_conflict",
       message:
-        "This Daily deck changed before the action was recorded. Reload the reserved deck and try again.",
+        "Daily changed before your move was recorded. Reload your deck and try again.",
       status: 409,
     };
   if (NOT_FOUND_CODES.has(code))
     return {
       code: "daily_session_unavailable",
-      message: "This reserved Daily deck is no longer available.",
+      message: "Today's Daily deck is no longer available.",
       status: 404,
     };
   if (code === "opening_locked")
@@ -47,13 +47,13 @@ export function classifyDailyActionHttpFailure(
     return {
       code: "daily_action_persistence_unavailable",
       message:
-        "Daily could not safely save that action. Your deck is unchanged; try again.",
+        "Daily couldn't save that action. Your deck is unchanged. Try again.",
       status: 503,
     };
   return {
     code: "daily_action_rejected",
     message:
-      "Daily rejected that action because it did not match the current reserved card.",
+      "Daily rejected that action because it did not match the current card.",
     status: 422,
   };
 }

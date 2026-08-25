@@ -345,7 +345,7 @@ async function applyActivityCompletionRemotely(input: {
     return {
       mode: "failed",
       code: "completion_evidence_missing",
-      message: "This completion has no durable session evidence yet.",
+      message: "This completion hasn't saved yet. Try again.",
     };
   }
   try {

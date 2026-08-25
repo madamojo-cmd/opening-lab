@@ -261,7 +261,7 @@ export function ProgressDashboard({
     } catch {
       if (!isMountedRef.current) return;
       setLoadError(
-        "Progress could not be confirmed from durable storage. Try again.",
+        "Couldn't load your saved progress. Try again.",
       );
     }
   }

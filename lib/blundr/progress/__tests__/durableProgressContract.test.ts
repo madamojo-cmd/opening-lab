@@ -52,7 +52,7 @@ test("durable progress derives every primary signal from server-owned tables", (
 
 test("the dashboard never falls back to local progress after an API failure", () => {
   assert.match(dashboard, /authenticatedApiFetch/);
-  assert.match(dashboard, /durable storage/);
+  assert.match(dashboard, /saved progress/);
   assert.doesNotMatch(dashboard, /loadBlundrProgressSummary/);
   assert.doesNotMatch(dashboard, /reconcileDailyBlundrRingCompletionForToday/);
 });

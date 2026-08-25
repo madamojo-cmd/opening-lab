@@ -17,7 +17,7 @@ export function OpeningHeroCard({ model }: { model: MasteryMapReadModel }) {
             {mastery === null ? "—" : `${mastery}%`}
           </h2>
           <p className={styles.heroMeta}>
-            {model.side} · Active access · current durable mastery evidence.
+            {model.side} · Unlocked · mastery snapshot.
           </p>
           <div
             className={styles.heroProgressTrack}
@@ -38,7 +38,7 @@ export function OpeningHeroCard({ model }: { model: MasteryMapReadModel }) {
       <div className={styles.heroAside}>
         <div className={styles.scoreLabel}>Access</div>
         <div className={styles.accessName}>{model.openingName}</div>
-        <p className={styles.accessCopy}>Unlocked · active · ready for mastery detail.</p>
+        <p className={styles.accessCopy}>Unlocked · active · ready to train.</p>
         <span className={styles.readyPill}>Ready</span>
       </div>
     </header>

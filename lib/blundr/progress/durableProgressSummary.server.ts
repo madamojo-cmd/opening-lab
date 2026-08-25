@@ -337,7 +337,7 @@ export async function loadDurableProgressSummary(input: {
     recentActivity.push({
       key: "daily",
       title: "Daily Blundr",
-      message: "Today’s durable review deck is complete.",
+      message: "Today's Daily deck is complete.",
       localDate: input.todayDateKey,
       href: "/daily",
       tone: "positive",
@@ -346,7 +346,7 @@ export async function loadDurableProgressSummary(input: {
     recentActivity.push({
       key: "review",
       title: "Review attempts",
-      message: `${reviewToday} durable review attempt${reviewToday === 1 ? "" : "s"} today.`,
+      message: `${reviewToday} review attempt${reviewToday === 1 ? "" : "s"} today.`,
       localDate: input.todayDateKey,
       href: "/review",
       tone: "neutral",
@@ -365,7 +365,7 @@ export async function loadDurableProgressSummary(input: {
   if (grantRows.some((row) => row.source === "daily_blundr_deck_completed"))
     milestones.push({
       title: "Daily Blundr complete",
-      message: "You completed a durable Daily Blundr session this week.",
+      message: "You completed Daily Blundr this week.",
     });
   if (number(streakRow.total_all_rings_closed_days) > 0)
     milestones.push({
@@ -381,7 +381,7 @@ export async function loadDurableProgressSummary(input: {
     milestones.push({
       title: "Start here",
       message:
-        "Finish an opening run and Daily Blundr session to establish your first milestone.",
+        "Finish an opening run and complete Daily Blundr to establish your first milestone.",
     });
 
   const summary: BlundrProgressSummary = {
@@ -451,7 +451,7 @@ export async function loadDurableProgressSummary(input: {
     weakAreas: {
       items: weakItems,
       message: weakItems.length
-        ? "Tempo is using durable misses to rank the lines that need attention."
+        ? "Tempo is using your saved misses to rank the lines that need attention."
         : "Complete a few unaided positions and Tempo will surface your weakest lines here.",
     },
     milestones,
@@ -469,7 +469,7 @@ export async function loadDurableProgressSummary(input: {
     {
       title: "Start Daily Blundr",
       href: "/daily",
-      description: "Work through today’s server-owned review loop.",
+      description: "Work through today's saved Daily deck.",
     },
     {
       title: "Review Queue",

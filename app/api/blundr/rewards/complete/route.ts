@@ -79,7 +79,7 @@ export async function POST(request: Request) {
       {
         error: message,
         message:
-          "The completion was not rewarded because durable evidence could not be confirmed.",
+          "That completion wasn't rewarded because it couldn't be confirmed. Try again.",
       },
       { status: statusForDatabaseError(message) },
     );
