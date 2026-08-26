@@ -41,3 +41,38 @@ test("public telemetry accepts auth hydration but rejects server-owned events", 
   );
   assert.equal(forgedReward.status, 400);
 });
+
+test("public telemetry fails safely when the configured sink is unavailable", async () => {
+  const originalEndpoint = process.env.BLUNDR_TELEMETRY_ENDPOINT;
+  const originalFetch = global.fetch;
+  process.env.BLUNDR_TELEMETRY_ENDPOINT = "https://telemetry.example.invalid/collect";
+  global.fetch = (async () =>
+    new Response("sink unavailable", { status: 503 })) as typeof fetch;
+  try {
+    const response = await telemetryPost(
+      new Request("http://blundr.local/api/blundr/telemetry", {
+        method: "POST",
+        body: JSON.stringify({
+          name: "AUTH_HYDRATION_COMPLETED",
+          payload: {
+            durationMs: 12,
+            token: "must-not-pass",
+          },
+        }),
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      accepted: true,
+      delivered: false,
+    });
+  } finally {
+    global.fetch = originalFetch;
+    if (originalEndpoint === undefined) {
+      delete process.env.BLUNDR_TELEMETRY_ENDPOINT;
+    } else {
+      process.env.BLUNDR_TELEMETRY_ENDPOINT = originalEndpoint;
+    }
+  }
+});

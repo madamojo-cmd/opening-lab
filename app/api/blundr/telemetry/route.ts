@@ -64,13 +64,15 @@ export async function POST(request: Request) {
       body: JSON.stringify(event),
       signal: AbortSignal.timeout(1500),
     }).catch(() => null);
-    if (!response?.ok)
-      return NextResponse.json(
-        { error: "telemetry_sink_unavailable" },
-        { status: 503 },
+    if (!response?.ok) {
+      console.warn(
+        "[blundr.telemetry] sink unavailable",
+        JSON.stringify({ name: event.name }),
       );
+      return NextResponse.json({ accepted: true, delivered: false });
+    }
   } else {
     console.info("[blundr.telemetry]", JSON.stringify(event));
   }
-  return NextResponse.json({ accepted: true });
+  return NextResponse.json({ accepted: true, delivered: true });
 }
