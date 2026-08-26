@@ -23,4 +23,9 @@ test("Review Queue browser clients send authenticated API requests", () => {
     replay,
     /fetch\("\/api\/blundr\/review-queue\?limit=1&page=0"/,
   );
+  assert.match(inbox, /data-testid="review-queue-scroll-region"/);
+  assert.match(inbox, /overflow-y-auto/);
+  assert.match(replay, /squareStyles=\{revealSquareStyles\}/);
+  assert.match(replay, /Continue/);
+  assert.match(replay, /router\.replace\(\s*next/);
 });

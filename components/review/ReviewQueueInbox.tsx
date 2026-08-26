@@ -137,8 +137,8 @@ export function ReviewQueueInbox() {
   const isPartial = payload.syncState === "partial";
 
   return (
-    <div className="mt-4 space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="mt-4 flex max-h-none flex-col gap-3 min-[821px]:max-h-[min(34rem,calc(100dvh-19rem))]">
+      <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 bg-white/95 pb-2 backdrop-blur">
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-full bg-stone-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-stone-700">
             {items.length} items
@@ -199,7 +199,10 @@ export function ReviewQueueInbox() {
           </p>
         </div>
       ) : (
-        <div className="grid gap-2">
+        <div
+          className="grid gap-2 overflow-visible pr-0 min-[821px]:overflow-y-auto min-[821px]:pr-1"
+          data-testid="review-queue-scroll-region"
+        >
           {items.map((item) => {
             const href = buildReviewQueuePracticeActionHref(item);
             return (

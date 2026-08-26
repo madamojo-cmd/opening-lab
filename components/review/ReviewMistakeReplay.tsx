@@ -36,6 +36,10 @@ type RevealResult = {
   expectedMoveSan: string | null;
 };
 
+type InboxPayload = {
+  items: Array<{ mistakeId: string; positionKey: string }>;
+};
+
 type LoadState =
   | { kind: "loading" }
   | { kind: "ready"; data: Snapshot }
@@ -68,6 +72,7 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
   const [attempt, setAttempt] = useState<AttemptResult | null>(null);
   const [reveal, setReveal] = useState<RevealResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [replayNonce, setReplayNonce] = useState(0);
   const attemptCount = useRef(0);
 
   const load = () => {
@@ -108,6 +113,23 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
     state.kind === "ready"
       ? `${state.data.openingId ?? "Unknown opening"} · ${state.data.repertoireSide === "unknown" ? "Unknown side" : state.data.repertoireSide === "white" ? "White" : "Black"}`
       : "Mistake replay";
+
+  const revealSquareStyles = useMemo(() => {
+    if (!reveal?.expectedMoveUci) return {};
+    const from = reveal.expectedMoveUci.slice(0, 2);
+    const to = reveal.expectedMoveUci.slice(2, 4);
+    if (!/^[a-h][1-8]$/.test(from) || !/^[a-h][1-8]$/.test(to)) return {};
+    return {
+      [from]: {
+        boxShadow: "inset 0 0 0 4px rgba(245, 158, 11, 0.92)",
+        backgroundColor: "rgba(253, 230, 138, 0.72)",
+      },
+      [to]: {
+        boxShadow: "inset 0 0 0 4px rgba(22, 163, 74, 0.92)",
+        backgroundColor: "rgba(187, 247, 208, 0.78)",
+      },
+    };
+  }, [reveal]);
 
   if (state.kind === "loading") {
     return (
@@ -186,12 +208,6 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
         throw new Error(payload.error || "unknown_error");
       attemptCount.current += 1;
       setAttempt(payload.data);
-      if (payload.data.correct && payload.data.resolved) {
-        void authenticatedApiFetch("/api/blundr/review-queue?limit=1&page=0", {
-          cache: "no-store",
-        }).catch(() => null);
-        router.replace("/review");
-      }
     } catch (error: unknown) {
       setAttempt({
         correct: false,
@@ -200,6 +216,38 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
         reviewRating: null,
         dueAt: null,
       });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onRetry = () => {
+    attemptCount.current += 1;
+    setAttempt(null);
+    setReveal(null);
+    setReplayNonce((value) => value + 1);
+  };
+
+  const onContinue = async () => {
+    if (busy || !attempt?.correct) return;
+    setBusy(true);
+    try {
+      const payload = await authenticatedApiFetch<
+        | { ok: true; data: InboxPayload }
+        | { ok: false; error: string }
+      >("/api/blundr/review-queue?limit=2&page=0", { cache: "no-store" });
+      if (payload.ok === false)
+        throw new Error(payload.error || "unknown_error");
+      const next = payload.data.items.find(
+        (item) => item.mistakeId !== snapshot.mistakeId,
+      );
+      router.replace(
+        next
+          ? `/review/mistakes/${encodeURIComponent(next.mistakeId)}`
+          : "/review",
+      );
+    } catch {
+      router.replace("/review");
     } finally {
       setBusy(false);
     }
@@ -251,11 +299,13 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.64fr)]">
         <DailyBlundrBoard
+          key={`${snapshot.mistakeId}:${replayNonce}`}
           fen={snapshot.canonicalFen}
           forcedOrientation={orientation}
           openingColor={orientation}
-          disabled={busy}
+          disabled={busy || Boolean(attempt?.correct)}
           onMoveAttempt={onBoardAttempt}
+          squareStyles={revealSquareStyles}
         />
 
         <div className="space-y-3">
@@ -274,11 +324,7 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  attemptCount.current = 0;
-                  setAttempt(null);
-                  setReveal(null);
-                }}
+                onClick={onRetry}
                 disabled={busy}
                 className="inline-flex min-h-10 items-center gap-2 rounded-[12px] border border-stone-200 bg-white px-3 text-[12px] font-black text-stone-900 shadow-sm disabled:opacity-40"
               >
@@ -294,6 +340,16 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
                 <Eye size={14} />
                 Reveal
               </button>
+              {attempt?.correct ? (
+                <button
+                  type="button"
+                  onClick={() => void onContinue()}
+                  disabled={busy}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-[12px] bg-stone-950 px-3 text-[12px] font-black text-white shadow-sm transition hover:-translate-y-0.5 disabled:opacity-40"
+                >
+                  Continue
+                </button>
+              ) : null}
             </div>
           </div>
 
@@ -310,9 +366,7 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
               </div>
               <div className="mt-2 text-[12px] leading-[1.55] opacity-90">
                 {attempt.correct
-                  ? attempt.resolved
-                    ? "Recorded as resolved by the server."
-                    : "Recorded. This item is still not resolved by the server."
+                  ? "Recorded. Continue to the next queued mistake."
                   : "Try again, or Reveal after a couple attempts."}
               </div>
             </div>
