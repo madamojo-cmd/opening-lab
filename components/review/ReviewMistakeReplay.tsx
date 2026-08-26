@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Eye, RefreshCcw } from "lucide-react";
+import { Chess } from "chess.js";
 
 import { DailyBlundrBoard } from "@/components/daily/DailyBlundrBoard";
 import { authenticatedApiFetch } from "@/lib/blundr/api/authenticatedApiClient";
@@ -71,6 +72,7 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [attempt, setAttempt] = useState<AttemptResult | null>(null);
   const [reveal, setReveal] = useState<RevealResult | null>(null);
+  const [confirmedMoveUci, setConfirmedMoveUci] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [replayNonce, setReplayNonce] = useState(0);
   const attemptCount = useRef(0);
@@ -100,24 +102,46 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
     attemptCount.current = 0;
     setAttempt(null);
     setReveal(null);
+    setConfirmedMoveUci(null);
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mistakeId]);
 
+  const readySnapshot = state.kind === "ready" ? state.data : null;
+
   const orientation =
-    state.kind === "ready" && state.data.repertoireSide === "black"
-      ? "black"
-      : "white";
+    readySnapshot?.repertoireSide === "black" ? "black" : "white";
 
   const title =
-    state.kind === "ready"
-      ? `${state.data.openingId ?? "Unknown opening"} · ${state.data.repertoireSide === "unknown" ? "Unknown side" : state.data.repertoireSide === "white" ? "White" : "Black"}`
+    readySnapshot
+      ? `${readySnapshot.openingId ?? "Unknown opening"} · ${readySnapshot.repertoireSide === "unknown" ? "Unknown side" : readySnapshot.repertoireSide === "white" ? "White" : "Black"}`
       : "Mistake replay";
 
-  const revealSquareStyles = useMemo(() => {
-    if (!reveal?.expectedMoveUci) return {};
-    const from = reveal.expectedMoveUci.slice(0, 2);
-    const to = reveal.expectedMoveUci.slice(2, 4);
+  const demonstratedMoveUci = reveal?.expectedMoveUci ?? confirmedMoveUci;
+
+  const demonstratedFen = useMemo(() => {
+    if (!readySnapshot) return "";
+    if (!demonstratedMoveUci) return readySnapshot.canonicalFen;
+    try {
+      const chess = new Chess(readySnapshot.canonicalFen);
+      const move = chess.move({
+        from: demonstratedMoveUci.slice(0, 2),
+        to: demonstratedMoveUci.slice(2, 4),
+        promotion:
+          demonstratedMoveUci.length > 4
+            ? demonstratedMoveUci.slice(4, 5)
+            : undefined,
+      });
+      return move ? chess.fen() : readySnapshot.canonicalFen;
+    } catch {
+      return readySnapshot.canonicalFen;
+    }
+  }, [demonstratedMoveUci, readySnapshot]);
+
+  const demonstratedSquareStyles = useMemo(() => {
+    if (!demonstratedMoveUci) return {};
+    const from = demonstratedMoveUci.slice(0, 2);
+    const to = demonstratedMoveUci.slice(2, 4);
     if (!/^[a-h][1-8]$/.test(from) || !/^[a-h][1-8]$/.test(to)) return {};
     return {
       [from]: {
@@ -129,7 +153,7 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
         backgroundColor: "rgba(187, 247, 208, 0.78)",
       },
     };
-  }, [reveal]);
+  }, [demonstratedMoveUci]);
 
   if (state.kind === "loading") {
     return (
@@ -207,6 +231,9 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
       if (payload.ok === false)
         throw new Error(payload.error || "unknown_error");
       attemptCount.current += 1;
+      if (payload.data.correct) {
+        setConfirmedMoveUci(uci);
+      }
       setAttempt(payload.data);
     } catch (error: unknown) {
       setAttempt({
@@ -225,6 +252,7 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
     attemptCount.current += 1;
     setAttempt(null);
     setReveal(null);
+    setConfirmedMoveUci(null);
     setReplayNonce((value) => value + 1);
   };
 
@@ -300,12 +328,12 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.64fr)]">
         <DailyBlundrBoard
           key={`${snapshot.mistakeId}:${replayNonce}`}
-          fen={snapshot.canonicalFen}
+          fen={demonstratedFen}
           forcedOrientation={orientation}
           openingColor={orientation}
           disabled={busy || Boolean(attempt?.correct)}
           onMoveAttempt={onBoardAttempt}
-          squareStyles={revealSquareStyles}
+          squareStyles={demonstratedSquareStyles}
         />
 
         <div className="space-y-3">

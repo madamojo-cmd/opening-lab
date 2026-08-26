@@ -25,7 +25,19 @@ test("Review Queue browser clients send authenticated API requests", () => {
   );
   assert.match(inbox, /data-testid="review-queue-scroll-region"/);
   assert.match(inbox, /overflow-y-auto/);
-  assert.match(replay, /squareStyles=\{revealSquareStyles\}/);
+  assert.match(replay, /import \{ Chess \} from "chess\.js"/);
+  assert.match(replay, /const \[confirmedMoveUci, setConfirmedMoveUci\]/);
+  assert.match(
+    replay,
+    /const demonstratedMoveUci = reveal\?\.expectedMoveUci \?\? confirmedMoveUci/,
+  );
+  assert.match(replay, /const demonstratedFen = useMemo/);
+  assert.match(replay, /new Chess\(readySnapshot\.canonicalFen\)/);
+  assert.match(replay, /fen=\{demonstratedFen\}/);
+  assert.match(replay, /squareStyles=\{demonstratedSquareStyles\}/);
+  assert.match(replay, /setConfirmedMoveUci\(uci\)/);
+  assert.match(replay, /setConfirmedMoveUci\(null\)/);
   assert.match(replay, /Continue/);
+  assert.match(replay, /attempt\?\.correct/);
   assert.match(replay, /router\.replace\(\s*next/);
 });
