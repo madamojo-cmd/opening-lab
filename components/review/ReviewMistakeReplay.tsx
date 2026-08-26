@@ -104,10 +104,10 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mistakeId]);
 
-  const orientation = useMemo(() => {
-    if (state.kind !== "ready") return "white" as const;
-    return state.data.repertoireSide === "black" ? "black" : "white";
-  }, [state.kind, state.kind === "ready" ? state.data.repertoireSide : null]);
+  const orientation =
+    state.kind === "ready" && state.data.repertoireSide === "black"
+      ? "black"
+      : "white";
 
   const title =
     state.kind === "ready"
