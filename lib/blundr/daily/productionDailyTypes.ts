@@ -81,6 +81,8 @@ export type ProductionDailyPublicSession = Omit<
   "userId" | "privateCards" | "state" | "publicCards"
 > & {
   cardsCompletedToday?: number;
+  /** Frozen target captured by the reserved Daily deck for this local day. */
+  dailyCardTarget?: number;
   publicCards: readonly (ProductionDailyPublicCard & { actionId: string })[];
   state: {
     currentIndex: number;

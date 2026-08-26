@@ -47,10 +47,11 @@ test("returns null without a reserved session", () => {
   assert.equal(resolveProductionDailyCardGoalProgress(null, 10), null);
 });
 
-test("counts completed cards without capping the goal to the reserved deck size", () => {
+test("uses the reserved deck target after a Daily session exists", () => {
   const progress = resolveProductionDailyCardGoalProgress(
     session({
       publicCards: [card, { ...card, cardFingerprint: "card-2" }],
+      dailyCardTarget: 10,
       state: {
         currentIndex: 2,
         completedCardIds: ["card-1"],
@@ -73,6 +74,7 @@ test("treats the card-goal as complete once the configured goal is reached", () 
   const progress = resolveProductionDailyCardGoalProgress(
     session({
       publicCards: [card, { ...card, cardFingerprint: "card-2" }],
+      dailyCardTarget: 10,
       cardsCompletedToday: 11,
       state: {
         currentIndex: 2,
@@ -87,4 +89,42 @@ test("treats the card-goal as complete once the configured goal is reached", () 
   assert.equal(progress.goalCards, 10);
   assert.equal(progress.completed, true);
   assert.equal(progress.percent, 100);
+});
+
+test("mid-session preference decreases do not shrink the frozen Daily target", () => {
+  const progress = resolveProductionDailyCardGoalProgress(
+    session({
+      publicCards: Array.from({ length: 10 }, (_, index) => ({
+        ...card,
+        cardFingerprint: `card-${index + 1}`,
+      })),
+      dailyCardTarget: 10,
+      cardsCompletedToday: 5,
+      state: {
+        currentIndex: 5,
+        completedCardIds: ["card-1", "card-2", "card-3", "card-4", "card-5"],
+        revealedCardIds: [],
+      },
+    }),
+    5,
+  );
+  assert.ok(progress);
+  if (!progress) return;
+  assert.equal(progress.completedCards, 5);
+  assert.equal(progress.goalCards, 10);
+  assert.equal(progress.progressCards, 5);
+  assert.equal(progress.completed, false);
+});
+
+test("pre-reservation preference still supplies the target when no snapshot exists", () => {
+  const progress = resolveProductionDailyCardGoalProgress(
+    session({
+      dailyCardTarget: undefined,
+      publicCards: [card, { ...card, cardFingerprint: "card-2" }],
+    }),
+    5,
+  );
+  assert.ok(progress);
+  if (!progress) return;
+  assert.equal(progress.goalCards, 5);
 });

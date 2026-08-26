@@ -388,6 +388,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
         const response = await authenticatedApiFetch<{
           ok: true;
           data: UserTrainingProfile;
+          effective?: { dailyBlundrCardGoal?: "today" | "next_local_day" };
         }>("/api/blundr/account/preferences", {
           method: "PATCH",
           body: JSON.stringify({
@@ -396,7 +397,11 @@ export function SettingsPage({ className }: SettingsPageProps) {
           }),
         });
         applyProfile(response.data);
-        setStatusMessage("Saved training preferences to your account.");
+        setStatusMessage(
+          response.effective?.dailyBlundrCardGoal === "next_local_day"
+            ? "Saved for tomorrow."
+            : "Saved training preferences to your account.",
+        );
       } catch (error) {
         setRatingBandId(snapshot.profile.ratingBandId);
         setTrainingGoalTempo(snapshot.profile.dailyTempoGoal);

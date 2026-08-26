@@ -8,6 +8,8 @@ import {
 } from "@/lib/blundr/daily/productionDailyService.server";
 import { ProductionDailyRepository } from "@/lib/blundr/daily/productionDailyRepository.server";
 import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTelemetry.server";
+import { readOwnedTrainingPreferences } from "@/lib/blundr/accounts/trainingPreferences.server";
+import { getLocalDateKeyForTimeZone } from "@/lib/blundr/daily-rings/dailyRingDate";
 
 export const dynamic = "force-dynamic";
 
@@ -20,8 +22,9 @@ export async function GET(request: Request) {
     );
   if (!isProductionDailyAvailable(getServerFeatureFlags()))
     return NextResponse.json({ error: "feature_disabled" }, { status: 503 });
-  const dateKey = new Date().toISOString().slice(0, 10);
   try {
+    const profile = await readOwnedTrainingPreferences(user);
+    const dateKey = getLocalDateKeyForTimeZone(new Date(), profile.timeZone);
     const session = await getOrReserveDaily(user, dateKey);
     const cardsCompletedToday = await new ProductionDailyRepository().countUniqueCompletedCardsForDate(
       user.userId,

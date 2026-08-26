@@ -36,7 +36,10 @@ export function resolveProductionDailyCardGoalProgress(
     ? Math.max(0, Math.trunc(Number(session.cardsCompletedToday)))
     : session.state.completedCardIds.length;
 
-  const requestedGoal = clampCardGoal(Number(cardGoal ?? 10), 10);
+  const requestedGoal = clampCardGoal(
+    Number(session.dailyCardTarget ?? cardGoal ?? 10),
+    10,
+  );
   const goalCards = requestedGoal;
   const progressCards = Math.min(goalCards, completedCards);
   const completed = goalCards > 0 && completedCards >= goalCards;

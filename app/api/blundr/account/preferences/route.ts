@@ -6,6 +6,8 @@ import {
   updateOwnedTrainingPreferences,
 } from "@/lib/blundr/accounts/trainingPreferences.server";
 import { validateTrainingPreferencesPatch } from "@/lib/blundr/accounts/trainingPreferences";
+import { ProductionDailyRepository } from "@/lib/blundr/daily/productionDailyRepository.server";
+import { getLocalDateKeyForTimeZone } from "@/lib/blundr/daily-rings/dailyRingDate";
 
 export const dynamic = "force-dynamic";
 
@@ -56,9 +58,24 @@ export async function PATCH(request: Request) {
       { status: 422 },
     );
   try {
+    const next = await updateOwnedTrainingPreferences(user, validation.patch);
+    const dateKey = getLocalDateKeyForTimeZone(new Date(), next.timeZone);
+    let reservedToday = false;
+    if (validation.patch.dailyBlundrCardGoal !== undefined) {
+      try {
+        reservedToday = Boolean(
+          await new ProductionDailyRepository().getByDate(user.userId, dateKey),
+        );
+      } catch {
+        reservedToday = false;
+      }
+    }
     return NextResponse.json({
       ok: true,
-      data: await updateOwnedTrainingPreferences(user, validation.patch),
+      data: next,
+      effective: {
+        dailyBlundrCardGoal: reservedToday ? "next_local_day" : "today",
+      },
     });
   } catch {
     return NextResponse.json(

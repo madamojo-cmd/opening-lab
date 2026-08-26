@@ -95,6 +95,7 @@ export function toPublicDailySession(
     deckId: session.deckId,
     dateKey: session.dateKey,
     cardsCompletedToday: options.cardsCompletedToday,
+    dailyCardTarget: Math.max(1, session.publicCards.length),
     publicCards: publicCards.map((card) => ({
       ...card,
       actionId: productionDailyActionId({

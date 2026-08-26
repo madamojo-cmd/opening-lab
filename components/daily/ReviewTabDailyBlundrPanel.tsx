@@ -86,9 +86,10 @@ export function ReviewTabDailyBlundrPanel({
   const completedToday = Number.isFinite(session?.cardsCompletedToday)
     ? Math.max(0, Math.trunc(Number(session?.cardsCompletedToday)))
     : session?.state.completedCardIds.length ?? 0;
-  const remainingCount = Math.max(0, dailyCardGoal - completedToday);
+  const effectiveGoal = Math.max(1, session?.dailyCardTarget ?? dailyCardGoal);
+  const remainingCount = Math.max(0, effectiveGoal - completedToday);
   const started = completedToday > 0;
-  const complete = completedToday >= dailyCardGoal;
+  const complete = completedToday >= effectiveGoal;
   const primaryLabel = resolvePrimaryLabel(
     hasCards,
     started,
@@ -137,7 +138,7 @@ export function ReviewTabDailyBlundrPanel({
         </div>
         <div className="px-2 py-3 text-stone-700 sm:border-r sm:border-stone-200">
           <CheckCircle2 size={15} className="mx-auto mb-1 text-green-700" />
-          {deck.length} cards
+          {effectiveGoal} card target
         </div>
         <div className="px-2 py-3 text-stone-700">
           <BadgeCheck size={15} className="mx-auto mb-1 text-green-700" />

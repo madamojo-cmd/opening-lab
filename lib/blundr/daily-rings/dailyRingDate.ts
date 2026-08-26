@@ -6,6 +6,29 @@ export function getLocalDateKey(date = new Date()): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+export function getLocalDateKeyForTimeZone(
+  date = new Date(),
+  timeZone?: string | null,
+): string {
+  const zone = String(timeZone ?? "").trim();
+  if (!zone) return getLocalDateKey(date);
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: zone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date);
+    const year = parts.find((part) => part.type === "year")?.value;
+    const month = parts.find((part) => part.type === "month")?.value;
+    const day = parts.find((part) => part.type === "day")?.value;
+    if (year && month && day) return `${year}-${month}-${day}`;
+  } catch {
+    return getLocalDateKey(date);
+  }
+  return getLocalDateKey(date);
+}
+
 export function normalizeLocalDateKey(value: unknown): string | null {
   const text = String(value ?? "").trim();
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
@@ -25,4 +48,3 @@ export function isConsecutiveLocalDate(previousDateKey: string | null | undefine
   if (!previous || !current) return false;
   return addLocalDays(previous, 1) === current;
 }
-
