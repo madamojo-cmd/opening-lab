@@ -107,6 +107,37 @@ async function loadDailyCardsCompletedToday(input: {
   ).length;
 }
 
+async function loadReservedDailyCardTarget(input: {
+  admin: ReturnType<typeof createBlundrSupabaseAdminClient>;
+  userId: string;
+  todayDateKey: string;
+}): Promise<number | null> {
+  const { admin, userId, todayDateKey } = input;
+  if (!admin) throw new Error("progress_persistence_unavailable");
+
+  const deckResult = await admin
+    .from("blundr_daily_decks")
+    .select("deck_id,public_cards")
+    .eq("user_id", userId)
+    .eq("local_date", todayDateKey)
+    .maybeSingle();
+  if (deckResult.error) throw new Error("progress_daily_decks_unavailable");
+  if (!deckResult.data) return null;
+
+  const sessionResult = await admin
+    .from("blundr_daily_sessions")
+    .select("session_id")
+    .eq("user_id", userId)
+    .eq("deck_id", String((deckResult.data as Row).deck_id ?? ""))
+    .maybeSingle();
+  if (sessionResult.error)
+    throw new Error("progress_daily_sessions_unavailable");
+  if (!sessionResult.data) return null;
+
+  const publicCards = (deckResult.data as Row).public_cards;
+  return Array.isArray(publicCards) ? Math.max(1, publicCards.length) : null;
+}
+
 export async function loadDurableProgressSummary(input: {
   userId: string;
   todayDateKey: string;
@@ -227,14 +258,25 @@ export async function loadDurableProgressSummary(input: {
   const rewardRows = (rewardRolls.data ?? []) as Row[];
   const today =
     dayRows.find((row) => String(row.local_date) === input.todayDateKey) ?? {};
-  const cardsCompletedToday = await loadDailyCardsCompletedToday({
-    admin,
-    userId: input.userId,
-    todayDateKey: input.todayDateKey,
-  });
+  const [cardsCompletedToday, reservedDailyCardTarget] = await Promise.all([
+    loadDailyCardsCompletedToday({
+      admin,
+      userId: input.userId,
+      todayDateKey: input.todayDateKey,
+    }),
+    loadReservedDailyCardTarget({
+      admin,
+      userId: input.userId,
+      todayDateKey: input.todayDateKey,
+    }),
+  ]);
   const dailyBlundrCardGoal = Math.max(
     1,
-    Math.min(99, Number(profileRow.daily_blundr_card_goal) || 10),
+    Math.min(
+      99,
+      Number(reservedDailyCardTarget ?? profileRow.daily_blundr_card_goal) ||
+        10,
+    ),
   );
 
   const ring = (

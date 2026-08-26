@@ -52,6 +52,11 @@ test("durable progress derives every primary signal from server-owned tables", (
   assert.match(service, /move_correct/);
   assert.match(service, /move_incorrect/);
   assert.match(service, /daily_blundr_card_goal/);
+  assert.match(service, /loadReservedDailyCardTarget/);
+  assert.match(
+    service,
+    /reservedDailyCardTarget\s*\?\?\s*profileRow\.daily_blundr_card_goal/,
+  );
 });
 
 test("the dashboard never falls back to local progress after an API failure", () => {
