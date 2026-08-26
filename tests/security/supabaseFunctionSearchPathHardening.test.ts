@@ -24,7 +24,7 @@ test("Supabase function search_path hardening stays scoped and explicit", async 
 
   const alteredSignatures = new Set<string>();
   for (const match of sql.matchAll(
-    /alter function if exists public\.([a-z0-9_]+)\(([^)]*)\)/gi,
+    /alter function(?: if exists)? public\.([a-z0-9_]+)\(([^)]*)\)/gi,
   )) {
     const functionName = match[1]!;
     const args = match[2] ?? "";
@@ -46,10 +46,9 @@ test("Supabase function search_path hardening stays scoped and explicit", async 
       "\\$&",
     );
     const hardeningPattern = new RegExp(
-      `alter function if exists public\\.${escapedName}\\(${escapedArgs}\\)\\s*\\n\\s*set search_path = pg_catalog;`,
+      `alter function(?: if exists)? public\\.${escapedName}\\(${escapedArgs}\\)\\s*\\n\\s*set search_path = pg_catalog;`,
       "i",
     );
     assert.match(sql, hardeningPattern, `missing_search_path_hardening:${signature}`);
   }
 });
-
