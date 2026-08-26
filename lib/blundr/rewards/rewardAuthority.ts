@@ -24,6 +24,8 @@ function failure(error: unknown): RewardAuthorityFailure {
     "continuation_trainer_terminal_unverified",
     "continuation_completion_idempotency_conflict",
     "completion_projection_idempotency_conflict",
+    "invalid_daily_blundr_reward_target",
+    "completion_evidence_unverified",
   ];
   return {
     ok: false,
@@ -47,6 +49,22 @@ export async function applyRewardCompletion(input: {
 > {
   const client = adminOrFailure();
   if (!client.ok) return { ok: false, code: client.code };
+  if (input.source === "daily_blundr_deck_completed") {
+    const prepared = await client.admin.rpc(
+      "blundr_prepare_daily_blundr_reward_target_v1",
+      {
+        p_user_id: input.userId,
+        p_session_id: input.evidenceId,
+      },
+    );
+    if (prepared.error) {
+      const message = String(prepared.error.message ?? "");
+      const missingDuringDeploy =
+        message.includes("blundr_prepare_daily_blundr_reward_target_v1") ||
+        message.includes("Could not find the function");
+      if (!missingDuringDeploy) return failure(prepared.error);
+    }
+  }
   const { data, error } = await client.admin.rpc(
     "blundr_apply_completion_reward_v3",
     {
