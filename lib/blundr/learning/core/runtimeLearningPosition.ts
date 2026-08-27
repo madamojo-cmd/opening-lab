@@ -1,5 +1,6 @@
 import { Chess } from "chess.js";
 import { resolveStage2CanonicalOpeningId } from "@/lib/blundr/openings/openingIdentity";
+import { isPreferredMoveForAuthority } from "@/lib/blundr/openings/preferredMoveAuthority";
 import type { TrainerTreeIndex } from "@/lib/blundr/trainingRuntime/runtimeEvidenceIndices";
 
 export type RuntimeLearningPositionInput = {
@@ -62,6 +63,22 @@ export function verifyRuntimeLearningPosition(
     return null;
   const runtimeFen = fenForSequence(node.playSequenceUci);
   if (!runtimeFen || normalizeFen(runtimeFen) !== requestedFen) return null;
+  const repertoireSide =
+    node.learnerPerspective === "white" || node.learnerPerspective === "black"
+      ? node.learnerPerspective
+      : null;
+  if (
+    expectedMoveUci &&
+    repertoireSide &&
+    !isPreferredMoveForAuthority({
+      openingId,
+      canonicalFen: runtimeFen,
+      repertoireSide,
+      expectedMoveUci,
+    })
+  ) {
+    return null;
+  }
   return {
     openingId,
     moveOrderKey,

@@ -2,6 +2,7 @@ import "server-only";
 
 import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
 import { getServerFeatureFlags } from "@/lib/blundr/contracts/serverFeatureFlags";
+import { isPreferredMoveForAuthority } from "@/lib/blundr/openings/preferredMoveAuthority";
 import type { ReviewQueueLifecycleState } from "./reviewQueueTypes";
 
 type Row = Record<string, unknown>;
@@ -105,7 +106,7 @@ async function readLatestLearningEventRow(input: {
   mistakeId: string;
   openingId: string | null;
   playKey: string | null;
-  includeExpectedMove: boolean;
+    includeExpectedMove: boolean;
 }) {
   const columns = [
     "position_key",
@@ -115,7 +116,7 @@ async function readLatestLearningEventRow(input: {
     "move_order_key",
     "occurred_at",
     "deleted_at",
-    ...(input.includeExpectedMove ? ["expected_move_uci"] : []),
+    "expected_move_uci",
   ].join(",");
 
   let query = input.client
@@ -174,6 +175,17 @@ export async function loadReviewMistakeSnapshot(input: {
   const eventRow = event.row;
   const canonicalFen = text(eventRow.canonical_fen);
   if (!canonicalFen) return { ok: false, error: "solution_unavailable" };
+  const repertoire = repertoireSide(eventRow.repertoire_side);
+  if (
+    !isPreferredMoveForAuthority({
+      openingId,
+      canonicalFen,
+      repertoireSide: repertoire,
+      expectedMoveUci: text(eventRow.expected_move_uci),
+    })
+  ) {
+    return { ok: false, error: "not_found" };
+  }
 
   return {
     ok: true,
@@ -182,7 +194,7 @@ export async function loadReviewMistakeSnapshot(input: {
       positionKey: text(weaknessRow.position_key),
       openingId,
       playKey,
-      repertoireSide: repertoireSide(eventRow.repertoire_side),
+      repertoireSide: repertoire,
       canonicalFen,
       category: text(weaknessRow.category),
       lifecycleState: lifecycle(weaknessRow.lifecycle_state),
@@ -233,6 +245,17 @@ export async function loadReviewMistakeSolution(input: {
   const expectedMoveUci = text(eventRow.expected_move_uci);
   if (!canonicalFen || !expectedMoveUci)
     return { ok: false, error: "solution_unavailable" };
+  const repertoire = repertoireSide(eventRow.repertoire_side);
+  if (
+    !isPreferredMoveForAuthority({
+      openingId,
+      canonicalFen,
+      repertoireSide: repertoire,
+      expectedMoveUci,
+    })
+  ) {
+    return { ok: false, error: "not_found" };
+  }
 
   return {
     ok: true,
@@ -241,7 +264,7 @@ export async function loadReviewMistakeSolution(input: {
       positionKey: text(weaknessRow.position_key),
       openingId,
       playKey,
-      repertoireSide: repertoireSide(eventRow.repertoire_side),
+      repertoireSide: repertoire,
       canonicalFen,
       expectedMoveUci,
       category: text(weaknessRow.category),

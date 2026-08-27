@@ -3,6 +3,7 @@ import { normalizeVisualFen } from "../visual/normalizeVisualFen";
 import { classifyContinuationSource, hasTerminalNodeForColor, legalContinuationsForColor } from "./branchResolver";
 import { resolveOpeningFamilyPlanFallback } from "./openingFamilyPlanFallback";
 import type { OpeningTree, RepertoireContinuation, ResolvedExpectedMove } from "./openingTypes";
+import { selectPreferredContinuation, type PreferredMoveAuthorityIndex } from "./preferredMoveAuthority";
 import { findTranspositionNodes } from "./transpositionMatcher";
 
 function emptyResolution(reason: string, debug: Record<string, unknown> = {}): ResolvedExpectedMove {
@@ -108,6 +109,7 @@ export function resolveExpectedMoveForFrame(input: {
   legacyExpectedMoveCandidate?: { san?: string | null; uci?: string | null } | null;
   enginePreview?: { pvs?: Array<{ san?: string; uci?: string }> } | null;
   allowEngineFallbackInRestricted?: boolean;
+  preferredMoveAuthorityIndex?: PreferredMoveAuthorityIndex;
 }): ResolvedExpectedMove {
   const fen4 = normalizeVisualFen(input.fen);
   const exactNodes = input.openingTree.nodesByFen4[fen4] ?? [];
@@ -129,7 +131,23 @@ export function resolveExpectedMoveForFrame(input: {
 
   const exactCandidates = legalContinuationsForColor(exactNodes, input.fen, input.userColor);
   if (exactCandidates.length) {
-    const selected = exactCandidates[0];
+    const preferred = selectPreferredContinuation({
+      openingId: input.openingTree.openingId,
+      canonicalFen: input.fen,
+      repertoireSide: input.openingTree.sideToTrain,
+      candidates: exactCandidates,
+      index: input.preferredMoveAuthorityIndex,
+    });
+    if (preferred.status !== "authority_not_indexed" && preferred.status !== "selected") {
+      return emptyResolution("preferred_move_authority_unresolved", {
+        ...debug,
+        preferredMoveAuthorityStatus: preferred.status,
+        preferredMoveAuthorityKey: "key" in preferred ? preferred.key : null,
+        preferredMoveAuthoritySelectedUci: "selectedUci" in preferred ? preferred.selectedUci : null,
+        candidateUcis: exactCandidates.map((candidate) => candidate.uci),
+      });
+    }
+    const selected = preferred.status === "selected" ? preferred.selected : exactCandidates[0];
     const classifiedSource = classifyContinuationSource(exactNodes, selected);
     return fromContinuation({
       continuation: { ...selected, source: classifiedSource },
@@ -137,27 +155,56 @@ export function resolveExpectedMoveForFrame(input: {
       bookResolutionState: "user_move_available",
       coverageTier: classifiedSource === "opening_branch" ? "known_branch_deep_coached" : "exact_line_deep_coached",
       reason: classifiedSource === "opening_branch" ? "exact_fen_opening_branch_node" : "exact_fen_repertoire_node",
-      candidates: exactCandidates.map((candidate) => ({ ...candidate, source: classifyContinuationSource(exactNodes, candidate) })),
+      candidates: [{ ...selected, source: classifiedSource }],
       lineCursor: selected.ply,
       lineLength: exactNodes.find((node) => node.lineId === selected.lineId)?.lineLength ?? null,
-      debug: { ...debug, selectedLineId: selected.lineId },
+      debug: {
+        ...debug,
+        selectedLineId: selected.lineId,
+        preferredMoveAuthorityStatus: preferred.status,
+        preferredMoveAuthorityRank: preferred.status === "selected" ? preferred.entry.stockfishRank : null,
+      },
     });
   }
 
   const transposition = findTranspositionNodes(input.openingTree, input.fen);
   const transpositionCandidates = legalContinuationsForColor(transposition.nodes, input.fen, input.userColor);
   if (!exactNodes.length && transpositionCandidates.length) {
-    const selected = transpositionCandidates[0];
+    const preferred = selectPreferredContinuation({
+      openingId: input.openingTree.openingId,
+      canonicalFen: input.fen,
+      repertoireSide: input.openingTree.sideToTrain,
+      candidates: transpositionCandidates,
+      index: input.preferredMoveAuthorityIndex,
+    });
+    if (preferred.status !== "authority_not_indexed" && preferred.status !== "selected") {
+      return emptyResolution("preferred_move_authority_unresolved", {
+        ...debug,
+        transpositionNodeFound: true,
+        transpositionKey: transposition.transpositionKey,
+        preferredMoveAuthorityStatus: preferred.status,
+        preferredMoveAuthorityKey: "key" in preferred ? preferred.key : null,
+        preferredMoveAuthoritySelectedUci: "selectedUci" in preferred ? preferred.selectedUci : null,
+        candidateUcis: transpositionCandidates.map((candidate) => candidate.uci),
+      });
+    }
+    const selected = preferred.status === "selected" ? preferred.selected : transpositionCandidates[0];
     return fromContinuation({
       continuation: { ...selected, source: "transposition" },
       source: "transposition",
       bookResolutionState: "transposition_available",
       coverageTier: "transposition_deep_coached",
       reason: "fen_transposed_to_known_repertoire_node",
-      candidates: transpositionCandidates.map((candidate) => ({ ...candidate, source: "transposition" })),
+      candidates: [{ ...selected, source: "transposition" }],
       lineCursor: selected.ply,
       lineLength: transposition.nodes.find((node) => node.lineId === selected.lineId)?.lineLength ?? null,
-      debug: { ...debug, transpositionNodeFound: true, transpositionKey: transposition.transpositionKey },
+      debug: {
+        ...debug,
+        transpositionNodeFound: true,
+        transpositionKey: transposition.transpositionKey,
+        preferredMoveAuthorityStatus: preferred.status,
+        preferredMoveAuthorityRank: preferred.status === "selected" ? preferred.entry.stockfishRank : null,
+      },
     });
   }
 

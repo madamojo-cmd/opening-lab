@@ -103,11 +103,12 @@ describe("Review mistake repository", () => {
           ),
         ).toBe(true);
         expect(q.selectColumns).toBeTruthy();
-        expect(q.selectColumns?.includes("expected_move_uci")).toBe(false);
+        expect(q.selectColumns?.includes("expected_move_uci")).toBe(true);
         return {
           position_key: mistakeId,
           canonical_fen:
             "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+          expected_move_uci: "e2e4",
           repertoire_side: "white",
           opening_id: "italian-white",
           move_order_key: "mainline",
@@ -127,6 +128,7 @@ describe("Review mistake repository", () => {
       expect(result.data.mistakeId).toBe(mistakeId);
       expect(result.data.repertoireSide).toBe("white");
       expect(result.data.missCount).toBe(3);
+      expect("expectedMoveUci" in result.data).toBe(false);
     }
   });
 
@@ -187,5 +189,49 @@ describe("Review mistake repository", () => {
     });
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.data.expectedMoveUci).toBe("e2e4");
+  });
+
+  it("rejects direct access to a superseded historical expected move", async () => {
+    process.env.BLUNDR_FEATURE_LEARNING_CORE_V2_READ = "true";
+    const userId = "user-a";
+    const mistakeId = "pos-1234abcd";
+
+    const fake = new FakeAdminClient({
+      blundr_weakness_projection: () => ({
+        position_key: mistakeId,
+        opening_id: "italian-white",
+        play_key: "mainline",
+        category: "opening_move",
+        lifecycle_state: "active",
+        lapse_count: 3,
+        last_evidence_at: "2026-08-25T00:00:00.000Z",
+        updated_at: "2026-08-25T00:01:00.000Z",
+      }),
+      blundr_learning_events: () => ({
+        position_key: mistakeId,
+        canonical_fen:
+          "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        expected_move_uci: "d2d4",
+        repertoire_side: "white",
+        opening_id: "italian-white",
+        move_order_key: "mainline",
+        occurred_at: "2026-08-25T00:00:00.000Z",
+        deleted_at: null,
+      }),
+    });
+
+    const snapshot = await loadReviewMistakeSnapshot({
+      userId,
+      mistakeId,
+      adminClient: fake as unknown as never,
+    });
+    expect(snapshot).toEqual({ ok: false, error: "not_found" });
+
+    const solution = await loadReviewMistakeSolution({
+      userId,
+      mistakeId,
+      adminClient: fake as unknown as never,
+    });
+    expect(solution).toEqual({ ok: false, error: "not_found" });
   });
 });
