@@ -102,4 +102,28 @@ describe("Review queue repository preferred authority filtering", () => {
       "pos-preferred",
     ]);
   });
+
+  it("defers capped preferred representatives before pagination", () => {
+    const result = filterReviewQueueItemsForPreferredAuthority({
+      includeResolved: false,
+      deferredAuthorityKeys: new Set([`italian-white|${fen.split(" ").slice(0, 4).join(" ")}|white`]),
+      items: [
+        item({
+          positionKey: "pos-preferred",
+          expectedMoveUci: "e2e4",
+          score: 30,
+        }),
+        {
+          ...item({
+            positionKey: "pos-other",
+            expectedMoveUci: "g1f3",
+            score: 20,
+          }),
+          openingId: "non-indexed-fixture",
+        },
+      ] as never,
+    });
+
+    expect(result.map((entry) => entry.positionKey)).toEqual(["pos-other"]);
+  });
 });

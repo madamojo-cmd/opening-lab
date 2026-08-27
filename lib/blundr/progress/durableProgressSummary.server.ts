@@ -2,6 +2,7 @@
 
 import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
 import { normalizeStarterPackId } from "@/lib/blundr/accounts/accountDefaults";
+import { getLocalDateKeyForTimeZone } from "@/lib/blundr/daily-rings/dailyRingDate";
 import { getDefaultStarterPack } from "@/lib/blundr/onboarding/starterPacks";
 import { getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
 import {
@@ -30,10 +31,10 @@ function addDays(dateKey: string, offset: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function dayFromTimestamp(value: unknown): string {
+function dayFromTimestamp(value: unknown, timeZone?: string | null): string {
   const parsed = new Date(String(value ?? ""));
   return Number.isFinite(parsed.valueOf())
-    ? parsed.toISOString().slice(0, 10)
+    ? getLocalDateKeyForTimeZone(parsed, timeZone)
     : "";
 }
 
@@ -148,8 +149,13 @@ export async function loadDurableProgressSummary(input: {
   const week = Array.from({ length: 7 }, (_, index) =>
     addDays(input.todayDateKey, index - 6),
   );
+  const recentDays = Array.from({ length: 28 }, (_, index) =>
+    addDays(input.todayDateKey, index - 27),
+  );
   const weekStart = week[0];
+  const recentStart = recentDays[0];
   const weekStartIso = `${weekStart}T00:00:00.000Z`;
+  const recentStartIso = `${recentStart}T00:00:00.000Z`;
 
   const [
     profile,
@@ -166,7 +172,7 @@ export async function loadDurableProgressSummary(input: {
     admin
       .from("blundr_user_profiles")
       .select(
-        "daily_tempo_goal,daily_battery_goal,daily_blundr_goal,daily_blundr_card_goal,selected_starter_pack_id",
+        "daily_tempo_goal,daily_battery_goal,daily_blundr_goal,daily_blundr_card_goal,selected_starter_pack_id,time_zone",
       )
       .eq("user_id", input.userId)
       .maybeSingle(),
@@ -190,7 +196,7 @@ export async function loadDurableProgressSummary(input: {
         "local_date,daily_tempo_goal,daily_tempo_progress,daily_tempo_completed,daily_battery_goal,daily_battery_progress,daily_battery_completed,daily_blundr_goal,daily_blundr_progress,daily_blundr_completed,all_rings_closed,xp_earned,opening_points_earned,updated_at",
       )
       .eq("user_id", input.userId)
-      .gte("local_date", weekStart)
+      .gte("local_date", recentStart)
       .lte("local_date", input.todayDateKey),
     admin
       .from("blundr_completion_grants")
@@ -219,7 +225,7 @@ export async function loadDurableProgressSummary(input: {
       .from("blundr_daily_attempts")
       .select("attempt_id,created_at,outcome,first_attempt")
       .eq("user_id", input.userId)
-      .gte("created_at", weekStartIso),
+      .gte("created_at", recentStartIso),
     admin
       .from("blundr_minigame_instances")
       .select("instance_id,mini_game_id,first_attempt,updated_at")
@@ -256,6 +262,7 @@ export async function loadDurableProgressSummary(input: {
   const attemptRows = (dailyAttempts.data ?? []) as Row[];
   const minigameRows = (minigames.data ?? []) as Row[];
   const rewardRows = (rewardRolls.data ?? []) as Row[];
+  const timeZone = String(profileRow.time_zone ?? "").trim() || null;
   const today =
     dayRows.find((row) => String(row.local_date) === input.todayDateKey) ?? {};
   const [cardsCompletedToday, reservedDailyCardTarget] = await Promise.all([
@@ -327,7 +334,28 @@ export async function loadDurableProgressSummary(input: {
     const day = dayRows.find((row) => String(row.local_date) === localDate);
     const reviewCount = countBy(
       attemptRows,
-      (row) => dayFromTimestamp(row.created_at) === localDate,
+      (row) => dayFromTimestamp(row.created_at, timeZone) === localDate,
+    );
+    const completionCount = countBy(
+      grantRows,
+      (row) => String(row.local_date) === localDate,
+    );
+    return {
+      localDate,
+      label: localDate.slice(5),
+      hasTraining:
+        completionCount > 0 ||
+        reviewCount > 0 ||
+        Boolean(day?.all_rings_closed),
+      allRingsClosed: Boolean(day?.all_rings_closed),
+      reviewCount,
+    };
+  });
+  const recentDayGrid = recentDays.map((localDate) => {
+    const day = dayRows.find((row) => String(row.local_date) === localDate);
+    const reviewCount = countBy(
+      attemptRows,
+      (row) => dayFromTimestamp(row.created_at, timeZone) === localDate,
     );
     const completionCount = countBy(
       grantRows,
@@ -352,7 +380,7 @@ export async function loadDurableProgressSummary(input: {
       ["move_correct", "move_incorrect"].includes(String(row.taxonomy)),
   );
   const todayAttempts = firstAttemptTrain.filter(
-    (row) => dayFromTimestamp(row.occurred_at) === input.todayDateKey,
+    (row) => dayFromTimestamp(row.occurred_at, timeZone) === input.todayDateKey,
   );
   const correct = countBy(
     todayAttempts,
@@ -424,12 +452,12 @@ export async function loadDurableProgressSummary(input: {
   );
   const reviewToday = countBy(
     attemptRows,
-    (row) => dayFromTimestamp(row.created_at) === input.todayDateKey,
+    (row) => dayFromTimestamp(row.created_at, timeZone) === input.todayDateKey,
   );
   const minigamesToday = countBy(
     minigameRows,
     (row) =>
-      dayFromTimestamp(row.updated_at) === input.todayDateKey &&
+      dayFromTimestamp(row.updated_at, timeZone) === input.todayDateKey &&
       Boolean(row.first_attempt),
   );
 
@@ -524,6 +552,7 @@ export async function loadDurableProgressSummary(input: {
       totalAllRingsClosedDays: number(streakRow.total_all_rings_closed_days),
       daysTrainedThisWeek: countBy(weekGrid, (day) => day.hasTraining),
       week: weekGrid,
+      recentDays: recentDayGrid,
     },
     trainingVolume: {
       openingRunsToday: openingToday,
@@ -542,7 +571,9 @@ export async function loadDurableProgressSummary(input: {
         (row) => row.source === "daily_blundr_deck_completed",
       ),
       reviewAttemptsToday: reviewToday,
-      reviewAttemptsWeek: attemptRows.length,
+      reviewAttemptsWeek: countBy(attemptRows, (row) =>
+        week.includes(dayFromTimestamp(row.created_at, timeZone)),
+      ),
       minigamesToday,
       minigamesWeek: countBy(minigameRows, (row) => Boolean(row.first_attempt)),
     },

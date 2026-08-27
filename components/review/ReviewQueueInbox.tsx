@@ -195,7 +195,8 @@ export function ReviewQueueInbox() {
             No queued mistakes
           </div>
           <p className="mt-2 text-[12px] leading-[1.5] text-stone-600">
-            When Blundr spots positions you keep missing, they show up here.
+            Done for now. New misses and the next local day&apos;s eligible
+            reviews will show up here.
           </p>
         </div>
       ) : (

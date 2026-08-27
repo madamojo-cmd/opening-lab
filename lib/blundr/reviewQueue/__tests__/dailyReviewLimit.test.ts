@@ -1,0 +1,113 @@
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("server-only", () => ({}));
+
+import {
+  buildReviewDailyLimitAuthorityKey,
+  countDailyCorrectReviewCompletionsByAuthority,
+  MAX_DAILY_REVIEW_COMPLETIONS_PER_AUTHORITY,
+} from "../dailyReviewLimit.server";
+
+const canonicalFen =
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+const key = buildReviewDailyLimitAuthorityKey({
+  openingId: "italian-white",
+  canonicalFen,
+  repertoireSide: "white",
+});
+
+function correctRow(overrides: Record<string, unknown> = {}) {
+  return {
+    source: "review",
+    taxonomy: "move_correct",
+    opening_id: "italian-white",
+    canonical_fen: canonicalFen,
+    repertoire_side: "white",
+    occurred_at: "2026-08-27T15:00:00.000Z",
+    deleted_at: null,
+    ...overrides,
+  };
+}
+
+describe("daily Review completion limit", () => {
+  it("counts only server-confirmed correct Review completions for the local day", () => {
+    const counts = countDailyCorrectReviewCompletionsByAuthority({
+      localDate: "2026-08-27",
+      timeZone: "UTC",
+      rows: [
+        correctRow(),
+        correctRow({ taxonomy: "move_incorrect" }),
+        correctRow({ source: "train" }),
+        correctRow({ deleted_at: "2026-08-27T15:01:00.000Z" }),
+        correctRow({ occurred_at: "2026-08-26T23:00:00.000Z" }),
+      ],
+    });
+
+    expect(counts.get(key ?? "")).toBe(1);
+  });
+
+  it("allows the fourth completion after three same-day completions", () => {
+    const counts = countDailyCorrectReviewCompletionsByAuthority({
+      localDate: "2026-08-27",
+      timeZone: "UTC",
+      rows: [correctRow(), correctRow(), correctRow()],
+    });
+
+    expect((counts.get(key ?? "") ?? 0) < MAX_DAILY_REVIEW_COMPLETIONS_PER_AUTHORITY).toBe(true);
+  });
+
+  it("defers after four same-day completions and keeps authority keys separate", () => {
+    const otherFen =
+      "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1";
+    const otherKey = buildReviewDailyLimitAuthorityKey({
+      openingId: "italian-white",
+      canonicalFen: otherFen,
+      repertoireSide: "white",
+    });
+    const counts = countDailyCorrectReviewCompletionsByAuthority({
+      localDate: "2026-08-27",
+      timeZone: "UTC",
+      rows: [
+        correctRow(),
+        correctRow(),
+        correctRow(),
+        correctRow(),
+        correctRow({ canonical_fen: otherFen }),
+      ],
+    });
+
+    expect(counts.get(key ?? "")).toBe(4);
+    expect(
+      (counts.get(key ?? "") ?? 0) >=
+        MAX_DAILY_REVIEW_COMPLETIONS_PER_AUTHORITY,
+    ).toBe(true);
+    expect(counts.get(otherKey ?? "")).toBe(1);
+  });
+
+  it("uses the persisted timezone day and restores eligibility on the next local day", () => {
+    const countsToday = countDailyCorrectReviewCompletionsByAuthority({
+      localDate: "2026-08-27",
+      timeZone: "America/Los_Angeles",
+      rows: [
+        correctRow({ occurred_at: "2026-08-28T06:55:00.000Z" }),
+        correctRow({ occurred_at: "2026-08-28T06:56:00.000Z" }),
+        correctRow({ occurred_at: "2026-08-28T06:57:00.000Z" }),
+        correctRow({ occurred_at: "2026-08-28T06:58:00.000Z" }),
+      ],
+    });
+    const countsTomorrow = countDailyCorrectReviewCompletionsByAuthority({
+      localDate: "2026-08-28",
+      timeZone: "America/Los_Angeles",
+      rows: [
+        correctRow({ occurred_at: "2026-08-28T06:55:00.000Z" }),
+        correctRow({ occurred_at: "2026-08-28T06:56:00.000Z" }),
+        correctRow({ occurred_at: "2026-08-28T06:57:00.000Z" }),
+        correctRow({ occurred_at: "2026-08-28T06:58:00.000Z" }),
+      ],
+    });
+
+    expect(countsToday.get(key ?? "")).toBe(4);
+    expect(countsTomorrow.get(key ?? "") ?? 0).toBe(0);
+  });
+});

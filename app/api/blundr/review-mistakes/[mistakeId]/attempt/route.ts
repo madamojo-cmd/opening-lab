@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { BLUNDR_RUNTIME_VERSION, type PositionIdentity } from "@/lib/blundr/contracts";
 import { requireGameDataUser, loadOpeningAccess } from "@/lib/blundr/gameData/gameDataService";
 import { appendLearningEventV2 } from "@/lib/blundr/learning/core/learningEventService.server";
+import { isReviewDailyLimitReached } from "@/lib/blundr/reviewQueue/dailyReviewLimit.server";
 import { loadReviewMistakeSolution, loadReviewMistakeSnapshot } from "@/lib/blundr/reviewQueue/reviewMistakeRepository.server";
 
 export const dynamic = "force-dynamic";
@@ -78,6 +79,24 @@ export async function POST(
   if (!access || access.decision !== "active")
     return NextResponse.json({ ok: false, error: "opening_locked" }, { status: 403 });
 
+  if (
+    correct &&
+    (await isReviewDailyLimitReached({
+      userId: user.userId,
+      identity: {
+        openingId: solution.data.openingId,
+        canonicalFen: solution.data.canonicalFen,
+        repertoireSide: solution.data.repertoireSide,
+      },
+      now,
+    }))
+  ) {
+    return NextResponse.json(
+      { ok: false, error: "daily_review_limit_reached" },
+      { status: 409 },
+    );
+  }
+
   const position: PositionIdentity = {
     positionKey: solution.data.positionKey,
     canonicalFen: solution.data.canonicalFen,
@@ -132,4 +151,3 @@ export async function POST(
     },
   });
 }
-

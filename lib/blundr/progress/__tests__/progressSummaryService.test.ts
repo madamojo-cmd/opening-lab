@@ -44,7 +44,7 @@ function installLocalStorageMock(): () => void {
 const restore = installLocalStorageMock();
 try {
   const userId = "progress-user";
-  const now = new Date().toISOString();
+  const now = "2026-08-27T15:30:00.000Z";
   const localDate = now.slice(0, 10);
 
   resetLocalAccountState(userId);
@@ -56,13 +56,13 @@ try {
     dailyBlundrGoal: 1,
     updatedAt: now,
   });
-  upsertLocalDailyRetentionProgress(
-    createDefaultDailyRetentionProgress(userId, localDate, {
-      dailyTempoGoal: 2,
-      dailyBatteryGoal: 1,
-      dailyBlundrGoal: 1,
-    }, now),
-  );
+  const todayRetention = createDefaultDailyRetentionProgress(userId, localDate, {
+    dailyTempoGoal: 2,
+    dailyBatteryGoal: 1,
+    dailyBlundrGoal: 1,
+  }, now);
+  todayRetention.rings.dailyTempo.progress = 1;
+  upsertLocalDailyRetentionProgress(todayRetention);
 
   writeDailyBlundrReviewAttempts([
     {
@@ -127,6 +127,18 @@ try {
   assert.equal(summary.nextActions.length >= 3, true);
   assert.equal(summary.repertoire.unlockedOpenings >= 0, true);
   assert.equal(summary.streak.week.length, 7);
+  assert.equal(summary.streak.recentDays.length, 28);
+  assert.deepEqual(
+    summary.streak.recentDays.map((day) => day.localDate),
+    Array.from({ length: 28 }, (_, index) => {
+      const date = new Date("2026-08-27T12:00:00.000Z");
+      date.setUTCDate(date.getUTCDate() + index - 27);
+      return date.toISOString().slice(0, 10);
+    }),
+  );
+  assert.equal(summary.streak.recentDays[0].hasTraining, false);
+  assert.equal(summary.streak.recentDays[0].reviewCount, 0);
+  assert.equal(summary.streak.daysTrainedThisWeek, 1);
   assert.equal(getLocalTrainingProfile(userId)?.dailyTempoGoal, 2);
   assert.equal(summary.recentActivity.some((item) => item.key === "minigames"), true);
 

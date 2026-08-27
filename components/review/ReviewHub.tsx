@@ -9,6 +9,7 @@ import {
   getDailyMiniGameDefinition,
 } from "@/lib/blundr/daily/miniGames/dailyMiniGameRegistry";
 import { ReviewTabDailyBlundrPanel } from "@/components/daily/ReviewTabDailyBlundrPanel";
+import { ReviewStreakConsistencyCard } from "@/components/progress/StreakConsistencyCard";
 import { ReviewQueueInbox } from "@/components/review/ReviewQueueInbox";
 
 type ReviewHubProps = {
@@ -99,9 +100,12 @@ export function ReviewHub({
       ) : null}
 
       <div className="grid items-start gap-[17px] xl:grid-cols-2">
-        <ReviewTabDailyBlundrPanel
-          enabled={capabilities?.dailyEnabled ?? null}
-        />
+        <div className="space-y-[17px]">
+          <ReviewTabDailyBlundrPanel
+            enabled={capabilities?.dailyEnabled ?? null}
+          />
+          <ReviewStreakConsistencyCard />
+        </div>
 
         <section
           className="flex flex-col rounded-[22px] border border-stone-200/80 bg-white/90 p-5 shadow-[0_16px_34px_rgba(16,20,17,0.07)] min-[821px]:h-[clamp(30rem,calc(100dvh-14rem),32rem)]"

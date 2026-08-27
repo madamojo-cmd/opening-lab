@@ -8,6 +8,11 @@ import {
   hasPreferredMoveAuthorityOpening,
   isPreferredMoveForAuthority,
 } from "@/lib/blundr/openings/preferredMoveAuthority";
+import {
+  buildReviewDailyLimitAuthorityKey,
+  loadDailyReviewCompletionCounts,
+  MAX_DAILY_REVIEW_COMPLETIONS_PER_AUTHORITY,
+} from "./dailyReviewLimit.server";
 import type {
   ReviewQueueItem,
   ReviewQueueLifecycleState,
@@ -89,6 +94,7 @@ export function filterReviewQueueItemsForPreferredAuthority(
   input: {
     items: InternalReviewQueueItem[];
     includeResolved: boolean;
+    deferredAuthorityKeys?: ReadonlySet<string>;
   },
 ): ReviewQueueItem[] {
   const grouped = new Map<string, InternalReviewQueueItem[]>();
@@ -153,6 +159,10 @@ export function filterReviewQueueItemsForPreferredAuthority(
       (latest, item) => latestTimestamp(latest, item.lastMissedAt),
       null,
     );
+    const dailyLimitKey = buildReviewDailyLimitAuthorityKey(representative);
+    if (dailyLimitKey && input.deferredAuthorityKeys?.has(dailyLimitKey)) {
+      continue;
+    }
     representatives.push(publicItem(representative));
   }
 
@@ -263,9 +273,23 @@ export async function loadReviewQueuePage(input: {
     }
   }
 
+  const dailyCompletionCounts = await loadDailyReviewCompletionCounts({
+    client,
+    userId: input.userId,
+    now: generatedAt,
+  });
+  const deferredAuthorityKeys = new Set(
+    Array.from(dailyCompletionCounts.counts.entries())
+      .filter(
+        ([, count]) => count >= MAX_DAILY_REVIEW_COMPLETIONS_PER_AUTHORITY,
+      )
+      .map(([key]) => key),
+  );
+
   const filteredItems = filterReviewQueueItemsForPreferredAuthority({
     items,
     includeResolved: input.includeResolved,
+    deferredAuthorityKeys,
   });
   const pageItems = filteredItems.slice(requestedFrom, requestedTo);
 

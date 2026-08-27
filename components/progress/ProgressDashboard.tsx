@@ -5,7 +5,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   BookOpen,
   ChevronRight,
-  Flame,
   RefreshCw,
   Sparkles,
   Target,
@@ -18,6 +17,7 @@ import { getLocalDateKey } from "@/lib/blundr/daily-rings/dailyRingDate";
 import { BLUNDR_LOCAL_DEMO_USER_ID } from "@/lib/blundr/persistence/persistenceKeys";
 import type { BlundrProgressSummary } from "@/lib/blundr/progress/progressTypes";
 import { NestedDailyRings } from "@/components/daily-rings/NestedDailyRings";
+import { StreakConsistencyCard } from "@/components/progress/StreakConsistencyCard";
 import {
   formatProgressPercentage,
   formatRepertoirePoints,
@@ -37,10 +37,10 @@ function classNames(
   return classes.filter(Boolean).join(" ");
 }
 
-function buildPendingWeek(): BlundrProgressSummary["streak"]["week"] {
-  return Array.from({ length: 7 }, (_, index) => ({
+function buildPendingRecentDays(): BlundrProgressSummary["streak"]["recentDays"] {
+  return Array.from({ length: 28 }, (_, index) => ({
     localDate: `pending-${index}`,
-    label: "—",
+    label: "--",
     hasTraining: false,
     allRingsClosed: false,
     reviewCount: 0,
@@ -48,7 +48,8 @@ function buildPendingWeek(): BlundrProgressSummary["streak"]["week"] {
 }
 
 function buildEmptySummary(): BlundrProgressSummary {
-  const week = buildPendingWeek();
+  const recentDays = buildPendingRecentDays();
+  const week = recentDays.slice(-7);
 
   return {
     userId: BLUNDR_LOCAL_DEMO_USER_ID,
@@ -90,6 +91,7 @@ function buildEmptySummary(): BlundrProgressSummary {
       totalAllRingsClosedDays: 0,
       daysTrainedThisWeek: 0,
       week,
+      recentDays,
     },
     trainingVolume: {
       openingRunsToday: 0,
@@ -385,42 +387,10 @@ export function ProgressDashboard({
           </div>
         </section>
 
-        <section className={classNames(styles.panel, styles.span5)}>
-          <SectionHeader
-            kicker="STREAK & CONSISTENCY"
-            title={`${summary.streak.currentDays} days`}
-            copy={`Best: ${summary.streak.bestDays} · ${summary.streak.daysTrainedThisWeek} days trained this week`}
-          />
-
-          <div className={styles.streakLayout}>
-            <div className={styles.streakPanel}>
-              <div className={styles.weekGrid}>
-                {summary.streak.week.map((day) => (
-                  <div
-                    key={day.localDate}
-                    className={classNames(
-                      styles.weekDay,
-                      day.allRingsClosed
-                        ? styles.weekDayClosed
-                        : day.hasTraining
-                          ? styles.weekDayTraining
-                          : styles.weekDayRest,
-                    )}
-                  >
-                    <div className={styles.weekDayLabel}>{day.label}</div>
-                    <div className={styles.weekDayMeta}>
-                      {day.allRingsClosed
-                        ? "All rings"
-                        : day.hasTraining
-                          ? `${day.reviewCount} review${day.reviewCount === 1 ? "" : "s"}`
-                          : "Rest"}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
+        <StreakConsistencyCard
+          streak={summary.streak}
+          className={styles.span5}
+        />
 
         <section className={classNames(styles.panel, styles.span12)}>
           <SectionHeader kicker="Training volume" />

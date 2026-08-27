@@ -323,7 +323,7 @@
 .weekDay {
   min-width: 0;
   border-radius: 14px;
-  padding: 10px 8px;
+  padding: 8px 5px;
   text-align: center;
 }
 
@@ -344,17 +344,18 @@
 }
 
 .weekDayLabel {
-  font-size: 0.63rem;
+  font-size: 0.6rem;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.08em;
   line-height: 1.2;
   text-transform: uppercase;
 }
 
 .weekDayMeta {
-  margin-top: 6px;
-  font-size: 0.67rem;
+  margin-top: 5px;
+  font-size: 0.58rem;
   line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .volumeGrid {

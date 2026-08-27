@@ -24,6 +24,20 @@ const progressDashboard = readFileSync(
   new URL("../../components/progress/ProgressDashboard.tsx", import.meta.url),
   "utf8",
 );
+const streakConsistencyCard = readFileSync(
+  new URL(
+    "../../components/progress/StreakConsistencyCard.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const reviewAttemptRoute = readFileSync(
+  new URL(
+    "../../app/api/blundr/review-mistakes/[mistakeId]/attempt/route.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 describe("Review and Progress presentation migration", () => {
   it("removes nested phone-shell wrappers from the routes", () => {
@@ -45,6 +59,7 @@ describe("Review and Progress presentation migration", () => {
     expect(progressDashboard).not.toMatch(/!embedded\s*\?/);
     expect(progressDashboard).toContain('aria-label="Refresh progress"');
     expect(progressDashboard).toContain("NestedDailyRings");
+    expect(progressDashboard).toContain("StreakConsistencyCard");
     expect(progressDashboard).toContain("refreshSummary");
     expect(progressDashboard).toContain("authenticatedApiFetch");
     expect(progressDashboard).toContain("getLocalDateKey");
@@ -52,6 +67,24 @@ describe("Review and Progress presentation migration", () => {
     expect(progressDashboard).toContain('window.addEventListener("storage"');
     expect(progressDashboard).toContain('window.addEventListener("focus"');
     expect(progressDashboard).toContain('window.removeEventListener("storage"');
+  });
+
+  it("shares the 28-day streak card between Progress and Review", () => {
+    expect(progressDashboard).toContain("StreakConsistencyCard");
+    expect(reviewHub).toContain("ReviewStreakConsistencyCard");
+    expect(streakConsistencyCard).toContain("STREAK & CONSISTENCY");
+    expect(streakConsistencyCard).toContain("length === 28");
+    expect(streakConsistencyCard).toContain("Array.from({ length: 28 }");
+    expect(streakConsistencyCard).toContain("week: recentDays.slice(-7)");
+  });
+
+  it("keeps direct Review replay guarded by the daily authority cap", () => {
+    expect(reviewAttemptRoute).toContain("isReviewDailyLimitReached");
+    expect(reviewAttemptRoute).toContain("daily_review_limit_reached");
+    expect(reviewAttemptRoute).toContain("status: 409");
+    expect(reviewAttemptRoute.indexOf("daily_review_limit_reached")).toBeLessThan(
+      reviewAttemptRoute.lastIndexOf("appendLearningEventV2"),
+    );
   });
 
   it("keeps the Progress route shell-native", () => {
