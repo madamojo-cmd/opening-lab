@@ -13,6 +13,13 @@ const reviewHub = readFileSync(
   new URL("../../components/review/ReviewHub.tsx", import.meta.url),
   "utf8",
 );
+const reviewTabDailyBlundrPanel = readFileSync(
+  new URL(
+    "../../components/daily/ReviewTabDailyBlundrPanel.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const progressDashboard = readFileSync(
   new URL("../../components/progress/ProgressDashboard.tsx", import.meta.url),
   "utf8",
@@ -54,11 +61,41 @@ describe("Review and Progress presentation migration", () => {
   });
 
   it("preserves the distinct Review daily access states and capability wiring", () => {
-    expect(reviewHub).toMatch(/capabilities === null\s*\?\s*"Checking"/);
-    expect(reviewHub).toMatch(/capabilities\.dailyEnabled === true\s*\?\s*"On"/);
-    expect(reviewHub).toMatch(/:\s*"Off"/);
     expect(reviewHub).toContain(
       "enabled={capabilities?.dailyEnabled ?? null}",
     );
+    expect(reviewTabDailyBlundrPanel).toMatch(
+      /enabled === null\s*\?\s*"Checking Daily Blundr/,
+    );
+    expect(reviewTabDailyBlundrPanel).toMatch(
+      /enabled === false\s*\?\s*"Daily Blundr is unavailable/,
+    );
+    expect(reviewTabDailyBlundrPanel).toMatch(
+      /loadFailed\s*\?\s*"Daily Blundr couldn't load today's deck/,
+    );
+  });
+
+  it("keeps Review queue height bounded only on desktop with an internal item scroller", () => {
+    const reviewQueueCard = reviewHub.match(
+      /<section[\s\S]*?aria-label="Review queue"[\s\S]*?>/,
+    )?.[0] ?? "";
+    expect(reviewHub).toContain("xl:grid-cols-2");
+    expect(reviewQueueCard).toContain("flex flex-col");
+    expect(reviewQueueCard).toContain(
+      "min-[821px]:h-[clamp(30rem,calc(100dvh-14rem),32rem)]",
+    );
+    expect(reviewQueueCard).not.toContain("overflow-y-auto");
+
+    const inbox = readFileSync(
+      new URL("../../components/review/ReviewQueueInbox.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(inbox).toContain("mt-4 flex min-h-0 flex-1 flex-col gap-3");
+    expect(inbox).toContain("data-testid=\"review-queue-scroll-region\"");
+    expect(inbox).toContain("overflow-visible");
+    expect(inbox).toContain("min-[821px]:overflow-y-auto");
+    expect(inbox).toContain("min-[821px]:flex-1");
+    expect(inbox).not.toContain("max-h-[");
+    expect(inbox).not.toContain("sticky top-0");
   });
 });

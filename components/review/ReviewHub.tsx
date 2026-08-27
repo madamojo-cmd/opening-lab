@@ -98,13 +98,13 @@ export function ReviewHub({
         </header>
       ) : null}
 
-      <div className="grid items-start gap-[17px] xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+      <div className="grid items-start gap-[17px] xl:grid-cols-2">
         <ReviewTabDailyBlundrPanel
           enabled={capabilities?.dailyEnabled ?? null}
         />
 
         <section
-          className="rounded-[22px] border border-stone-200/80 bg-white/90 p-5 shadow-[0_16px_34px_rgba(16,20,17,0.07)]"
+          className="flex flex-col rounded-[22px] border border-stone-200/80 bg-white/90 p-5 shadow-[0_16px_34px_rgba(16,20,17,0.07)] min-[821px]:h-[clamp(30rem,calc(100dvh-14rem),32rem)]"
           aria-label="Review queue"
         >
           <div className="text-[10px] font-black uppercase tracking-[0.18em] text-green-800">
