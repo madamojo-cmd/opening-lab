@@ -917,9 +917,11 @@ test("PR-01 keeps the v2 Daily and reward writers disabled in committed profiles
     ) as { featureFlags?: Record<string, unknown> };
     assert.equal(profile.featureFlags?.daily_adaptive_v2, false, profileName);
     assert.equal(profile.featureFlags?.rewards_v2_enabled, false, profileName);
+    const expectedPresentations =
+      profileName === "staging-3.99.json" ? true : false;
     assert.equal(
       profile.featureFlags?.reward_presentations_v2_enabled,
-      false,
+      expectedPresentations,
       profileName,
     );
   }

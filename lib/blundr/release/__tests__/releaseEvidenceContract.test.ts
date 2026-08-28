@@ -24,10 +24,10 @@ test("staging profile requires the isolated production target", () => {
     "daily_mixed_test",
     "daily_adaptive_v2",
     "rewards_v2_enabled",
-    "reward_presentations_v2_enabled",
   ]) {
     assert.equal(profile.featureFlags[disabledUntilAcceptedWriter], false);
   }
+  assert.equal(profile.featureFlags.reward_presentations_v2_enabled, true);
 });
 
 test("canonical release routes are no-store and fail closed", () => {

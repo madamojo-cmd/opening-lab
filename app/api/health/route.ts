@@ -15,6 +15,21 @@ function configured(value: string | undefined): boolean {
   return Boolean(String(value ?? "").trim());
 }
 
+function buildTelemetryHealth(): {
+  ready: boolean;
+  optional: boolean;
+  configured: boolean;
+  delivery: "degraded" | "console_only";
+} {
+  const endpointConfigured = configured(process.env.BLUNDR_TELEMETRY_ENDPOINT);
+  return {
+    ready: false,
+    optional: true,
+    configured: endpointConfigured,
+    delivery: endpointConfigured ? "degraded" : "console_only",
+  };
+}
+
 export async function GET(): Promise<Response> {
   const build = readBlundrBuildIdentity();
   const admin = createBlundrSupabaseAdminClient();
@@ -40,13 +55,12 @@ export async function GET(): Promise<Response> {
     configured(
       process.env.CRON_SECRET ?? process.env.BLUNDR_GAME_DATA_CRON_SECRET,
     );
-  const telemetryReady = configured(process.env.BLUNDR_TELEMETRY_ENDPOINT);
+  const telemetry = buildTelemetryHealth();
   const ready =
     build.ready &&
     databaseReady &&
     remoteMaiaReady &&
-    workerReady &&
-    telemetryReady;
+    workerReady;
 
   const response = NextResponse.json(
     {
@@ -65,7 +79,7 @@ export async function GET(): Promise<Response> {
         database: { ready: databaseReady },
         maia: getRedactedMaiaRuntimeSummary(maiaConfig, maiaHealth),
         worker: { ready: workerReady },
-        telemetry: { ready: telemetryReady },
+        telemetry,
       },
     },
     { status: ready ? 200 : 503 },

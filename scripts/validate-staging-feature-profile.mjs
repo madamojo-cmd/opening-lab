@@ -8,7 +8,7 @@ const DEPRECATED_DAILY_CAPABILITIES = [
   "daily_deep_minigames",
   "daily_mixed_test",
 ];
-const CUMULATIVE_RELEASE_MIGRATION_HEAD = "20260817203000";
+const CUMULATIVE_RELEASE_MIGRATION_HEAD = "20260826130803";
 const migrationHead = (await readdir("supabase/migrations"))
   .filter((file) => file.endsWith(".sql"))
   .sort()
@@ -74,7 +74,6 @@ for (const { path, value: profile } of profiles) {
       profile.onboardingV11 === true &&
       profile.requiresRemoteMaia === true &&
       profile.requiresWorker === true &&
-      profile.requiresTelemetry === true &&
       profile.failureClosed === true,
     `${prefix} profile must require durable storage, production dependencies, and failure-closed flags.`,
   );
@@ -86,14 +85,17 @@ for (const { path, value: profile } of profiles) {
       ),
     `${prefix} Daily deep minigames and atomic mixed test must be declared deprecated and disabled.`,
   );
-  requireValue(
-    profile.featureFlags.daily_adaptive_v2 === false &&
-      profile.featureFlags.rewards_v2_enabled === false &&
-      profile.featureFlags.reward_presentations_v2_enabled === false,
-    `${prefix} new Daily and Rewards v2 controls must default off.`,
-  );
-
   if (profile.profileId === "production-3.99") {
+    requireValue(
+      profile.requiresTelemetry === true,
+      `${prefix} production telemetry requirement must remain explicit.`,
+    );
+    requireValue(
+      profile.featureFlags.daily_adaptive_v2 === false &&
+        profile.featureFlags.rewards_v2_enabled === false &&
+        profile.featureFlags.reward_presentations_v2_enabled === false,
+      `${prefix} new Daily and Rewards v2 controls must default off.`,
+    );
     requireValue(
       profile.releaseId === "blundr-production-3.99" &&
         profile.dailyPolicy === "default_free" &&
@@ -108,6 +110,13 @@ for (const { path, value: profile } of profiles) {
       profile.profileId === "staging-3.99" &&
         profile.releaseId === "blundr-staging-3.99",
       `${prefix} unexpected staging profile identity.`,
+    );
+    requireValue(
+      profile.requiresTelemetry === true &&
+        profile.featureFlags.daily_adaptive_v2 === false &&
+        profile.featureFlags.rewards_v2_enabled === false &&
+        profile.featureFlags.reward_presentations_v2_enabled === true,
+      `${prefix} staging beta profile must keep Daily/Rewards v2 authority off and reward presentations on.`,
     );
   }
 }
