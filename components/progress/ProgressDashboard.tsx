@@ -500,14 +500,14 @@ export function ProgressDashboard({
             </div>
             <p className={styles.recommendationCopy}>
               {summary.repertoire.recommendedOpeningId
-                ? `Opening ID: ${summary.repertoire.recommendedOpeningId}`
+                ? "A focused place to spend your next repertoire session."
                 : "Tempo will surface a target when it has enough data."}
             </p>
           </div>
           <div className={styles.keyValueRow}>
-            <span className={styles.keyValueLabel}>Most trained ID</span>
+            <span className={styles.keyValueLabel}>Most trained opening</span>
             <span className={styles.keyValueValue}>
-              {summary.repertoire.mostTrainedOpeningId ?? "None yet"}
+              {summary.repertoire.mostTrainedOpeningName ?? "None yet"}
             </span>
           </div>
         </section>
@@ -600,8 +600,8 @@ export function ProgressDashboard({
       ) : null}
 
       <div className={styles.sessionFooter}>
-        <span>Last refreshed: {summary.generatedAt}</span>
-        <span>Refreshes this session: {refreshCount}</span>
+        <span>Progress updates after training and review sessions.</span>
+        <span>{refreshCount > 0 ? "Updated this session" : "Ready to update"}</span>
       </div>
     </section>
   );

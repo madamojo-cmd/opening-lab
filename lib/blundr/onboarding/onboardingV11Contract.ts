@@ -1,6 +1,16 @@
 import type { RatingBandId, StarterPackId } from "@/lib/blundr/accounts/accountTypes";
 
-export const ONBOARDING_V11_STEPS = ["welcome", "level", "priorities", "training-loop", "pace", "starter-pack", "training-mode", "plan", "ready"] as const;
+export const ONBOARDING_V11_STEPS = [
+  "welcome",
+  "level",
+  "priorities",
+  "starter-pack",
+  "training-mode",
+  "pace",
+  "line-changes",
+  "review",
+  "ready",
+] as const;
 export type OnboardingV11Step = (typeof ONBOARDING_V11_STEPS)[number];
 export type OnboardingPriority = "remember_openings" | "build_repertoire" | "post_opening_plans" | "review_mistakes" | "prepare_for_games";
 export type OnboardingV11Pace = "light" | "standard" | "focused";

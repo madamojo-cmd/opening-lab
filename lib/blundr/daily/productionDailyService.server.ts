@@ -497,10 +497,10 @@ async function buildReservation(
       side: entry.side,
       why:
         entry.priority > 0.5
-          ? "This position is prioritized from a verified weakness projection."
+          ? "This position comes from an area of your repertoire that needs more work."
           : entry.priority > 0.1
-            ? "This position is prioritized from your authoritative review evidence."
-            : "This position comes from an unlocked, verified opening line.",
+            ? "This position comes from moves you have missed before."
+            : "This position comes from an unlocked opening line.",
       interaction: options?.length ? "choice" : "move",
       options,
       steps: privateSteps?.map(
@@ -541,7 +541,7 @@ async function buildReservation(
       entry,
       "daily_move_recall",
       "Missing Move",
-      "Play the missing move from this verified opening position.",
+      "Play the missing move from this opening position.",
       [primary.moveUci],
       "This move keeps the approved opening plan on track.",
     );
@@ -549,7 +549,7 @@ async function buildReservation(
     if (featureFlags.daily_plan_recall && labels.length >= 2) {
       const question = {
         type: "next_plan" as const,
-        prompt: "Which move matches the verified plan for this position?",
+        prompt: "Which move keeps your opening plan on track?",
         choices: labels.map((move) => ({
           id: move.moveUci,
           label: legalByUci.get(move.moveUci) ?? move.moveUci,
@@ -563,7 +563,7 @@ async function buildReservation(
           version: runtime.manifest.packageId,
         }),
         explanation:
-          "The selected move is the verified runtime repertoire choice.",
+          "This move keeps your repertoire plan on track.",
       };
       const built = buildPlanRecall({
         openingId: entry.node.openingId,
@@ -609,9 +609,9 @@ async function buildReservation(
           entry,
           built.activityId,
           "Candidate choice",
-          "Choose the move that best preserves the verified plan.",
+          "Choose the move that best preserves your opening plan.",
           [primary.moveUci],
-          "The selected move is the verified runtime repertoire choice.",
+          "This move keeps your repertoire plan on track.",
           options,
           built.solution.acceptedIds,
         );

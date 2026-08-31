@@ -153,7 +153,24 @@ export function AppAuthForm({ mode }: { mode: "login" | "signup" }) {
                   onChange={(event) => setAgeConfirmed(event.target.checked)}
                   required
                 />
-                <span>I confirm that I am at least 13 years old.</span>
+                <span>
+                  I agree to the{" "}
+                  <Link
+                    className="font-bold text-green-800 underline-offset-4 hover:underline"
+                    href="/terms"
+                  >
+                    Terms of Service
+                  </Link>{" "}
+                  and{" "}
+                  <Link
+                    className="font-bold text-green-800 underline-offset-4 hover:underline"
+                    href="/privacy"
+                  >
+                    Privacy Policy
+                  </Link>
+                  , and I confirm that I meet Blundr&rsquo;s minimum age
+                  requirement.
+                </span>
               </label>
             ) : null}
 

@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { AppShell, type AppShellNavKey } from "./AppShell";
+import { useOnboardingAuthSession } from "@/lib/blundr/onboarding/useOnboardingAuthSession";
 
 const EXEMPT = [
   "/signup",
@@ -45,6 +46,8 @@ function routeEyebrow(pathname: string): string | undefined {
 
 export function ResponsiveAppShellGate({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "/";
+  const auth = useOnboardingAuthSession();
+  if (pathname === "/" && auth.status !== "authenticated") return <>{children}</>;
   if (
     EXEMPT.some(
       (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),

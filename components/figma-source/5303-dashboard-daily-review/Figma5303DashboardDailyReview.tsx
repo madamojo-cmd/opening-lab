@@ -219,8 +219,8 @@ function HomeTrainingCard({
               Close your daily rings.
             </h2>
             <p className="mt-2 max-w-xl text-[11px] leading-[1.55] text-stone-600">
-              The canonical three-ring widget stays intact while today&apos;s
-              real Tempo, Battery and Blundr progress stays visible.
+              Tempo, Battery, and Daily Blundr show the work that keeps your
+              training habit moving.
             </p>
           </div>
           <span className="rounded-full bg-amber-50 px-3 py-2 text-[11px] font-black text-amber-800 ring-1 ring-amber-200">
@@ -301,7 +301,7 @@ function HomeTrainingCard({
               <p className="mt-1 text-[11px] leading-[1.5] text-stone-600">
                 {remainingCount === 0
                   ? "Keep the loop visible and return when the next day opens."
-                  : "Continue the production flow that owns this ring’s progress."}
+                  : "Continue training to close your next ring."}
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">

@@ -21,6 +21,7 @@ const EXEMPT_PREFIXES = [
   "/acceptable-use",
   "/subscription-terms",
 ];
+const SIGNED_OUT_PUBLIC_PATHS = ["/"];
 
 export function OnboardingRouteGate({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "/";
@@ -32,8 +33,13 @@ export function OnboardingRouteGate({ children }: { children: ReactNode }) {
   const exempt = EXEMPT_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
+  const signedOutPublicPath = SIGNED_OUT_PUBLIC_PATHS.includes(pathname);
   useEffect(() => {
     if (!isOnboardingV11Enabled() || exempt) {
+      setChecked(true);
+      return;
+    }
+    if (signedOutPublicPath && auth.status !== "authenticated") {
       setChecked(true);
       return;
     }
@@ -61,7 +67,13 @@ export function OnboardingRouteGate({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [auth.status, exempt, pathname, requestVersion, router]);
+  }, [auth.status, exempt, pathname, requestVersion, router, signedOutPublicPath]);
+  if (
+    isOnboardingV11Enabled() &&
+    signedOutPublicPath &&
+    auth.status !== "authenticated"
+  )
+    return <>{children}</>;
   if (isOnboardingV11Enabled() && !exempt && auth.status === "loading")
     return <main className="min-h-screen bg-stone-50" aria-busy="true" />;
   if (

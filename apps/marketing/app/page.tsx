@@ -1,3 +1,109 @@
-import { Cta, PageIntro, Placeholder } from "../components/MarketingShell";
-import { appCta } from "../lib/site";
-export default function Home(){return <><section className="hero"><p className="eyebrow">Personalized chess training</p><h1>Train the chess you actually play.</h1><p className="lede">Blundr transforms your real games and opening repertoire into a personalized daily training plan, so every session targets the positions and decisions that matter most.</p><Cta source="homepage"/> <a href="/how-it-works">See how Blundr works</a><Placeholder label="Product visual"/></section><section className="section"><h2>Study less randomly. Train with a reason.</h2><p>Connect your games, identify recurring patterns, train targeted positions, review at the right time, and track mastery.</p><div className="grid">{["Connect","Identify","Train","Review","Track mastery"].map(x=><article className="card" key={x}><h3>{x}</h3><p className="muted">A connected step in your improvement loop.</p></article>)}</div></section><section className="section"><h2>Daily Blundr keeps the habit connected.</h2><p>Tempo reps, Battery positions, and spaced Daily Blundr activities turn your repertoire and findings into a repeatable session.</p><a href="/daily-blundr">Explore Daily Blundr</a></section><section className="section"><h2>Built for deliberate improvement</h2><p>Real-game findings, repertoire training, Mastery Map insights, a Review Queue, and three focused standalone minigames support the work.</p><a href="/features">See all features</a></section><section className="section"><h2>Start useful, then make the plan yours.</h2><div className="grid"><article className="card"><h3>Blundr Free</h3><p>One starter repertoire, metered training, one provider sample, and a rotating daily minigame.</p></article><article className="card"><h3>Blundr Pro</h3><p>Complete personalization, all openings, unlimited reviews, both providers, and all three minigames.</p></article></div><p><a href="/pricing">Compare Free and Pro</a></p></section><section className="section"><h2>Questions, answered plainly.</h2><details><summary>Do I need to connect a provider?</summary><p>No. You can start without connecting Chess.com or Lichess. Blundr never needs your provider password.</p></details><details><summary>Does Blundr guarantee rating improvement?</summary><p>No. Blundr is an educational training service; progress depends on practice and many factors.</p></details><p><a href="/support">Visit support</a></p></section><section className="section"><h2>Build a training habit around your games.</h2><Cta source="homepage"/></section></>}
+import { Cta } from "../components/MarketingShell";
+
+const ASSET_BASE = "/assets/landing";
+
+const sections = [
+  {
+    id: "daily",
+    eyebrow: "Daily practice",
+    headline: "The right positions, every day.",
+    body: "Daily Blundr turns your repertoire and weak spots into focused positions. Make the move first. Then review the answer and keep your training on track.",
+    image: "daily_move_recall_chess_trainer.png",
+    alt: "Daily Blundr move recall trainer",
+  },
+  {
+    id: "review",
+    eyebrow: "Review",
+    headline: "Mistakes become your review.",
+    body: "Blundr brings back the positions you miss so weak spots turn into moves you actually remember.",
+    image: "chess_replay_training_dashboard.png",
+    alt: "Blundr replay dashboard for a missed move",
+  },
+  {
+    id: "repertoire",
+    eyebrow: "Repertoire mastery",
+    headline: "Build a repertoire you actually understand.",
+    body: "Track opening mastery, spot weak branches, and know what to train next.",
+    image: "italian_game_mastery_dashboard.png",
+    alt: "Italian Game mastery dashboard",
+  },
+  {
+    id: "habit",
+    eyebrow: "Consistency",
+    headline: "Train a little every day. Improve a lot over time.",
+    body: "Close your daily rings, keep your streak alive, and always know the next best action.",
+    image: "daily_rings_training_dashboard.png",
+    alt: "Daily rings training dashboard",
+  },
+];
+
+function ProductImage({ image, alt }: { image: string; alt: string }) {
+  return (
+    <div className="launch-media">
+      <img src={`${ASSET_BASE}/${image}`} alt={alt} />
+    </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <>
+      <section className="launch-hero">
+        <div>
+          <p className="eyebrow">Opening training for real games</p>
+          <h1>Learn the opening. Know what to do when it changes.</h1>
+          <p className="lede">
+            Blundr trains the positions behind your repertoire, brings back the moves you miss, and helps you keep playing when your opponent leaves the line.
+          </p>
+          <p className="launch-actions">
+            <Cta source="homepage" />
+            <a href="#how-it-works">See how it works</a>
+          </p>
+        </div>
+        <div className="launch-hero-media">
+          <img src={`${ASSET_BASE}/interactive_chess_training_board.png`} alt="Interactive chess training board" />
+          <img src={`${ASSET_BASE}/italian_game_tempo_cue_card.png`} alt="Italian Game tempo cue card" />
+        </div>
+      </section>
+
+      <section id="how-it-works" className="launch-section">
+        <div>
+          <p className="eyebrow">Why it matters</p>
+          <h2>Your opponent won't follow your study file.</h2>
+          <p>Memorizing one line is not enough. Blundr helps you understand the position, respond to common continuations, and stay comfortable when the game changes.</p>
+        </div>
+        <ProductImage image="interactive_chess_training_board.png" alt="Blundr board for opening practice" />
+      </section>
+
+      {sections.map((section, index) => (
+        <section key={section.id} id={section.id} className={`launch-section ${index % 2 ? "reverse" : ""}`}>
+          <div>
+            <p className="eyebrow">{section.eyebrow}</p>
+            <h2>{section.headline}</h2>
+            <p>{section.body}</p>
+          </div>
+          <ProductImage image={section.image} alt={section.alt} />
+        </section>
+      ))}
+
+      <section id="rewards" className="launch-section">
+        <div>
+          <p className="eyebrow">Momentum</p>
+          <h2>Progress should feel rewarding.</h2>
+          <p>Close your rings, earn rewards, and keep momentum moving.</p>
+        </div>
+        <ProductImage image="blundr_common_reward_popup.png" alt="Blundr reward popup" />
+      </section>
+
+      <section className="launch-final">
+        <div>
+          <p className="eyebrow">Start now</p>
+          <h2>Start building a stronger opening game.</h2>
+          <p>Train smarter openings, review the moves you miss, and build a repertoire that holds up in real games.</p>
+          <Cta source="homepage" />
+        </div>
+        <ProductImage image="daily_rings_training_dashboard.png" alt="Daily rings dashboard" />
+      </section>
+    </>
+  );
+}

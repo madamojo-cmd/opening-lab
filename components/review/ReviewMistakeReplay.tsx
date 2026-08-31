@@ -50,8 +50,28 @@ function formatTimestamp(value: string | null): string {
   if (!value) return "unknown";
   const parsed = new Date(value);
   return Number.isFinite(parsed.valueOf())
-    ? `${parsed.toISOString().replace("T", " ").slice(0, 16)} UTC`
+    ? parsed.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
     : "unknown";
+}
+
+function formatOpeningLabel(value: string | null): string {
+  const text = String(value ?? "").trim();
+  if (!text) return "Unknown opening";
+  return text
+    .replace(/-(white|black)$/i, "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatCategoryLabel(value: string): string {
+  if (value === "opening_move") return "Opening recall";
+  return value
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function badgeClass(state: string): string {
@@ -114,7 +134,7 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
 
   const title =
     readySnapshot
-      ? `${readySnapshot.openingId ?? "Unknown opening"} · ${readySnapshot.repertoireSide === "unknown" ? "Unknown side" : readySnapshot.repertoireSide === "white" ? "White" : "Black"}`
+      ? `${formatOpeningLabel(readySnapshot.openingId)} · ${readySnapshot.repertoireSide === "unknown" ? "Unknown side" : readySnapshot.repertoireSide === "white" ? "White" : "Black"}`
       : "Mistake replay";
 
   const demonstratedMoveUci = reveal?.expectedMoveUci ?? confirmedMoveUci;
@@ -345,7 +365,7 @@ export function ReviewMistakeReplay({ mistakeId }: { mistakeId: string }) {
               Find the move you missed.
             </div>
             <div className="mt-2 text-[12px] leading-[1.55] text-stone-600">
-              {snapshot.category ? `Category: ${snapshot.category}. ` : null}
+              {snapshot.category ? `Focus: ${formatCategoryLabel(snapshot.category)}. ` : null}
               Misses: {Math.max(0, snapshot.missCount ?? 0)}. Last missed:{" "}
               {formatTimestamp(snapshot.lastMissedAt)}.
             </div>

@@ -22,6 +22,13 @@ export type OpeningDetailFixture = {
   hasRealGameData: boolean;
 };
 
+function formatBranchCategory(value: string): string {
+  if (value === "opening_move") return "Opening recall";
+  return value
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 export function OpeningDetailShell({
   fixture,
 }: {
@@ -93,7 +100,7 @@ export function OpeningDetailShell({
                     className="rounded-2xl border border-stone-200 p-3 text-sm"
                   >
                     <span className="font-bold">
-                      {branch.category.replaceAll("_", " ")}
+                      {formatBranchCategory(branch.category)}
                     </span>
                     <span className="ml-2 text-stone-500">
                       {Math.round(branch.score * 100)}% priority

@@ -53,6 +53,7 @@ import { compileVisualRecipe } from "@/lib/blundr/visualRecipe/visualRecipeCompi
 import { useVisualRecipePlayback } from "@/components/board/useVisualRecipePlayback";
 import { ProjectiveTacticalOverlay } from "@/components/board/ProjectiveTacticalOverlay";
 import { ProfileSettingsIcon } from "@/components/navigation/ProfileSettingsIcon";
+import { BlundrLandingPage } from "@/components/marketing/BlundrLandingPage";
 import { TempoDailyBlundrCard } from "@/components/daily/TempoDailyBlundrCard";
 import { ReviewTabDailyBlundrPanel } from "@/components/daily/ReviewTabDailyBlundrPanel";
 import { DailyRingsCard } from "@/components/daily-rings/DailyRingsCard";
@@ -269,6 +270,7 @@ import {
   writeLocalBoardPreferences,
 } from "@/lib/blundr/board/boardPreferenceService";
 import { shouldShowOnboarding } from "@/lib/blundr/onboarding/onboardingRouting";
+import { useOnboardingAuthSession } from "@/lib/blundr/onboarding/useOnboardingAuthSession";
 import { getRatingBandLabel } from "@/lib/blundr/onboarding/ratingBand";
 import { loadRepertoireProgress } from "@/lib/blundr/repertoire/repertoireProgressService";
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
@@ -15166,7 +15168,19 @@ function BlundrApp({
   );
 }
 
-export default BlundrApp;
+export default function HomePage({
+  initialTab = "home",
+  initialOpeningId = null,
+}: {
+  initialTab?: Tab;
+  initialOpeningId?: string | null;
+} = {}) {
+  const auth = useOnboardingAuthSession();
+  if (initialTab === "home" && initialOpeningId === null && auth.status !== "authenticated") {
+    return <BlundrLandingPage />;
+  }
+  return <BlundrApp initialTab={initialTab} initialOpeningId={initialOpeningId} />;
+}
 
 function boardThemeClasses(theme: BoardTheme, isDark: boolean) {
   if (theme === "blue") return isDark ? "bg-sky-700" : "bg-sky-100";

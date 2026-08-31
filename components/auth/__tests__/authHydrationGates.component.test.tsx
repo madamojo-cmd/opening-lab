@@ -102,7 +102,7 @@ describe("auth hydration gates", () => {
     expect(auth.unsubscribe).toHaveBeenCalledOnce();
   });
 
-  it("lets the signed-out route gate redirect instead of leaving the root shell busy", async () => {
+  it("allows the signed-out root route to render the public landing", async () => {
     auth.getSession.mockResolvedValue(null);
     render(
       <OnboardingRouteGate>
@@ -113,7 +113,8 @@ describe("auth hydration gates", () => {
     );
 
     await waitFor(() =>
-      expect(navigation.replace).toHaveBeenCalledWith("/login?next=%2F"),
+      expect(screen.getByText("Protected content")).toBeInTheDocument(),
     );
+    expect(navigation.replace).not.toHaveBeenCalled();
   });
 });

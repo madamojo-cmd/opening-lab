@@ -31,8 +31,21 @@ function formatTimestamp(value: string | null): string {
   if (!value) return "unknown";
   const parsed = new Date(value);
   return Number.isFinite(parsed.valueOf())
-    ? `${parsed.toISOString().replace("T", " ").slice(0, 16)} UTC`
+    ? parsed.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
     : "unknown";
+}
+
+function formatOpeningLabel(value: string | null): string {
+  const text = String(value ?? "").trim();
+  if (!text) return "Unknown opening";
+  return text
+    .replace(/-(white|black)$/i, "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function badgeClass(state: string): string {
@@ -219,7 +232,7 @@ export function ReviewQueueInbox() {
                       {formatLifecycleLabel(item.lifecycleState)}
                     </span>
                     <span className="text-[11px] font-black text-stone-900">
-                      {item.openingId ?? "Unknown opening"}{" "}
+                      {formatOpeningLabel(item.openingId)}{" "}
                       <span className="text-stone-500">
                         ·{" "}
                         {item.repertoireSide === "unknown"
@@ -252,7 +265,6 @@ export function ReviewQueueInbox() {
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-stone-500">
                   <span>Misses {Math.max(0, item.missCount ?? 0)}</span>
                   <span>Last missed {formatTimestamp(item.lastMissedAt)}</span>
-                  <span>Updated {formatTimestamp(item.updatedAt)}</span>
                 </div>
               </div>
             );

@@ -272,9 +272,10 @@ export async function completeOnboardingV11(
   const state = await readOnboardingV11State(user);
   if (!shouldInitializeOnboardingV11StarterRepertoire(state)) return state;
   const earliest = getEarliestIncompleteOnboardingV11Step(state);
-  if (earliest !== "plan" && earliest !== "ready")
+  if (earliest !== "ready")
     throw new Error(`onboarding_incomplete:${earliest}`);
   if (
+    !state.ageConfirmed ||
     !state.starterPackId ||
     !state.ratingBandId ||
     !state.pace ||

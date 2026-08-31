@@ -817,5 +817,9 @@ function LegacyOnboardingPage() {
 }
 
 export default function OnboardingPage() {
-  return isOnboardingV11Enabled() ? <OnboardingV11Flow /> : <LegacyOnboardingPage />;
+  return isOnboardingV11Enabled() || process.env.NODE_ENV === "production" ? (
+    <OnboardingV11Flow />
+  ) : (
+    <LegacyOnboardingPage />
+  );
 }
