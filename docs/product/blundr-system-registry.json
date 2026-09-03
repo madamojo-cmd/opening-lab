@@ -297,7 +297,10 @@
       "evidence": [
         "Recovered local branch launch/market-phase3-canonical-landing at 01b8d0bb795bc3ff67eac22361b89f9006a8c39a; local worktree validation in /tmp/opening-lab-phase3-validation.",
         "Wave 1B checkpoint d1d5418e8934b14575f76290cc124f5911b78908 protects the recovered Phase 3 launch experience integration but is not an accepted launch SHA.",
-        "Wave 1B stabilization evidence on 2026-09-03: npm run test:unit passed 588 tests with 0 failures; disposable Supabase npm run test:security passed 28 tests with 0 failures; npm run typecheck passed; npm run lint passed with existing warnings and 0 errors; npm run build passed; public landing/legal/asset responsive browser QA passed."
+        "Wave 1B stabilization evidence on 2026-09-03: npm run test:unit passed 588 tests with 0 failures; disposable Supabase npm run test:security passed 28 tests with 0 failures; npm run typecheck passed; npm run lint passed with existing warnings and 0 errors; npm run build passed; public landing/legal/asset responsive browser QA passed.",
+        "Wave 1C source-side migration recovery adds 20260903155151_blundr_onboarding_v11_step_constraint_repair.sql; npm run verify:migrations passed with 45 migrations at head 20260903155151 and checksum 01cb7efe2a4634d9f8ce75d7b886e343e34a42b731582f98df508cd32dbd29d3.",
+        "Wave 1C focused contract coverage verifies the onboarding_step migration values match ONBOARDING_V11_STEPS, including line-changes and review, while unknown values remain rejected.",
+        "Wave 1C staging read-only PostgREST schema check confirmed daily_blundr_card_goal and onboarding_step are visible; staging migration application still requires non-production operator action because direct Postgres access is blocked from this runner and CLI linking returned Unauthorized."
       ],
       "blockers": [
         "Stripe Checkout is not implemented.",
@@ -307,7 +310,8 @@
         "Account export and deletion controls are incomplete.",
         "Commercial analytics are not implemented.",
         "Lifecycle messaging is not implemented.",
-        "Authenticated commercial QA is blocked: configured non-production Supabase Auth projects returned over_email_send_rate_limit for anonymous signup, local Docker Supabase is unavailable in this runner, direct non-production Postgres migration access is blocked by network restrictions, and the available disposable/staging databases are not both at the repository migration head required for the complete V11 browser journey.",
+        "Authenticated commercial QA is blocked: configured non-production Supabase Auth projects returned over_email_send_rate_limit for anonymous signup, local Docker Supabase is blocked in this runner by full root/Docker storage, direct non-production Postgres migration access is blocked by network restrictions, CLI staging link returned Unauthorized, and the available disposable/staging databases are not both at the repository migration head required for the complete V11 browser journey.",
+        "Staging must apply repository migration head 20260903155151 and rerun the authenticated V11 journey before Phase 3 can be accepted.",
         "Exact-SHA deployed proof is incomplete."
       ]
     },

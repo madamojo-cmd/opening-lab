@@ -57,6 +57,18 @@ assert.match(
   workflow,
   /grep -oE '\[0-9\]\{8\}\(\[0-9\]\{6\}\)\?_[^\n]+tail -n "\$expected_count" >"\$actual_file"/,
 );
+assert.match(workflow, /Journey A preflight and fresh zero-to-45 rebuild/);
+assert.match(workflow, /Journey B preflight and exact 25-to-45 upgrade/);
+assert.match(
+  workflow,
+  /BLUNDR_EXPECTED_MIGRATION_COUNT=45 BLUNDR_EXPECTED_MIGRATION_HEAD=20260903155151/,
+);
+assert.match(workflow, /tail -n 20 >"\$expected_pr03_migration"/);
+assert.doesNotMatch(workflow, /zero-to-44|25-to-44/);
+assert.doesNotMatch(
+  workflow,
+  /BLUNDR_EXPECTED_MIGRATION_COUNT=40 BLUNDR_EXPECTED_MIGRATION_HEAD=20260820203000/,
+);
 assert.doesNotMatch(workflow, /command_log" \| sort/);
 assert.equal(
   (workflow.match(/cmp -s "\$expected_file" "\$actual_file"/g) ?? []).length,
@@ -81,16 +93,17 @@ assert.match(
   /supabase-rls-upgrade:[\s\S]*?BLUNDR_RLS_FRESH_PROJECT_REF:[\s\S]*?BLUNDR_RLS_UPGRADE_PROJECT_REF:[\s\S]*?BLUNDR_RLS_TEST_PROJECT_REF:/,
 );
 assertInOrder(
-  "BLUNDR_EXPECTED_MIGRATION_COUNT=0",
-  'require_dry_run_migrations "$expected_migrations"',
-  "run_supabase db push",
-  "BLUNDR_EXPECTED_MIGRATION_COUNT=25 BLUNDR_EXPECTED_MIGRATION_HEAD=20260805150000",
+  "Journey A preflight and fresh zero-to-45 rebuild",
+  'run_supabase link --project-ref "$BLUNDR_RLS_FRESH_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"',
+  "run_supabase --yes db reset --linked --no-seed",
+  "BLUNDR_EXPECTED_MIGRATION_COUNT=45 BLUNDR_EXPECTED_MIGRATION_HEAD=20260903155151",
 );
 assertInOrder(
-  "BLUNDR_EXPECTED_MIGRATION_COUNT=24 BLUNDR_EXPECTED_MIGRATION_HEAD=20260805140000",
+  "Journey B preflight and exact 25-to-45 upgrade",
+  "BLUNDR_EXPECTED_MIGRATION_COUNT=25 BLUNDR_EXPECTED_MIGRATION_HEAD=20260805150000",
   'require_dry_run_migrations "$expected_pr03_migration"',
   "run_supabase db push",
-  "BLUNDR_EXPECTED_MIGRATION_COUNT=25 BLUNDR_EXPECTED_MIGRATION_HEAD=20260805150000",
+  "BLUNDR_EXPECTED_MIGRATION_COUNT=45 BLUNDR_EXPECTED_MIGRATION_HEAD=20260903155151",
   "Run non-skippable upgraded authority matrix",
 );
 

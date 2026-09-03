@@ -45,6 +45,22 @@ The supplied file `BLUNDR_FINAL_COMMERCIAL_LAUNCH_HANDOFF(1).md` was not present
 - The dedicated staging database is also behind the V11 onboarding migration head for browser use: its `blundr_user_profiles_onboarding_step_check` rejects the `line-changes` step.
 - No production deployment, production environment change, production database change, billing implementation, or entitlement implementation occurred.
 
+## Wave 1C source-side recovery
+
+- Source predecessor: `e0c42c35a8b7b0d47fc0f5ee4eeb0ba6134a3ec2`.
+- New repository migration: `supabase/migrations/20260903155151_blundr_onboarding_v11_step_constraint_repair.sql`.
+- Repository migration count: `45`.
+- Repository migration head: `20260903155151`.
+- Static migration verification: `npm run verify:migrations` passed with checksum `01cb7efe2a4634d9f8ce75d7b886e343e34a42b731582f98df508cd32dbd29d3`.
+- Focused V11 schema contract: `lib/blundr/onboarding/__tests__/onboardingV11MigrationContract.test.ts` verifies that the database constraint values match `ONBOARDING_V11_STEPS`, including `line-changes` and `review`, and rejects unknown step values.
+- CI migration evidence strings in `.github/workflows/blundr-release-candidate.yml` and `.github/workflows/blundr-daily-v3-disposable-gate.yml` now reference the 45-migration head and the 25-to-45 upgrade path.
+- Staging read-only PostgREST schema check confirmed `daily_blundr_card_goal` and `onboarding_step` are visible.
+- Disposable read-only PostgREST schema check confirmed `onboarding_step` is visible but `daily_blundr_card_goal` is absent with PostgreSQL error `42703`; this disposable target is not at repository migration head.
+- Local Supabase validation is blocked in this runner by Docker/root filesystem exhaustion while pulling the official local stack images. Docker cleanup was not performed.
+- Direct hosted Postgres migration access is blocked from this runner by network restrictions; the CLI connection attempts fail before migration history can be inspected or applied.
+- Supabase CLI linking to the configured staging project returned `Unauthorized`, so staging migration application requires operator action with a valid non-production staging Supabase CLI/API authority.
+- Staging-only operator handoff: `docs/operations/phase3-wave1c-staging-operator-handoff-20260903.md`.
+
 ## Remaining blockers
 
 - Stripe Checkout
@@ -56,5 +72,7 @@ The supplied file `BLUNDR_FINAL_COMMERCIAL_LAUNCH_HANDOFF(1).md` was not present
 - Lifecycle messaging
 - Commercial QA
 - Non-production Supabase migration-head reconciliation for authenticated browser acceptance
+- Staging application of `20260903155151_blundr_onboarding_v11_step_constraint_repair.sql`
+- Authenticated staging journey after schema alignment
 
 `RELEASE-001` remains blocked. This handoff does not authorize production deployment, production database mutation, production environment changes, or commercial release.
