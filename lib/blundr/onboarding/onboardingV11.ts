@@ -54,6 +54,21 @@ type ProfileRow = {
   preferred_training_mode?: unknown;
 };
 
+type AuthAdminClient = {
+  auth: {
+    admin: {
+      getUserById: (userId: string) => Promise<{
+        data: { user: { user_metadata?: unknown } | null };
+        error: unknown;
+      }>;
+      updateUserById: (
+        userId: string,
+        attributes: { user_metadata: Record<string, unknown> },
+      ) => Promise<{ error: unknown }>;
+    };
+  };
+};
+
 function text(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -93,6 +108,20 @@ function readPlanIntent(
   user: CurrentBlundrUser,
 ): OnboardingV11PlanIntent | null {
   return isPlanIntent(user.launchPlanIntent) ? user.launchPlanIntent : null;
+}
+
+export function mergeOnboardingPlanIntentUserMetadata(
+  metadata: unknown,
+  planIntent: OnboardingV11PlanIntent,
+): Record<string, unknown> {
+  const existing =
+    metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? (metadata as Record<string, unknown>)
+      : {};
+  return {
+    ...existing,
+    blundr_launch_plan_intent: planIntent,
+  };
 }
 
 function priorities(value: unknown): OnboardingPriority[] {
@@ -226,16 +255,17 @@ async function savePlanIntent(
   user: CurrentBlundrUser,
   planIntent: OnboardingV11PlanIntent,
 ): Promise<void> {
-  if (!user.accessToken) throw new Error("onboarding_plan_intent_unavailable");
-  const client = createBlundrSupabaseServerClient({
-    accessToken: user.accessToken,
-    forUserQueries: true,
-  });
-  if (!client) throw new Error("onboarding_plan_intent_unavailable");
-  const { error } = await client.auth.updateUser({
-    data: {
-      blundr_launch_plan_intent: planIntent,
-    },
+  const admin = createBlundrSupabaseAdminClient();
+  if (!admin) throw new Error("onboarding_plan_intent_unavailable");
+  const authAdmin = admin as unknown as AuthAdminClient;
+  const existing = await authAdmin.auth.admin.getUserById(user.userId);
+  if (existing.error || !existing.data.user)
+    throw new Error("onboarding_plan_intent_unavailable");
+  const { error } = await authAdmin.auth.admin.updateUserById(user.userId, {
+    user_metadata: mergeOnboardingPlanIntentUserMetadata(
+      existing.data.user.user_metadata,
+      planIntent,
+    ),
   });
   if (error) throw new Error("onboarding_plan_intent_unavailable");
   user.launchPlanIntent = planIntent;

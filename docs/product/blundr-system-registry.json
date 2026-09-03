@@ -300,7 +300,11 @@
         "Wave 1B stabilization evidence on 2026-09-03: npm run test:unit passed 588 tests with 0 failures; disposable Supabase npm run test:security passed 28 tests with 0 failures; npm run typecheck passed; npm run lint passed with existing warnings and 0 errors; npm run build passed; public landing/legal/asset responsive browser QA passed.",
         "Wave 1C source-side migration recovery adds 20260903155151_blundr_onboarding_v11_step_constraint_repair.sql; npm run verify:migrations passed with 45 migrations at head 20260903155151 and checksum 01cb7efe2a4634d9f8ce75d7b886e343e34a42b731582f98df508cd32dbd29d3.",
         "Wave 1C focused contract coverage verifies the onboarding_step migration values match ONBOARDING_V11_STEPS, including line-changes and review, while unknown values remain rejected.",
-        "Wave 1C staging read-only PostgREST schema check confirmed daily_blundr_card_goal and onboarding_step are visible; staging migration application still requires non-production operator action because direct Postgres access is blocked from this runner and CLI linking returned Unauthorized."
+        "Wave 1C staging read-only PostgREST schema check confirmed daily_blundr_card_goal and onboarding_step are visible.",
+        "Wave 1C staging migration recovery on 2026-09-03 used the non-production Session Pooler connection; db push dry-run proposed exactly 20260903155151_blundr_onboarding_v11_step_constraint_repair.sql, db push applied it, and remote migration history reported 45 migrations at head 20260903155151.",
+        "Wave 1C staging schema probes verified line-changes and review are accepted, invalid onboarding_step values remain rejected, daily_blundr_card_goal remains present, and existing QA profile data was restored.",
+        "Wave 1C authenticated staging journey passed with an existing confirmed QA account: anonymous landing, signup/sign-in surface, every V11 step, Free, Home, Train, sign out, sign in, Home, Train. QA profile, repertoire, and Auth metadata were restored after the run.",
+        "Wave 1C acceptance gates on repaired source: npm run test:unit passed 589 tests; BLUNDR_RLS_TEST_ENVIRONMENT_ROLE=staging npm run test:security passed 28 tests; npm run test:component passed 49 tests; npm run test:integration passed 11 tests; npm run typecheck, npm run lint, npm run build, npm run verify:migrations, npm run bundle:audit, npm run security:audit, and git diff --check passed."
       ],
       "blockers": [
         "Stripe Checkout is not implemented.",
@@ -310,8 +314,6 @@
         "Account export and deletion controls are incomplete.",
         "Commercial analytics are not implemented.",
         "Lifecycle messaging is not implemented.",
-        "Authenticated commercial QA is blocked: configured non-production Supabase Auth projects returned over_email_send_rate_limit for anonymous signup, local Docker Supabase is blocked in this runner by full root/Docker storage, direct non-production Postgres migration access is blocked by network restrictions, CLI staging link returned Unauthorized, and the available disposable/staging databases are not both at the repository migration head required for the complete V11 browser journey.",
-        "Staging must apply repository migration head 20260903155151 and rerun the authenticated V11 journey before Phase 3 can be accepted.",
         "Exact-SHA deployed proof is incomplete."
       ]
     },

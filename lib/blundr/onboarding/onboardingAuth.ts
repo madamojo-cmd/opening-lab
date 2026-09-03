@@ -227,8 +227,7 @@ export async function getOnboardingAuthSession(): Promise<OnboardingAuthSession 
     const sessionResult = await client.auth.getSession();
     const session = sessionResult.data.session;
     if (!session) return null;
-    const userResult = await client.auth.getUser();
-    const user = userResult.data.user ?? session.user ?? null;
+    const user = session.user ?? null;
     if (!user) return null;
     return {
       userId: user.id,

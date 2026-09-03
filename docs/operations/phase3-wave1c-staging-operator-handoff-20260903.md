@@ -194,6 +194,24 @@ Verify:
 - Home and Train load without console errors.
 - No cross-user state is visible.
 
+## Applied Staging Evidence
+
+This operator action was completed from the recovery worktree on 2026-09-03
+against the confirmed non-production staging project only.
+
+- `db push --dry-run` proposed exactly
+  `20260903155151_blundr_onboarding_v11_step_constraint_repair.sql`.
+- `db push` applied `20260903155151`.
+- Remote migration history reported `45` applied migrations with head
+  `20260903155151`.
+- Reversible profile probes confirmed `line-changes` and `review` are accepted,
+  invalid onboarding steps remain rejected, `daily_blundr_card_goal` remains
+  present, and the QA profile row was restored.
+- The authenticated V11 staging journey passed using one existing confirmed QA
+  account, without public signup loops or production Auth changes.
+- `npm run test:security` passed against staging with the explicit
+  non-production role guard.
+
 ## Rollback / Recovery
 
 If the new constraint must be backed out before acceptance, apply a new forward

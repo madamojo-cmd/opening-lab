@@ -61,6 +61,29 @@ The supplied file `BLUNDR_FINAL_COMMERCIAL_LAUNCH_HANDOFF(1).md` was not present
 - Supabase CLI linking to the configured staging project returned `Unauthorized`, so staging migration application requires operator action with a valid non-production staging Supabase CLI/API authority.
 - Staging-only operator handoff: `docs/operations/phase3-wave1c-staging-operator-handoff-20260903.md`.
 
+## Wave 1C staging acceptance recovery
+
+- Checkpoint pushed: `e2b35de55b5b272cd97019eae8e751c3593b5af1` on `launch/market-phase3-canonical-landing`.
+- Staging credential handling: values were sourced only from `.env.codex-staging.local` inside command processes; no credentials were printed, committed, or persisted.
+- Connection method: non-production staging Supabase Session Pooler database URL.
+- Target validation: URI parsed, host class was Supabase pooler, username/project reference matched the configured staging project reference, and database name was `postgres`.
+- Remote migration dry run: exactly one pending migration, `20260903155151_blundr_onboarding_v11_step_constraint_repair.sql`; no destructive action was proposed.
+- Staging migration application: `npx --yes supabase@2.111.0 db push --db-url <staging-session-pooler-url>` applied migration `20260903155151`.
+- Remote migration state after push: `45` applied migrations, head `20260903155151`.
+- Schema verification: `daily_blundr_card_goal` remains present; `onboarding_step` accepts canonical V11 steps including `line-changes` and `review`; invalid values remain rejected with check-constraint error `23514`; existing QA profile data was restored after reversible probes.
+- Authenticated staging journey: existing confirmed staging QA account completed `Anonymous landing -> signup/sign-in surface -> V11 onboarding welcome/level/priorities/starter-pack/training-mode/pace/line-changes/review/plan/ready -> Free -> Home -> Train -> sign out -> sign in -> Home -> Train`; the QA profile, repertoire row, and Auth metadata were restored afterward. Evidence screenshot: `.agent_runs/commercial-launch-wave1c-staging-journey/authenticated-journey-train-desktop.png`.
+- Stabilization repair: V11 plan intent now persists through the server-side Supabase Auth admin seam, preserving existing user metadata and storing only `blundr_launch_plan_intent`; it does not grant Pro, create checkout, create billing tables, or create entitlements.
+- Auth hydration repair: client-side onboarding session hydration now uses the locally held Supabase session user and leaves bearer-token authority validation to server APIs, reducing browser-side Supabase network churn during route transitions.
+- Staging security/RLS suite: `BLUNDR_RLS_TEST_ENVIRONMENT_ROLE=staging npm run test:security` passed with `28` tests and `0` failures after the guard was narrowed to allow only explicitly non-production `disposable` or `staging` environments.
+- Unit suite: `npm run test:unit` passed with `589` tests and `0` failures.
+- Component suite: `npm run test:component` passed with `17` files and `49` tests.
+- Integration suite: `npm run test:integration` passed with `6` files and `11` tests.
+- Typecheck: `npm run typecheck` passed.
+- Lint: `npm run lint` passed with existing warnings and `0` errors.
+- Production build: `npm run build` passed with the non-production staging public Supabase environment for authenticated browser QA.
+- Static checks: `npm run verify:migrations`, `node scripts/pr01-journey-workflow-static.test.mjs`, `npm run verify:registry`, `npm run bundle:audit`, escalated `npm run security:audit`, and `git diff --check` passed. `npm run format:check` still reports pre-existing style drift in unrelated files not touched by Phase 3 recovery.
+- Stale public-copy scan found no `$7.99`, `$59.99`, `13+`, monthly-no-trial, or no-trial launch copy in public app/legal/test surfaces.
+
 ## Remaining blockers
 
 - Stripe Checkout
@@ -71,8 +94,5 @@ The supplied file `BLUNDR_FINAL_COMMERCIAL_LAUNCH_HANDOFF(1).md` was not present
 - Commercial analytics
 - Lifecycle messaging
 - Commercial QA
-- Non-production Supabase migration-head reconciliation for authenticated browser acceptance
-- Staging application of `20260903155151_blundr_onboarding_v11_step_constraint_repair.sql`
-- Authenticated staging journey after schema alignment
 
 `RELEASE-001` remains blocked. This handoff does not authorize production deployment, production database mutation, production environment changes, or commercial release.
