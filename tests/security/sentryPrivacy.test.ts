@@ -28,16 +28,17 @@ test("Sentry integration is bounded, private, and build-secret only", () => {
 });
 
 test("privacy route contains approved disclosures and no unresolved placeholders", () => {
-  const page = read("app/privacy/page.tsx");
+  const page = read("content/legal/03_PRIVACY_POLICY.md");
   for (const required of [
-    "Effective date: July 15, 2026",
-    "Sentry",
-    "Chess.com",
-    "Lichess",
-    "We never request or store your Chess.com or Lichess password",
-    "Disconnecting a provider",
-    "support@blundr.io",
-    "Children's Privacy",
+    "Last updated: August 31, 2026",
+    "Supabase",
+    "Vercel",
+    "Stripe",
+    "Optional third-party or imported chess information",
+    "chess games, usernames, account identifiers",
+    "standard launch Service is not directed to children under 16",
+    "privacy@blundr.io",
+    "Cookie Policy",
   ])
     assert.match(
       page,

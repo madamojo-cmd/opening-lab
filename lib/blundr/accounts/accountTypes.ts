@@ -14,7 +14,10 @@ export type StarterPackId =
   | "dynamic_fighter"
   | "flexible_strategist";
 
-export type BlundrAccountMode = "local_demo" | "authenticated" | "developer_admin";
+export type BlundrAccountMode =
+  | "local_demo"
+  | "authenticated"
+  | "developer_admin";
 
 export type UserTrainingProfile = {
   userId: string;
@@ -204,6 +207,8 @@ export type CurrentBlundrUser = {
   provider?: string | null;
   /** Server-validated sign-up metadata, never returned as a public profile. */
   age13Confirmed?: boolean;
+  /** Presentation-only launch plan intent; not an entitlement or subscription state. */
+  launchPlanIntent?: "free" | "pro_monthly" | "pro_annual" | null;
 };
 
 export type UserAccountBootstrap = {
@@ -226,6 +231,16 @@ export type UserAccountSyncState = {
   validationSnapshot?: ValidationSnapshot | null;
 };
 
-export type DailyTrainingSettings = Pick<UserTrainingProfile, "dailyTempoGoal" | "dailyBatteryGoal" | "dailyBlundrGoal" | "dailyBlundrCardGoal" | "preferredTrainingMode" | "ratingBandId" | "ratingSource" | "selectedStarterPackId"> & {
+export type DailyTrainingSettings = Pick<
+  UserTrainingProfile,
+  | "dailyTempoGoal"
+  | "dailyBatteryGoal"
+  | "dailyBlundrGoal"
+  | "dailyBlundrCardGoal"
+  | "preferredTrainingMode"
+  | "ratingBandId"
+  | "ratingSource"
+  | "selectedStarterPackId"
+> & {
   difficulty?: DailyBlundrDifficulty;
 };

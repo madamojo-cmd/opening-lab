@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { authenticatedApiFetch, AuthenticatedApiError } from "@/lib/blundr/api/authenticatedApiClient";
+import {
+  authenticatedApiFetch,
+  AuthenticatedApiError,
+} from "@/lib/blundr/api/authenticatedApiClient";
 import { getAllStarterPacks } from "@/lib/blundr/onboarding/starterPacks";
 import { useOnboardingAuthSession } from "@/lib/blundr/onboarding/useOnboardingAuthSession";
 import { getCompletedOnboardingRedirectDestination } from "@/lib/blundr/onboarding/onboardingRouting";
@@ -12,6 +15,7 @@ import {
   ONBOARDING_V11_STEPS,
   getOnboardingV11PaceGoals,
   type OnboardingPriority,
+  type OnboardingV11PlanIntent,
   type OnboardingV11Pace,
   type OnboardingV11State,
   type OnboardingV11Step,
@@ -26,11 +30,31 @@ const LEVELS = [
 ] as const;
 
 const PRIORITIES: Array<[OnboardingPriority, string, string]> = [
-  ["remember_openings", "Remember my openings", "Turn studied moves into recall."],
-  ["build_repertoire", "Build a repertoire", "Start with a focused White and Black pair."],
-  ["post_opening_plans", "Know what comes next", "Practice decisions after the line changes."],
-  ["review_mistakes", "Review my misses", "Bring weak positions back until they stick."],
-  ["prepare_for_games", "Prepare for real games", "Train positions you can actually reach."],
+  [
+    "remember_openings",
+    "Remember my openings",
+    "Turn studied moves into recall.",
+  ],
+  [
+    "build_repertoire",
+    "Build a repertoire",
+    "Start with a focused White and Black pair.",
+  ],
+  [
+    "post_opening_plans",
+    "Know what comes next",
+    "Practice decisions after the line changes.",
+  ],
+  [
+    "review_mistakes",
+    "Review my misses",
+    "Bring weak positions back until they stick.",
+  ],
+  [
+    "prepare_for_games",
+    "Prepare for real games",
+    "Train positions you can actually reach.",
+  ],
 ];
 
 const PACES: Array<[OnboardingV11Pace, string, string]> = [
@@ -53,25 +77,34 @@ function titleForStep(step: OnboardingV11Step): string {
     pace: "Set your daily practice target.",
     "line-changes": "When the line changes, keep playing.",
     review: "Missed moves come back.",
+    plan: "Choose how you want to train.",
     ready: "Your trainer is ready.",
   }[step];
 }
 
 function subtitleForStep(step: OnboardingV11Step): string {
   return {
-    welcome: "Blundr teaches opening positions and decisions, not just memorized sequences.",
+    welcome:
+      "Blundr teaches opening positions and decisions, not just memorized sequences.",
     level: "Your level helps Blundr choose the right amount of guidance.",
     priorities: "Pick the training outcomes that matter most right now.",
     "starter-pack": "This becomes the first version of your personal trainer.",
     "training-mode": "Assisted teaches the idea. Plain asks you to recall it.",
     pace: "Tempo, Battery, and Daily Blundr form the daily practice loop.",
-    "line-changes": "Your opponent can choose another continuation. Blundr keeps teaching from the position.",
+    "line-changes":
+      "Your opponent can choose another continuation. Blundr keeps teaching from the position.",
     review: "Moves you miss return to Review so they can be practiced again.",
-    ready: "Start with a real opening session, then let Review bring back what needs work.",
+    plan: "Keep training free, or save Pro trial intent for the billing wave.",
+    ready:
+      "Start with a real opening session, then let Review bring back what needs work.",
   }[step];
 }
 
-export function OnboardingV11Flow({ requestedStep }: { requestedStep?: string }) {
+export function OnboardingV11Flow({
+  requestedStep,
+}: {
+  requestedStep?: string;
+}) {
   const auth = useOnboardingAuthSession();
   const router = useRouter();
   const [state, setState] = useState<OnboardingV11State | null>(null);
@@ -79,20 +112,34 @@ export function OnboardingV11Flow({ requestedStep }: { requestedStep?: string })
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<unknown>(undefined);
 
-  const requested = ONBOARDING_V11_STEPS.includes(requestedStep as OnboardingV11Step) ? (requestedStep as OnboardingV11Step) : null;
-  const activeStep = state?.completed ? "ready" : state?.step ?? requested ?? "welcome";
+  const requested = ONBOARDING_V11_STEPS.includes(
+    requestedStep as OnboardingV11Step,
+  )
+    ? (requestedStep as OnboardingV11Step)
+    : null;
+  const activeStep = state?.completed
+    ? "ready"
+    : (state?.step ?? requested ?? "welcome");
   const stepIndex = Math.max(0, ONBOARDING_V11_STEPS.indexOf(activeStep));
 
   const load = async () => {
     setError(null);
     try {
-      const response = await authenticatedApiFetch<{ ok: true; data: OnboardingV11State }>("/api/blundr/onboarding/v11", { cache: "no-store" });
+      const response = await authenticatedApiFetch<{
+        ok: true;
+        data: OnboardingV11State;
+      }>("/api/blundr/onboarding/v11", { cache: "no-store" });
       const next = apiData(response);
       setState(next);
       setSelected(valueForStep(next, next.step));
-      if (!next.completed && requested && requested !== next.step) router.replace(`/onboarding/${next.step}`);
+      if (!next.completed && requested && requested !== next.step)
+        router.replace(`/onboarding/${next.step}`);
     } catch (cause) {
-      setError(cause instanceof AuthenticatedApiError && cause.status === 401 ? "Your session has ended. Sign in to continue setup." : "We couldn't load your saved setup. Try again.");
+      setError(
+        cause instanceof AuthenticatedApiError && cause.status === 401
+          ? "Your session has ended. Sign in to continue setup."
+          : "We couldn't load your saved setup. Try again.",
+      );
     }
   };
 
@@ -110,7 +157,10 @@ export function OnboardingV11Flow({ requestedStep }: { requestedStep?: string })
     setBusy(true);
     setError(null);
     try {
-      const response = await authenticatedApiFetch<{ ok: true; data: OnboardingV11State }>("/api/blundr/onboarding/v11", {
+      const response = await authenticatedApiFetch<{
+        ok: true;
+        data: OnboardingV11State;
+      }>("/api/blundr/onboarding/v11", {
         method: "PATCH",
         body: JSON.stringify({
           step,
@@ -133,20 +183,29 @@ export function OnboardingV11Flow({ requestedStep }: { requestedStep?: string })
     setBusy(true);
     setError(null);
     try {
-      const response = await authenticatedApiFetch<{ ok: true; data: OnboardingV11State }>("/api/blundr/onboarding/v11/complete", { method: "POST" });
+      const response = await authenticatedApiFetch<{
+        ok: true;
+        data: OnboardingV11State;
+      }>("/api/blundr/onboarding/v11/complete", { method: "POST" });
       const next = apiData(response);
       setState(next);
       startTraining(next);
     } catch {
-      setError("We couldn't verify your starter repertoire. Your choices are saved; try again.");
+      setError(
+        "We couldn't verify your starter repertoire. Your choices are saved; try again.",
+      );
     } finally {
       setBusy(false);
     }
   };
 
   const startTraining = (nextState = state) => {
-    const pack = nextState?.starterPackId ? getAllStarterPacks().find((item) => item.id === nextState.starterPackId) : null;
-    router.push(`/train${pack ? `?openingId=${encodeURIComponent(pack.whiteOpeningId)}` : ""}`);
+    const pack = nextState?.starterPackId
+      ? getAllStarterPacks().find((item) => item.id === nextState.starterPackId)
+      : null;
+    router.push(
+      `/train${pack ? `?openingId=${encodeURIComponent(pack.whiteOpeningId)}` : ""}`,
+    );
   };
 
   const content = useMemo(() => {
@@ -155,9 +214,12 @@ export function OnboardingV11Flow({ requestedStep }: { requestedStep?: string })
       return (
         <div className="space-y-5">
           <div className="rounded-3xl border border-green-200 bg-green-50 p-5">
-            <h2 className="text-lg font-black text-stone-950">Opening study should survive real games.</h2>
+            <h2 className="text-lg font-black text-stone-950">
+              Opening study should survive real games.
+            </h2>
             <p className="mt-2 text-sm leading-6 text-stone-700">
-              Learn the move, understand the position, and keep training when your opponent leaves the line.
+              Learn the move, understand the position, and keep training when
+              your opponent leaves the line.
             </p>
           </div>
           <label className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-white p-4 text-sm leading-6 text-stone-700">
@@ -170,71 +232,289 @@ export function OnboardingV11Flow({ requestedStep }: { requestedStep?: string })
               required
             />
             <span>
-              I agree to the <Link className="font-black text-green-800 underline" href="/terms">Terms of Service</Link> and{" "}
-              <Link className="font-black text-green-800 underline" href="/privacy">Privacy Policy</Link>, and I confirm that I meet Blundr&rsquo;s minimum age requirement.
+              I agree to the{" "}
+              <Link
+                className="font-black text-green-800 underline"
+                href="/terms"
+              >
+                Terms of Service
+              </Link>{" "}
+              and{" "}
+              <Link
+                className="font-black text-green-800 underline"
+                href="/privacy"
+              >
+                Privacy Policy
+              </Link>
+              , and I confirm that I am at least 16 years old (or the minimum
+              age required by law where I live, if higher). If I am not legally
+              able to enter this agreement on my own, I confirm that my parent
+              or legal guardian has reviewed and agreed to these Terms.
             </span>
           </label>
         </div>
       );
     }
-    if (activeStep === "level") return <ChoiceList value={selected} onChange={setSelected} choices={LEVELS.map(([id, label, description, range]) => [id, `${label} · ${range}`, description])} single />;
-    if (activeStep === "priorities") return <ChoiceList value={selected ?? state.priorities} onChange={setSelected} choices={PRIORITIES}/>;
-    if (activeStep === "starter-pack") return <ChoiceList value={selected} onChange={setSelected} choices={getAllStarterPacks().map((pack) => [pack.id, pack.displayName, `${pack.whiteOpeningName} as White · ${pack.blackOpeningName} as Black`])} single />;
-    if (activeStep === "training-mode") return <ChoiceList value={selected ?? state.trainingMode ?? "assisted"} onChange={setSelected} choices={[["assisted", "Assisted", "Get move cues and a short explanation while learning."], ["plain", "Plain", "Find the move from memory before feedback appears."]]} single />;
-    if (activeStep === "pace") return <ChoiceList value={selected ?? state.pace ?? "standard"} onChange={setSelected} choices={PACES.map(([id, label, description]) => { const goals = getOnboardingV11PaceGoals(id); return [id, label, `${description} ${goals.tempo} Tempo · ${goals.battery} Battery · ${goals.daily} Daily Blundr`]; })} single />;
-    if (activeStep === "line-changes") return <ExplainerCards items={[["Opponent choices", "Your opponent may choose a different continuation than the one you studied."], ["Position first", "Blundr keeps the training focused on the position and the decision in front of you."], ["Keep playing", "Continuation practice helps you stay comfortable after preparation ends."]]} />;
-    if (activeStep === "review") return <ExplainerCards items={[["Missed moves return", "Review brings back positions you missed so weak spots turn into remembered moves."], ["Retry matters", "You can try again, reveal the answer, and continue once the move is clear."], ["Daily loop", "Review connects back into the same daily practice habit."]]} />;
-    return <PlanSummary state={state}/>;
+    if (activeStep === "level")
+      return (
+        <ChoiceList
+          value={selected}
+          onChange={setSelected}
+          choices={LEVELS.map(([id, label, description, range]) => [
+            id,
+            `${label} · ${range}`,
+            description,
+          ])}
+          single
+        />
+      );
+    if (activeStep === "priorities")
+      return (
+        <ChoiceList
+          value={selected ?? state.priorities}
+          onChange={setSelected}
+          choices={PRIORITIES}
+        />
+      );
+    if (activeStep === "starter-pack")
+      return (
+        <ChoiceList
+          value={selected}
+          onChange={setSelected}
+          choices={getAllStarterPacks().map((pack) => [
+            pack.id,
+            pack.displayName,
+            `${pack.whiteOpeningName} as White · ${pack.blackOpeningName} as Black`,
+          ])}
+          single
+        />
+      );
+    if (activeStep === "training-mode")
+      return (
+        <ChoiceList
+          value={selected ?? state.trainingMode ?? "assisted"}
+          onChange={setSelected}
+          choices={[
+            [
+              "assisted",
+              "Assisted",
+              "Get move cues and a short explanation while learning.",
+            ],
+            [
+              "plain",
+              "Plain",
+              "Find the move from memory before feedback appears.",
+            ],
+          ]}
+          single
+        />
+      );
+    if (activeStep === "pace")
+      return (
+        <ChoiceList
+          value={selected ?? state.pace ?? "standard"}
+          onChange={setSelected}
+          choices={PACES.map(([id, label, description]) => {
+            const goals = getOnboardingV11PaceGoals(id);
+            return [
+              id,
+              label,
+              `${description} ${goals.tempo} Tempo · ${goals.battery} Battery · ${goals.daily} Daily Blundr`,
+            ];
+          })}
+          single
+        />
+      );
+    if (activeStep === "line-changes")
+      return (
+        <ExplainerCards
+          items={[
+            [
+              "Opponent choices",
+              "Your opponent may choose a different continuation than the one you studied.",
+            ],
+            [
+              "Position first",
+              "Blundr keeps the training focused on the position and the decision in front of you.",
+            ],
+            [
+              "Keep playing",
+              "Continuation practice helps you stay comfortable after preparation ends.",
+            ],
+          ]}
+        />
+      );
+    if (activeStep === "review")
+      return (
+        <ExplainerCards
+          items={[
+            [
+              "Missed moves return",
+              "Review brings back positions you missed so weak spots turn into remembered moves.",
+            ],
+            [
+              "Retry matters",
+              "You can try again, reveal the answer, and continue once the move is clear.",
+            ],
+            [
+              "Daily loop",
+              "Review connects back into the same daily practice habit.",
+            ],
+          ]}
+        />
+      );
+    if (activeStep === "plan")
+      return (
+        <PlanSelection
+          value={selected ?? state.planIntent}
+          onChange={setSelected}
+        />
+      );
+    return <PlanSummary state={state} />;
   }, [activeStep, selected, state]);
 
-  if (auth.status === "loading") return <OnboardingFrame title="Checking your session"><p role="status">Loading your account.</p></OnboardingFrame>;
-  if (auth.status === "signed_out") return <OnboardingFrame title="Sign in to continue"><p>Your setup belongs to your Blundr account.</p><Link className="mt-6 inline-flex min-h-11 items-center rounded-lg bg-green-800 px-4 font-bold text-white" href={`/login?next=${encodeURIComponent(`/onboarding/${requested ?? "welcome"}`)}`}>Log in</Link></OnboardingFrame>;
-  if (auth.status === "authenticated" && state?.completed) return <OnboardingFrame title="Redirecting to training"><p role="status">Your setup is complete. Taking you back to Blundr.</p></OnboardingFrame>;
+  if (auth.status === "loading")
+    return (
+      <OnboardingFrame title="Checking your session">
+        <p role="status">Loading your account.</p>
+      </OnboardingFrame>
+    );
+  if (auth.status === "signed_out")
+    return (
+      <OnboardingFrame title="Sign in to continue">
+        <p>Your setup belongs to your Blundr account.</p>
+        <Link
+          className="mt-6 inline-flex min-h-11 items-center rounded-lg bg-green-800 px-4 font-bold text-white"
+          href={`/login?next=${encodeURIComponent(`/onboarding/${requested ?? "welcome"}`)}`}
+        >
+          Log in
+        </Link>
+      </OnboardingFrame>
+    );
+  if (auth.status === "authenticated" && state?.completed)
+    return (
+      <OnboardingFrame title="Redirecting to training">
+        <p role="status">Your setup is complete. Taking you back to Blundr.</p>
+      </OnboardingFrame>
+    );
 
   return (
-    <OnboardingFrame title={titleForStep(activeStep)} subtitle={subtitleForStep(activeStep)} progress={`${stepIndex + 1} of ${ONBOARDING_V11_STEPS.length}`}>
+    <OnboardingFrame
+      title={titleForStep(activeStep)}
+      subtitle={subtitleForStep(activeStep)}
+      progress={`${stepIndex + 1} of ${ONBOARDING_V11_STEPS.length}`}
+    >
       {content}
-      {error ? <p role="alert" className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">{error}</p> : null}
+      {error ? (
+        <p
+          role="alert"
+          className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-800"
+        >
+          {error}
+        </p>
+      ) : null}
       <div className="mt-8 flex gap-3">
-        {stepIndex > 0 && activeStep !== "ready" ? <button className="min-h-11 rounded-lg border border-stone-300 px-4 font-semibold text-stone-800" disabled={busy} onClick={() => router.push(`/onboarding/${ONBOARDING_V11_STEPS[stepIndex - 1]}`)}>Back</button> : null}
-        <button className="min-h-11 flex-1 rounded-lg bg-green-800 px-4 font-bold text-white disabled:opacity-50" disabled={busy || disabled(activeStep, selected, state)} onClick={() => activeStep === "ready" ? void complete() : void save(activeStep, selected)}>
-          {busy ? "Saving..." : actionFor(activeStep)}
+        {stepIndex > 0 && activeStep !== "ready" ? (
+          <button
+            className="min-h-11 rounded-lg border border-stone-300 px-4 font-semibold text-stone-800"
+            disabled={busy}
+            onClick={() =>
+              router.push(`/onboarding/${ONBOARDING_V11_STEPS[stepIndex - 1]}`)
+            }
+          >
+            Back
+          </button>
+        ) : null}
+        <button
+          className="min-h-11 flex-1 rounded-lg bg-green-800 px-4 font-bold text-white disabled:opacity-50"
+          disabled={busy || disabled(activeStep, selected, state)}
+          onClick={() =>
+            activeStep === "ready"
+              ? void complete()
+              : void save(activeStep, selected)
+          }
+        >
+          {busy ? "Saving..." : actionFor(activeStep, selected)}
         </button>
       </div>
     </OnboardingFrame>
   );
 }
 
-function valueForStep(state: OnboardingV11State, step: OnboardingV11Step): unknown {
+function valueForStep(
+  state: OnboardingV11State,
+  step: OnboardingV11Step,
+): unknown {
   if (step === "welcome") return state.ageConfirmed ? true : undefined;
-  if (step === "level") return state.step === "level" ? undefined : state.ratingBandId;
+  if (step === "level")
+    return state.step === "level" ? undefined : state.ratingBandId;
   if (step === "priorities") return state.priorities;
   if (step === "starter-pack") return state.starterPackId;
   if (step === "training-mode") return state.trainingMode ?? "assisted";
   if (step === "pace") return state.pace ?? "standard";
+  if (step === "plan") return state.planIntent;
   return undefined;
 }
 
-function disabled(step: OnboardingV11Step, value: unknown, state: OnboardingV11State | null) {
+function disabled(
+  step: OnboardingV11Step,
+  value: unknown,
+  state: OnboardingV11State | null,
+) {
   if (step === "welcome") return !state?.ageConfirmed && value !== true;
-  if (step === "level" || step === "starter-pack" || step === "training-mode" || step === "pace") return !value;
-  if (step === "priorities") return !Array.isArray(value ?? state?.priorities) || (value as unknown[]).length === 0;
+  if (
+    step === "level" ||
+    step === "starter-pack" ||
+    step === "training-mode" ||
+    step === "pace"
+  )
+    return !value;
+  if (step === "priorities")
+    return (
+      !Array.isArray(value ?? state?.priorities) ||
+      (value as unknown[]).length === 0
+    );
+  if (step === "plan") return !value;
   return false;
 }
 
-function actionFor(step: OnboardingV11Step) {
-  return step === "welcome" ? "Continue" : step === "ready" ? "Start training" : "Continue";
+function actionFor(step: OnboardingV11Step, value?: unknown) {
+  if (step === "welcome") return "Continue";
+  if (step === "ready") return "Start training";
+  if (step === "plan")
+    return value === "free" ? "Continue with Free" : "Save Pro intent";
+  return "Continue";
 }
 
-function OnboardingFrame({ title, subtitle, progress, children }: { title: string; subtitle?: string; progress?: string; children: ReactNode }) {
+function OnboardingFrame({
+  title,
+  subtitle,
+  progress,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  progress?: string;
+  children: ReactNode;
+}) {
   return (
     <main className="min-h-screen bg-[#f6f3eb] px-4 py-8 text-stone-950 sm:px-6">
       <section className="mx-auto grid min-h-[calc(100vh-4rem)] w-full max-w-6xl items-center gap-8 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="rounded-lg bg-[#091a13] p-8 text-white shadow-2xl sm:p-10">
           <div className="text-sm font-black text-green-300">Blundr</div>
-          {progress ? <p className="mt-8 text-xs font-black uppercase tracking-[0.16em] text-amber-300">{progress}</p> : null}
-          <h1 className="mt-4 text-4xl font-black leading-none tracking-tight sm:text-6xl">{title}</h1>
-          {subtitle ? <p className="mt-5 max-w-xl text-base leading-7 text-white/70">{subtitle}</p> : null}
+          {progress ? (
+            <p className="mt-8 text-xs font-black uppercase tracking-[0.16em] text-amber-300">
+              {progress}
+            </p>
+          ) : null}
+          <h1 className="mt-4 text-4xl font-black leading-none tracking-tight sm:text-6xl">
+            {title}
+          </h1>
+          {subtitle ? (
+            <p className="mt-5 max-w-xl text-base leading-7 text-white/70">
+              {subtitle}
+            </p>
+          ) : null}
         </div>
         <div className="rounded-lg border border-stone-200 bg-white p-5 shadow-xl sm:p-8">
           {children}
@@ -244,37 +524,247 @@ function OnboardingFrame({ title, subtitle, progress, children }: { title: strin
   );
 }
 
-function ExplainerCards({ items }: { items: Array<readonly [string, string]> }) {
-  return <div className="grid gap-3">{items.map(([title, body]) => <InfoCard key={title} title={title} body={body} />)}</div>;
+function ExplainerCards({
+  items,
+}: {
+  items: Array<readonly [string, string]>;
+}) {
+  return (
+    <div className="grid gap-3">
+      {items.map(([title, body]) => (
+        <InfoCard key={title} title={title} body={body} />
+      ))}
+    </div>
+  );
 }
 
 function InfoCard({ title, body }: { title: string; body: string }) {
-  return <div className="rounded-2xl border border-stone-200 bg-[#fbfaf6] p-4"><h2 className="font-black text-stone-950">{title}</h2><p className="mt-1 text-sm leading-6 text-stone-600">{body}</p></div>;
+  return (
+    <div className="rounded-2xl border border-stone-200 bg-[#fbfaf6] p-4">
+      <h2 className="font-black text-stone-950">{title}</h2>
+      <p className="mt-1 text-sm leading-6 text-stone-600">{body}</p>
+    </div>
+  );
 }
 
-function ChoiceList({ value, onChange, choices, single = false }: { value: unknown; onChange: (value: unknown) => void; choices: Array<readonly [string, string, string]>; single?: boolean }) {
+function ChoiceList({
+  value,
+  onChange,
+  choices,
+  single = false,
+}: {
+  value: unknown;
+  onChange: (value: unknown) => void;
+  choices: Array<readonly [string, string, string]>;
+  single?: boolean;
+}) {
   const values = Array.isArray(value) ? value : [];
-  return <div className="grid gap-3">{choices.map(([id, label, description]) => { const selected = single ? value === id : values.includes(id); return <button type="button" key={id} aria-pressed={selected} onClick={() => onChange(single ? id : selected ? values.filter((item) => item !== id) : [...values, id])} className={`min-h-11 rounded-2xl border p-4 text-left transition ${selected ? "border-green-800 bg-green-50 shadow-sm" : "border-stone-200 bg-white hover:border-green-200"}`}><span className="block font-black text-stone-950">{label}</span>{description ? <span className="mt-1 block text-sm leading-6 text-stone-600">{description}</span> : null}</button>; })}</div>;
+  return (
+    <div className="grid gap-3">
+      {choices.map(([id, label, description]) => {
+        const selected = single ? value === id : values.includes(id);
+        return (
+          <button
+            type="button"
+            key={id}
+            aria-pressed={selected}
+            onClick={() =>
+              onChange(
+                single
+                  ? id
+                  : selected
+                    ? values.filter((item) => item !== id)
+                    : [...values, id],
+              )
+            }
+            className={`min-h-11 rounded-2xl border p-4 text-left transition ${selected ? "border-green-800 bg-green-50 shadow-sm" : "border-stone-200 bg-white hover:border-green-200"}`}
+          >
+            <span className="block font-black text-stone-950">{label}</span>
+            {description ? (
+              <span className="mt-1 block text-sm leading-6 text-stone-600">
+                {description}
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function PlanSelection({
+  value,
+  onChange,
+}: {
+  value: unknown;
+  onChange: (value: unknown) => void;
+}) {
+  const selected = typeof value === "string" ? value : "";
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-3">
+        <PlanChoice
+          id="free"
+          selected={selected}
+          onChange={onChange}
+          title="Free"
+          price="$0"
+          details={[
+            "Up to three active openings",
+            "Unlimited Train within those active openings",
+            "Five Daily Blundr cards per local day",
+            "Five Review positions per local day",
+            "Basic progress and repertoire views",
+          ]}
+        />
+        <PlanChoice
+          id="pro_monthly"
+          selected={selected}
+          onChange={onChange}
+          title="Pro Monthly"
+          price="7-day card-required trial"
+          details={[
+            "$9.99/month after trial",
+            "Unlimited active repertoire",
+            "Daily target from 1-99",
+            "Unlimited Review",
+            "Full mastery, weak-area, trend, and next-action intelligence",
+          ]}
+        />
+        <PlanChoice
+          id="pro_annual"
+          selected={selected}
+          onChange={onChange}
+          title="Pro Annual"
+          price="7-day card-required trial"
+          details={[
+            "$69.99/year after trial",
+            "Unlimited active repertoire",
+            "Daily target from 1-99",
+            "Unlimited Review",
+            "Full mastery, weak-area, trend, and next-action intelligence",
+          ]}
+        />
+      </div>
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+        Pro checkout is not active in this preview. Choosing Pro saves only plan
+        intent for the next billing wave and does not grant Pro access.
+      </div>
+      <div className="flex flex-wrap gap-4 text-sm font-bold text-green-800">
+        <Link href="/pricing" className="underline underline-offset-4">
+          Pricing
+        </Link>
+        <Link
+          href="/subscription-terms"
+          className="underline underline-offset-4"
+        >
+          Subscription Terms
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function PlanChoice({
+  id,
+  selected,
+  onChange,
+  title,
+  price,
+  details,
+}: {
+  id: OnboardingV11PlanIntent;
+  selected: string;
+  onChange: (value: unknown) => void;
+  title: string;
+  price: string;
+  details: string[];
+}) {
+  const active = selected === id;
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={() => onChange(id)}
+      className={`min-h-[25rem] rounded-2xl border p-5 text-left transition ${active ? "border-green-800 bg-green-50 shadow-sm" : "border-stone-200 bg-white hover:border-green-200"}`}
+    >
+      <span className="block text-2xl font-black text-stone-950">{title}</span>
+      <span className="mt-2 block text-sm font-black text-green-800">
+        {price}
+      </span>
+      <span className="mt-4 block space-y-2 text-sm leading-6 text-stone-600">
+        {details.map((detail) => (
+          <span key={detail} className="block">
+            - {detail}
+          </span>
+        ))}
+      </span>
+    </button>
+  );
 }
 
 function PlanSummary({ state }: { state: OnboardingV11State }) {
-  const pack = state.starterPackId ? getAllStarterPacks().find((item) => item.id === state.starterPackId) : null;
+  const pack = state.starterPackId
+    ? getAllStarterPacks().find((item) => item.id === state.starterPackId)
+    : null;
   const pace = state.pace ? getOnboardingV11PaceGoals(state.pace) : null;
   return (
     <div className="space-y-4">
       <dl className="grid gap-3 text-sm">
-        <SummaryRow label="Experience" value={state.ratingBandId ?? "Not set"} />
-        <SummaryRow label="Starter repertoire" value={pack ? `${pack.whiteOpeningName} + ${pack.blackOpeningName}` : "Not set"} />
-        <SummaryRow label="Training style" value={state.trainingMode === "plain" ? "Plain recall" : "Assisted learning"} />
-        <SummaryRow label="Daily target" value={pace ? `${pace.tempo} Tempo · ${pace.battery} Battery · ${pace.daily} Daily Blundr` : "Not set"} />
+        <SummaryRow
+          label="Experience"
+          value={state.ratingBandId ?? "Not set"}
+        />
+        <SummaryRow
+          label="Starter repertoire"
+          value={
+            pack
+              ? `${pack.whiteOpeningName} + ${pack.blackOpeningName}`
+              : "Not set"
+          }
+        />
+        <SummaryRow
+          label="Training style"
+          value={
+            state.trainingMode === "plain"
+              ? "Plain recall"
+              : "Assisted learning"
+          }
+        />
+        <SummaryRow
+          label="Daily target"
+          value={
+            pace
+              ? `${pace.tempo} Tempo · ${pace.battery} Battery · ${pace.daily} Daily Blundr`
+              : "Not set"
+          }
+        />
+        <SummaryRow
+          label="Plan"
+          value={
+            state.planIntent === "pro_monthly"
+              ? "Pro monthly intent saved; Free access until billing launches"
+              : state.planIntent === "pro_annual"
+                ? "Pro annual intent saved; Free access until billing launches"
+                : "Free"
+          }
+        />
       </dl>
       <p className="rounded-2xl bg-green-50 p-4 text-sm leading-6 text-green-950">
-        Your first session starts in Train. After that, missed moves can return through Review.
+        Your first session starts in Train. After that, missed moves can return
+        through Review.
       </p>
     </div>
   );
 }
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-2xl border border-stone-200 p-4"><dt className="text-xs font-black uppercase tracking-[0.14em] text-stone-500">{label}</dt><dd className="mt-1 font-black text-stone-950">{value}</dd></div>;
+  return (
+    <div className="rounded-2xl border border-stone-200 p-4">
+      <dt className="text-xs font-black uppercase tracking-[0.14em] text-stone-500">
+        {label}
+      </dt>
+      <dd className="mt-1 font-black text-stone-950">{value}</dd>
+    </div>
+  );
 }

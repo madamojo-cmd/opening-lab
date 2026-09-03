@@ -16,11 +16,13 @@ import {
 import { hasVerifiedStarterOpeningAccess } from "./starterOpeningAccess";
 import {
   ONBOARDING_V11_PACE_GOALS,
+  ONBOARDING_V11_PLAN_INTENTS,
   ONBOARDING_V11_PRIORITIES,
   ONBOARDING_V11_STEPS,
   getEarliestIncompleteOnboardingV11Step,
   shouldInitializeOnboardingV11StarterRepertoire,
   type OnboardingPriority,
+  type OnboardingV11PlanIntent,
   type OnboardingV11Pace,
   type OnboardingV11State,
   type OnboardingV11Step,
@@ -30,6 +32,7 @@ export {
   getEarliestIncompleteOnboardingV11Step,
   getOnboardingV11PaceGoals,
   type OnboardingPriority,
+  type OnboardingV11PlanIntent,
   type OnboardingV11Pace,
   type OnboardingV11State,
   type OnboardingV11Step,
@@ -82,6 +85,16 @@ function isMode(value: unknown): value is "assisted" | "plain" {
   return value === "assisted" || value === "plain";
 }
 
+function isPlanIntent(value: unknown): value is OnboardingV11PlanIntent {
+  return ONBOARDING_V11_PLAN_INTENTS.includes(value as OnboardingV11PlanIntent);
+}
+
+function readPlanIntent(
+  user: CurrentBlundrUser,
+): OnboardingV11PlanIntent | null {
+  return isPlanIntent(user.launchPlanIntent) ? user.launchPlanIntent : null;
+}
+
 function priorities(value: unknown): OnboardingPriority[] {
   return Array.from(
     new Set(
@@ -112,6 +125,7 @@ function paceFromGoals(row: ProfileRow): OnboardingV11Pace | null {
 
 export function normalizeOnboardingV11ProfileRow(
   row: ProfileRow | null | undefined,
+  user?: CurrentBlundrUser,
 ): OnboardingV11State {
   const completed = Boolean(row?.onboarding_completed);
   return {
@@ -130,6 +144,7 @@ export function normalizeOnboardingV11ProfileRow(
     trainingMode: isMode(row?.preferred_training_mode)
       ? row.preferred_training_mode
       : null,
+    planIntent: user ? readPlanIntent(user) : null,
     ageConfirmed: Boolean(row?.age_confirmed_at),
     startedAt: text(row?.onboarding_started_at) || null,
     completedAt: text(row?.onboarding_completed_at) || null,
@@ -204,7 +219,26 @@ async function ensureProfile(
 export async function readOnboardingV11State(
   user: CurrentBlundrUser,
 ): Promise<OnboardingV11State> {
-  return normalizeOnboardingV11ProfileRow(await ensureProfile(user));
+  return normalizeOnboardingV11ProfileRow(await ensureProfile(user), user);
+}
+
+async function savePlanIntent(
+  user: CurrentBlundrUser,
+  planIntent: OnboardingV11PlanIntent,
+): Promise<void> {
+  if (!user.accessToken) throw new Error("onboarding_plan_intent_unavailable");
+  const client = createBlundrSupabaseServerClient({
+    accessToken: user.accessToken,
+    forUserQueries: true,
+  });
+  if (!client) throw new Error("onboarding_plan_intent_unavailable");
+  const { error } = await client.auth.updateUser({
+    data: {
+      blundr_launch_plan_intent: planIntent,
+    },
+  });
+  if (error) throw new Error("onboarding_plan_intent_unavailable");
+  user.launchPlanIntent = planIntent;
 }
 
 export async function saveOnboardingV11Step(
@@ -250,6 +284,10 @@ export async function saveOnboardingV11Step(
     if (!isMode(input.value)) throw new Error("invalid_training_mode");
     update.preferred_training_mode = input.value;
   }
+  if (input.step === "plan") {
+    if (!isPlanIntent(input.value)) throw new Error("invalid_plan_intent");
+    await savePlanIntent(user, input.value);
+  }
   // The server-confirmed age acknowledgement is durable evidence. Repeated
   // submissions must be idempotent and must never replace it with another
   // onboarding timestamp.
@@ -263,7 +301,7 @@ export async function saveOnboardingV11Step(
     .select("*")
     .single();
   if (error || !data) throw new Error("onboarding_persistence_unavailable");
-  return normalizeOnboardingV11ProfileRow(data as ProfileRow);
+  return normalizeOnboardingV11ProfileRow(data as ProfileRow, user);
 }
 
 export async function completeOnboardingV11(

@@ -21,6 +21,9 @@ const EXEMPT_PREFIXES = [
   "/onboarding",
   "/privacy",
   "/terms",
+  "/pricing",
+  "/cookies",
+  "/legal",
   "/acceptable-use",
   "/subscription-terms",
 ];

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "registryVersion": "1.3.0",
+  "registryVersion": "1.4.0",
   "baseCommit": "c7d4e9e091daecfb19e9933af174bcc6e73a5a7e",
   "statusDefinitions": {
     "verified": "Exact recorded SHA has complete automated and deployed evidence.",
@@ -278,6 +278,24 @@
       "lastVerifiedSha": null,
       "evidence": [],
       "blockers": ["The one-shell UI transition, feature-preservation ledger, responsive/accessibility acceptance, and route gzip budgets are not implemented or proven."]
+    },
+    {
+      "id": "COMMERCIAL-LAUNCH-001",
+      "name": "Commercial launch presentation",
+      "contractVersion": "1",
+      "userPromise": "Anonymous users see a truthful launch landing page, canonical legal pages, and onboarding plan choices that do not grant paid access before billing authority exists.",
+      "status": "partial",
+      "releaseRequired": true,
+      "authority": ["components/marketing/BlundrLandingPage.tsx", "components/legal/CommercialLegalPage.tsx", "components/onboarding/OnboardingV11Flow.tsx", "lib/blundr/onboarding/onboardingV11.ts", "content/legal"],
+      "entryPoints": ["/", "/pricing", "/terms", "/privacy", "/subscription-terms", "/cookies", "/legal", "/signup", "/onboarding"],
+      "persistence": ["Supabase Auth user metadata stores presentation-only launch plan intent; no billing tables or entitlement grants exist in this wave."],
+      "dependencies": ["AUTH-ACCOUNT-001", "ONBOARD-001", "UI-SHELL-001", "future Stripe Checkout", "future RevenueCat", "future backend entitlement authority"],
+      "featureFlags": [],
+      "fallback": "Free onboarding remains available; Pro checkout is labeled unavailable and may only save intent until backend billing and entitlement authority are implemented.",
+      "requiredTests": ["tests/marketing/canonicalLanding.test.ts", "tests/marketing/commercialLaunchLegal.test.ts", "authenticated browser journey: anonymous landing -> signup -> onboarding -> Free -> Home -> Train -> sign out -> sign in -> Home -> Train"],
+      "lastVerifiedSha": null,
+      "evidence": ["Recovered local branch launch/market-phase3-canonical-landing at 01b8d0bb795bc3ff67eac22361b89f9006a8c39a; local worktree validation in /tmp/opening-lab-phase3-validation."],
+      "blockers": ["Stripe Checkout is not implemented.", "RevenueCat is not implemented.", "Backend entitlement authority is not implemented.", "Durable versioned consent storage is not implemented.", "Account export and deletion controls are incomplete.", "Commercial analytics are not implemented.", "Lifecycle messaging is not implemented.", "Commercial QA and exact-SHA deployed proof are incomplete."]
     },
     {
       "id": "RELEASE-001",

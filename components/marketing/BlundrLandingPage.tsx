@@ -60,13 +60,21 @@ const productSections = [
 function BrandMark() {
   return (
     <span className={styles.brand} aria-label="Blundr">
-      <span className={styles.brandGlyph} aria-hidden="true">B</span>
+      <span className={styles.brandGlyph} aria-hidden="true">
+        B
+      </span>
       <span className={styles.brandWord}>Blundr</span>
     </span>
   );
 }
 
-function PrimaryCta({ compact = false, location }: { compact?: boolean; location: string }) {
+function PrimaryCta({
+  compact = false,
+  location,
+}: {
+  compact?: boolean;
+  location: string;
+}) {
   return (
     <a
       href={APP_URL}
@@ -88,7 +96,10 @@ function SecondaryCta() {
 
 function HeroVisual() {
   return (
-    <div className={styles.heroVisual} aria-label="Blundr training board with Italian Game tempo cue">
+    <div
+      className={styles.heroVisual}
+      aria-label="Blundr training board with Italian Game tempo cue"
+    >
       <div className={styles.heroBoard}>
         <Image
           src={`${ASSET_BASE}/interactive_chess_training_board.png`}
@@ -152,8 +163,16 @@ function ProductImage({
   wide?: boolean;
 }) {
   return (
-    <div className={`${styles.productImageFrame} ${wide ? styles.productImageFrameWide : ""}`}>
-      <Image src={src} alt={alt} width={width} height={height} sizes="(max-width: 760px) 92vw, 560px" />
+    <div
+      className={`${styles.productImageFrame} ${wide ? styles.productImageFrameWide : ""}`}
+    >
+      <Image
+        src={src}
+        alt={alt}
+        width={width}
+        height={height}
+        sizes="(max-width: 760px) 92vw, 560px"
+      />
     </div>
   );
 }
@@ -171,15 +190,20 @@ export function BlundrLandingPage() {
     <main className={styles.page}>
       <header className={styles.header}>
         <div className={styles.headerInner}>
-          <a href="#top" className={styles.brandLink} aria-label="Blundr home"><BrandMark /></a>
+          <a href="#top" className={styles.brandLink} aria-label="Blundr home">
+            <BrandMark />
+          </a>
           <nav className={styles.desktopNav} aria-label="Primary navigation">
             <a href="#how-it-works">Why Blundr</a>
             <a href="#daily">Daily</a>
             <a href="#review">Review</a>
             <a href="#repertoire">Repertoire</a>
+            <a href="#plans">Plans</a>
           </nav>
           <div className={styles.headerActions}>
-            <a href={LOGIN_URL} className={styles.loginLink}>Log in</a>
+            <a href={LOGIN_URL} className={styles.loginLink}>
+              Log in
+            </a>
             <PrimaryCta compact location="header" />
           </div>
           <button
@@ -194,10 +218,21 @@ export function BlundrLandingPage() {
         </div>
         {menuOpen ? (
           <nav className={styles.mobileNav} aria-label="Mobile navigation">
-            <a href="#how-it-works" onClick={() => setMenuOpen(false)}>Why Blundr</a>
-            <a href="#daily" onClick={() => setMenuOpen(false)}>Daily</a>
-            <a href="#review" onClick={() => setMenuOpen(false)}>Review</a>
-            <a href="#repertoire" onClick={() => setMenuOpen(false)}>Repertoire</a>
+            <a href="#how-it-works" onClick={() => setMenuOpen(false)}>
+              Why Blundr
+            </a>
+            <a href="#daily" onClick={() => setMenuOpen(false)}>
+              Daily
+            </a>
+            <a href="#review" onClick={() => setMenuOpen(false)}>
+              Review
+            </a>
+            <a href="#repertoire" onClick={() => setMenuOpen(false)}>
+              Repertoire
+            </a>
+            <a href="#plans" onClick={() => setMenuOpen(false)}>
+              Plans
+            </a>
             <a href={LOGIN_URL}>Log in</a>
             <PrimaryCta location="mobile-menu" />
           </nav>
@@ -207,10 +242,14 @@ export function BlundrLandingPage() {
       <section id="top" className={styles.hero}>
         <div className={styles.heroInner}>
           <div className={styles.heroCopy}>
-            <span className={styles.eyebrow}>Opening training for real games</span>
+            <span className={styles.eyebrow}>
+              Opening training for real games
+            </span>
             <h1>Learn the opening. Know what to do when it changes.</h1>
             <p>
-              Blundr trains the positions behind your repertoire, brings back the moves you miss, and helps you keep playing when your opponent leaves the line.
+              Blundr trains the positions behind your repertoire, brings back
+              the moves you miss, and helps you keep playing when your opponent
+              leaves the line.
             </p>
             <div className={styles.heroActions}>
               <PrimaryCta location="hero" />
@@ -226,7 +265,9 @@ export function BlundrLandingPage() {
           <span className={styles.eyebrow}>Why it matters</span>
           <h2>Your opponent won&apos;t follow your study file.</h2>
           <p>
-            Memorizing one line is not enough. Blundr helps you understand the position, respond to common continuations, and stay comfortable when the game changes.
+            Memorizing one line is not enough. Blundr helps you understand the
+            position, respond to common continuations, and stay comfortable when
+            the game changes.
           </p>
         </div>
         <DifferentiatorVisual />
@@ -270,12 +311,51 @@ export function BlundrLandingPage() {
         </div>
       </section>
 
+      <section id="plans" className={styles.planSection}>
+        <div className={styles.sectionCopy}>
+          <span className={styles.eyebrow}>Free and Pro</span>
+          <h2>Start free. Upgrade when you want more volume.</h2>
+          <p>
+            Free includes focused opening training, Daily Blundr, Review, rings,
+            rewards, and basic progress. Pro is planned for unlimited active
+            repertoire, higher Daily targets, unlimited Review, and deeper
+            mastery, weak-area, trend, and next-action views.
+          </p>
+          <a href="/pricing" className={styles.textLink}>
+            Compare launch plans
+          </a>
+        </div>
+        <div className={styles.planCards} aria-label="Blundr plan availability">
+          <div className={styles.planCard}>
+            <h3>Free</h3>
+            <p className={styles.planPrice}>$0</p>
+            <ul>
+              <li>Up to three active openings</li>
+              <li>Unlimited Train within those openings</li>
+              <li>Five Daily Blundr cards per local day</li>
+              <li>Five Review positions per local day</li>
+            </ul>
+          </div>
+          <div className={styles.planCard}>
+            <h3>Pro</h3>
+            <p className={styles.planPrice}>7-day trial planned</p>
+            <ul>
+              <li>$9.99/month after trial</li>
+              <li>$69.99/year after trial</li>
+              <li>Unlimited active repertoire</li>
+              <li>Daily target from 1-99 and unlimited Review</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
       <section className={styles.finalCtaSection}>
         <div className={styles.finalCtaCopy}>
           <span className={styles.eyebrow}>Start now</span>
           <h2>Start building a stronger opening game.</h2>
           <p>
-            Train smarter openings, review the moves you miss, and build a repertoire that holds up in real games.
+            Train smarter openings, review the moves you miss, and build a
+            repertoire that holds up in real games.
           </p>
           <PrimaryCta location="final" />
         </div>
@@ -293,15 +373,22 @@ export function BlundrLandingPage() {
       <footer className={styles.footer}>
         <div>
           <BrandMark />
-          <p>Practical opening training for players who want preparation to hold up in real games.</p>
+          <p>
+            Practical opening training for players who want preparation to hold
+            up in real games.
+          </p>
         </div>
         <nav className={styles.footerLinks} aria-label="Footer navigation">
           <a href="#how-it-works">Why Blundr</a>
           <a href="#daily">Daily</a>
           <a href="#review">Review</a>
           <a href="#repertoire">Repertoire</a>
+          <a href="/pricing">Pricing</a>
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
+          <a href="/subscription-terms">Subscription Terms</a>
+          <a href="/cookies">Cookies</a>
+          <a href="/legal">Legal Notice</a>
         </nav>
       </footer>
     </main>

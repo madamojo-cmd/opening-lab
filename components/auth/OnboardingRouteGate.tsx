@@ -18,6 +18,9 @@ const EXEMPT_PREFIXES = [
   "/onboarding",
   "/privacy",
   "/terms",
+  "/pricing",
+  "/cookies",
+  "/legal",
   "/acceptable-use",
   "/subscription-terms",
 ];
@@ -67,7 +70,14 @@ export function OnboardingRouteGate({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [auth.status, exempt, pathname, requestVersion, router, signedOutPublicPath]);
+  }, [
+    auth.status,
+    exempt,
+    pathname,
+    requestVersion,
+    router,
+    signedOutPublicPath,
+  ]);
   if (
     isOnboardingV11Enabled() &&
     signedOutPublicPath &&

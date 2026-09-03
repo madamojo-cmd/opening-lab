@@ -41,15 +41,43 @@ const orderedHeadlines = [
 ];
 
 for (const headline of orderedHeadlines) {
-  assert.match(landing, new RegExp(headline.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(
+    landing,
+    new RegExp(headline.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+  );
 }
 
 for (const sectionId of [
-  "id=\"top\"",
-  "id=\"how-it-works\"",
-  "id=\"rewards\"",
+  'id="top"',
+  'id="how-it-works"',
+  'id="rewards"',
+  'id="plans"',
 ]) {
   assert.match(landing, new RegExp(sectionId));
+}
+
+for (const legalPath of [
+  "/pricing",
+  "/privacy",
+  "/terms",
+  "/subscription-terms",
+  "/cookies",
+  "/legal",
+]) {
+  assert.match(landing, new RegExp(`href="${legalPath}"`));
+}
+
+for (const launchCopy of [
+  "$0",
+  "$9.99/month after trial",
+  "$69.99/year after trial",
+  "Five Daily Blundr cards per local day",
+  "Five Review positions per local day",
+]) {
+  assert.match(
+    landing,
+    new RegExp(launchCopy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+  );
 }
 
 for (const banned of [
