@@ -1,8 +1,21 @@
 import assert from "node:assert/strict";
 
-import { createDefaultDailyRetentionProgress, createDefaultTrainingProfile } from "../../accounts/accountDefaults";
-import { getLocalTrainingProfile, resetLocalAccountState, setLocalAccountCurrentUserId, upsertLocalDailyRetentionProgress, upsertLocalTrainingProfile } from "../../accounts/localAccountStorage";
-import { clearLocalLearningEvents, createLearningSessionId, recordLearningEvent } from "../../learning/learningEvents";
+import {
+  createDefaultDailyRetentionProgress,
+  createDefaultTrainingProfile,
+} from "../../accounts/accountDefaults";
+import {
+  getLocalTrainingProfile,
+  resetLocalAccountState,
+  setLocalAccountCurrentUserId,
+  upsertLocalDailyRetentionProgress,
+  upsertLocalTrainingProfile,
+} from "../../accounts/localAccountStorage";
+import {
+  clearLocalLearningEvents,
+  createLearningSessionId,
+  recordLearningEvent,
+} from "../../learning/learningEvents";
 import { loadBlundrProgressSummary } from "../progressSummaryService";
 import { writeDailyBlundrReviewAttempts } from "../../daily/dailyBlundrReviewStorage";
 
@@ -15,7 +28,7 @@ class MemoryStorage implements Storage {
     this.store.clear();
   }
   getItem(key: string): string | null {
-    return this.store.has(key) ? this.store.get(key) ?? null : null;
+    return this.store.has(key) ? (this.store.get(key) ?? null) : null;
   }
   key(index: number): string | null {
     return Array.from(this.store.keys())[index] ?? null;
@@ -44,7 +57,7 @@ function installLocalStorageMock(): () => void {
 const restore = installLocalStorageMock();
 try {
   const userId = "progress-user";
-  const now = "2026-08-27T15:30:00.000Z";
+  const now = new Date().toISOString();
   const localDate = now.slice(0, 10);
 
   resetLocalAccountState(userId);
@@ -56,11 +69,16 @@ try {
     dailyBlundrGoal: 1,
     updatedAt: now,
   });
-  const todayRetention = createDefaultDailyRetentionProgress(userId, localDate, {
-    dailyTempoGoal: 2,
-    dailyBatteryGoal: 1,
-    dailyBlundrGoal: 1,
-  }, now);
+  const todayRetention = createDefaultDailyRetentionProgress(
+    userId,
+    localDate,
+    {
+      dailyTempoGoal: 2,
+      dailyBatteryGoal: 1,
+      dailyBlundrGoal: 1,
+    },
+    now,
+  );
   todayRetention.rings.dailyTempo.progress = 1;
   upsertLocalDailyRetentionProgress(todayRetention);
 
@@ -131,7 +149,7 @@ try {
   assert.deepEqual(
     summary.streak.recentDays.map((day) => day.localDate),
     Array.from({ length: 28 }, (_, index) => {
-      const date = new Date("2026-08-27T12:00:00.000Z");
+      const date = new Date(`${localDate}T12:00:00.000Z`);
       date.setUTCDate(date.getUTCDate() + index - 27);
       return date.toISOString().slice(0, 10);
     }),
@@ -140,7 +158,10 @@ try {
   assert.equal(summary.streak.recentDays[0].reviewCount, 0);
   assert.equal(summary.streak.daysTrainedThisWeek, 1);
   assert.equal(getLocalTrainingProfile(userId)?.dailyTempoGoal, 2);
-  assert.equal(summary.recentActivity.some((item) => item.key === "minigames"), true);
+  assert.equal(
+    summary.recentActivity.some((item) => item.key === "minigames"),
+    true,
+  );
 
   console.log("progressSummaryService.test.ts passed");
 } finally {

@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
+import assert from "node:assert/strict";
+import test from "node:test";
 
 import { verifyRuntimeLearningPosition } from "../runtimeLearningPosition";
 import type { TrainerTreeIndex } from "@/lib/blundr/trainingRuntime/runtimeEvidenceIndices";
 
-const startFen =
-  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+const startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 const trainer: TrainerTreeIndex = {
   nodesByKey: new Map([
@@ -25,35 +25,41 @@ const trainer: TrainerTreeIndex = {
     [
       "italian-white:startpos",
       [
-        { openingId: "italian-white", playKeyBefore: "startpos", moveUci: "e2e4" },
-        { openingId: "italian-white", playKeyBefore: "startpos", moveUci: "d2d4" },
+        {
+          openingId: "italian-white",
+          playKeyBefore: "startpos",
+          moveUci: "e2e4",
+        },
+        {
+          openingId: "italian-white",
+          playKeyBefore: "startpos",
+          moveUci: "d2d4",
+        },
       ],
     ],
   ]),
 };
 
-describe("runtime learning preferred authority", () => {
-  it("accepts only the selected preferred expected move for indexed openings", () => {
-    const preferred = verifyRuntimeLearningPosition(
-      {
-        openingId: "italian-white",
-        moveOrderKey: "startpos",
-        canonicalFen: startFen,
-        expectedMoveUci: "e2e4",
-      },
-      trainer,
-    );
-    expect(preferred?.expectedMoveUci).toBe("e2e4");
+test("runtime learning preferred authority accepts only the selected preferred expected move for indexed openings", () => {
+  const preferred = verifyRuntimeLearningPosition(
+    {
+      openingId: "italian-white",
+      moveOrderKey: "startpos",
+      canonicalFen: startFen,
+      expectedMoveUci: "e2e4",
+    },
+    trainer,
+  );
+  assert.equal(preferred?.expectedMoveUci, "e2e4");
 
-    const superseded = verifyRuntimeLearningPosition(
-      {
-        openingId: "italian-white",
-        moveOrderKey: "startpos",
-        canonicalFen: startFen,
-        expectedMoveUci: "d2d4",
-      },
-      trainer,
-    );
-    expect(superseded).toBeNull();
-  });
+  const superseded = verifyRuntimeLearningPosition(
+    {
+      openingId: "italian-white",
+      moveOrderKey: "startpos",
+      canonicalFen: startFen,
+      expectedMoveUci: "d2d4",
+    },
+    trainer,
+  );
+  assert.equal(superseded, null);
 });

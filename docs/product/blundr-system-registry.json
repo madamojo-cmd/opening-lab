@@ -294,8 +294,22 @@
       "fallback": "Free onboarding remains available; Pro checkout is labeled unavailable and may only save intent until backend billing and entitlement authority are implemented.",
       "requiredTests": ["tests/marketing/canonicalLanding.test.ts", "tests/marketing/commercialLaunchLegal.test.ts", "authenticated browser journey: anonymous landing -> signup -> onboarding -> Free -> Home -> Train -> sign out -> sign in -> Home -> Train"],
       "lastVerifiedSha": null,
-      "evidence": ["Recovered local branch launch/market-phase3-canonical-landing at 01b8d0bb795bc3ff67eac22361b89f9006a8c39a; local worktree validation in /tmp/opening-lab-phase3-validation."],
-      "blockers": ["Stripe Checkout is not implemented.", "RevenueCat is not implemented.", "Backend entitlement authority is not implemented.", "Durable versioned consent storage is not implemented.", "Account export and deletion controls are incomplete.", "Commercial analytics are not implemented.", "Lifecycle messaging is not implemented.", "Commercial QA and exact-SHA deployed proof are incomplete."]
+      "evidence": [
+        "Recovered local branch launch/market-phase3-canonical-landing at 01b8d0bb795bc3ff67eac22361b89f9006a8c39a; local worktree validation in /tmp/opening-lab-phase3-validation.",
+        "Wave 1B checkpoint d1d5418e8934b14575f76290cc124f5911b78908 protects the recovered Phase 3 launch experience integration but is not an accepted launch SHA.",
+        "Wave 1B stabilization evidence on 2026-09-03: npm run test:unit passed 588 tests with 0 failures; disposable Supabase npm run test:security passed 28 tests with 0 failures; npm run typecheck passed; npm run lint passed with existing warnings and 0 errors; npm run build passed; public landing/legal/asset responsive browser QA passed."
+      ],
+      "blockers": [
+        "Stripe Checkout is not implemented.",
+        "RevenueCat is not implemented.",
+        "Backend entitlement authority is not implemented.",
+        "Durable versioned consent storage is not implemented.",
+        "Account export and deletion controls are incomplete.",
+        "Commercial analytics are not implemented.",
+        "Lifecycle messaging is not implemented.",
+        "Authenticated commercial QA is blocked: configured non-production Supabase Auth projects returned over_email_send_rate_limit for anonymous signup, local Docker Supabase is unavailable in this runner, direct non-production Postgres migration access is blocked by network restrictions, and the available disposable/staging databases are not both at the repository migration head required for the complete V11 browser journey.",
+        "Exact-SHA deployed proof is incomplete."
+      ]
     },
     {
       "id": "RELEASE-001",

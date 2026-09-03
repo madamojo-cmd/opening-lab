@@ -173,11 +173,14 @@ async function main() {
     const first = await service.rpc(REWARD_RPC, acceptedArgs);
     assert.equal(first.error, null);
     assert.equal(first.data.duplicate, false);
-    assert.match(String(first.data.randomEvaluation), /^(evaluated|unavailable)$/);
+    assert.match(
+      String(first.data.randomEvaluation),
+      /^(evaluated|unavailable)$/,
+    );
     assert.equal(
       await countPendingPresentations(userAId),
-      0,
-      "one Daily ring must not create an all-rings presentation",
+      1,
+      "one verified Daily completion creates one pending completion presentation",
     );
     const compatibilityRetry = await service.rpc(
       "blundr_apply_reward_transaction_v2",
@@ -195,6 +198,11 @@ async function main() {
     );
     assert.equal(retry.error, null);
     assert.equal(retry.data.duplicate, true);
+    assert.equal(
+      await countPendingPresentations(userAId),
+      1,
+      "repeating the Daily completion must not duplicate its presentation",
+    );
     const conflict = await service.rpc(
       REWARD_RPC,
       rewardArgs(userAId, acceptedSession, "conflicting-policy"),
@@ -346,12 +354,7 @@ async function main() {
     );
     assert.equal(checkmateEvidence.error, null);
     assert.equal(checkmateEvidence.data.status, "inserted");
-
-    assert.equal(
-      await countPendingPresentations(userAId),
-      0,
-      "historical one-ring days must not create pending presentations",
-    );
+    const pendingBeforeTempo = await countPendingPresentations(userAId);
     const tempoReward = await service.rpc(
       REWARD_RPC,
       rewardArgs(
@@ -366,8 +369,8 @@ async function main() {
     assert.equal(tempoReward.data.dayRecord.dailyTempo.progress, 1);
     assert.equal(
       await countPendingPresentations(userAId),
-      0,
-      "Tempo alone must not create an all-rings presentation",
+      pendingBeforeTempo + 1,
+      "verified Tempo completion creates one pending completion presentation",
     );
     assert.equal(
       (
@@ -384,6 +387,8 @@ async function main() {
       true,
     );
 
+    const pendingBeforeContinuationReward =
+      await countPendingPresentations(userAId);
     const continuationReward = await service.rpc(
       REWARD_RPC,
       rewardArgs(
@@ -398,8 +403,8 @@ async function main() {
     assert.equal(continuationReward.data.dayRecord.dailyBattery.progress, 1);
     assert.equal(
       await countPendingPresentations(userAId),
-      0,
-      "Tempo plus Battery must not create an all-rings presentation",
+      pendingBeforeContinuationReward + 1,
+      "verified Battery completion creates one pending completion presentation",
     );
     assert.equal(
       (
@@ -415,8 +420,14 @@ async function main() {
       ).data.duplicate,
       true,
     );
+    assert.equal(
+      await countPendingPresentations(userAId),
+      pendingBeforeContinuationReward + 1,
+      "repeating the Battery completion must not duplicate its presentation",
+    );
     const allRingsDay = new Date().toISOString().slice(0, 10);
     const allRingsDailySession = await seedCompletedDaily(userAId, allRingsDay);
+    const pendingBeforeAllRings = await countPendingPresentations(userAId);
     const allRingsDailyReward = await service.rpc(
       REWARD_RPC,
       rewardArgs(
@@ -431,8 +442,8 @@ async function main() {
     assert.equal(allRingsDailyReward.data.dayRecord.dailyBlundr.progress, 1);
     assert.equal(
       await countPendingPresentations(userAId),
-      1,
-      "the third same-day verified ring must create exactly one presentation",
+      pendingBeforeAllRings + 1,
+      "the third same-day verified ring must create exactly one new presentation",
     );
     assert.equal(
       (
@@ -450,8 +461,8 @@ async function main() {
     );
     assert.equal(
       await countPendingPresentations(userAId),
-      1,
-      "repeating the third completion must not duplicate the presentation",
+      pendingBeforeAllRings + 1,
+      "repeating the third completion must not duplicate its presentation",
     );
     assert.ok(
       (
@@ -503,62 +514,69 @@ async function main() {
       ["1:0", "1:0", "1:1"],
     );
 
-    const claim = await service.rpc("blundr_claim_reward_presentation_v2", {
-      p_user_id: userAId,
-      p_claimed_by: `tab-${scope}`,
-      p_lease_seconds: 60,
-    });
-    assert.equal(claim.error, null);
-    assert.ok(claim.data?.id);
-    const otherClaim = await service.rpc(
-      "blundr_claim_reward_presentation_v2",
-      {
+    const pendingBeforeClaims = await countPendingPresentations(userAId);
+    let claimedCount = 0;
+    while (claimedCount < pendingBeforeClaims) {
+      const claimedBy = `tab-${scope}-${claimedCount}`;
+      const claim = await service.rpc("blundr_claim_reward_presentation_v2", {
         p_user_id: userAId,
-        p_claimed_by: `other-${scope}`,
+        p_claimed_by: claimedBy,
         p_lease_seconds: 60,
-      },
-    );
-    assert.equal(otherClaim.error, null);
-    assert.equal(otherClaim.data, null);
-    assert.ok(
-      (
-        await userB.rpc("blundr_mark_reward_presentation_v2", {
+      });
+      assert.equal(claim.error, null);
+      assert.ok(claim.data?.id);
+      const otherClaim = await service.rpc(
+        "blundr_claim_reward_presentation_v2",
+        {
           p_user_id: userAId,
-          p_presentation_id: claim.data.id,
-          p_claimed_by: `tab-${scope}`,
-          p_action: "acknowledged",
-        })
-      ).error,
-    );
-    assert.equal(
-      (
-        await service.rpc("blundr_mark_reward_presentation_v2", {
-          p_user_id: userAId,
-          p_presentation_id: claim.data.id,
-          p_claimed_by: `tab-${scope}`,
-          p_action: "rendered",
-        })
-      ).error,
-      null,
-    );
-    assert.equal(
-      (
-        await service.rpc("blundr_mark_reward_presentation_v2", {
-          p_user_id: userAId,
-          p_presentation_id: claim.data.id,
-          p_claimed_by: `tab-${scope}`,
-          p_action: "acknowledged",
-        })
-      ).error,
-      null,
-    );
-    const acknowledged = await service
-      .from("blundr_reward_presentations_v2")
-      .select("id,acknowledged_at")
-      .eq("id", claim.data.id)
-      .single();
-    assert.equal(acknowledged.error, null);
-    assert.ok(acknowledged.data?.acknowledged_at);
+          p_claimed_by: `other-${scope}-${claimedCount}`,
+          p_lease_seconds: 60,
+        },
+      );
+      assert.equal(otherClaim.error, null);
+      assert.equal(otherClaim.data, null);
+      assert.ok(
+        (
+          await userB.rpc("blundr_mark_reward_presentation_v2", {
+            p_user_id: userAId,
+            p_presentation_id: claim.data.id,
+            p_claimed_by: claimedBy,
+            p_action: "acknowledged",
+          })
+        ).error,
+      );
+      assert.equal(
+        (
+          await service.rpc("blundr_mark_reward_presentation_v2", {
+            p_user_id: userAId,
+            p_presentation_id: claim.data.id,
+            p_claimed_by: claimedBy,
+            p_action: "rendered",
+          })
+        ).error,
+        null,
+      );
+      assert.equal(
+        (
+          await service.rpc("blundr_mark_reward_presentation_v2", {
+            p_user_id: userAId,
+            p_presentation_id: claim.data.id,
+            p_claimed_by: claimedBy,
+            p_action: "acknowledged",
+          })
+        ).error,
+        null,
+      );
+      const acknowledged = await service
+        .from("blundr_reward_presentations_v2")
+        .select("id,acknowledged_at")
+        .eq("id", claim.data.id)
+        .single();
+      assert.equal(acknowledged.error, null);
+      assert.ok(acknowledged.data?.acknowledged_at);
+      claimedCount += 1;
+    }
+    assert.equal(claimedCount, pendingBeforeClaims);
     const nextClaim = await service.rpc("blundr_claim_reward_presentation_v2", {
       p_user_id: userAId,
       p_claimed_by: `other-${scope}`,
