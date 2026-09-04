@@ -138,6 +138,8 @@ async function seedAuthorityRows(userId: string, suffix: string) {
         displayed_currency: "usd",
         displayed_interval: "month",
         trial_eligible: false,
+        displayed_at: new Date("2026-09-04T00:00:00.000Z").toISOString(),
+        accepted_at: new Date("2026-09-04T00:01:00.000Z").toISOString(),
         disclosed_conversion_at: new Date("2026-09-04T00:00:00.000Z").toISOString(),
         expires_at: new Date("2026-09-04T00:30:00.000Z").toISOString(),
       })
