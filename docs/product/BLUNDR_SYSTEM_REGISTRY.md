@@ -19,8 +19,8 @@ explains how to use it.
 | `MINIGAME-DEEP-001` | Deep games use server-owned, engine-certified multi-step content | Partial |
 | `DATA-OPENINGS-001` | One versioned opening package is canonical | Partial |
 | `OBSERVABILITY-001` | Failures are measurable without leaking private data | Partial |
-| `BILLING-ENTITLEMENT-001` | Web billing creates Stripe Checkout and persists trusted RevenueCat Pro entitlement authority | Partial |
-| `COMMERCIAL-LAUNCH-001` | Public launch landing, legal pages, and plan-intent onboarding are truthful before billing | Partial |
+| `BILLING-ENTITLEMENT-001` | Web billing, paid-offer consent, and Free/Pro enforcement read trusted backend entitlement authority | Partial |
+| `COMMERCIAL-LAUNCH-001` | Public launch, legal pages, and onboarding paywall choices never grant paid access without trusted entitlement | Partial |
 | `RELEASE-001` | One exact SHA, migration state, and rollback target define release | Blocked |
 
 `partial` is not failure; it is an honest statement that implementation exists

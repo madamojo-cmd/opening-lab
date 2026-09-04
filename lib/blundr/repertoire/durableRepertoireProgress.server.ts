@@ -30,6 +30,11 @@ import {
   sortRepertoireUnlockEvents,
 } from "./repertoireEvents";
 import type { RepertoireProgress } from "./repertoireTypes";
+import { loadFreeActiveOpeningPolicy } from "@/lib/blundr/commercial/activeOpenings.server";
+import {
+  readCommercialBillingEnvironment,
+  resolveCommercialAccess,
+} from "@/lib/blundr/commercial/commercialAccess.server";
 
 type DurableRepertoireProgressInput = {
   userId: string;
@@ -239,5 +244,22 @@ export async function loadDurableRepertoireProgress(
     starterPackId,
     now: input.now,
   });
-  return progress;
+  const commercialAccess = await resolveCommercialAccess({
+    userId: input.userId,
+    now: input.now,
+  });
+  const openingPolicy = await loadFreeActiveOpeningPolicy({
+    userId: input.userId,
+    environment: readCommercialBillingEnvironment(),
+    unlockedOpeningIds: progress.unlockedOpeningIds,
+    access: commercialAccess,
+  });
+  return {
+    ...progress,
+    commercialPlan: commercialAccess.plan,
+    activeOpeningIds: openingPolicy.activeOpeningIds
+      ? Array.from(openingPolicy.activeOpeningIds)
+      : progress.unlockedOpeningIds,
+    activeOpeningSelectionRequired: openingPolicy.selectionRequired,
+  };
 }

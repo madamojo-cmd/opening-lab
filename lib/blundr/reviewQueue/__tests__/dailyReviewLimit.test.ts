@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   buildReviewDailyLimitAuthorityKey,
   countDailyCorrectReviewCompletionsByAuthority,
-  MAX_DAILY_REVIEW_COMPLETIONS_PER_AUTHORITY,
+  MAX_DAILY_REVIEW_COMPLETIONS_PER_FREE_USER,
 } from "../dailyReviewLimit.server";
 
 const canonicalFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -44,20 +44,20 @@ test("daily Review completion limit counts only server-confirmed correct Review 
   assert.equal(counts.get(key ?? ""), 1);
 });
 
-test("daily Review completion limit allows the fourth completion after three same-day completions", () => {
+test("daily Review completion limit allows the fifth Free completion after four same-day completions", () => {
   const counts = countDailyCorrectReviewCompletionsByAuthority({
     localDate: "2026-08-27",
     timeZone: "UTC",
-    rows: [correctRow(), correctRow(), correctRow()],
+    rows: [correctRow(), correctRow(), correctRow(), correctRow()],
   });
 
   assert.equal(
-    (counts.get(key ?? "") ?? 0) < MAX_DAILY_REVIEW_COMPLETIONS_PER_AUTHORITY,
+    (counts.get(key ?? "") ?? 0) < MAX_DAILY_REVIEW_COMPLETIONS_PER_FREE_USER,
     true,
   );
 });
 
-test("daily Review completion limit defers after four same-day completions and keeps authority keys separate", () => {
+test("daily Review completion limit defers Free users after five same-day completions and keeps authority keys separate", () => {
   const otherFen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1";
   const otherKey = buildReviewDailyLimitAuthorityKey({
     openingId: "italian-white",
@@ -72,13 +72,14 @@ test("daily Review completion limit defers after four same-day completions and k
       correctRow(),
       correctRow(),
       correctRow(),
+      correctRow(),
       correctRow({ canonical_fen: otherFen }),
     ],
   });
 
-  assert.equal(counts.get(key ?? ""), 4);
+  assert.equal(counts.get(key ?? ""), 5);
   assert.equal(
-    (counts.get(key ?? "") ?? 0) >= MAX_DAILY_REVIEW_COMPLETIONS_PER_AUTHORITY,
+    (counts.get(key ?? "") ?? 0) >= MAX_DAILY_REVIEW_COMPLETIONS_PER_FREE_USER,
     true,
   );
   assert.equal(counts.get(otherKey ?? ""), 1);

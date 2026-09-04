@@ -126,6 +126,39 @@ async function seedAuthorityRows(userId: string, suffix: string) {
     ).error,
     null,
   );
+  assert.equal(
+    (
+      await service.from("blundr_paid_offer_acceptances").insert({
+        user_id: userId,
+        billing_environment: billingEnvironment,
+        offer_version: "paid-offer-v1",
+        legal_version: "subscription-terms-20260904",
+        selected_plan: "monthly",
+        displayed_price_cents: 999,
+        displayed_currency: "usd",
+        displayed_interval: "month",
+        trial_eligible: false,
+        disclosed_conversion_at: new Date("2026-09-04T00:00:00.000Z").toISOString(),
+        expires_at: new Date("2026-09-04T00:30:00.000Z").toISOString(),
+      })
+    ).error,
+    null,
+  );
+  assert.equal(
+    (
+      await service.from("blundr_free_active_opening_selections").insert({
+        user_id: userId,
+        billing_environment: billingEnvironment,
+        active_opening_ids: [
+          `italian-white-${suffix}`,
+          `scotch-white-${suffix}`,
+          `french-black-${suffix}`,
+        ],
+        selection_required: false,
+      })
+    ).error,
+    null,
+  );
 }
 
 async function expectOwnReadOnly(
@@ -202,6 +235,8 @@ async function main() {
       "blundr_billing_subscriptions",
       "blundr_trusted_entitlements",
       "blundr_billing_trial_eligibility",
+      "blundr_paid_offer_acceptances",
+      "blundr_free_active_opening_selections",
     ]) {
       await expectOwnReadOnly(userA, table, userAId, userBId);
       await expectOwnReadOnly(userB, table, userBId, userAId);
@@ -327,6 +362,49 @@ async function main() {
           (query as { eq: (column: string, value: string) => unknown }).eq(
             "provider_event_id",
             eventA,
+          ),
+      );
+      await expectWriteDenied(
+        client,
+        label,
+        "blundr_paid_offer_acceptances",
+        userBId,
+        {
+          user_id: userAId,
+          billing_environment: billingEnvironment,
+          offer_version: "paid-offer-v1",
+          legal_version: "subscription-terms-20260904",
+          selected_plan: "annual",
+          displayed_price_cents: 6999,
+          displayed_currency: "usd",
+          displayed_interval: "year",
+          trial_eligible: false,
+          disclosed_conversion_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        },
+        { selected_plan: "monthly" },
+        (query) =>
+          (query as { eq: (column: string, value: string) => unknown }).eq(
+            "user_id",
+            userAId,
+          ),
+      );
+      await expectWriteDenied(
+        client,
+        label,
+        "blundr_free_active_opening_selections",
+        userBId,
+        {
+          user_id: userAId,
+          billing_environment: billingEnvironment,
+          active_opening_ids: ["italian-white", "scotch-white", "french-black"],
+          selection_required: false,
+        },
+        { active_opening_ids: ["italian-white"] },
+        (query) =>
+          (query as { eq: (column: string, value: string) => unknown }).eq(
+            "user_id",
+            userAId,
           ),
       );
     }

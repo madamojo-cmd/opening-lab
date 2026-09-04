@@ -81,9 +81,9 @@ const onboarding = readFileSync(
   resolve(root, "components/onboarding/OnboardingV11Flow.tsx"),
   "utf8",
 );
-assert.match(onboarding, /Pro checkout is not active in this preview/);
-assert.match(onboarding, /does not grant Pro access/);
-assert.match(onboarding, /Save Pro intent/);
+assert.match(onboarding, /Choose how you want to train/);
+assert.match(onboarding, /Keep training free, or try everything in Blundr Pro for 7 days/);
+assert.match(onboarding, /PaywallPlanSelection/);
 assert.doesNotMatch(onboarding, /isPro/);
 
 for (const gateFile of [

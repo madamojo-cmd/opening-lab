@@ -3,7 +3,8 @@
 Scope: non-production backend foundation for web billing and trusted Pro
 entitlement authority. Production was not touched. This wave does not enable
 live mode, a final paywall UI, lifecycle email delivery, analytics, or
-application-wide Free/Pro feature gates.
+application-wide Free/Pro feature gates. Wave 2B adds those gates in
+`docs/operations/commercial-paywall-enforcement-wave2b-20260904.md`.
 
 ## Feature ID
 
@@ -174,7 +175,7 @@ Checkout reservation is concurrency-safe and retry-safe:
 - Stripe dashboard product, portal, and webhook settings need operator proof.
 - RevenueCat dashboard integration, offering, entitlement, webhook secret, and
   Stripe product mapping need operator proof.
-- Final paywall UI and application-wide Free/Pro gates are deferred.
+- Final paywall UI and application-wide Free/Pro gates move to Wave 2B.
 
 ## Documentation References
 

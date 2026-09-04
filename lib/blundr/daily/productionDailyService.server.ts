@@ -47,6 +47,12 @@ import type { DailyReservationIdentity } from "./productionDailyTypes";
 import { runtimeSequenceToFen } from "./runtimeSequence";
 import { selectProductionDailyBoardCards } from "./productionDailyDeckSelection";
 import { resolveServerDailyTaskCount } from "./core/adaptiveDailyPolicy";
+import { loadFreeActiveOpeningPolicy } from "@/lib/blundr/commercial/activeOpenings.server";
+import {
+  readCommercialBillingEnvironment,
+  resolveCommercialAccess,
+} from "@/lib/blundr/commercial/commercialAccess.server";
+import { effectiveDailyBlundrCardGoal } from "@/lib/blundr/commercial/commercialAccess";
 
 // Request-time Daily selection uses only verified runtime data. Bound the
 // amount of chess reconstruction per reservation so a large runtime package
@@ -99,6 +105,42 @@ function dailyTaskEvidence(input: DailyTaskEvidenceInput) {
     revealOccurred: input.evidenceType === "reveal",
     evidenceType: input.evidenceType,
   };
+}
+
+function hasCompletedDailyCard(
+  session: ProductionDailySession,
+  cardFingerprint: string,
+): boolean {
+  return (
+    session.state.attempts.some(
+      (attempt) =>
+        attempt.card.cardFingerprint === cardFingerprint &&
+        attempt.outcome === "correct",
+    ) ||
+    session.state.activityProgress?.[cardFingerprint]?.status === "completed"
+  );
+}
+
+async function assertDailyCardCompletionAvailable(input: {
+  repository: ProductionDailyRepository;
+  session: ProductionDailySession;
+  userId: string;
+  cardFingerprint: string;
+  now: string;
+}): Promise<void> {
+  if (hasCompletedDailyCard(input.session, input.cardFingerprint)) return;
+  const access = await resolveCommercialAccess({
+    userId: input.userId,
+    now: input.now,
+  });
+  if (access.plan === "pro" && access.entitlementActive) return;
+  const completedToday = await input.repository.countUniqueCompletedCardsForDate(
+    input.userId,
+    input.session.dateKey,
+  );
+  if (completedToday >= access.limits.dailyBlundrCards) {
+    throw new Error("daily_card_limit_reached");
+  }
 }
 
 async function dailyLearningEvent(
@@ -304,7 +346,7 @@ async function openingAccess(
         updatedAt: String(row.updated_at),
       }
     : null;
-  return new RepertoireOpeningAccessRepository(() =>
+  const repertoireProgress =
     stored
       ? {
           userId: user.userId,
@@ -321,8 +363,19 @@ async function openingAccess(
           unlockEvents: [],
           updatedAt: stored.updatedAt,
         }
-      : null,
-  );
+      : null;
+  const environment = readCommercialBillingEnvironment();
+  const commercialAccess = await resolveCommercialAccess({
+    userId: user.userId,
+    environment,
+  });
+  const policy = await loadFreeActiveOpeningPolicy({
+    userId: user.userId,
+    environment,
+    unlockedOpeningIds: repertoireProgress?.unlockedOpeningIds ?? [],
+    access: commercialAccess,
+  });
+  return new RepertoireOpeningAccessRepository(() => repertoireProgress, policy);
 }
 
 async function buildReservation(
@@ -760,7 +813,10 @@ async function buildReservation(
     throw new Error("daily_opening_selection_required");
   const desiredTaskCount = Math.max(
     resolveServerDailyTaskCount({}),
-    dailyBlundrCardGoal,
+    effectiveDailyBlundrCardGoal(
+      dailyBlundrCardGoal,
+      await resolveCommercialAccess({ userId: user.userId }),
+    ),
   );
   const reservationTaskCount = Math.max(
     1,
@@ -945,6 +1001,15 @@ export async function applyDailyAction(input: {
           feedback: step.explanation,
         }).state
       : nextState;
+    if (finalStep) {
+      await assertDailyCardCompletionAvailable({
+        repository,
+        session,
+        userId: input.user.userId,
+        cardFingerprint: input.cardFingerprint,
+        now,
+      });
+    }
     const next = {
       ...session,
       state: completedState,
@@ -1092,6 +1157,15 @@ export async function applyDailyAction(input: {
           ? "Correct. The approved move keeps the opening plan on track."
           : "Recorded. Review the position and try the line again.",
   });
+  if (correct && reduced.result === "accepted") {
+    await assertDailyCardCompletionAvailable({
+      repository,
+      session,
+      userId: input.user.userId,
+      cardFingerprint: input.cardFingerprint,
+      now,
+    });
+  }
   const next = {
     ...session,
     state: reduced.state,

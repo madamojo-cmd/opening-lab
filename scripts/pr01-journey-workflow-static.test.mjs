@@ -57,11 +57,11 @@ assert.match(
   workflow,
   /grep -oE '\[0-9\]\{8\}\(\[0-9\]\{6\}\)\?_[^\n]+tail -n "\$expected_count" >"\$actual_file"/,
 );
-assert.match(workflow, /Journey A preflight and fresh zero-to-46 rebuild/);
-assert.match(workflow, /Journey B preflight and exact 25-to-46 upgrade/);
+assert.match(workflow, /Journey A preflight and fresh zero-to-47 rebuild/);
+assert.match(workflow, /Journey B preflight and exact 25-to-47 upgrade/);
 assert.match(
   workflow,
-  /BLUNDR_EXPECTED_MIGRATION_COUNT=46 BLUNDR_EXPECTED_MIGRATION_HEAD=20260904135434/,
+  /BLUNDR_EXPECTED_MIGRATION_COUNT=47 BLUNDR_EXPECTED_MIGRATION_HEAD=20260904170758/,
 );
 assert.match(workflow, /tail -n 21 >"\$expected_pr03_migration"/);
 assert.doesNotMatch(workflow, /zero-to-44|25-to-44/);
@@ -93,17 +93,17 @@ assert.match(
   /supabase-rls-upgrade:[\s\S]*?BLUNDR_RLS_FRESH_PROJECT_REF:[\s\S]*?BLUNDR_RLS_UPGRADE_PROJECT_REF:[\s\S]*?BLUNDR_RLS_TEST_PROJECT_REF:/,
 );
 assertInOrder(
-  "Journey A preflight and fresh zero-to-46 rebuild",
+  "Journey A preflight and fresh zero-to-47 rebuild",
   'run_supabase link --project-ref "$BLUNDR_RLS_FRESH_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"',
   "run_supabase --yes db reset --linked --no-seed",
-  "BLUNDR_EXPECTED_MIGRATION_COUNT=46 BLUNDR_EXPECTED_MIGRATION_HEAD=20260904135434",
+  "BLUNDR_EXPECTED_MIGRATION_COUNT=47 BLUNDR_EXPECTED_MIGRATION_HEAD=20260904170758",
 );
 assertInOrder(
-  "Journey B preflight and exact 25-to-46 upgrade",
+  "Journey B preflight and exact 25-to-47 upgrade",
   "BLUNDR_EXPECTED_MIGRATION_COUNT=25 BLUNDR_EXPECTED_MIGRATION_HEAD=20260805150000",
   'require_dry_run_migrations "$expected_pr03_migration"',
   "run_supabase db push",
-  "BLUNDR_EXPECTED_MIGRATION_COUNT=46 BLUNDR_EXPECTED_MIGRATION_HEAD=20260904135434",
+  "BLUNDR_EXPECTED_MIGRATION_COUNT=47 BLUNDR_EXPECTED_MIGRATION_HEAD=20260904170758",
   "Run non-skippable upgraded authority matrix",
 );
 

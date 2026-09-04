@@ -55,11 +55,11 @@ describe("onboarding V11 migration contract", () => {
       .filter((file) => file.endsWith(".sql"))
       .sort();
 
-    assert.equal(migrations.length, 46);
+    assert.equal(migrations.length, 47);
     assert.ok(migrations.includes(migrationFile));
     assert.equal(
       migrations.at(-1),
-      "20260904135434_blundr_billing_entitlement_authority.sql",
+      "20260904170758_blundr_paywall_enforcement_authority.sql",
     );
   });
 });

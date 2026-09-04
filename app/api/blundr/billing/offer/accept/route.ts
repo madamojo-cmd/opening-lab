@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentBlundrUser } from "@/lib/blundr/accounts/accountSession";
 import { readBillingConfig } from "@/lib/blundr/billing/billingConfig";
-import { createBillingCheckoutSession } from "@/lib/blundr/billing/checkout.server";
+import { acceptPaidOffer } from "@/lib/blundr/billing/paidOffer.server";
 
 export const dynamic = "force-dynamic";
 
@@ -11,13 +11,16 @@ export async function POST(request: Request) {
     request,
     allowLocalFallback: false,
   });
-  const body = await request.json().catch(() => ({}));
+  const body = (await request.json().catch(() => ({}))) as {
+    offerId?: unknown;
+    plan?: unknown;
+  };
   try {
-    const result = await createBillingCheckoutSession({
+    const result = await acceptPaidOffer({
       user,
-      body,
+      offerId: body.offerId,
+      plan: body.plan,
       config: readBillingConfig(),
-      requireAcceptedOffer: true,
     });
     if (result.ok === false) {
       return NextResponse.json(
@@ -25,13 +28,10 @@ export async function POST(request: Request) {
         { status: result.status },
       );
     }
-    return NextResponse.json({
-      ok: true,
-      data: { url: result.url },
-    });
+    return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json(
-      { ok: false, error: { code: "billing_unavailable" } },
+      { ok: false, error: { code: "billing_offer_unavailable" } },
       { status: 503 },
     );
   }

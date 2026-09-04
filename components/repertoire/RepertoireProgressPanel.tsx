@@ -10,6 +10,7 @@ import { BLUNDR_ANALYTICS_EVENTS } from "@/lib/blundr/analytics/blundrAnalyticsE
 import { trackBlundrAnalyticsEvent } from "@/lib/blundr/analytics/blundrAnalyticsService";
 import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 import { getStarterPackById } from "@/lib/blundr/onboarding/starterPacks";
+import { getUnlockedOpeningCards } from "@/lib/blundr/repertoire/repertoireUnlockService";
 import { RepertoireOpeningGrid } from "./RepertoireOpeningGrid";
 import { RepertoireTempoCallout } from "./RepertoireTempoCallout";
 import { RewardHistoryList } from "@/components/rewards/RewardHistoryList";
@@ -48,6 +49,10 @@ export function RepertoireProgressPanel({
   const [unlockingOpeningId, setUnlockingOpeningId] = useState<string | null>(
     null,
   );
+  const [selectedActiveOpenings, setSelectedActiveOpenings] = useState<
+    string[]
+  >([]);
+  const [savingActiveOpenings, setSavingActiveOpenings] = useState(false);
 
   const starterPack = useMemo(
     () =>
@@ -64,6 +69,10 @@ export function RepertoireProgressPanel({
       lockedCount,
     });
   }, [userId, unlockedCount, lockedCount]);
+
+  useEffect(() => {
+    setSelectedActiveOpenings(progress?.activeOpeningIds ?? []);
+  }, [progress?.activeOpeningIds]);
 
   async function handleUnlock(openingId: string) {
     if (!progress) return;
@@ -111,11 +120,52 @@ export function RepertoireProgressPanel({
   }
 
   function handleTrainOpening(openingId: string) {
+    if (
+      progress?.commercialPlan === "free" &&
+      progress.activeOpeningIds &&
+      !progress.activeOpeningIds.includes(openingId)
+    ) {
+      setErrorMessage(
+        "Choose this opening as one of your 3 active Free openings before training it.",
+      );
+      return;
+    }
     if (onTrainOpening) {
       onTrainOpening(openingId);
       return;
     }
     setStatusMessage("Open this opening from Home to start training.");
+  }
+
+  function toggleActiveOpening(openingId: string) {
+    setSelectedActiveOpenings((current) => {
+      if (current.includes(openingId))
+        return current.filter((item) => item !== openingId);
+      if (current.length >= 3) return current;
+      return [...current, openingId];
+    });
+  }
+
+  async function saveActiveOpeningSelection() {
+    if (!progress) return;
+    setSavingActiveOpenings(true);
+    setErrorMessage(null);
+    setStatusMessage(null);
+    try {
+      await authenticatedApiFetch<{ ok: true }>(
+        "/api/blundr/repertoire/active-openings",
+        {
+          method: "POST",
+          body: JSON.stringify({ activeOpeningIds: selectedActiveOpenings }),
+        },
+      );
+      setStatusMessage("Active Free openings saved.");
+      await refreshRepertoire();
+    } catch {
+      setErrorMessage("Choose exactly three unlocked openings to keep active.");
+    } finally {
+      setSavingActiveOpenings(false);
+    }
   }
 
   return (
@@ -249,6 +299,50 @@ export function RepertoireProgressPanel({
               {unlockedCount} unlocked · {lockedCount} locked
             </div>
           </article>
+
+          {progress.activeOpeningSelectionRequired ? (
+            <article className={styles.stateCard}>
+              <div className={styles.kicker}>Free active openings</div>
+              <h2 className={styles.stateTitle}>Choose 3 openings to train.</h2>
+              <p className={styles.stateText}>
+                Your full repertoire stays saved. Free training is active for
+                the three openings you select here.
+              </p>
+              <div className="mt-4 grid gap-2">
+                {getUnlockedOpeningCards(progress).map((card) => {
+                  const checked = selectedActiveOpenings.includes(
+                    card.openingId,
+                  );
+                  return (
+                    <label
+                      key={card.openingId}
+                      className="flex min-h-11 items-center gap-3 rounded-lg border border-stone-200 bg-white px-3 text-sm font-semibold text-stone-800"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={
+                          savingActiveOpenings ||
+                          (!checked && selectedActiveOpenings.length >= 3)
+                        }
+                        onChange={() => toggleActiveOpening(card.openingId)}
+                        className="h-5 w-5 rounded border-stone-300 text-green-800"
+                      />
+                      <span>{card.openingName}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                className={styles.stateAction}
+                disabled={savingActiveOpenings || selectedActiveOpenings.length !== 3}
+                onClick={() => void saveActiveOpeningSelection()}
+              >
+                {savingActiveOpenings ? "Saving..." : "Save active openings"}
+              </button>
+            </article>
+          ) : null}
 
           <RepertoireOpeningGrid
             progress={progress}

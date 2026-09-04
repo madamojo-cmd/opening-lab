@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
   Cloud,
+  CreditCard,
   LogOut,
   Shield,
   SlidersHorizontal,
@@ -50,6 +51,7 @@ import {
   validateBlundrUsername,
   type BlundrProfilePublic,
 } from "@/lib/blundr/profile/profileTypes";
+import type { CommercialAccess } from "@/lib/blundr/commercial/commercialAccess";
 import styles from "./SettingsPage.module.css";
 
 type SettingsPageProps = {
@@ -94,6 +96,32 @@ function classNames(
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function formatDateTime(value: string | null): string {
+  if (!value) return "";
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
+
+function formatBillingStatus(status: CommercialAccess | null): string {
+  if (!status) return "Current plan: Free. Upgrade is available when you are ready.";
+  if (status.plan === "free" && status.expiresAt) {
+    return "Current plan: Free. Your previous Pro access has expired; your learning history and queued Review items remain saved.";
+  }
+  if (status.plan === "free") {
+    return "Current plan: Free. You can train unlimited within your active openings, with 5 Daily cards and 5 Review completions per day.";
+  }
+  if (status.trialStatus === "active") {
+    return `Current plan: Blundr Pro trial. Trial ends ${formatDateTime(status.expiresAt ?? status.currentPeriodEndAt)}.${status.cancelAtPeriodEnd ? " Cancellation is scheduled at period end." : ""}`;
+  }
+  return `Current plan: Blundr Pro.${status.cancelAtPeriodEnd ? " Cancellation is scheduled; access continues until the provider-confirmed expiration." : " Renews automatically until canceled."} ${status.currentPeriodEndAt ? `Next billing date: ${formatDateTime(status.currentPeriodEndAt)}.` : ""}`;
 }
 
 function Section({ id, title, copy, active, children }: SectionProps) {
@@ -219,6 +247,11 @@ export function SettingsPage({ className }: SettingsPageProps) {
   const [usernameDraft, setUsernameDraft] = useState("");
   const [usernameBusy, setUsernameBusy] = useState(false);
   const [usernameMessage, setUsernameMessage] = useState<string | null>(null);
+  const [billingStatus, setBillingStatus] = useState<CommercialAccess | null>(
+    null,
+  );
+  const [billingBusy, setBillingBusy] = useState(false);
+  const [billingMessage, setBillingMessage] = useState<string | null>(null);
   const [authResolved, setAuthResolved] = useState(false);
   const [activeSectionId, setActiveSectionId] =
     useState<BlundrSettingsSectionId>("account");
@@ -290,9 +323,11 @@ export function SettingsPage({ className }: SettingsPageProps) {
                 "Your username could not be loaded. Try refreshing.",
               );
           });
+        void loadBillingStatus();
       } else {
         setBlundrUsername(null);
         setUsernameDraft("");
+        setBillingStatus(null);
       }
     });
 
@@ -523,6 +558,39 @@ export function SettingsPage({ className }: SettingsPageProps) {
       );
     } finally {
       setUsernameBusy(false);
+    }
+  }
+
+  async function loadBillingStatus() {
+    setBillingMessage(null);
+    try {
+      const response = await authenticatedApiFetch<{
+        ok: true;
+        data: CommercialAccess;
+      }>("/api/blundr/billing/status", { cache: "no-store" });
+      setBillingStatus(response.data);
+    } catch {
+      setBillingMessage("Billing status could not be loaded.");
+    }
+  }
+
+  async function openBillingPortal() {
+    setBillingBusy(true);
+    setBillingMessage(null);
+    try {
+      const response = await authenticatedApiFetch<{
+        ok: true;
+        data: { url: string };
+      }>("/api/blundr/billing/portal", {
+        method: "POST",
+        body: JSON.stringify({}),
+        cache: "no-store",
+      });
+      window.location.assign(response.data.url);
+    } catch {
+      setBillingMessage("Billing portal could not be opened.");
+    } finally {
+      setBillingBusy(false);
     }
   }
 
@@ -1187,23 +1255,55 @@ export function SettingsPage({ className }: SettingsPageProps) {
             <Section
               id="billing"
               title="Billing"
-              copy="Subscriptions are not managed in this beta build."
+              copy="Manage your Blundr plan from trusted billing state."
               active={activeSectionId === "billing"}
             >
               <div className="rounded-[1.5rem] border border-stone-200 bg-[#fbfcf7] p-4">
-                <div className="text-sm font-black text-stone-950">
-                  No web billing controls
+                <div className="flex items-center gap-2 text-sm font-black text-stone-950">
+                  <CreditCard size={16} className="text-green-700" />
+                  {billingStatus?.plan === "pro" ? "Blundr Pro" : "Blundr Free"}
                 </div>
                 <p className="mt-2 text-sm leading-6 text-stone-600">
-                  This build does not start, change, or cancel subscriptions
-                  from Settings.
+                  {formatBillingStatus(billingStatus)}
                 </p>
-                <Link
-                  href="/subscription-terms"
-                  className="mt-3 inline-flex text-sm font-black text-green-700 underline underline-offset-4"
-                >
-                  Read subscription terms
-                </Link>
+                <div className="mt-3 flex flex-wrap gap-3">
+                  {billingStatus?.plan === "pro" || billingStatus?.expiresAt ? (
+                    <button
+                      type="button"
+                      disabled={billingBusy}
+                      onClick={() => void openBillingPortal()}
+                      className="inline-flex min-h-10 items-center rounded-lg bg-green-800 px-3 text-sm font-black text-white disabled:opacity-60"
+                    >
+                      {billingBusy ? "Opening..." : "Manage billing"}
+                    </button>
+                  ) : (
+                    <Link
+                      href="/onboarding/plan"
+                      className="inline-flex min-h-10 items-center rounded-lg bg-green-800 px-3 text-sm font-black text-white"
+                    >
+                      Upgrade
+                    </Link>
+                  )}
+                  <button
+                    type="button"
+                    disabled={billingBusy}
+                    onClick={() => void loadBillingStatus()}
+                    className="inline-flex min-h-10 items-center rounded-lg border border-stone-300 px-3 text-sm font-black text-stone-800 disabled:opacity-60"
+                  >
+                    Refresh
+                  </button>
+                  <Link
+                    href="/subscription-terms"
+                    className="inline-flex min-h-10 items-center text-sm font-black text-green-700 underline underline-offset-4"
+                  >
+                    Subscription terms
+                  </Link>
+                </div>
+                {billingMessage ? (
+                  <p role="alert" className="mt-3 text-sm font-bold text-red-700">
+                    {billingMessage}
+                  </p>
+                ) : null}
               </div>
             </Section>
 

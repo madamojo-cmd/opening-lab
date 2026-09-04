@@ -8,6 +8,7 @@ import {
   authenticatedApiFetch,
   AuthenticatedApiError,
 } from "@/lib/blundr/api/authenticatedApiClient";
+import { PaywallPlanSelection } from "@/components/billing/PaywallPlanSelection";
 import { getAllStarterPacks } from "@/lib/blundr/onboarding/starterPacks";
 import { useOnboardingAuthSession } from "@/lib/blundr/onboarding/useOnboardingAuthSession";
 import { getCompletedOnboardingRedirectDestination } from "@/lib/blundr/onboarding/onboardingRouting";
@@ -94,7 +95,7 @@ function subtitleForStep(step: OnboardingV11Step): string {
     "line-changes":
       "Your opponent can choose another continuation. Blundr keeps teaching from the position.",
     review: "Moves you miss return to Review so they can be practiced again.",
-    plan: "Keep training free, or save Pro trial intent for the billing wave.",
+    plan: "Keep training free, or try everything in Blundr Pro for 7 days.",
     ready:
       "Start with a real opening session, then let Review bring back what needs work.",
   }[step];
@@ -365,9 +366,9 @@ export function OnboardingV11Flow({
       );
     if (activeStep === "plan")
       return (
-        <PlanSelection
-          value={selected ?? state.planIntent}
-          onChange={setSelected}
+        <PaywallPlanSelection
+          selected={String(selected ?? "")}
+          onSelect={setSelected as never}
         />
       );
     return <PlanSummary state={state} />;
@@ -452,7 +453,7 @@ function valueForStep(
   if (step === "starter-pack") return state.starterPackId;
   if (step === "training-mode") return state.trainingMode ?? "assisted";
   if (step === "pace") return state.pace ?? "standard";
-  if (step === "plan") return state.planIntent;
+  if (step === "plan") return undefined;
   return undefined;
 }
 
@@ -482,7 +483,7 @@ function actionFor(step: OnboardingV11Step, value?: unknown) {
   if (step === "welcome") return "Continue";
   if (step === "ready") return "Start training";
   if (step === "plan")
-    return value === "free" ? "Continue with Free" : "Save Pro intent";
+    return value === "free" ? "Continue with Free" : "Continue";
   return "Continue";
 }
 
@@ -589,117 +590,6 @@ function ChoiceList({
         );
       })}
     </div>
-  );
-}
-
-function PlanSelection({
-  value,
-  onChange,
-}: {
-  value: unknown;
-  onChange: (value: unknown) => void;
-}) {
-  const selected = typeof value === "string" ? value : "";
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-3">
-        <PlanChoice
-          id="free"
-          selected={selected}
-          onChange={onChange}
-          title="Free"
-          price="$0"
-          details={[
-            "Up to three active openings",
-            "Unlimited Train within those active openings",
-            "Five Daily Blundr cards per local day",
-            "Five Review positions per local day",
-            "Basic progress and repertoire views",
-          ]}
-        />
-        <PlanChoice
-          id="pro_monthly"
-          selected={selected}
-          onChange={onChange}
-          title="Pro Monthly"
-          price="7-day card-required trial"
-          details={[
-            "$9.99/month after trial",
-            "Unlimited active repertoire",
-            "Daily target from 1-99",
-            "Unlimited Review",
-            "Full mastery, weak-area, trend, and next-action intelligence",
-          ]}
-        />
-        <PlanChoice
-          id="pro_annual"
-          selected={selected}
-          onChange={onChange}
-          title="Pro Annual"
-          price="7-day card-required trial"
-          details={[
-            "$69.99/year after trial",
-            "Unlimited active repertoire",
-            "Daily target from 1-99",
-            "Unlimited Review",
-            "Full mastery, weak-area, trend, and next-action intelligence",
-          ]}
-        />
-      </div>
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
-        Pro checkout is not active in this preview. Choosing Pro saves only plan
-        intent for the next billing wave and does not grant Pro access.
-      </div>
-      <div className="flex flex-wrap gap-4 text-sm font-bold text-green-800">
-        <Link href="/pricing" className="underline underline-offset-4">
-          Pricing
-        </Link>
-        <Link
-          href="/subscription-terms"
-          className="underline underline-offset-4"
-        >
-          Subscription Terms
-        </Link>
-      </div>
-    </div>
-  );
-}
-
-function PlanChoice({
-  id,
-  selected,
-  onChange,
-  title,
-  price,
-  details,
-}: {
-  id: OnboardingV11PlanIntent;
-  selected: string;
-  onChange: (value: unknown) => void;
-  title: string;
-  price: string;
-  details: string[];
-}) {
-  const active = selected === id;
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={() => onChange(id)}
-      className={`min-h-[25rem] rounded-2xl border p-5 text-left transition ${active ? "border-green-800 bg-green-50 shadow-sm" : "border-stone-200 bg-white hover:border-green-200"}`}
-    >
-      <span className="block text-2xl font-black text-stone-950">{title}</span>
-      <span className="mt-2 block text-sm font-black text-green-800">
-        {price}
-      </span>
-      <span className="mt-4 block space-y-2 text-sm leading-6 text-stone-600">
-        {details.map((detail) => (
-          <span key={detail} className="block">
-            - {detail}
-          </span>
-        ))}
-      </span>
-    </button>
   );
 }
 

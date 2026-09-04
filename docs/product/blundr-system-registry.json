@@ -286,34 +286,35 @@
       "userPromise": "Authenticated web billing creates hosted Stripe subscription Checkout and persists trusted Pro entitlement state only from RevenueCat-normalized provider authority.",
       "status": "partial",
       "releaseRequired": true,
-      "authority": ["app/api/blundr/billing", "lib/blundr/billing", "supabase/migrations/20260904135434_blundr_billing_entitlement_authority.sql", "docs/operations/commercial-billing-authority-wave2a-20260904.md"],
-      "entryPoints": ["/api/blundr/billing/checkout", "/api/blundr/billing/portal", "/api/blundr/billing/stripe/webhook", "/api/blundr/billing/revenuecat/webhook"],
-      "persistence": ["blundr_billing_customers", "blundr_billing_subscriptions", "blundr_trusted_entitlements", "blundr_billing_provider_events", "blundr_billing_trial_eligibility"],
+      "authority": ["app/api/blundr/billing", "lib/blundr/billing", "lib/blundr/commercial", "supabase/migrations/20260904135434_blundr_billing_entitlement_authority.sql", "supabase/migrations/20260904170758_blundr_paywall_enforcement_authority.sql", "docs/operations/commercial-billing-authority-wave2a-20260904.md", "docs/operations/commercial-paywall-enforcement-wave2b-20260904.md"],
+      "entryPoints": ["/api/blundr/billing/checkout", "/api/blundr/billing/portal", "/api/blundr/billing/offer", "/api/blundr/billing/offer/accept", "/api/blundr/billing/status", "/api/blundr/billing/stripe/webhook", "/api/blundr/billing/revenuecat/webhook", "/billing/success", "/billing/cancel", "/settings#billing"],
+      "persistence": ["blundr_billing_customers", "blundr_billing_subscriptions", "blundr_trusted_entitlements", "blundr_billing_provider_events", "blundr_billing_trial_eligibility", "blundr_paid_offer_acceptances", "blundr_free_active_opening_selections"],
       "dependencies": ["AUTH-ACCOUNT-001", "Supabase", "Stripe test-mode Checkout and Customer Portal", "RevenueCat pro entitlement"],
       "featureFlags": [],
       "fallback": "Client redirects, query parameters, client-supplied price/customer/user IDs, user metadata, and client RevenueCat state grant no protected access; failed RevenueCat reconciliation grants nothing new while preserving only previously verified entitlement until provider-confirmed expiration.",
-      "requiredTests": ["lib/blundr/billing/__tests__", "tests/security/billingAuthorityStatic.test.ts", "tests/security/billingAuthority.integration.test.ts", "npm run verify:migrations", ".github/workflows/blundr-billing-rls-disposable-gate.yml"],
+      "requiredTests": ["lib/blundr/billing/__tests__", "lib/blundr/commercial/__tests__", "tests/architecture/wave2bCommercialAuthority.test.ts", "tests/security/billingAuthorityStatic.test.ts", "tests/security/billingAuthority.integration.test.ts", "npm run verify:migrations", ".github/workflows/blundr-billing-rls-disposable-gate.yml"],
       "lastVerifiedSha": null,
       "evidence": [
         "Wave 2A adds one generated additive migration, server-only billing repository, hosted Stripe Checkout and portal endpoints, raw-body Stripe webhook verification, RevenueCat authorization-header webhook processing, and native-fetch RevenueCat reconciliation.",
         "Focused local tests cover locked price mappings, authenticated UUID metadata in both Checkout and Subscription metadata, trial reservation behavior, duplicate/out-of-order provider events, RevenueCat environment and identity isolation, and static RLS/write-policy shape.",
-        "Dedicated disposable billing RLS gate passed on 2026-09-04 at SHA 257f0c4317224dc456d6e234f65ada55c8c2325c: run 33892448684 rebuilt the disposable Supabase project from local migrations, verified remote migration count 46 and head 20260904135434, ran tests/security/billingAuthority.integration.test.ts, and completed cleanup."
+        "Dedicated disposable billing RLS gate passed on 2026-09-04 at SHA 257f0c4317224dc456d6e234f65ada55c8c2325c: run 33892448684 rebuilt the disposable Supabase project from local migrations, verified remote migration count 46 and head 20260904135434, ran tests/security/billingAuthority.integration.test.ts, and completed cleanup.",
+        "Wave 2B adds the shared trusted commercial access resolver, paywall and paid-offer acknowledgement UX, Checkout success/cancel reconciliation states, Settings Billing controls, Free active-opening selection, and server-side Free/Pro enforcement for active repertoire access, Daily card limits, Review completion limits, and premium progress fields."
       ],
       "blockers": [
-        "No production deployment or live-mode activation is authorized in Wave 2A.",
+        "No production deployment or live-mode activation is authorized in Wave 2B.",
         "Stripe dashboard products, Customer Portal configuration, webhook endpoint registration, RevenueCat webhook setup, and RevenueCat Stripe integration must be manually verified before production activation.",
         "Tax geography and automatic-tax policy remain undecided.",
-        "Application-wide Free/Pro feature gating and final paywall UI are intentionally deferred."
+        "Lifecycle email delivery, launch analytics, production migration, and live Stripe/RevenueCat activation remain later-wave work."
       ]
     },
     {
       "id": "COMMERCIAL-LAUNCH-001",
       "name": "Commercial launch presentation",
       "contractVersion": "1",
-      "userPromise": "Anonymous users see a truthful launch landing page, canonical legal pages, and onboarding plan choices that do not grant paid access before billing authority exists.",
+      "userPromise": "Anonymous users see a truthful launch landing page, canonical legal pages, and onboarding plan choices that never grant paid access without trusted backend entitlement authority.",
       "status": "partial",
       "releaseRequired": true,
-      "authority": ["components/marketing/BlundrLandingPage.tsx", "components/legal/CommercialLegalPage.tsx", "components/onboarding/OnboardingV11Flow.tsx", "lib/blundr/onboarding/onboardingV11.ts", "content/legal"],
+      "authority": ["components/marketing/BlundrLandingPage.tsx", "components/legal/CommercialLegalPage.tsx", "components/onboarding/OnboardingV11Flow.tsx", "components/billing/PaywallPlanSelection.tsx", "lib/blundr/onboarding/onboardingV11.ts", "content/legal"],
       "entryPoints": ["/", "/pricing", "/terms", "/privacy", "/subscription-terms", "/cookies", "/legal", "/signup", "/onboarding"],
       "persistence": ["Supabase Auth user metadata stores presentation-only launch plan intent; billing and entitlement authority is owned by BILLING-ENTITLEMENT-001 and is not granted by onboarding metadata."],
       "dependencies": ["AUTH-ACCOUNT-001", "ONBOARD-001", "UI-SHELL-001", "BILLING-ENTITLEMENT-001"],
@@ -333,14 +334,15 @@
         "Wave 1C authenticated staging journey passed with an existing confirmed QA account: anonymous landing, signup/sign-in surface, every V11 step, Free, Home, Train, sign out, sign in, Home, Train. QA profile, repertoire, and Auth metadata were restored after the run.",
         "Wave 1C acceptance gates on repaired source: npm run test:unit passed 589 tests; one-time authorized BLUNDR_RLS_TEST_ENVIRONMENT_ROLE=staging npm run test:security passed 28 tests; npm run test:component passed 49 tests; npm run test:integration passed 11 tests; npm run typecheck, npm run lint, npm run build, npm run verify:migrations, npm run bundle:audit, npm run security:audit, and git diff --check passed.",
         "Phase 3 final correction records migration 20260903155151 passed, remote migration count 45, authenticated V11 journey passed, one-time staging RLS validation passed 28/28, permanent automated RLS suites remain disposable-only and reject staging before network/database access, and Production was not touched.",
-        "Wave 2A implements the backend billing and entitlement authority foundation without production deployment, live-mode activation, final paywall UI, or application-wide Free/Pro feature gating."
+        "Wave 2A implements the backend billing and entitlement authority foundation without production deployment, live-mode activation, final paywall UI, or application-wide Free/Pro feature gating.",
+        "Wave 2B replaces the final onboarding plan-intent presentation with an explicit Free/Pro paywall step, requires paid-offer acknowledgement before Checkout, and keeps the Free path available without Checkout or payment method."
       ],
       "blockers": [
         "Durable versioned consent storage is not implemented.",
         "Account export and deletion controls are incomplete.",
         "Commercial analytics are not implemented.",
         "Lifecycle messaging is not implemented.",
-        "Final paywall UI and production billing activation are not implemented.",
+        "Production billing activation is not implemented.",
         "Exact-SHA deployed proof is incomplete."
       ]
     },

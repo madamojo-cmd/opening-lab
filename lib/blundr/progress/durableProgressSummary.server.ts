@@ -9,6 +9,11 @@ import {
   getNextUnlockCost,
   getUnlockProgressPct,
 } from "@/lib/blundr/repertoire/repertoireUnlockCurve";
+import { resolveCommercialAccess } from "@/lib/blundr/commercial/commercialAccess.server";
+import {
+  effectiveDailyBlundrCardGoal,
+  isTrustedProAccess,
+} from "@/lib/blundr/commercial/commercialAccess";
 import type { BlundrProgressSummary } from "./progressTypes";
 
 type Row = Record<string, unknown>;
@@ -263,6 +268,10 @@ export async function loadDurableProgressSummary(input: {
   const minigameRows = (minigames.data ?? []) as Row[];
   const rewardRows = (rewardRolls.data ?? []) as Row[];
   const timeZone = String(profileRow.time_zone ?? "").trim() || null;
+  const commercialAccess = await resolveCommercialAccess({
+    userId: input.userId,
+  });
+  const hasPremiumProgress = isTrustedProAccess(commercialAccess);
   const today =
     dayRows.find((row) => String(row.local_date) === input.todayDateKey) ?? {};
   const [cardsCompletedToday, reservedDailyCardTarget] = await Promise.all([
@@ -277,13 +286,9 @@ export async function loadDurableProgressSummary(input: {
       todayDateKey: input.todayDateKey,
     }),
   ]);
-  const dailyBlundrCardGoal = Math.max(
-    1,
-    Math.min(
-      99,
-      Number(reservedDailyCardTarget ?? profileRow.daily_blundr_card_goal) ||
-        10,
-    ),
+  const dailyBlundrCardGoal = effectiveDailyBlundrCardGoal(
+    Number(reservedDailyCardTarget ?? profileRow.daily_blundr_card_goal) || 10,
+    commercialAccess,
   );
 
   const ring = (
@@ -595,12 +600,16 @@ export async function loadDurableProgressSummary(input: {
       nextUnlockProgressPct: getUnlockProgressPct(unlockShape),
       mostTrainedOpeningId,
       mostTrainedOpeningName: openingName(mostTrainedOpeningId),
-      recommendedOpeningId,
-      recommendedOpeningName: openingName(recommendedOpeningId),
+      recommendedOpeningId: hasPremiumProgress ? recommendedOpeningId : null,
+      recommendedOpeningName: hasPremiumProgress
+        ? openingName(recommendedOpeningId)
+        : null,
     },
     weakAreas: {
-      items: weakItems,
-      message: weakItems.length
+      items: hasPremiumProgress ? weakItems : [],
+      message: !hasPremiumProgress
+        ? "Upgrade to Blundr Pro to see weak-area and mastery intelligence."
+        : weakItems.length
         ? "Tempo is using your saved misses to rank the lines that need attention."
         : "Complete a few unaided positions and Tempo will surface your weakest lines here.",
     },
@@ -640,5 +649,24 @@ export async function loadDurableProgressSummary(input: {
           : "All MVP openings are currently unlocked.",
     },
   ];
+  if (!hasPremiumProgress) {
+    summary.nextActions = [
+      {
+        title: "Continue Training",
+        href: "/",
+        description: "Train inside your active Free repertoire.",
+      },
+      {
+        title: "Start Daily Blundr",
+        href: "/daily",
+        description: "Complete up to 5 Daily cards today.",
+      },
+      {
+        title: "Review Queue",
+        href: "/review",
+        description: "Complete up to 5 Review positions today.",
+      },
+    ];
+  }
   return summary;
 }

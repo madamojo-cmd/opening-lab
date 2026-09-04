@@ -1,11 +1,13 @@
 import "server-only";
 
 import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
+import { resolveCommercialAccess } from "@/lib/blundr/commercial/commercialAccess.server";
+import { isTrustedProAccess } from "@/lib/blundr/commercial/commercialAccess";
 import { getLocalDateKeyForTimeZone } from "@/lib/blundr/daily-rings/dailyRingDate";
 import { buildPreferredMoveAuthorityKey } from "@/lib/blundr/openings/preferredMoveAuthority";
 import type { ReviewQueueItem } from "./reviewQueueTypes";
 
-export const MAX_DAILY_REVIEW_COMPLETIONS_PER_AUTHORITY = 4;
+export const MAX_DAILY_REVIEW_COMPLETIONS_PER_FREE_USER = 5;
 
 type Row = Record<string, unknown>;
 
@@ -146,8 +148,14 @@ export async function isReviewDailyLimitReached(input: {
     userId: input.userId,
     now: input.now,
   });
-  return (
-    (result.counts.get(key) ?? 0) >=
-    MAX_DAILY_REVIEW_COMPLETIONS_PER_AUTHORITY
+  const commercialAccess = await resolveCommercialAccess({
+    userId: input.userId,
+    now: input.now,
+  });
+  if (isTrustedProAccess(commercialAccess)) return false;
+  const totalCompletedToday = Array.from(result.counts.values()).reduce(
+    (total, count) => total + count,
+    0,
   );
+  return totalCompletedToday >= MAX_DAILY_REVIEW_COMPLETIONS_PER_FREE_USER;
 }

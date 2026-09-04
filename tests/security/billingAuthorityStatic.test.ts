@@ -5,6 +5,8 @@ import test from "node:test";
 
 const migration =
   "supabase/migrations/20260904135434_blundr_billing_entitlement_authority.sql";
+const wave2bMigration =
+  "supabase/migrations/20260904170758_blundr_paywall_enforcement_authority.sql";
 
 function sourceFiles(root: string): string[] {
   const files: string[] = [];
@@ -67,6 +69,31 @@ test("billing migration exposes only own-row reads and service-only trial RPCs",
       new RegExp(`grant execute on function public\\.${signature.replace(/[()]/g, "\\$&")}[\\s\\S]*to service_role`, "i"),
     );
   }
+});
+
+test("paywall migration keeps offer consent and active-opening selection service-owned", () => {
+  const sql = readFileSync(wave2bMigration, "utf8");
+  for (const table of [
+    "blundr_paid_offer_acceptances",
+    "blundr_free_active_opening_selections",
+  ]) {
+    assert.match(
+      sql,
+      new RegExp(`alter table public\\.${table} enable row level security`, "i"),
+    );
+    assert.match(
+      sql,
+      new RegExp(`create policy ${table}_select_own[\\s\\S]*user_id = auth\\.uid\\(\\)`, "i"),
+    );
+    assert.doesNotMatch(
+      sql,
+      new RegExp(`for (?:insert|update|delete) to authenticated[\\s\\S]*${table}`, "i"),
+    );
+  }
+  assert.match(sql, /offer_version in \('paid-offer-v1'\)/);
+  assert.match(sql, /legal_version in \('subscription-terms-20260904'\)/);
+  assert.match(sql, /cardinality\(active_opening_ids\) <= 3/);
+  assert.doesNotMatch(sql, /user_metadata|raw_user_meta_data/);
 });
 
 test("billing routes authenticate server-side and keep provider secrets out of client code", () => {

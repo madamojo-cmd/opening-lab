@@ -8,6 +8,8 @@ import {
 import { validateTrainingPreferencesPatch } from "@/lib/blundr/accounts/trainingPreferences";
 import { ProductionDailyRepository } from "@/lib/blundr/daily/productionDailyRepository.server";
 import { getLocalDateKeyForTimeZone } from "@/lib/blundr/daily-rings/dailyRingDate";
+import { resolveCommercialAccess } from "@/lib/blundr/commercial/commercialAccess.server";
+import { FREE_DAILY_BLUNDR_CARD_LIMIT } from "@/lib/blundr/commercial/commercialAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +59,21 @@ export async function PATCH(request: Request) {
       { error: validation.code, message: validation.message },
       { status: 422 },
     );
+  if (validation.patch.dailyBlundrCardGoal !== undefined) {
+    const access = await resolveCommercialAccess({ userId: user.userId });
+    if (
+      access.plan !== "pro" &&
+      validation.patch.dailyBlundrCardGoal > FREE_DAILY_BLUNDR_CARD_LIMIT
+    ) {
+      return NextResponse.json(
+        {
+          error: "daily_card_goal_requires_pro",
+          message: "Free plans can set up to 5 Daily cards.",
+        },
+        { status: 403 },
+      );
+    }
+  }
   try {
     const next = await updateOwnedTrainingPreferences(user, validation.patch);
     const dateKey = getLocalDateKeyForTimeZone(new Date(), next.timeZone);

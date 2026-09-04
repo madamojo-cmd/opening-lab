@@ -140,7 +140,7 @@ jobs:
           set -euo pipefail
           mkdir -p "$LOG_DIR"
           log="$LOG_DIR/migrations-after-reset.log"
-          BLUNDR_EXPECTED_MIGRATION_COUNT=46 BLUNDR_EXPECTED_MIGRATION_HEAD=20260904135434 \
+          BLUNDR_EXPECTED_MIGRATION_COUNT=47 BLUNDR_EXPECTED_MIGRATION_HEAD=20260904170758 \
             npm run verify:remote-migration-history | tee "$log"
 
       - id: billing_authority_rls_regression
@@ -182,8 +182,8 @@ jobs:
             echo "- Run ID: $GITHUB_RUN_ID"
             echo "- Tested SHA: $GITHUB_SHA"
             echo "- Disposable environment role: $BLUNDR_RLS_TEST_ENVIRONMENT_ROLE"
-            echo "- Migration count: 46"
-            echo "- Migration head: 20260904135434"
+            echo "- Migration count: 47"
+            echo "- Migration head: 20260904170758"
             echo "- Billing authority RLS and entitlement isolation regression: ${{ steps.billing_authority_rls_regression.outcome }}"
             echo "- Disposable cleanup: ${{ steps.cleanup_disposable_project.outcome }}"
             echo "- Logs: uploaded as artifact from $LOG_DIR"

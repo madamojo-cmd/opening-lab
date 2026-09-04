@@ -8,10 +8,12 @@ import {
   hasPreferredMoveAuthorityOpening,
   isPreferredMoveForAuthority,
 } from "@/lib/blundr/openings/preferredMoveAuthority";
+import { resolveCommercialAccess } from "@/lib/blundr/commercial/commercialAccess.server";
+import { isTrustedProAccess } from "@/lib/blundr/commercial/commercialAccess";
 import {
   buildReviewDailyLimitAuthorityKey,
   loadDailyReviewCompletionCounts,
-  MAX_DAILY_REVIEW_COMPLETIONS_PER_AUTHORITY,
+  MAX_DAILY_REVIEW_COMPLETIONS_PER_FREE_USER,
 } from "./dailyReviewLimit.server";
 import type {
   ReviewQueueItem,
@@ -278,11 +280,36 @@ export async function loadReviewQueuePage(input: {
     userId: input.userId,
     now: generatedAt,
   });
+  const commercialAccess = await resolveCommercialAccess({
+    userId: input.userId,
+    now: generatedAt,
+  });
+  const totalCompletedToday = Array.from(
+    dailyCompletionCounts.counts.values(),
+  ).reduce((total, count) => total + count, 0);
+  const freeLimitReached =
+    !isTrustedProAccess(commercialAccess) &&
+    totalCompletedToday >= MAX_DAILY_REVIEW_COMPLETIONS_PER_FREE_USER;
+  if (freeLimitReached) {
+    return {
+      ok: true,
+      data: {
+        syncState: "ready",
+        generatedAt,
+        lastSyncAt: jobs.data?.[0]?.updated_at
+          ? String(jobs.data[0].updated_at)
+          : null,
+        page: input.page,
+        limit: input.limit,
+        nextPage: null,
+        items: [],
+        warnings: ["daily_review_limit_reached"],
+      },
+    };
+  }
   const deferredAuthorityKeys = new Set(
     Array.from(dailyCompletionCounts.counts.entries())
-      .filter(
-        ([, count]) => count >= MAX_DAILY_REVIEW_COMPLETIONS_PER_AUTHORITY,
-      )
+      .filter(([, count]) => count >= MAX_DAILY_REVIEW_COMPLETIONS_PER_FREE_USER)
       .map(([key]) => key),
   );
 

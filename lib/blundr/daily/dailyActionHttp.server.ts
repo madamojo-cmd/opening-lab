@@ -39,6 +39,13 @@ export function classifyDailyActionHttpFailure(
         "This opening is no longer active in your repertoire. Reload Daily to receive an eligible card.",
       status: 403,
     };
+  if (code === "daily_card_limit_reached")
+    return {
+      code,
+      message:
+        "Free plans can complete up to 5 Daily cards per day. Reload Daily after upgrading or come back tomorrow.",
+      status: 409,
+    };
   if (
     code.includes("persistence") ||
     code.includes("projection") ||
