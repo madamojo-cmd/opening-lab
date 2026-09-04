@@ -134,7 +134,7 @@ Checkout reservation is concurrency-safe and retry-safe:
    `REVENUECAT_WEBHOOK_AUTHORIZATION`.
 6. Set all variables only in the server runtime environment.
 7. Apply the migration only to a disposable database before any staging or
-   production promotion.
+   production promotion. Wave 2A disposable proof passed on 2026-09-04.
 
 ## Rollback Or Disable
 
@@ -147,6 +147,25 @@ Checkout reservation is concurrency-safe and retry-safe:
 - If a provider identity conflict occurs, leave the event ignored/manual and run
   deterministic RevenueCat reconciliation after operator review.
 
+## Acceptance Evidence
+
+- Checkpoint commit preserving the implementation before disposable-network
+  recovery: `d9f8b1fbf07a6a93aba8e40d919fb4e23e1db26c`.
+- Dedicated disposable billing RLS gate:
+  `https://github.com/madamojo-cmd/opening-lab/actions/runs/33892448684`.
+- Tested SHA:
+  `257f0c4317224dc456d6e234f65ada55c8c2325c`.
+- The dedicated gate rebuilt the disposable Supabase project from local
+  migrations, verified remote migration count `46` and head
+  `20260904135434`, ran
+  `npm run test:billing-rls-authority`, and completed disposable cleanup.
+- The billing RLS proof covered own-row reads, cross-user read isolation,
+  client insert/update/delete denial for billing customer mappings,
+  subscriptions, trusted entitlements, provider events, and trial eligibility,
+  service-only trial reconciliation RPCs, and sandbox/production entitlement
+  row isolation.
+- Production and staging were not touched.
+
 ## Known Manual Blockers
 
 - Production deployment and live-mode activation are not authorized.
@@ -156,7 +175,6 @@ Checkout reservation is concurrency-safe and retry-safe:
 - RevenueCat dashboard integration, offering, entitlement, webhook secret, and
   Stripe product mapping need operator proof.
 - Final paywall UI and application-wide Free/Pro gates are deferred.
-- Disposable database RLS execution is required before release promotion.
 
 ## Documentation References
 

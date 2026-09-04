@@ -292,18 +292,18 @@
       "dependencies": ["AUTH-ACCOUNT-001", "Supabase", "Stripe test-mode Checkout and Customer Portal", "RevenueCat pro entitlement"],
       "featureFlags": [],
       "fallback": "Client redirects, query parameters, client-supplied price/customer/user IDs, user metadata, and client RevenueCat state grant no protected access; failed RevenueCat reconciliation grants nothing new while preserving only previously verified entitlement until provider-confirmed expiration.",
-      "requiredTests": ["lib/blundr/billing/__tests__", "tests/security/billingAuthorityStatic.test.ts", "npm run verify:migrations", "focused disposable RLS/security tests before production activation"],
+      "requiredTests": ["lib/blundr/billing/__tests__", "tests/security/billingAuthorityStatic.test.ts", "tests/security/billingAuthority.integration.test.ts", "npm run verify:migrations", ".github/workflows/blundr-billing-rls-disposable-gate.yml"],
       "lastVerifiedSha": null,
       "evidence": [
         "Wave 2A adds one generated additive migration, server-only billing repository, hosted Stripe Checkout and portal endpoints, raw-body Stripe webhook verification, RevenueCat authorization-header webhook processing, and native-fetch RevenueCat reconciliation.",
-        "Focused local tests cover locked price mappings, authenticated UUID metadata in both Checkout and Subscription metadata, trial reservation behavior, duplicate/out-of-order provider events, RevenueCat environment and identity isolation, and static RLS/write-policy shape."
+        "Focused local tests cover locked price mappings, authenticated UUID metadata in both Checkout and Subscription metadata, trial reservation behavior, duplicate/out-of-order provider events, RevenueCat environment and identity isolation, and static RLS/write-policy shape.",
+        "Dedicated disposable billing RLS gate passed on 2026-09-04 at SHA 257f0c4317224dc456d6e234f65ada55c8c2325c: run 33892448684 rebuilt the disposable Supabase project from local migrations, verified remote migration count 46 and head 20260904135434, ran tests/security/billingAuthority.integration.test.ts, and completed cleanup."
       ],
       "blockers": [
         "No production deployment or live-mode activation is authorized in Wave 2A.",
         "Stripe dashboard products, Customer Portal configuration, webhook endpoint registration, RevenueCat webhook setup, and RevenueCat Stripe integration must be manually verified before production activation.",
         "Tax geography and automatic-tax policy remain undecided.",
-        "Application-wide Free/Pro feature gating and final paywall UI are intentionally deferred.",
-        "Disposable database RLS execution must pass before this entry can be promoted to verified."
+        "Application-wide Free/Pro feature gating and final paywall UI are intentionally deferred."
       ]
     },
     {
