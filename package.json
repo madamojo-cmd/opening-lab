@@ -81,6 +81,7 @@
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "stockfish": "18.0.7",
+    "stripe": "22.6.1",
     "tailwindcss": "4.3.0",
     "ts-fsrs": "^5.4.1"
   },

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "registryVersion": "1.4.0",
+  "registryVersion": "1.5.0",
   "baseCommit": "c7d4e9e091daecfb19e9933af174bcc6e73a5a7e",
   "statusDefinitions": {
     "verified": "Exact recorded SHA has complete automated and deployed evidence.",
@@ -280,6 +280,33 @@
       "blockers": ["The one-shell UI transition, feature-preservation ledger, responsive/accessibility acceptance, and route gzip budgets are not implemented or proven."]
     },
     {
+      "id": "BILLING-ENTITLEMENT-001",
+      "name": "Billing and entitlement authority",
+      "contractVersion": "1",
+      "userPromise": "Authenticated web billing creates hosted Stripe subscription Checkout and persists trusted Pro entitlement state only from RevenueCat-normalized provider authority.",
+      "status": "partial",
+      "releaseRequired": true,
+      "authority": ["app/api/blundr/billing", "lib/blundr/billing", "supabase/migrations/20260904135434_blundr_billing_entitlement_authority.sql", "docs/operations/commercial-billing-authority-wave2a-20260904.md"],
+      "entryPoints": ["/api/blundr/billing/checkout", "/api/blundr/billing/portal", "/api/blundr/billing/stripe/webhook", "/api/blundr/billing/revenuecat/webhook"],
+      "persistence": ["blundr_billing_customers", "blundr_billing_subscriptions", "blundr_trusted_entitlements", "blundr_billing_provider_events", "blundr_billing_trial_eligibility"],
+      "dependencies": ["AUTH-ACCOUNT-001", "Supabase", "Stripe test-mode Checkout and Customer Portal", "RevenueCat pro entitlement"],
+      "featureFlags": [],
+      "fallback": "Client redirects, query parameters, client-supplied price/customer/user IDs, user metadata, and client RevenueCat state grant no protected access; failed RevenueCat reconciliation grants nothing new while preserving only previously verified entitlement until provider-confirmed expiration.",
+      "requiredTests": ["lib/blundr/billing/__tests__", "tests/security/billingAuthorityStatic.test.ts", "npm run verify:migrations", "focused disposable RLS/security tests before production activation"],
+      "lastVerifiedSha": null,
+      "evidence": [
+        "Wave 2A adds one generated additive migration, server-only billing repository, hosted Stripe Checkout and portal endpoints, raw-body Stripe webhook verification, RevenueCat authorization-header webhook processing, and native-fetch RevenueCat reconciliation.",
+        "Focused local tests cover locked price mappings, authenticated UUID metadata in both Checkout and Subscription metadata, trial reservation behavior, duplicate/out-of-order provider events, RevenueCat environment and identity isolation, and static RLS/write-policy shape."
+      ],
+      "blockers": [
+        "No production deployment or live-mode activation is authorized in Wave 2A.",
+        "Stripe dashboard products, Customer Portal configuration, webhook endpoint registration, RevenueCat webhook setup, and RevenueCat Stripe integration must be manually verified before production activation.",
+        "Tax geography and automatic-tax policy remain undecided.",
+        "Application-wide Free/Pro feature gating and final paywall UI are intentionally deferred.",
+        "Disposable database RLS execution must pass before this entry can be promoted to verified."
+      ]
+    },
+    {
       "id": "COMMERCIAL-LAUNCH-001",
       "name": "Commercial launch presentation",
       "contractVersion": "1",
@@ -288,10 +315,10 @@
       "releaseRequired": true,
       "authority": ["components/marketing/BlundrLandingPage.tsx", "components/legal/CommercialLegalPage.tsx", "components/onboarding/OnboardingV11Flow.tsx", "lib/blundr/onboarding/onboardingV11.ts", "content/legal"],
       "entryPoints": ["/", "/pricing", "/terms", "/privacy", "/subscription-terms", "/cookies", "/legal", "/signup", "/onboarding"],
-      "persistence": ["Supabase Auth user metadata stores presentation-only launch plan intent; no billing tables or entitlement grants exist in this wave."],
-      "dependencies": ["AUTH-ACCOUNT-001", "ONBOARD-001", "UI-SHELL-001", "future Stripe Checkout", "future RevenueCat", "future backend entitlement authority"],
+      "persistence": ["Supabase Auth user metadata stores presentation-only launch plan intent; billing and entitlement authority is owned by BILLING-ENTITLEMENT-001 and is not granted by onboarding metadata."],
+      "dependencies": ["AUTH-ACCOUNT-001", "ONBOARD-001", "UI-SHELL-001", "BILLING-ENTITLEMENT-001"],
       "featureFlags": [],
-      "fallback": "Free onboarding remains available; Pro checkout is labeled unavailable and may only save intent until backend billing and entitlement authority are implemented.",
+      "fallback": "Free onboarding remains available; onboarding plan intent remains informational and cannot grant Pro.",
       "requiredTests": ["tests/marketing/canonicalLanding.test.ts", "tests/marketing/commercialLaunchLegal.test.ts", "authenticated browser journey: anonymous landing -> signup -> onboarding -> Free -> Home -> Train -> sign out -> sign in -> Home -> Train"],
       "lastVerifiedSha": null,
       "evidence": [
@@ -305,16 +332,15 @@
         "Wave 1C staging schema probes verified line-changes and review are accepted, invalid onboarding_step values remain rejected, daily_blundr_card_goal remains present, and existing QA profile data was restored.",
         "Wave 1C authenticated staging journey passed with an existing confirmed QA account: anonymous landing, signup/sign-in surface, every V11 step, Free, Home, Train, sign out, sign in, Home, Train. QA profile, repertoire, and Auth metadata were restored after the run.",
         "Wave 1C acceptance gates on repaired source: npm run test:unit passed 589 tests; one-time authorized BLUNDR_RLS_TEST_ENVIRONMENT_ROLE=staging npm run test:security passed 28 tests; npm run test:component passed 49 tests; npm run test:integration passed 11 tests; npm run typecheck, npm run lint, npm run build, npm run verify:migrations, npm run bundle:audit, npm run security:audit, and git diff --check passed.",
-        "Phase 3 final correction records migration 20260903155151 passed, remote migration count 45, authenticated V11 journey passed, one-time staging RLS validation passed 28/28, permanent automated RLS suites remain disposable-only and reject staging before network/database access, and Production was not touched."
+        "Phase 3 final correction records migration 20260903155151 passed, remote migration count 45, authenticated V11 journey passed, one-time staging RLS validation passed 28/28, permanent automated RLS suites remain disposable-only and reject staging before network/database access, and Production was not touched.",
+        "Wave 2A implements the backend billing and entitlement authority foundation without production deployment, live-mode activation, final paywall UI, or application-wide Free/Pro feature gating."
       ],
       "blockers": [
-        "Stripe Checkout is not implemented.",
-        "RevenueCat is not implemented.",
-        "Backend entitlement authority is not implemented.",
         "Durable versioned consent storage is not implemented.",
         "Account export and deletion controls are incomplete.",
         "Commercial analytics are not implemented.",
         "Lifecycle messaging is not implemented.",
+        "Final paywall UI and production billing activation are not implemented.",
         "Exact-SHA deployed proof is incomplete."
       ]
     },

@@ -50,12 +50,16 @@ describe("onboarding V11 migration contract", () => {
     );
   });
 
-  it("records the expected migration count and head", () => {
+  it("keeps the Phase 3 repair present under the current migration head", () => {
     const migrations = readdirSync(migrationsDirectory)
       .filter((file) => file.endsWith(".sql"))
       .sort();
 
-    assert.equal(migrations.length, 45);
-    assert.equal(migrations.at(-1), migrationFile);
+    assert.equal(migrations.length, 46);
+    assert.ok(migrations.includes(migrationFile));
+    assert.equal(
+      migrations.at(-1),
+      "20260904135434_blundr_billing_entitlement_authority.sql",
+    );
   });
 });
