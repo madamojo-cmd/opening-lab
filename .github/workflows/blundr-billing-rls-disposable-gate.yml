@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - launch/commercial-billing-authority-20260904
+      - launch/commercial-paywall-enforcement-20260904
   workflow_dispatch:
 
 permissions:
