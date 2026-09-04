@@ -1,6 +1,9 @@
 name: Blundr Daily v3 disposable gate
 
 on:
+  push:
+    branches:
+      - launch/commercial-billing-authority-20260904
   workflow_dispatch:
 
 permissions:
