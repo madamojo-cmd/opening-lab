@@ -312,6 +312,14 @@ jobs:
           echo "Running learningCoreRls.integration.test.ts"
           node --preserve-symlinks --import tsx tests/security/learningCoreRls.integration.test.ts | tee "$LOG_DIR/learning-core-rls.log"
 
+      - id: billing_authority_rls_regression
+        name: Billing authority RLS and entitlement isolation regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          npm run test:billing-rls-authority | tee "$LOG_DIR/billing-authority-rls.log"
+
       - id: local_daily_rewards_ring_and_security_contracts
         name: Daily composition and fallback tests
         shell: bash
@@ -379,6 +387,7 @@ jobs:
             echo "- Trainer regression: ${{ steps.durable_trainer_completion_authority_regression.outcome }}"
             echo "- PR-01 migration authority regression: ${{ steps.pr01_migration_authority_regression.outcome }}"
             echo "- Learning core RLS and cross-user isolation matrix: ${{ steps.learning_core_rls_cross_user_isolation_matrix.outcome }}"
+            echo "- Billing authority RLS and entitlement isolation regression: ${{ steps.billing_authority_rls_regression.outcome }}"
             echo "- Daily composition and fallback tests: ${{ steps.local_daily_rewards_ring_and_security_contracts.outcome }}"
             echo "- Rewards v2 server authority contract tests: ${{ steps.rewards_server_authoritative_contract.outcome }}"
             echo "- Daily ring authenticated writer-isolation tests: ${{ steps.daily_rings_read_only_authority.outcome }}"

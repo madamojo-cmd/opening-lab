@@ -52,6 +52,7 @@
     "test:pr02-remote-authority": "node --preserve-symlinks --import tsx tests/security/pr02LearningDailyAuthority.integration.test.ts",
     "test:pr03-remote-authority": "node --preserve-symlinks --import tsx tests/security/pr03RewardsAuthority.integration.test.ts",
     "test:daily-v3-remote-authority": "node --preserve-symlinks --import tsx tests/security/dailyTaskEvidenceAuthority.integration.test.ts",
+    "test:billing-rls-authority": "node --preserve-symlinks --import tsx tests/security/billingAuthority.integration.test.ts",
     "verify:pr01-disposable-project": "node scripts/pr01-disposable-project-preflight.mjs",
     "test:pr01-disposable-project": "node scripts/pr01-disposable-project-preflight.test.mjs",
     "test:pr01-journey-workflow": "node scripts/pr01-journey-workflow-static.test.mjs",
