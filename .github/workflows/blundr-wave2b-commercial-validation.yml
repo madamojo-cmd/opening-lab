@@ -20,8 +20,8 @@ jobs:
     environment: wave2b-validation
     env:
       WAVE2B_PREVIEW_URL: ${{ secrets.WAVE2B_PREVIEW_URL }}
-      WAVE2B_QA_EMAIL: ${{ secrets.WAVE2B_QA_EMAIL }}
-      WAVE2B_QA_PASSWORD: ${{ secrets.WAVE2B_QA_PASSWORD }}
+      WAVE2B_QA_EMAIL: ${{ secrets.BLUNDR_QA_EMAIL }}
+      WAVE2B_QA_PASSWORD: ${{ secrets.BLUNDR_QA_PASSWORD }}
       WAVE2B_QA_SUPABASE_UUID: ${{ secrets.WAVE2B_QA_SUPABASE_UUID }}
       WAVE2B_EXPECTED_SHA: ${{ github.sha }}
       WAVE2B_EXECUTE_SANDBOX_CHECKOUT: ${{ vars.WAVE2B_EXECUTE_SANDBOX_CHECKOUT }}
@@ -62,22 +62,26 @@ jobs:
 
           const artifactDir = process.env.ARTIFACT_DIR;
           const required = [
-            "WAVE2B_PREVIEW_URL",
-            "WAVE2B_QA_EMAIL",
-            "WAVE2B_QA_PASSWORD",
+            { env: "WAVE2B_PREVIEW_URL", name: "WAVE2B_PREVIEW_URL" },
+            { env: "WAVE2B_QA_EMAIL", name: "BLUNDR_QA_EMAIL" },
+            { env: "WAVE2B_QA_PASSWORD", name: "BLUNDR_QA_PASSWORD" },
           ];
           const optionalSandbox = [
-            "WAVE2B_QA_SUPABASE_UUID",
-            "STRIPE_SECRET_KEY",
-            "STRIPE_PRO_MONTHLY_PRICE_ID",
-            "STRIPE_PRO_ANNUAL_PRICE_ID",
-            "REVENUECAT_REST_API_KEY",
-            "REVENUECAT_PROJECT_ID",
-            "REVENUECAT_PRO_ENTITLEMENT_ID",
-            "REVENUECAT_OFFERING_ID",
+            { env: "WAVE2B_QA_SUPABASE_UUID", name: "WAVE2B_QA_SUPABASE_UUID" },
+            { env: "STRIPE_SECRET_KEY", name: "STRIPE_SECRET_KEY" },
+            { env: "STRIPE_PRO_MONTHLY_PRICE_ID", name: "STRIPE_PRO_MONTHLY_PRICE_ID" },
+            { env: "STRIPE_PRO_ANNUAL_PRICE_ID", name: "STRIPE_PRO_ANNUAL_PRICE_ID" },
+            { env: "REVENUECAT_REST_API_KEY", name: "REVENUECAT_REST_API_KEY" },
+            { env: "REVENUECAT_PROJECT_ID", name: "REVENUECAT_PROJECT_ID" },
+            { env: "REVENUECAT_PRO_ENTITLEMENT_ID", name: "REVENUECAT_PRO_ENTITLEMENT_ID" },
+            { env: "REVENUECAT_OFFERING_ID", name: "REVENUECAT_OFFERING_ID" },
           ];
-          const missingRequired = required.filter((name) => !process.env[name]);
-          const missingSandbox = optionalSandbox.filter((name) => !process.env[name]);
+          const missingRequired = required
+            .filter((config) => !process.env[config.env])
+            .map((config) => config.name);
+          const missingSandbox = optionalSandbox
+            .filter((config) => !process.env[config.env])
+            .map((config) => config.name);
 
           const result = {
             workflow: process.env.GITHUB_WORKFLOW,
@@ -566,19 +570,21 @@ jobs:
 
           const artifactDir = process.env.ARTIFACT_DIR;
           const required = [
-            "WAVE2B_PREVIEW_URL",
-            "WAVE2B_QA_EMAIL",
-            "WAVE2B_QA_PASSWORD",
-            "WAVE2B_QA_SUPABASE_UUID",
-            "STRIPE_SECRET_KEY",
-            "STRIPE_PRO_MONTHLY_PRICE_ID",
-            "STRIPE_PRO_ANNUAL_PRICE_ID",
-            "REVENUECAT_REST_API_KEY",
-            "REVENUECAT_PROJECT_ID",
-            "REVENUECAT_PRO_ENTITLEMENT_ID",
-            "REVENUECAT_OFFERING_ID",
+            { env: "WAVE2B_PREVIEW_URL", name: "WAVE2B_PREVIEW_URL" },
+            { env: "WAVE2B_QA_EMAIL", name: "BLUNDR_QA_EMAIL" },
+            { env: "WAVE2B_QA_PASSWORD", name: "BLUNDR_QA_PASSWORD" },
+            { env: "WAVE2B_QA_SUPABASE_UUID", name: "WAVE2B_QA_SUPABASE_UUID" },
+            { env: "STRIPE_SECRET_KEY", name: "STRIPE_SECRET_KEY" },
+            { env: "STRIPE_PRO_MONTHLY_PRICE_ID", name: "STRIPE_PRO_MONTHLY_PRICE_ID" },
+            { env: "STRIPE_PRO_ANNUAL_PRICE_ID", name: "STRIPE_PRO_ANNUAL_PRICE_ID" },
+            { env: "REVENUECAT_REST_API_KEY", name: "REVENUECAT_REST_API_KEY" },
+            { env: "REVENUECAT_PROJECT_ID", name: "REVENUECAT_PROJECT_ID" },
+            { env: "REVENUECAT_PRO_ENTITLEMENT_ID", name: "REVENUECAT_PRO_ENTITLEMENT_ID" },
+            { env: "REVENUECAT_OFFERING_ID", name: "REVENUECAT_OFFERING_ID" },
           ];
-          const missing = required.filter((name) => !process.env[name]);
+          const missing = required
+            .filter((config) => !process.env[config.env])
+            .map((config) => config.name);
           const proof = {
             status: missing.length ? "configuration_pending" : "started",
             missingConfigurationNames: missing,
