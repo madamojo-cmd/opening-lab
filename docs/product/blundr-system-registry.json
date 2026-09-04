@@ -298,7 +298,8 @@
         "Wave 2A adds one generated additive migration, server-only billing repository, hosted Stripe Checkout and portal endpoints, raw-body Stripe webhook verification, RevenueCat authorization-header webhook processing, and native-fetch RevenueCat reconciliation.",
         "Focused local tests cover locked price mappings, authenticated UUID metadata in both Checkout and Subscription metadata, trial reservation behavior, duplicate/out-of-order provider events, RevenueCat environment and identity isolation, and static RLS/write-policy shape.",
         "Dedicated disposable billing RLS gate passed on 2026-09-04 at SHA 257f0c4317224dc456d6e234f65ada55c8c2325c: run 33892448684 rebuilt the disposable Supabase project from local migrations, verified remote migration count 46 and head 20260904135434, ran tests/security/billingAuthority.integration.test.ts, and completed cleanup.",
-        "Wave 2B adds the shared trusted commercial access resolver, paywall and paid-offer acknowledgement UX, Checkout success/cancel reconciliation states, Settings Billing controls, Free active-opening selection, and server-side Free/Pro enforcement for active repertoire access, Daily card limits, Review completion limits, and premium progress fields."
+        "Wave 2B adds the shared trusted commercial access resolver, paywall and paid-offer acknowledgement UX, Checkout success/cancel reconciliation states, Settings Billing controls, Free active-opening selection, and server-side Free/Pro enforcement for active repertoire access, Daily card limits, Review completion limits, and premium progress fields.",
+        "Wave 2B disposable billing RLS gate passed on 2026-09-04 at SHA 907a0deb50c1967a3f0413f639f411cefc157564: run 33903045519 rebuilt the disposable Supabase project from local migrations, verified remote migration count 47 and head 20260904170758, ran tests/security/billingAuthority.integration.test.ts with Wave 2B paid-offer and active-opening selection coverage, and completed cleanup."
       ],
       "blockers": [
         "No production deployment or live-mode activation is authorized in Wave 2B.",
@@ -335,7 +336,8 @@
         "Wave 1C acceptance gates on repaired source: npm run test:unit passed 589 tests; one-time authorized BLUNDR_RLS_TEST_ENVIRONMENT_ROLE=staging npm run test:security passed 28 tests; npm run test:component passed 49 tests; npm run test:integration passed 11 tests; npm run typecheck, npm run lint, npm run build, npm run verify:migrations, npm run bundle:audit, npm run security:audit, and git diff --check passed.",
         "Phase 3 final correction records migration 20260903155151 passed, remote migration count 45, authenticated V11 journey passed, one-time staging RLS validation passed 28/28, permanent automated RLS suites remain disposable-only and reject staging before network/database access, and Production was not touched.",
         "Wave 2A implements the backend billing and entitlement authority foundation without production deployment, live-mode activation, final paywall UI, or application-wide Free/Pro feature gating.",
-        "Wave 2B replaces the final onboarding plan-intent presentation with an explicit Free/Pro paywall step, requires paid-offer acknowledgement before Checkout, and keeps the Free path available without Checkout or payment method."
+        "Wave 2B replaces the final onboarding plan-intent presentation with an explicit Free/Pro paywall step, requires paid-offer acknowledgement before Checkout, and keeps the Free path available without Checkout or payment method.",
+        "Wave 2B disposable billing RLS gate passed on 2026-09-04 at SHA 907a0deb50c1967a3f0413f639f411cefc157564 in run 33903045519 with remote migration count 47, head 20260904170758, billingAuthority.integration RLS coverage, and disposable cleanup."
       ],
       "blockers": [
         "Durable versioned consent storage is not implemented.",

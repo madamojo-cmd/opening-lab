@@ -149,9 +149,16 @@ production-launch blocker.
 
 ## Acceptance Evidence To Record
 
-- Focused paywall, billing, entitlement, and architecture tests.
+- Focused paywall, billing, entitlement, and architecture tests passed locally
+  on the Wave 2B branch.
 - Disposable-only billing RLS/security gate with migrations through
-  `20260904170758`.
+  `20260904170758` passed in GitHub Actions on 2026-09-04: run
+  `33903045519` tested SHA
+  `907a0deb50c1967a3f0413f639f411cefc157564`, rebuilt the disposable
+  Supabase project from local migrations, verified remote migration count 47
+  and head `20260904170758`, ran
+  `tests/security/billingAuthority.integration.test.ts`, and completed
+  disposable cleanup.
 - Migration verifier, unit tests, component/integration tests affected,
   typecheck, lint, build, secret/browser-bundle audit, responsive QA, and
   `git diff --check`.
