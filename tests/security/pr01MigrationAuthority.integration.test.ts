@@ -769,11 +769,10 @@ async function runPr01RlsMatrix(): Promise<void> {
     configured,
     `CI requires configured disposable PR-01 credentials: ${missingEnvironmentNames.join(", ")}`,
   );
-  assert.ok(
-    ["disposable", "staging"].includes(
-      process.env.BLUNDR_RLS_TEST_ENVIRONMENT_ROLE ?? "",
-    ),
-    "PR-01 authority tests only run against disposable or staging environments",
+  assert.equal(
+    process.env.BLUNDR_RLS_TEST_ENVIRONMENT_ROLE,
+    "disposable",
+    "PR-01 authority tests only run against disposable CI",
   );
   const url = process.env.BLUNDR_RLS_TEST_URL!;
   const service = createClient(

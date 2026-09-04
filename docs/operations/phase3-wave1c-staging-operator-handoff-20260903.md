@@ -209,8 +209,10 @@ against the confirmed non-production staging project only.
   present, and the QA profile row was restored.
 - The authenticated V11 staging journey passed using one existing confirmed QA
   account, without public signup loops or production Auth changes.
-- `npm run test:security` passed against staging with the explicit
-  non-production role guard.
+- The one-time authorized `npm run test:security` staging validation passed
+  `28/28`. Permanent automated RLS suites remain disposable-only and reject
+  `BLUNDR_RLS_TEST_ENVIRONMENT_ROLE=staging` before any network request or
+  database mutation.
 
 ## Rollback / Recovery
 

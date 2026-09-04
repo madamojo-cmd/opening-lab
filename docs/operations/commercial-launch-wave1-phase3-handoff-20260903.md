@@ -74,7 +74,7 @@ The supplied file `BLUNDR_FINAL_COMMERCIAL_LAUNCH_HANDOFF(1).md` was not present
 - Authenticated staging journey: existing confirmed staging QA account completed `Anonymous landing -> signup/sign-in surface -> V11 onboarding welcome/level/priorities/starter-pack/training-mode/pace/line-changes/review/plan/ready -> Free -> Home -> Train -> sign out -> sign in -> Home -> Train`; the QA profile, repertoire row, and Auth metadata were restored afterward. Evidence screenshot: `.agent_runs/commercial-launch-wave1c-staging-journey/authenticated-journey-train-desktop.png`.
 - Stabilization repair: V11 plan intent now persists through the server-side Supabase Auth admin seam, preserving existing user metadata and storing only `blundr_launch_plan_intent`; it does not grant Pro, create checkout, create billing tables, or create entitlements.
 - Auth hydration repair: client-side onboarding session hydration now uses the locally held Supabase session user and leaves bearer-token authority validation to server APIs, reducing browser-side Supabase network churn during route transitions.
-- Staging security/RLS suite: `BLUNDR_RLS_TEST_ENVIRONMENT_ROLE=staging npm run test:security` passed with `28` tests and `0` failures after the guard was narrowed to allow only explicitly non-production `disposable` or `staging` environments.
+- One-time staging security/RLS validation: `BLUNDR_RLS_TEST_ENVIRONMENT_ROLE=staging npm run test:security` passed with `28` tests and `0` failures during the authorized Phase 3 recovery run. The permanent automated RLS suites remain disposable-only and reject `staging` before any network request or database mutation.
 - Unit suite: `npm run test:unit` passed with `589` tests and `0` failures.
 - Component suite: `npm run test:component` passed with `17` files and `49` tests.
 - Integration suite: `npm run test:integration` passed with `6` files and `11` tests.
@@ -83,6 +83,7 @@ The supplied file `BLUNDR_FINAL_COMMERCIAL_LAUNCH_HANDOFF(1).md` was not present
 - Production build: `npm run build` passed with the non-production staging public Supabase environment for authenticated browser QA.
 - Static checks: `npm run verify:migrations`, `node scripts/pr01-journey-workflow-static.test.mjs`, `npm run verify:registry`, `npm run bundle:audit`, escalated `npm run security:audit`, and `git diff --check` passed. `npm run format:check` still reports pre-existing style drift in unrelated files not touched by Phase 3 recovery.
 - Stale public-copy scan found no `$7.99`, `$59.99`, `13+`, monthly-no-trial, or no-trial launch copy in public app/legal/test surfaces.
+- Phase 3 final correction records migration `20260903155151` passed, remote migration count `45`, the authenticated V11 journey passed, the one-time staging RLS validation passed `28/28`, permanent RLS guardrails are disposable-only, and Production was not touched.
 
 ## Remaining blockers
 

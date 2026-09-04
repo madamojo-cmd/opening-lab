@@ -16,12 +16,7 @@ const required = [
   "BLUNDR_RLS_TEST_USER_B_PASSWORD",
 ];
 for (const name of required) assert.ok(process.env[name], `${name} required`);
-assert.ok(
-  ["disposable", "staging"].includes(
-    process.env.BLUNDR_RLS_TEST_ENVIRONMENT_ROLE ?? "",
-  ),
-  "security tests only run against disposable or staging environments",
-);
+assert.equal(process.env.BLUNDR_RLS_TEST_ENVIRONMENT_ROLE, "disposable");
 const url = process.env.BLUNDR_RLS_TEST_URL!,
   anonKey = process.env.BLUNDR_RLS_TEST_ANON_KEY!,
   serviceKey = process.env.BLUNDR_RLS_TEST_SERVICE_ROLE_KEY!;
