@@ -1,0 +1,199 @@
+name: Blundr billing authority disposable RLS gate
+
+on:
+  push:
+    branches:
+      - launch/commercial-billing-authority-20260904
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blundr-billing-rls-disposable-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  billing_rls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: blundr-disposable-rls
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      BLUNDR_RLS_FRESH_PROJECT_REF: ${{ secrets.BLUNDR_RLS_FRESH_PROJECT_REF }}
+      BLUNDR_RLS_UPGRADE_PROJECT_REF: ${{ secrets.BLUNDR_RLS_UPGRADE_PROJECT_REF }}
+      BLUNDR_RLS_TEST_PROJECT_REF: ${{ secrets.BLUNDR_RLS_TEST_PROJECT_REF }}
+      BLUNDR_RLS_TEST_ENVIRONMENT_ROLE: ${{ secrets.BLUNDR_RLS_TEST_ENVIRONMENT_ROLE }}
+      BLUNDR_RLS_TEST_USER_A_EMAIL: ${{ secrets.BLUNDR_RLS_TEST_USER_A_EMAIL }}
+      BLUNDR_RLS_TEST_USER_A_PASSWORD: ${{ secrets.BLUNDR_RLS_TEST_USER_A_PASSWORD }}
+      BLUNDR_RLS_TEST_USER_B_EMAIL: ${{ secrets.BLUNDR_RLS_TEST_USER_B_EMAIL }}
+      BLUNDR_RLS_TEST_USER_B_PASSWORD: ${{ secrets.BLUNDR_RLS_TEST_USER_B_PASSWORD }}
+      LOG_DIR: ${{ github.workspace }}/.tmp/blundr-billing-rls-logs
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+
+      - name: Print exact tested SHA
+        run: echo "Exact SHA $GITHUB_SHA"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify local migration set
+        run: npm run verify:migrations
+
+      - name: Require disposable billing RLS environment
+        run: |
+          set -eu
+          for name in \
+            SUPABASE_ACCESS_TOKEN \
+            SUPABASE_DB_PASSWORD \
+            BLUNDR_RLS_FRESH_PROJECT_REF \
+            BLUNDR_RLS_UPGRADE_PROJECT_REF \
+            BLUNDR_RLS_TEST_PROJECT_REF \
+            BLUNDR_RLS_TEST_ENVIRONMENT_ROLE \
+            BLUNDR_RLS_TEST_USER_A_EMAIL \
+            BLUNDR_RLS_TEST_USER_A_PASSWORD \
+            BLUNDR_RLS_TEST_USER_B_EMAIL \
+            BLUNDR_RLS_TEST_USER_B_PASSWORD
+          do
+            test -n "${!name:-}" || { echo "$name is required"; exit 1; }
+          done
+          test "$BLUNDR_RLS_FRESH_PROJECT_REF" != "$BLUNDR_RLS_UPGRADE_PROJECT_REF" || {
+            echo "Fresh and upgrade project refs must be distinct"
+            exit 1
+          }
+          test "$BLUNDR_RLS_TEST_PROJECT_REF" = "$BLUNDR_RLS_UPGRADE_PROJECT_REF" || {
+            echo "Test and upgrade project refs must match before disposable promotion"
+            exit 1
+          }
+          test "$BLUNDR_RLS_TEST_ENVIRONMENT_ROLE" = "disposable" || {
+            echo "Remote target must be disposable"
+            exit 1
+          }
+
+      - name: Confirm disposable project and export keys
+        env:
+          BLUNDR_PR01_PREFLIGHT_MODE: fresh
+          BLUNDR_PR01_PREFLIGHT_PROJECT_REF: ${{ secrets.BLUNDR_RLS_FRESH_PROJECT_REF }}
+          BLUNDR_PR01_EXPORT_API_KEYS: "true"
+        run: npm run verify:pr01-disposable-project
+
+      - id: link_disposable_project
+        name: Link disposable project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          log="$LOG_DIR/link.log"
+          command_log="$(mktemp)"
+          if ! npx --yes supabase@2.111.0 link --project-ref "$BLUNDR_RLS_FRESH_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD" >"$command_log" 2>&1; then
+            cat "$command_log"
+            rm -f "$command_log"
+            exit 1
+          fi
+          if grep -q '"_tag":"Error"' "$command_log"; then
+            cat "$command_log"
+            rm -f "$command_log"
+            exit 1
+          fi
+          cat "$command_log" | tee "$log" >/dev/null
+          rm -f "$command_log"
+
+      - name: Promote fresh project for billing RLS tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "BLUNDR_RLS_TEST_PROJECT_REF=$BLUNDR_RLS_FRESH_PROJECT_REF" >> "$GITHUB_ENV"
+
+      - name: Rebuild disposable project from local migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          log="$LOG_DIR/db-reset-linked.log"
+          command_log="$(mktemp)"
+          if ! npx --yes supabase@2.111.0 --yes db reset --linked --no-seed >"$command_log" 2>&1; then
+            cat "$command_log"
+            rm -f "$command_log"
+            exit 1
+          fi
+          if grep -q '"_tag":"Error"' "$command_log"; then
+            cat "$command_log"
+            rm -f "$command_log"
+            exit 1
+          fi
+          cat "$command_log" | tee "$log" >/dev/null
+          rm -f "$command_log"
+
+      - name: Verify rebuilt remote migration history
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          log="$LOG_DIR/migrations-after-reset.log"
+          BLUNDR_EXPECTED_MIGRATION_COUNT=46 BLUNDR_EXPECTED_MIGRATION_HEAD=20260904135434 \
+            npm run verify:remote-migration-history | tee "$log"
+
+      - id: billing_authority_rls_regression
+        name: Billing authority RLS and entitlement isolation regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          npm run test:billing-rls-authority | tee "$LOG_DIR/billing-authority-rls.log"
+
+      - id: cleanup_disposable_project
+        name: Cleanup disposable project
+        if: ${{ always() && steps.link_disposable_project.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          log="$LOG_DIR/db-reset-cleanup.log"
+          command_log="$(mktemp)"
+          if ! npx --yes supabase@2.111.0 --yes db reset --linked --no-seed >"$command_log" 2>&1; then
+            cat "$command_log"
+            rm -f "$command_log"
+            exit 1
+          fi
+          if grep -q '"_tag":"Error"' "$command_log"; then
+            cat "$command_log"
+            rm -f "$command_log"
+            exit 1
+          fi
+          cat "$command_log" | tee "$log" >/dev/null
+          rm -f "$command_log"
+
+      - name: Publish billing RLS gate summary
+        if: always()
+        run: |
+          {
+            echo "## Billing authority disposable RLS gate"
+            echo "- Workflow: $GITHUB_WORKFLOW"
+            echo "- Run ID: $GITHUB_RUN_ID"
+            echo "- Tested SHA: $GITHUB_SHA"
+            echo "- Disposable environment role: $BLUNDR_RLS_TEST_ENVIRONMENT_ROLE"
+            echo "- Migration count: 46"
+            echo "- Migration head: 20260904135434"
+            echo "- Billing authority RLS and entitlement isolation regression: ${{ steps.billing_authority_rls_regression.outcome }}"
+            echo "- Disposable cleanup: ${{ steps.cleanup_disposable_project.outcome }}"
+            echo "- Logs: uploaded as artifact from $LOG_DIR"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload billing RLS gate logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blundr-billing-rls-disposable-gate-${{ github.sha }}
+          path: ${{ github.workspace }}/.tmp/blundr-billing-rls-logs
+          if-no-files-found: warn
+          retention-days: 30
