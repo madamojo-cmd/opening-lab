@@ -181,34 +181,54 @@ jobs:
 
           async function readJson(path) {
             const response = await fetch(`${base}${path}`, { redirect: "manual" });
-            if (!response.ok) {
-              return { ok: false, status: response.status };
-            }
             try {
-              return { ok: true, status: response.status, body: await response.json() };
+              return { ok: response.ok, status: response.status, body: await response.json() };
             } catch {
-              return { ok: true, status: response.status, body: null };
+              return { ok: response.ok, status: response.status, body: null };
             }
           }
 
-          const probes = [
-            ["/api/health", ["gitSha", "sha", "commit", "buildGitSha"]],
-            ["/api/build-info", ["gitSha", "sha", "commit", "buildGitSha"]],
-          ];
+          function readPath(value, path) {
+            return path.reduce((current, key) => current && typeof current === "object" ? current[key] : undefined, value);
+          }
+
+          function extractSha(body) {
+            if (!body || typeof body !== "object") return null;
+            const paths = [
+              ["gitSha"],
+              ["sha"],
+              ["commit"],
+              ["buildGitSha"],
+              ["build", "gitSha"],
+              ["build", "sha"],
+              ["build", "commit"],
+              ["build", "buildGitSha"],
+            ];
+            for (const path of paths) {
+              const value = readPath(body, path);
+              if (typeof value === "string" && /^[0-9a-f]{40}$/i.test(value)) return value.toLowerCase();
+            }
+            return null;
+          }
+
+          function summarizeBody(body) {
+            if (!body || typeof body !== "object") return null;
+            return {
+              ready: typeof body.ready === "boolean" ? body.ready : null,
+              buildReady: typeof body.build?.ready === "boolean" ? body.build.ready : null,
+              buildIssues: Array.isArray(body.build?.issues) ? body.build.issues.map(String) : [],
+              errorCode: typeof body.error === "string" ? body.error : typeof body.error?.code === "string" ? body.error.code : null,
+            };
+          }
+
+          const probes = ["/api/health", "/api/build-info"];
           const observations = [];
           let exposedSha = null;
-          for (const [path, keys] of probes) {
+          for (const path of probes) {
             const result = await readJson(path);
-            const redacted = { path, ok: result.ok, status: result.status, exposedSha: null };
-            if (result.body && typeof result.body === "object") {
-              for (const key of keys) {
-                if (typeof result.body[key] === "string" && result.body[key]) {
-                  exposedSha = result.body[key];
-                  redacted.exposedSha = exposedSha;
-                  break;
-                }
-              }
-            }
+            const candidate = extractSha(result.body);
+            if (candidate) exposedSha = candidate;
+            const redacted = { path, ok: result.ok, status: result.status, exposedSha: candidate, summary: summarizeBody(result.body) };
             observations.push(redacted);
           }
           const identity = {
@@ -222,6 +242,9 @@ jobs:
           );
           if (identity.status === "mismatched") {
             throw new Error("Preview deployment metadata exposes a different SHA.");
+          }
+          if (identity.status === "not_exposed") {
+            throw new Error("Preview deployment metadata did not expose a supported SHA field.");
           }
           console.log(`Preview SHA identity ${identity.status}.`);
           NODE
@@ -237,6 +260,7 @@ jobs:
           const baseUrl = process.env.WAVE2B_PREVIEW_URL.replace(/\/+$/, "");
           const qaEmail = process.env.WAVE2B_QA_EMAIL;
           const qaPassword = process.env.WAVE2B_QA_PASSWORD;
+          const qaUserId = process.env.WAVE2B_QA_SUPABASE_UUID;
           const artifactDir = process.env.ARTIFACT_DIR;
 
           const viewports = [
@@ -262,6 +286,47 @@ jobs:
                 "I understand that my 7-day Blundr Pro trial requires a payment method and will automatically convert to the plan I selected on the date shown above unless I cancel before then.",
             },
           };
+          const onboardingSteps = [
+            "welcome",
+            "level",
+            "priorities",
+            "starter-pack",
+            "training-mode",
+            "pace",
+            "line-changes",
+            "review",
+            "plan",
+            "ready",
+          ];
+          const onboardingValues = {
+            welcome: true,
+            level: "1200-1600",
+            priorities: ["remember_openings", "review_mistakes"],
+            "starter-pack": "classical_attacker",
+            "training-mode": "assisted",
+            pace: "standard",
+            "line-changes": null,
+            review: null,
+          };
+
+          function redactText(value) {
+            let text = String(value ?? "");
+            for (const forbidden of [qaEmail, qaPassword, qaUserId].filter(Boolean)) {
+              text = text.split(forbidden).join("[redacted]");
+            }
+            return text
+              .replace(/\b(?:sk_live|sk_test|whsec|rk_live|eyJ[A-Za-z0-9_-]{20,})\b/g, "[redacted]")
+              .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi, "[redacted-uuid]");
+          }
+
+          function summarizeOnboardingBody(body) {
+            return {
+              ok: body?.ok === true,
+              step: typeof body?.data?.step === "string" ? body.data.step : null,
+              completed: body?.data?.completed === true,
+              errorCode: typeof body?.error?.code === "string" ? body.error.code : null,
+            };
+          }
 
           function assertNoSensitiveText(text, label) {
             const forbidden = [
@@ -282,21 +347,6 @@ jobs:
           }
 
           async function installRoutes(page) {
-            await page.route("**/api/blundr/onboarding/v11", async (route) => {
-              await route.fulfill({
-                status: 200,
-                contentType: "application/json",
-                body: JSON.stringify({
-                  ok: true,
-                  state: {
-                    currentStep: "plan",
-                    completed: false,
-                    profile: {},
-                    preferences: {},
-                  },
-                }),
-              });
-            });
             await page.route("**/api/blundr/billing/offer**", async (route) => {
               await route.fulfill({
                 status: 200,
@@ -373,6 +423,250 @@ jobs:
             await page.waitForLoadState("networkidle").catch(() => {});
           }
 
+          function installPageDiagnostics(page) {
+            const diagnostics = {
+              responses: [],
+              requestFailures: [],
+              consoleErrors: [],
+              pageErrors: [],
+            };
+            const interesting = new Set([
+              "/login",
+              "/onboarding/plan",
+              "/api/blundr/onboarding/v11",
+              "/api/blundr/dev/reset-user",
+              "/api/blundr/billing/offer",
+              "/api/blundr/billing/checkout",
+              "/api/blundr/billing/status",
+              "/api/blundr/billing/portal",
+            ]);
+            function pathFor(url) {
+              try {
+                const parsed = new URL(url);
+                if (parsed.origin !== baseUrl) return null;
+                return parsed.pathname;
+              } catch {
+                return null;
+              }
+            }
+            page.on("response", (response) => {
+              const path = pathFor(response.url());
+              if (!path || !interesting.has(path)) return;
+              diagnostics.responses.push({
+                path,
+                status: response.status(),
+                ok: response.ok(),
+              });
+            });
+            page.on("requestfailed", (request) => {
+              const path = pathFor(request.url());
+              if (!path) return;
+              diagnostics.requestFailures.push({
+                path,
+                method: request.method(),
+                resourceType: request.resourceType(),
+                failure: redactText(request.failure()?.errorText ?? "unknown"),
+              });
+            });
+            page.on("console", (message) => {
+              if (message.type() === "error") {
+                diagnostics.consoleErrors.push(redactText(message.text()).slice(0, 500));
+              }
+            });
+            page.on("pageerror", (error) => {
+              diagnostics.pageErrors.push(redactText(error.message).slice(0, 500));
+            });
+            return diagnostics;
+          }
+
+          async function redactPageForScreenshot(page) {
+            await page.evaluate(() => {
+              for (const input of document.querySelectorAll("input")) {
+                const type = input.getAttribute("type") || "";
+                if (/email|password|text|search|tel/i.test(type)) {
+                  input.value = "";
+                  input.setAttribute("value", "");
+                }
+              }
+            }).catch(() => {});
+          }
+
+          async function readBrowserSession(page) {
+            return page.evaluate((expectedUserId) => {
+              function findSession(value) {
+                if (!value || typeof value !== "object") return null;
+                if (
+                  typeof value.access_token === "string" &&
+                  value.access_token &&
+                  value.user &&
+                  typeof value.user.id === "string"
+                ) {
+                  return { accessToken: value.access_token, userId: value.user.id };
+                }
+                for (const child of Object.values(value)) {
+                  const found = findSession(child);
+                  if (found) return found;
+                }
+                return null;
+              }
+              for (const key of Object.keys(window.localStorage)) {
+                const raw = window.localStorage.getItem(key);
+                if (!raw) continue;
+                try {
+                  const found = findSession(JSON.parse(raw));
+                  if (found) {
+                    return {
+                      authenticated: true,
+                      accessToken: found.accessToken,
+                      userIdPresent: true,
+                      userMatchesExpected: found.userId === expectedUserId,
+                    };
+                  }
+                } catch {
+                  // Ignore unrelated localStorage values.
+                }
+              }
+              return {
+                authenticated: false,
+                accessToken: null,
+                userIdPresent: false,
+                userMatchesExpected: false,
+              };
+            }, qaUserId);
+          }
+
+          async function authenticatedJson(page, accessToken, path, init = {}) {
+            return page.evaluate(
+              async ({ accessToken, path, init }) => {
+                const response = await fetch(path, {
+                  ...init,
+                  headers: {
+                    accept: "application/json",
+                    "content-type": "application/json",
+                    authorization: `Bearer ${accessToken}`,
+                    ...(init.headers || {}),
+                  },
+                  credentials: "same-origin",
+                });
+                const body = await response.json().catch(() => null);
+                return { status: response.status, ok: response.ok, body };
+              },
+              { accessToken, path, init },
+            );
+          }
+
+          async function readOnboardingState(page, accessToken) {
+            const result = await authenticatedJson(page, accessToken, "/api/blundr/onboarding/v11");
+            return {
+              status: result.status,
+              ok: result.ok,
+              ...summarizeOnboardingBody(result.body),
+            };
+          }
+
+          async function patchOnboardingStep(page, accessToken, step) {
+            const result = await authenticatedJson(page, accessToken, "/api/blundr/onboarding/v11", {
+              method: "PATCH",
+              body: JSON.stringify({
+                step,
+                value: onboardingValues[step],
+                ageConfirmed: step === "welcome" ? true : undefined,
+              }),
+            });
+            return {
+              status: result.status,
+              ok: result.ok,
+              ...summarizeOnboardingBody(result.body),
+            };
+          }
+
+          async function resetQaOnboarding(page, accessToken) {
+            const result = await authenticatedJson(page, accessToken, "/api/blundr/dev/reset-user", {
+              method: "POST",
+              body: JSON.stringify({
+                scope: "onboarding",
+                userId: qaUserId,
+              }),
+            });
+            return {
+              status: result.status,
+              ok: result.ok,
+              errorCode: typeof result.body?.error?.code === "string" ? result.body.error.code : null,
+            };
+          }
+
+          async function ensureOnboardingPlanState(page, accessToken, diagnostics) {
+            let state = await readOnboardingState(page, accessToken);
+            diagnostics.initialOnboarding = state;
+            if (!state.ok) return state;
+            const planIndex = onboardingSteps.indexOf("plan");
+            let currentIndex = onboardingSteps.indexOf(state.step);
+            if (state.completed || currentIndex > planIndex) {
+              diagnostics.resetAttempt = await resetQaOnboarding(page, accessToken);
+              if (!diagnostics.resetAttempt.ok) return state;
+              state = await readOnboardingState(page, accessToken);
+              currentIndex = onboardingSteps.indexOf(state.step);
+            }
+            diagnostics.advancement = [];
+            while (state.ok && !state.completed && state.step !== "plan") {
+              currentIndex = onboardingSteps.indexOf(state.step);
+              if (currentIndex < 0 || currentIndex >= planIndex) break;
+              const patched = await patchOnboardingStep(page, accessToken, state.step);
+              diagnostics.advancement.push({
+                from: state.step,
+                status: patched.status,
+                ok: patched.ok,
+                nextStep: patched.step,
+                completed: patched.completed,
+                errorCode: patched.errorCode,
+              });
+              state = patched;
+            }
+            diagnostics.finalOnboarding = state;
+            return state;
+          }
+
+          async function writePaywallDiagnostics(page, viewport, diagnostics, sessionSummary, state, response) {
+            const heading = await page.locator("h1").first().textContent().catch(() => null);
+            const path = (() => {
+              try {
+                return new URL(page.url()).pathname;
+              } catch {
+                return "unknown";
+              }
+            })();
+            const payload = {
+              status: "before_paywall_assertion",
+              authenticationSucceeded: sessionSummary.authenticated === true,
+              userIdPresent: sessionSummary.userIdPresent === true,
+              userMatchesExpected: sessionSummary.userMatchesExpected === true,
+              currentPathname: path,
+              pageHttpStatus: response?.status() ?? null,
+              onboardingApiStatus: state.status,
+              currentOnboardingStep: state.step,
+              onboardingCompleted: state.completed,
+              visibleHeading: redactText(heading),
+              responses: diagnostics.responses.slice(-20),
+              requestFailures: diagnostics.requestFailures.slice(-20),
+              consoleErrors: diagnostics.consoleErrors.slice(-20),
+              pageErrors: diagnostics.pageErrors.slice(-20),
+              initialOnboarding: diagnostics.initialOnboarding,
+              finalOnboarding: diagnostics.finalOnboarding,
+              resetAttempt: diagnostics.resetAttempt ?? null,
+              advancement: diagnostics.advancement ?? [],
+            };
+            await writeFile(
+              `${artifactDir}/browser-diagnostics-${viewport.name}-before-paywall.json`,
+              `${JSON.stringify(payload, null, 2)}\n`,
+            );
+            await redactPageForScreenshot(page);
+            await page.screenshot({
+              path: `${artifactDir}/screenshots/${viewport.name}-before-paywall.png`,
+              fullPage: true,
+            });
+            assertNoSensitiveText(await page.locator("body").innerText(), `${viewport.name}-before-paywall`);
+          }
+
           async function assertLayout(page, label) {
             const bodyText = await page.locator("body").innerText();
             assertNoSensitiveText(bodyText, label);
@@ -417,8 +711,23 @@ jobs:
             });
           }
 
-          async function validatePaywall(page, viewport) {
-            await page.goto(`${baseUrl}/onboarding/plan`, { waitUntil: "domcontentloaded" });
+          async function validatePaywall(page, viewport, diagnostics) {
+            const sessionSummary = await readBrowserSession(page);
+            if (!sessionSummary.authenticated || !sessionSummary.accessToken || !sessionSummary.userMatchesExpected) {
+              await writePaywallDiagnostics(page, viewport, diagnostics, sessionSummary, { status: null, step: null, completed: null }, null);
+              throw new Error("QA authentication did not produce the expected non-production user session.");
+            }
+            const state = await ensureOnboardingPlanState(page, sessionSummary.accessToken, diagnostics);
+            const response = await page.goto(`${baseUrl}/onboarding/plan`, { waitUntil: "domcontentloaded" });
+            await page.waitForLoadState("networkidle").catch(() => {});
+            const currentState = await readOnboardingState(page, sessionSummary.accessToken);
+            await writePaywallDiagnostics(page, viewport, diagnostics, sessionSummary, currentState, response);
+            if (!state.ok || !currentState.ok) {
+              throw new Error("Authenticated onboarding-state endpoint did not return a usable state.");
+            }
+            if (currentState.completed || currentState.step !== "plan") {
+              throw new Error(`QA account is not at onboarding plan step; current step is ${currentState.step ?? "unknown"}.`);
+            }
             await expect(page.getByRole("heading", { name: /choose how you want to train/i })).toBeVisible();
             await expect(page.getByText(/keep training free, or try everything in blundr pro for 7 days/i)).toBeVisible();
             await expect(page.getByText("$9.99/month after trial")).toBeVisible();
@@ -503,10 +812,11 @@ jobs:
             for (const viewport of viewports) {
               const context = await browser.newContext({ viewport });
               const page = await context.newPage();
+              const pageDiagnostics = installPageDiagnostics(page);
               await installRoutes(page);
               await signIn(page);
               await installRoutes(page);
-              await validatePaywall(page, viewport);
+              await validatePaywall(page, viewport, pageDiagnostics);
               await validateRoutes(page, viewport);
               await validateKeyboard(page);
               summary.push({ viewport: viewport.name, status: "passed" });
