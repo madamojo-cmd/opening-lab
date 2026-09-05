@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
@@ -85,4 +86,38 @@ test("Wave 2B migration exposes safe read-only client state only", () => {
   assert.match(migration, /using \(user_id = auth\.uid\(\)\)/);
   assert.doesNotMatch(migration, /for insert to authenticated|for update to authenticated|for delete to authenticated/);
   assert.doesNotMatch(migration, /user_metadata|raw_user_meta_data/);
+});
+
+test("Wave 2B browser route checks are backed by real pages and reject 404s", () => {
+  const workflowPath = ".github/workflows/blundr-wave2b-commercial-validation.yml";
+  const workflow = read(workflowPath);
+  const routeTable = workflow.match(/const routeChecks = \[([\s\S]*?)\];/);
+
+  assert.ok(routeTable, "browser QA routeChecks table must be present");
+  assert.doesNotMatch(routeTable[1], /path: "\/rings"/);
+  assert.doesNotMatch(routeTable[1], /path: "\/rewards"/);
+  assert.doesNotMatch(routeTable[1], /requiredText: \[\/blundr\/i\]/i);
+  assert.doesNotMatch(workflow, /locator\("body"\)\)\.toContainText/);
+  assert.doesNotMatch(workflow, /toContainText\(text, \{ timeout: 15000 \}\)/);
+  assert.match(workflow, /did not produce a main-document response/);
+  assert.match(workflow, /returned HTTP \$\{response\.status\(\)\}/);
+  assert.match(workflow, /ended on unexpected path/);
+  assert.match(workflow, /This page could not be found/);
+  assert.match(workflow, /rendered a Not Found or generic error page/);
+  assert.match(routeTable[1], /label: "progress"[\s\S]*path: "\/progress"[\s\S]*Daily rings[\s\S]*Tempo[\s\S]*Battery[\s\S]*Daily Blundr[\s\S]*STREAK & CONSISTENCY/);
+
+  const paths = [...routeTable[1].matchAll(/path: "([^"]+)"/g)].map(
+    ([, path]) => path.split(/[?#]/)[0],
+  );
+  assert.ok(paths.length > 0, "browser QA must list standalone routes");
+  for (const path of paths) {
+    const pagePath =
+      path === "/"
+        ? "app/page.tsx"
+        : join("app", path.replace(/^\//, ""), "page.tsx");
+    assert.ok(
+      existsSync(join(root, pagePath)),
+      `${path} must have a real route at ${pagePath}`,
+    );
+  }
 });

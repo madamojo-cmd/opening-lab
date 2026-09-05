@@ -826,23 +826,93 @@ jobs:
           }
 
           async function validateRoutes(page, viewport) {
-            for (const [label, path, text] of [
-              ["billing-success", "/billing/success?session_id=cs_wave2b_redacted", /being processed|confirmation|current plan|free/i],
-              ["billing-cancel", "/billing/cancel", /cancel|choose|billing/i],
-              ["settings-billing", "/settings#billing", /billing|current plan|free|manage/i],
-              ["train", "/train", /train|opening|coach|continue/i],
-              ["daily", "/daily", /daily|blundr|card/i],
-              ["review", "/review", /review|queue|position/i],
-              ["repertoire", "/repertoire", /repertoire|opening/i],
-              ["progress", "/progress", /progress|mastery|streak/i],
-              ["rings", "/rings", /ring|tempo|battery|blundr/i],
-              ["rewards", "/rewards", /reward|streak|ring/i],
-              ["minigames", "/minigames", /game|mini|puzzle/i],
-            ]) {
-              await page.goto(`${baseUrl}${path}`, { waitUntil: "domcontentloaded" });
+            const routeChecks = [
+              {
+                label: "billing-success",
+                path: "/billing/success?session_id=cs_wave2b_redacted",
+                pathname: "/billing/success",
+                heading: /Subscription confirmation is being processed\./i,
+                requiredText: [/provider reconciliation/i, /Settings -> Billing/i],
+              },
+              {
+                label: "billing-cancel",
+                path: "/billing/cancel",
+                pathname: "/billing/cancel",
+                heading: /Checkout was canceled\./i,
+                requiredText: [/No subscription change was made/i, /Plan selection/i],
+              },
+              {
+                label: "settings-billing",
+                path: "/settings#billing",
+                pathname: "/settings",
+                heading: /Account settings\./i,
+                requiredText: [/Billing/i, /Current plan: Free/i],
+              },
+              {
+                label: "train",
+                path: "/train",
+                pathname: "/train",
+                heading: /Choose an opening\.|Loading your openings\.|Opening list unavailable\./i,
+                requiredText: [/Unlocked openings only|checking which openings are ready|couldn't load your saved repertoire/i],
+              },
+              {
+                label: "daily",
+                path: "/daily",
+                pathname: "/daily",
+                heading: /Your Daily deck\./i,
+                requiredText: [/First try counts/i, /Review · Daily Blundr/i],
+              },
+              {
+                label: "review",
+                path: "/review",
+                pathname: "/review",
+                heading: /Review what needs to stick\./i,
+                requiredText: [/Review queue/i, /Minigames · separate from Daily/i],
+              },
+              {
+                label: "repertoire",
+                path: "/repertoire",
+                pathname: "/repertoire",
+                heading: /Your opening library\./i,
+                requiredText: [/Repertoire/i, /Tempo Cache/i],
+              },
+              {
+                label: "progress",
+                path: "/progress",
+                pathname: "/progress",
+                heading: /Momentum, without noise\./i,
+                requiredText: [/Daily rings/i, /Tempo/i, /Battery/i, /Daily Blundr/i, /STREAK & CONSISTENCY/i],
+              },
+              {
+                label: "minigames",
+                path: "/minigames",
+                pathname: "/minigames",
+                heading: /Review what needs to stick\./i,
+                requiredText: [/Minigames · separate from Daily/i, /production practice games/i],
+              },
+            ];
+            for (const check of routeChecks) {
+              const response = await page.goto(`${baseUrl}${check.path}`, { waitUntil: "domcontentloaded" });
+              if (!response) {
+                throw new Error(`${check.label} did not produce a main-document response.`);
+              }
+              if (response.status() < 200 || response.status() >= 400) {
+                throw new Error(`${check.label} returned HTTP ${response.status()}.`);
+              }
               await page.waitForLoadState("networkidle").catch(() => {});
-              await expect(page.locator("body")).toContainText(text, { timeout: 15000 });
-              await snapshot(page, viewport, label);
+              const finalPath = new URL(page.url()).pathname;
+              if (finalPath !== check.pathname) {
+                throw new Error(`${check.label} ended on unexpected path ${finalPath}.`);
+              }
+              const bodyText = await page.locator("body").innerText();
+              if (/404\s*This page could not be found|This page could not be found|Application error|Internal Server Error/i.test(bodyText)) {
+                throw new Error(`${check.label} rendered a Not Found or generic error page.`);
+              }
+              await expect(page.getByRole("heading", { name: check.heading }).first()).toBeVisible({ timeout: 15000 });
+              for (const text of check.requiredText) {
+                await expect(page.getByText(text).first()).toBeVisible({ timeout: 15000 });
+              }
+              await snapshot(page, viewport, check.label);
             }
           }
 
