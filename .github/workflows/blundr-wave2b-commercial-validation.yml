@@ -269,23 +269,22 @@ jobs:
             { name: "desktop", width: 1440, height: 900 },
           ];
 
-          const offerFixture = {
-            ok: true,
-            offer: {
+          function createOfferFixture(plan) {
+            const annual = plan === "annual";
+            return {
+              id: `wave2b-${plan}-offer`,
               legalVersion: "wave2b-preview-validation",
-              plan: "monthly",
-              price: "$9.99",
-              interval: "month",
+              plan,
               trialEligible: true,
               trialDays: 7,
               conversionTimestamp: "2026-09-11T17:00:00.000Z",
               cancelBeforeTimestamp: "2026-09-11T16:59:59.000Z",
               disclosure:
-                "7 days free, then $9.99/month plus applicable taxes beginning September 11, 2026 at 5:00 PM UTC. Renews automatically until canceled. Cancel before September 11, 2026 at 4:59 PM UTC to avoid the first subscription charge.",
+                `7 days free, then ${annual ? "$69.99/year" : "$9.99/month"} plus applicable taxes beginning September 11, 2026 at 5:00 PM UTC. Renews automatically until canceled. Cancel before September 11, 2026 at 4:59 PM UTC to avoid the first subscription charge.`,
               acknowledgement:
                 "I understand that my 7-day Blundr Pro trial requires a payment method and will automatically convert to the plan I selected on the date shown above unless I cancel before then.",
-            },
-          };
+            };
+          }
           const onboardingSteps = [
             "welcome",
             "level",
@@ -347,14 +346,39 @@ jobs:
           }
 
           async function installRoutes(page) {
-            await page.route("**/api/blundr/billing/offer**", async (route) => {
+            await page.route((url) => url.origin === baseUrl && url.pathname === "/api/blundr/billing/offer", async (route) => {
+              const body = route.request().postDataJSON();
+              const keys = Object.keys(body ?? {}).sort();
+              if (keys.join(",") !== "plan" || !["monthly", "annual"].includes(body.plan)) {
+                throw new Error("Offer request must contain only the plan enum.");
+              }
+              const offer = createOfferFixture(body.plan);
               await route.fulfill({
                 status: 200,
                 contentType: "application/json",
-                body: JSON.stringify(offerFixture),
+                body: JSON.stringify({ ok: true, data: offer }),
               });
             });
-            await page.route("**/api/blundr/billing/checkout", async (route) => {
+            await page.route((url) => url.origin === baseUrl && url.pathname === "/api/blundr/billing/offer/accept", async (route) => {
+              const body = route.request().postDataJSON();
+              const keys = Object.keys(body ?? {}).sort();
+              if (keys.join(",") !== "offerId,plan" || !["monthly", "annual"].includes(body.plan)) {
+                throw new Error("Offer acceptance request must contain only offerId and the plan enum.");
+              }
+              if (body.offerId !== createOfferFixture(body.plan).id) {
+                throw new Error("Offer acceptance must use the offer ID for the selected plan.");
+              }
+              const serialized = JSON.stringify(body);
+              if (/price|amount|user|customer|entitlement|pro|subscription/i.test(serialized)) {
+                throw new Error("Offer acceptance must not include client-controlled billing authority.");
+              }
+              await route.fulfill({
+                status: 200,
+                contentType: "application/json",
+                body: JSON.stringify({ ok: true }),
+              });
+            });
+            await page.route((url) => url.origin === baseUrl && url.pathname === "/api/blundr/billing/checkout", async (route) => {
               const body = route.request().postDataJSON();
               const keys = Object.keys(body ?? {}).sort();
               if (keys.join(",") !== "plan" || !["monthly", "annual"].includes(body.plan)) {
@@ -365,17 +389,17 @@ jobs:
                 contentType: "application/json",
                 body: JSON.stringify({
                   ok: true,
-                  url: `${baseUrl}/billing/success?session_id=cs_wave2b_redacted`,
+                  data: { url: `${baseUrl}/billing/success?session_id=cs_wave2b_redacted` },
                 }),
               });
             });
-            await page.route("**/api/blundr/billing/status", async (route) => {
+            await page.route((url) => url.origin === baseUrl && url.pathname === "/api/blundr/billing/status", async (route) => {
               await route.fulfill({
                 status: 200,
                 contentType: "application/json",
                 body: JSON.stringify({
                   ok: true,
-                  access: {
+                  data: {
                     plan: "free",
                     entitlementActive: false,
                     entitlementSource: "none",
@@ -391,7 +415,7 @@ jobs:
                 }),
               });
             });
-            await page.route("**/api/blundr/billing/portal", async (route) => {
+            await page.route((url) => url.origin === baseUrl && url.pathname === "/api/blundr/billing/portal", async (route) => {
               const body = route.request().postData();
               if (body && /customer|stripe/i.test(body)) {
                 throw new Error("Portal request must not include client customer authority.");
@@ -399,7 +423,7 @@ jobs:
               await route.fulfill({
                 status: 200,
                 contentType: "application/json",
-                body: JSON.stringify({ ok: true, url: `${baseUrl}/settings?portal=redacted` }),
+                body: JSON.stringify({ ok: true, data: { url: `${baseUrl}/settings?portal=redacted` } }),
               });
             });
           }
@@ -739,10 +763,38 @@ jobs:
             await expect(monthly).not.toHaveAttribute("aria-pressed", "true");
             await expect(annual).not.toHaveAttribute("aria-pressed", "true");
 
-            await monthly.click();
-            const acknowledgement = page.getByRole("checkbox").first();
+            async function waitForOfferResponse(plan, action) {
+              const responsePromise = page.waitForResponse((response) => {
+                const url = new URL(response.url());
+                return (
+                  url.origin === baseUrl &&
+                  url.pathname === "/api/blundr/billing/offer" &&
+                  response.request().method() === "POST"
+                );
+              });
+              await action();
+              const response = await responsePromise;
+              if (!response.ok()) {
+                throw new Error(`${plan} offer response failed with HTTP ${response.status()}.`);
+              }
+              const body = await response.json();
+              if (body?.ok !== true || body?.data?.plan !== plan || body.data.id !== createOfferFixture(plan).id) {
+                throw new Error(`${plan} offer response did not match the billing API contract.`);
+              }
+              return body.data;
+            }
+
+            const acknowledgementName = /I understand that my 7-day Blundr Pro trial requires a payment method and will automatically convert to the plan I selected/i;
+            const monthlyOffer = await waitForOfferResponse("monthly", async () => {
+              await monthly.click();
+            });
+            const acknowledgement = page.getByRole("checkbox", { name: acknowledgementName });
+            await expect(acknowledgement).toBeVisible();
             await expect(acknowledgement).not.toBeChecked();
             await expect(page.getByText(/card required/i)).toBeVisible();
+            if (!monthlyOffer.disclosure.includes("$9.99/month")) {
+              throw new Error("Monthly offer disclosure does not include the monthly price.");
+            }
             await expect(page.getByText(/7 days free, then \$9\.99\/month plus applicable taxes beginning/i)).toBeVisible();
             await expect(page.getByText(/requires a payment method/i)).toBeVisible();
             const checkout = page.getByRole("button", { name: /start 7-day pro trial/i });
@@ -751,8 +803,19 @@ jobs:
             await expect(checkout).toBeEnabled();
             await snapshot(page, viewport, "onboarding-paywall-monthly");
 
-            await annual.click();
+            const annualOffer = await waitForOfferResponse("annual", async () => {
+              await annual.click();
+            });
+            await expect(acknowledgement).toBeVisible();
+            await expect(acknowledgement).not.toBeChecked();
+            await expect(checkout).toBeDisabled();
+            if (!annualOffer.disclosure.includes("$69.99/year")) {
+              throw new Error("Annual offer disclosure does not include the annual price.");
+            }
             await expect(page.getByText("$69.99/year after trial")).toBeVisible();
+            await expect(page.getByText(/7 days free, then \$69\.99\/year plus applicable taxes beginning/i)).toBeVisible();
+            await acknowledgement.check();
+            await expect(checkout).toBeEnabled();
             await snapshot(page, viewport, "onboarding-paywall-annual");
 
             await page.getByRole("button", { name: /continue with free/i }).click();
