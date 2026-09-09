@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  LOCKED_STRIPE_PRO_ANNUAL_PRICE_ID,
-  LOCKED_STRIPE_PRO_MONTHLY_PRICE_ID,
+  LOCKED_STRIPE_TEST_PRO_ANNUAL_PRICE_ID,
+  LOCKED_STRIPE_TEST_PRO_MONTHLY_PRICE_ID,
   priceForBillingPlan,
   readBillingConfig,
 } from "../billingConfig";
@@ -30,15 +30,17 @@ test("billing config fails closed and allows only locked test prices", () => {
     process.env.BLUNDR_APP_ORIGIN = "https://blundr.test/path";
     process.env.STRIPE_SECRET_KEY = "sk_test";
     process.env.STRIPE_WEBHOOK_SECRET = "whsec";
-    process.env.STRIPE_PRO_MONTHLY_PRICE_ID = LOCKED_STRIPE_PRO_MONTHLY_PRICE_ID;
-    process.env.STRIPE_PRO_ANNUAL_PRICE_ID = LOCKED_STRIPE_PRO_ANNUAL_PRICE_ID;
+    process.env.STRIPE_PRO_MONTHLY_PRICE_ID =
+      LOCKED_STRIPE_TEST_PRO_MONTHLY_PRICE_ID;
+    process.env.STRIPE_PRO_ANNUAL_PRICE_ID =
+      LOCKED_STRIPE_TEST_PRO_ANNUAL_PRICE_ID;
     process.env.REVENUECAT_WEBHOOK_AUTHORIZATION = "Bearer rc";
     const config = readBillingConfig();
     assert.equal(config.appOrigin, "https://blundr.test");
     assert.deepEqual(priceForBillingPlan(config, "monthly"), {
       ok: true,
       plan: "monthly",
-      priceId: LOCKED_STRIPE_PRO_MONTHLY_PRICE_ID,
+      priceId: LOCKED_STRIPE_TEST_PRO_MONTHLY_PRICE_ID,
     });
     assert.deepEqual(priceForBillingPlan(config, "price_attacker"), {
       ok: false,

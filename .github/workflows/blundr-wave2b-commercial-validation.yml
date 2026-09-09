@@ -34,9 +34,12 @@ jobs:
       STRIPE_PRO_MONTHLY_PRICE_ID: ${{ secrets.STRIPE_PRO_MONTHLY_PRICE_ID }}
       STRIPE_PRO_ANNUAL_PRICE_ID: ${{ secrets.STRIPE_PRO_ANNUAL_PRICE_ID }}
       REVENUECAT_REST_API_KEY: ${{ secrets.REVENUECAT_REST_API_KEY }}
+      REVENUECAT_V2_SECRET_API_KEY: ${{ secrets.REVENUECAT_V2_SECRET_API_KEY }}
       REVENUECAT_PROJECT_ID: ${{ secrets.REVENUECAT_PROJECT_ID }}
       REVENUECAT_PRO_ENTITLEMENT_ID: ${{ secrets.REVENUECAT_PRO_ENTITLEMENT_ID }}
       REVENUECAT_OFFERING_ID: ${{ secrets.REVENUECAT_OFFERING_ID }}
+      BLUNDR_STAGING_SUPABASE_URL: ${{ secrets.BLUNDR_STAGING_SUPABASE_URL }}
+      BLUNDR_STAGING_SUPABASE_SECRET_KEY: ${{ secrets.BLUNDR_STAGING_SUPABASE_SECRET_KEY }}
       ARTIFACT_DIR: ${{ github.workspace }}/.tmp/wave2b-commercial-validation
     steps:
       - uses: actions/checkout@v4
@@ -78,9 +81,12 @@ jobs:
             { env: "STRIPE_PRO_MONTHLY_PRICE_ID", name: "STRIPE_PRO_MONTHLY_PRICE_ID" },
             { env: "STRIPE_PRO_ANNUAL_PRICE_ID", name: "STRIPE_PRO_ANNUAL_PRICE_ID" },
             { env: "REVENUECAT_REST_API_KEY", name: "REVENUECAT_REST_API_KEY" },
+            { env: "REVENUECAT_V2_SECRET_API_KEY", name: "REVENUECAT_V2_SECRET_API_KEY" },
             { env: "REVENUECAT_PROJECT_ID", name: "REVENUECAT_PROJECT_ID" },
             { env: "REVENUECAT_PRO_ENTITLEMENT_ID", name: "REVENUECAT_PRO_ENTITLEMENT_ID" },
             { env: "REVENUECAT_OFFERING_ID", name: "REVENUECAT_OFFERING_ID" },
+            { env: "BLUNDR_STAGING_SUPABASE_URL", name: "BLUNDR_STAGING_SUPABASE_URL" },
+            { env: "BLUNDR_STAGING_SUPABASE_SECRET_KEY", name: "BLUNDR_STAGING_SUPABASE_SECRET_KEY" },
           ];
           const missingRequired = required
             .filter((config) => !process.env[config.env])
@@ -288,129 +294,12 @@ jobs:
       - name: Run Wave 2B provider configuration check
         run: |
           set -euo pipefail
-          node <<'NODE'
-          const fs = require("node:fs");
-          const Stripe = require("stripe");
-
-          const artifactDir = process.env.ARTIFACT_DIR;
-          const required = [
-            { env: "WAVE2B_PREVIEW_URL", name: "WAVE2B_PREVIEW_URL" },
-            { env: "WAVE2B_QA_EMAIL", name: "BLUNDR_QA_EMAIL" },
-            { env: "WAVE2B_QA_PASSWORD", name: "BLUNDR_QA_PASSWORD" },
-            { env: "WAVE2B_QA_SUPABASE_UUID", name: "WAVE2B_QA_SUPABASE_UUID" },
-            { env: "STRIPE_SECRET_KEY", name: "STRIPE_SECRET_KEY" },
-            { env: "STRIPE_PRO_MONTHLY_PRICE_ID", name: "STRIPE_PRO_MONTHLY_PRICE_ID" },
-            { env: "STRIPE_PRO_ANNUAL_PRICE_ID", name: "STRIPE_PRO_ANNUAL_PRICE_ID" },
-            { env: "REVENUECAT_REST_API_KEY", name: "REVENUECAT_REST_API_KEY" },
-            { env: "REVENUECAT_PROJECT_ID", name: "REVENUECAT_PROJECT_ID" },
-            { env: "REVENUECAT_PRO_ENTITLEMENT_ID", name: "REVENUECAT_PRO_ENTITLEMENT_ID" },
-            { env: "REVENUECAT_OFFERING_ID", name: "REVENUECAT_OFFERING_ID" },
-          ];
-          const missing = required
-            .filter((config) => !process.env[config.env])
-            .map((config) => config.name);
-          const proof = {
-            classification: "PROVIDER_CONFIGURATION_CHECK",
-            status: missing.length ? "configuration_pending" : "started",
-            missingConfigurationNames: missing,
-            previewUrl: process.env.WAVE2B_PREVIEW_URL || null,
-            checks: {},
-          };
-
-          function write() {
-            fs.writeFileSync(
-              `${artifactDir}/provider-configuration-check.json`,
-              `${JSON.stringify(proof, null, 2)}\n`,
-            );
-          }
-
-          if (missing.length) {
-            write();
-            console.log(`Provider configuration check pending configuration: ${missing.join(", ")}`);
-            process.exit(0);
-          }
-          if (!process.env.STRIPE_SECRET_KEY.startsWith("sk_test_")) {
-            throw new Error("STRIPE_SECRET_KEY must be test-mode.");
-          }
-          if (process.env.REVENUECAT_PRO_ENTITLEMENT_ID !== "pro") {
-            throw new Error("RevenueCat entitlement identifier must be pro.");
-          }
-          if (process.env.REVENUECAT_OFFERING_ID !== "default") {
-            throw new Error("RevenueCat offering identifier must be default.");
-          }
-
-          (async () => {
-            const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-            const monthly = await stripe.prices.retrieve(process.env.STRIPE_PRO_MONTHLY_PRICE_ID);
-            const annual = await stripe.prices.retrieve(process.env.STRIPE_PRO_ANNUAL_PRICE_ID);
-            if (monthly.livemode || annual.livemode) {
-              throw new Error("Configured Stripe prices must be test-mode objects.");
-            }
-            if (!monthly.active || monthly.unit_amount !== 999 || monthly.recurring?.interval !== "month") {
-              throw new Error("Monthly Stripe price does not match the Wave 2B contract.");
-            }
-            if (!annual.active || annual.unit_amount !== 6999 || annual.recurring?.interval !== "year") {
-              throw new Error("Annual Stripe price does not match the Wave 2B contract.");
-            }
-            proof.checks.stripePriceVerified = true;
-            proof.checks.monthlyPriceVerified = true;
-            proof.checks.annualPriceVerified = true;
-
-            const rcResponse = await fetch(
-              `https://api.revenuecat.com/v2/projects/${encodeURIComponent(process.env.REVENUECAT_PROJECT_ID)}`,
-              {
-                headers: {
-                  Authorization: `Bearer ${process.env.REVENUECAT_REST_API_KEY}`,
-                  Accept: "application/json",
-                },
-              },
-            );
-            if (!rcResponse.ok) {
-              throw new Error(`RevenueCat API authentication failed with HTTP ${rcResponse.status}.`);
-            }
-            proof.checks.revenueCatApiAuthenticated = true;
-            proof.checks.revenueCatEntitlementIdentifier = "pro";
-            proof.checks.revenueCatOfferingIdentifier = "default";
-            proof.status = "passed";
-            write();
-            console.log("Provider configuration check passed.");
-          })().catch((error) => {
-            proof.status = "failed";
-            proof.error = error instanceof Error ? error.message : String(error);
-            write();
-            throw error;
-          });
-          NODE
+          node scripts/wave2b-provider-configuration-check.mjs
 
       - name: Require real Wave 2B sandbox integration proof
         run: |
           set -euo pipefail
-          node <<'NODE'
-          const fs = require("node:fs");
-
-          const artifactDir = process.env.ARTIFACT_DIR;
-          const proof = {
-            classification: "SANDBOX_INTEGRATION_PROOF",
-            status: "blocked_operator_required",
-            requiredEvidence: [
-              "real non-production Checkout completed from the preview",
-              "Stripe webhook processing succeeded",
-              "duplicate Stripe event processing remained idempotent",
-              "RevenueCat recognized the Stripe purchase",
-              "RevenueCat pro entitlement was active for the QA user",
-              "trusted backend Pro state resolved from RevenueCat/backend authority",
-              "Customer Portal opened from trusted Stripe customer mapping",
-            ],
-            acceptanceEligible: false,
-          };
-          fs.writeFileSync(
-            `${artifactDir}/sandbox-integration-proof.json`,
-            `${JSON.stringify(proof, null, 2)}\n`,
-          );
-          throw new Error(
-            "SANDBOX_INTEGRATION_PROOF is blocked until real non-production Checkout, webhook, RevenueCat, backend Pro-state, idempotency, and Customer Portal evidence is recorded.",
-          );
-          NODE
+          node scripts/wave2b-sandbox-integration-proof.mjs
 
       - name: Publish Wave 2B validation summary
         if: always()

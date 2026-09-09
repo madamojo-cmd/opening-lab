@@ -111,19 +111,72 @@ Required server-only variables remain those from Wave 2A:
 - `STRIPE_PRO_ANNUAL_PRICE_ID`
 - `REVENUECAT_WEBHOOK_AUTHORIZATION`
 
-Optional server-only variable:
+Required Vercel Preview server-only variables for billing validation:
 
+- `BLUNDR_BILLING_ENVIRONMENT`: `test` only.
+- `BLUNDR_APP_ORIGIN`: stable non-production callback host.
+- `STRIPE_SECRET_KEY`: Stripe test-mode secret key only.
+- `STRIPE_WEBHOOK_SECRET`: Stripe test webhook signing secret.
+- `STRIPE_PRO_MONTHLY_PRICE_ID`: `price_1UDmveLuqtbLOQt39LJ8Pp4v`.
+- `STRIPE_PRO_ANNUAL_PRICE_ID`: `price_1UDmw4LuqtbLOQt3G6bgL5mY`.
+- `REVENUECAT_WEBHOOK_AUTHORIZATION`: server-only RevenueCat webhook header.
+- `REVENUECAT_REST_API_KEY`: RevenueCat v1 app API key used only for
+  server-side subscriber reconciliation through
+  `/v1/subscribers/{app_user_id}`.
+
+Required protected GitHub Environment values for Wave 2B validation:
+
+- `BLUNDR_QA_EMAIL`
+- `BLUNDR_QA_PASSWORD`
+- `WAVE2B_QA_SUPABASE_UUID`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_PRO_MONTHLY_PRICE_ID`
+- `STRIPE_PRO_ANNUAL_PRICE_ID`
 - `REVENUECAT_REST_API_KEY`
+- `REVENUECAT_V2_SECRET_API_KEY`: RevenueCat v2 secret API key used only by
+  the GitHub validation job for read-only project/configuration inspection.
+- `REVENUECAT_PROJECT_ID`
+- `REVENUECAT_PRO_ENTITLEMENT_ID`
+- `REVENUECAT_OFFERING_ID`
+- `BLUNDR_STAGING_SUPABASE_URL`
+- `BLUNDR_STAGING_SUPABASE_SECRET_KEY`: modern non-production `sb_secret_`
+  key used only by the protected workflow to create and delete ephemeral Auth
+  users for real sandbox proof.
 
-No billing or service-role secret may be exposed as `NEXT_PUBLIC_*`.
+The immutable Preview URL and expected SHA are `workflow_dispatch` inputs, not
+secrets. No billing, webhook, Supabase admin, or RevenueCat key may be exposed
+as `NEXT_PUBLIC_*`.
+
+## Callback Topology
+
+The stable non-production callback host for provider dashboards is:
+
+- `https://blundr-staging-git-launc-291807-adamconnor00-gmailcoms-projects.vercel.app`
+
+Required provider callback routes:
+
+- Stripe webhook:
+  `https://blundr-staging-git-launc-291807-adamconnor00-gmailcoms-projects.vercel.app/api/blundr/billing/stripe/webhook`
+- RevenueCat webhook:
+  `https://blundr-staging-git-launc-291807-adamconnor00-gmailcoms-projects.vercel.app/api/blundr/billing/revenuecat/webhook`
+
+Required Stripe sandbox events:
+
+- `customer.subscription.created`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+
+RevenueCat external-purchase identity field: `app_user_id`.
 
 ## Dashboard Proof Checklist
 
 Read-only operator proof is required before production activation:
 
 - Confirm the Stripe key is test-mode; abort if a live key is present.
-- Confirm the monthly price is active, recurring monthly, and exactly $9.99.
-- Confirm the annual price is active, recurring yearly, and exactly $69.99.
+- Confirm the monthly sandbox price is `price_1UDmveLuqtbLOQt39LJ8Pp4v`,
+  active, recurring monthly, and exactly $9.99.
+- Confirm the annual sandbox price is `price_1UDmw4LuqtbLOQt3G6bgL5mY`,
+  active, recurring yearly, and exactly $69.99.
 - Confirm hosted Checkout and Customer Portal configuration are accessible.
 - Confirm RevenueCat entitlement identifier is exactly `pro`.
 - Confirm RevenueCat offering identifier is exactly `default`.
@@ -166,8 +219,15 @@ production-launch blocker.
 - Focused paywall, billing, entitlement, and architecture tests passed locally
   on the Wave 2B branch.
 - Browser-contract QA, provider configuration checks, and sandbox integration
-  proof are recorded separately. Mocked browser endpoints can never satisfy
-  sandbox integration proof or produce Wave 2B acceptance.
+  proof are recorded separately. Mocked browser endpoints always remain
+  `acceptanceEligible=false` and can never satisfy sandbox integration proof or
+  produce Wave 2B acceptance.
+- Real sandbox integration proof must create an ephemeral non-production
+  Supabase Auth user, complete hosted Stripe test Checkout, verify Stripe
+  metadata and webhook idempotency, verify RevenueCat v1 subscriber
+  reconciliation for the same Supabase UUID, verify trusted backend Pro state,
+  create a Customer Portal session from the server-trusted customer mapping,
+  and clean up only the ephemeral user and sandbox subscription.
 - Disposable-only billing RLS/security gate with migrations through
   `20260904170758` passed in GitHub Actions on 2026-09-04: run
   `33903045519` tested SHA
@@ -186,7 +246,7 @@ production-launch blocker.
 - Live Stripe activation is out of scope.
 - Production migration application is out of scope.
 - Stripe and RevenueCat dashboard proof is pending unless safe test credentials
-  are configured.
+  and the stable callback topology above are configured.
 - Real non-production Checkout, webhook processing, RevenueCat purchase
   recognition, trusted backend Pro-state verification, idempotency, and
   Customer Portal evidence are required before Wave 2B acceptance.

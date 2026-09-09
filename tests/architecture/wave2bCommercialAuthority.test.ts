@@ -185,30 +185,71 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
     ".github/workflows/blundr-wave2b-commercial-validation.yml",
   );
   const browserHarness = read("scripts/wave2b-browser-qa.mjs");
+  const providerCheck = read("scripts/wave2b-provider-configuration-check.mjs");
+  const sandboxProof = read("scripts/wave2b-sandbox-integration-proof.mjs");
+  const billingConfig = read("lib/blundr/billing/billingConfig.ts");
 
   assert.match(workflow, /Run Wave 2B provider configuration check/);
-  assert.match(workflow, /classification: "PROVIDER_CONFIGURATION_CHECK"/);
-  assert.match(workflow, /provider-configuration-check\.json/);
-  assert.match(workflow, /providerConfigurationAvailable/);
+  assert.match(
+    workflow,
+    /node scripts\/wave2b-provider-configuration-check\.mjs/,
+  );
+  assert.match(workflow, /Require real Wave 2B sandbox integration proof/);
+  assert.match(workflow, /node scripts\/wave2b-sandbox-integration-proof\.mjs/);
+  assert.match(workflow, /REVENUECAT_V2_SECRET_API_KEY/);
+  assert.match(workflow, /BLUNDR_STAGING_SUPABASE_SECRET_KEY/);
   assert.match(
     workflow,
     /sandboxIntegrationProof: "blocked_until_real_provider_journey"/,
   );
-  assert.match(workflow, /stripePriceVerified/);
-  assert.match(workflow, /revenueCatApiAuthenticated/);
-  assert.match(workflow, /RevenueCat entitlement identifier must be pro/);
-  assert.match(workflow, /RevenueCat offering identifier must be default/);
 
-  assert.match(workflow, /Require real Wave 2B sandbox integration proof/);
-  assert.match(workflow, /classification: "SANDBOX_INTEGRATION_PROOF"/);
-  assert.match(workflow, /status: "blocked_operator_required"/);
-  assert.match(workflow, /acceptanceEligible: false/);
-  assert.match(workflow, /throw new Error\(/);
-  assert.match(workflow, /real non-production Checkout/);
-  assert.match(workflow, /Stripe webhook processing succeeded/);
-  assert.match(workflow, /RevenueCat recognized the Stripe purchase/);
-  assert.match(workflow, /trusted backend Pro state/);
-  assert.match(workflow, /Customer Portal opened/);
+  assert.match(providerCheck, /classification: "PROVIDER_CONFIGURATION_CHECK"/);
+  assert.match(providerCheck, /provider-configuration-check\.json/);
+  assert.match(providerCheck, /STABLE_CALLBACK_HOST/);
+  assert.match(
+    providerCheck,
+    /blundr-staging-git-launc-291807-adamconnor00-gmailcoms-projects\.vercel\.app/,
+  );
+  assert.match(providerCheck, /callbackHostShaVerified/);
+  assert.match(providerCheck, /method: "POST"/);
+  assert.match(providerCheck, /stripeWebhookReachable/);
+  assert.match(providerCheck, /revenueCatWebhookReachable/);
+  assert.match(providerCheck, /monthlyPriceVerified/);
+  assert.match(providerCheck, /annualPriceVerified/);
+  assert.match(providerCheck, /customerPortalConfigured/);
+  assert.match(providerCheck, /revenueCatV2ApiAuthenticated/);
+  assert.match(providerCheck, /REVENUECAT_V2_SECRET_API_KEY/);
+  assert.match(providerCheck, /api\.revenuecat\.com\/v2\/projects/);
+  assert.match(providerCheck, /RevenueCat entitlement identifier must be pro/);
+  assert.match(providerCheck, /RevenueCat offering identifier must be default/);
+  assert.doesNotMatch(providerCheck, /REVENUECAT_REST_API_KEY/);
+
+  assert.match(sandboxProof, /classification: "SANDBOX_INTEGRATION_PROOF"/);
+  assert.match(
+    sandboxProof,
+    /blundr-staging-git-launc-291807-adamconnor00-gmailcoms-projects\.vercel\.app/,
+  );
+  assert.match(sandboxProof, /\$\{label\}CallbackHostSha/);
+  assert.match(sandboxProof, /verifyStableCallbackHostSha\("before"\)/);
+  assert.match(sandboxProof, /verifyStableCallbackHostSha\("after"\)/);
+  assert.match(sandboxProof, /acceptanceEligible: false/);
+  assert.match(sandboxProof, /acceptanceEligible = true/);
+  assert.match(sandboxProof, /BLUNDR_STAGING_SUPABASE_SECRET_KEY/);
+  assert.match(sandboxProof, /sb_secret_/);
+  assert.match(sandboxProof, /auth\/v1\/admin\/users/);
+  assert.match(sandboxProof, /price_1UDmveLuqtbLOQt39LJ8Pp4v/);
+  assert.match(sandboxProof, /price_1UDmw4LuqtbLOQt3G6bgL5mY/);
+  assert.match(sandboxProof, /stripe\.webhooks\.generateTestHeaderString/);
+  assert.match(sandboxProof, /stripeWebhookDuplicateIdempotent/);
+  assert.match(sandboxProof, /api\.revenuecat\.com\/v1\/subscribers/);
+  assert.match(sandboxProof, /REVENUECAT_REST_API_KEY/);
+  assert.match(sandboxProof, /backendProState/);
+  assert.match(sandboxProof, /customerPortalCreated/);
+
+  assert.match(billingConfig, /LOCKED_STRIPE_TEST_PRO_MONTHLY_PRICE_ID/);
+  assert.match(billingConfig, /LOCKED_STRIPE_TEST_PRO_ANNUAL_PRICE_ID/);
+  assert.match(billingConfig, /price_1UDmveLuqtbLOQt39LJ8Pp4v/);
+  assert.match(billingConfig, /price_1UDmw4LuqtbLOQt3G6bgL5mY/);
 
   assert.match(
     browserHarness,
@@ -219,7 +260,35 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
     /providerProof: "separate_sandbox_integration_required"/,
   );
   assert.doesNotMatch(workflow, /WAVE2B_ACCEPTED=yes/);
-  assert.doesNotMatch(workflow, /sandbox-proof\.json/);
   assert.doesNotMatch(workflow, /automated_checkout_not_enabled/);
   assert.doesNotMatch(workflow, /operator_checkout_required/);
+});
+
+test("Wave 2B sandbox validation excludes retired live Stripe prices from active code", () => {
+  const retiredLivePrices = [
+    "price_1UBaUQLGvBclDkdEYam8Nz43",
+    "price_1UBaUQLGvBclDkdEZNLeAfpq",
+  ];
+  const activePaths = [
+    ".github/workflows/blundr-wave2b-commercial-validation.yml",
+    "scripts/wave2b-browser-qa.mjs",
+    "scripts/wave2b-provider-configuration-check.mjs",
+    "scripts/wave2b-sandbox-integration-proof.mjs",
+    "lib/blundr/billing/billingConfig.ts",
+    "lib/blundr/billing/stripeWebhook.server.ts",
+    "lib/blundr/billing/__tests__/billingConfig.test.ts",
+    "lib/blundr/billing/__tests__/checkoutAuthority.test.ts",
+    "lib/blundr/billing/__tests__/providerWebhookAuthority.test.ts",
+  ];
+
+  for (const path of activePaths) {
+    const source = read(path);
+    for (const retiredLivePrice of retiredLivePrices) {
+      assert.doesNotMatch(
+        source,
+        new RegExp(retiredLivePrice),
+        `retired live price ${retiredLivePrice} must not appear in active Wave 2B path ${path}`,
+      );
+    }
+  }
 });

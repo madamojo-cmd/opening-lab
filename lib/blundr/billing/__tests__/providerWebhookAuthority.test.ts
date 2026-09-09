@@ -34,7 +34,7 @@ function stripeSubscriptionEvent(input: {
           data: [
             {
               price: {
-                id: "price_1UBaUQLGvBclDkdEYam8Nz43",
+                id: "price_1UDmveLuqtbLOQt39LJ8Pp4v",
                 product: "prod_web_monthly",
               },
             },
@@ -327,8 +327,8 @@ const billingConfig = {
   stripeSecretKey: "sk_test_placeholder",
   stripeWebhookSecret: "whsec_placeholder",
   stripePrices: {
-    monthly: "price_1UBaUQLGvBclDkdEYam8Nz43",
-    annual: "price_1UBaUQLGvBclDkdEZNLeAfpq",
+    monthly: "price_1UDmveLuqtbLOQt39LJ8Pp4v",
+    annual: "price_1UDmw4LuqtbLOQt3G6bgL5mY",
   },
   revenueCatWebhookAuthorization: "Bearer rc",
   revenueCatApiKey: "rc_test_key",

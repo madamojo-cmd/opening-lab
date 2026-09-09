@@ -1,8 +1,8 @@
 import type Stripe from "stripe";
 
 import {
-  LOCKED_STRIPE_PRO_ANNUAL_PRICE_ID,
-  LOCKED_STRIPE_PRO_MONTHLY_PRICE_ID,
+  LOCKED_STRIPE_TEST_PRO_ANNUAL_PRICE_ID,
+  LOCKED_STRIPE_TEST_PRO_MONTHLY_PRICE_ID,
   STRIPE_APP_USER_ID_METADATA_KEY,
   type BillingEnvironment,
 } from "./billingConfig";
@@ -23,8 +23,8 @@ function eventIso(event: Pick<Stripe.Event, "created">): string {
 }
 
 function planInterval(priceId: string | null): BillingPlan | null {
-  if (priceId === LOCKED_STRIPE_PRO_MONTHLY_PRICE_ID) return "monthly";
-  if (priceId === LOCKED_STRIPE_PRO_ANNUAL_PRICE_ID) return "annual";
+  if (priceId === LOCKED_STRIPE_TEST_PRO_MONTHLY_PRICE_ID) return "monthly";
+  if (priceId === LOCKED_STRIPE_TEST_PRO_ANNUAL_PRICE_ID) return "annual";
   return null;
 }
 
@@ -37,7 +37,10 @@ export async function processStripeBillingEvent(input: {
   event: Stripe.Event;
   environment: BillingEnvironment;
   repository?: BillingRepository;
-}): Promise<{ ok: true; duplicate: boolean } | { ok: false; retryable: boolean; error: string }> {
+}): Promise<
+  | { ok: true; duplicate: boolean }
+  | { ok: false; retryable: boolean; error: string }
+> {
   const repository = input.repository ?? createSupabaseBillingRepository();
   const ledger = await repository.beginProviderEvent({
     provider: "stripe",
@@ -49,14 +52,20 @@ export async function processStripeBillingEvent(input: {
   });
   if (ledger === "duplicate") return { ok: true, duplicate: true };
   try {
-    const object = input.event.data.object as unknown as Record<string, unknown>;
+    const object = input.event.data.object as unknown as Record<
+      string,
+      unknown
+    >;
     if (input.event.type.startsWith("customer.subscription.")) {
       const userId = metadataUserId(object);
       const subscriptionId = String(object.id ?? "");
       const customerId = String(object.customer ?? "");
       const priceId =
-        ((object.items as { data?: Array<{ price?: { id?: string; product?: string } }> })
-          ?.data?.[0]?.price?.id as string | undefined) ?? null;
+        ((
+          object.items as {
+            data?: Array<{ price?: { id?: string; product?: string } }>;
+          }
+        )?.data?.[0]?.price?.id as string | undefined) ?? null;
       if (!userId || !subscriptionId || !customerId) {
         throw new Error("stripe_subscription_identity_missing");
       }
@@ -77,7 +86,10 @@ export async function processStripeBillingEvent(input: {
         trialEndAt: trialEnd,
         currentPeriodEndAt: isoFromSeconds(object.current_period_end),
         cancelAtPeriodEnd: object.cancel_at_period_end === true,
-        expiresAt: isoFromSeconds(object.ended_at) ?? isoFromSeconds(object.current_period_end) ?? trialEnd,
+        expiresAt:
+          isoFromSeconds(object.ended_at) ??
+          isoFromSeconds(object.current_period_end) ??
+          trialEnd,
         lastProviderEventAt: eventIso(input.event),
       });
       if (trialEnd) {
@@ -97,7 +109,8 @@ export async function processStripeBillingEvent(input: {
     });
     return { ok: true, duplicate: false };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "stripe_event_failed";
+    const message =
+      error instanceof Error ? error.message : "stripe_event_failed";
     await repository.markProviderEvent({
       provider: "stripe",
       environment: input.environment,

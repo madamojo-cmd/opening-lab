@@ -27,8 +27,11 @@ application-wide Free/Pro feature gates. Wave 2B adds those gates in
 
 ## Locked Test Configuration
 
-- Monthly web price: `price_1UBaUQLGvBclDkdEYam8Nz43`
-- Annual web price: `price_1UBaUQLGvBclDkdEZNLeAfpq`
+- Monthly sandbox web price: `price_1UDmveLuqtbLOQt39LJ8Pp4v`
+- Annual sandbox web price: `price_1UDmw4LuqtbLOQt3G6bgL5mY`
+- Retired live-mode prices `price_1UBaUQLGvBclDkdEYam8Nz43` and
+  `price_1UBaUQLGvBclDkdEZNLeAfpq` are prohibited from non-production
+  validation and are not runtime fallbacks.
 - Trial: 7 days, payment method required, automatic renewal.
 - RevenueCat entitlement identifier: `pro`
 - RevenueCat offering: `default`
@@ -53,8 +56,9 @@ Required server variables:
 
 Optional server variable:
 
-- `REVENUECAT_REST_API_KEY`: server-only key for deterministic subscriber
-  reconciliation.
+- `REVENUECAT_REST_API_KEY`: RevenueCat v1 app API key for deterministic
+  subscriber reconciliation through `/v1/subscribers/{app_user_id}`. It is not
+  valid for v2 project-configuration inspection.
 
 Do not expose any of these as `NEXT_PUBLIC_*`. Price IDs may be configured, but
 the server still rejects any value that differs from the locked Wave 2A test
@@ -125,8 +129,9 @@ Checkout reservation is concurrency-safe and retry-safe:
 
 ## Operator Setup
 
-1. Configure the Stripe test monthly and annual products with the locked price
-   IDs.
+1. Configure the Stripe test monthly and annual products with the locked
+   sandbox price IDs. Do not use retired live-mode price IDs in any
+   non-production validation environment.
 2. Configure Stripe hosted Customer Portal for the test project.
 3. Register the Stripe webhook endpoint and set `STRIPE_WEBHOOK_SECRET`.
 4. Configure RevenueCat entitlement `pro`, offering `default`, and map the Stripe

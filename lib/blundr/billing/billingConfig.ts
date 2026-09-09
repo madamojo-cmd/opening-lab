@@ -11,10 +11,10 @@ export type BillingConfig = {
   revenueCatApiKey: string | null;
 };
 
-export const LOCKED_STRIPE_PRO_MONTHLY_PRICE_ID =
-  "price_1UBaUQLGvBclDkdEYam8Nz43";
-export const LOCKED_STRIPE_PRO_ANNUAL_PRICE_ID =
-  "price_1UBaUQLGvBclDkdEZNLeAfpq";
+export const LOCKED_STRIPE_TEST_PRO_MONTHLY_PRICE_ID =
+  "price_1UDmveLuqtbLOQt39LJ8Pp4v";
+export const LOCKED_STRIPE_TEST_PRO_ANNUAL_PRICE_ID =
+  "price_1UDmw4LuqtbLOQt3G6bgL5mY";
 export const REVENUECAT_PRO_ENTITLEMENT = "pro";
 export const REVENUECAT_DEFAULT_OFFERING = "default";
 export const STRIPE_APP_USER_ID_METADATA_KEY = "app_user_id";
@@ -59,10 +59,10 @@ export function readBillingConfig(): BillingConfig {
     monthly: required("STRIPE_PRO_MONTHLY_PRICE_ID"),
     annual: required("STRIPE_PRO_ANNUAL_PRICE_ID"),
   };
-  if (stripePrices.monthly !== LOCKED_STRIPE_PRO_MONTHLY_PRICE_ID) {
+  if (stripePrices.monthly !== LOCKED_STRIPE_TEST_PRO_MONTHLY_PRICE_ID) {
     throw new Error("stripe_monthly_price_mismatch");
   }
-  if (stripePrices.annual !== LOCKED_STRIPE_PRO_ANNUAL_PRICE_ID) {
+  if (stripePrices.annual !== LOCKED_STRIPE_TEST_PRO_ANNUAL_PRICE_ID) {
     throw new Error("stripe_annual_price_mismatch");
   }
   return {
@@ -71,7 +71,9 @@ export function readBillingConfig(): BillingConfig {
     stripeSecretKey: required("STRIPE_SECRET_KEY"),
     stripeWebhookSecret: required("STRIPE_WEBHOOK_SECRET"),
     stripePrices,
-    revenueCatWebhookAuthorization: required("REVENUECAT_WEBHOOK_AUTHORIZATION"),
+    revenueCatWebhookAuthorization: required(
+      "REVENUECAT_WEBHOOK_AUTHORIZATION",
+    ),
     revenueCatApiKey: text(process.env.REVENUECAT_REST_API_KEY) || null,
   };
 }
@@ -84,6 +86,9 @@ export function priceForBillingPlan(
   return { ok: true, plan, priceId: config.stripePrices[plan] };
 }
 
-export function billingUrl(origin: string, path: "/billing/success" | "/billing/cancel" | "/settings"): string {
+export function billingUrl(
+  origin: string,
+  path: "/billing/success" | "/billing/cancel" | "/settings",
+): string {
   return new URL(path, origin).toString();
 }

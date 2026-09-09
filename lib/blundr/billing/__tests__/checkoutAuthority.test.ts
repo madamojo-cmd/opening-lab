@@ -4,8 +4,8 @@ import test from "node:test";
 import type { CurrentBlundrUser } from "@/lib/blundr/accounts/accountTypes";
 
 import {
-  LOCKED_STRIPE_PRO_ANNUAL_PRICE_ID,
-  LOCKED_STRIPE_PRO_MONTHLY_PRICE_ID,
+  LOCKED_STRIPE_TEST_PRO_ANNUAL_PRICE_ID,
+  LOCKED_STRIPE_TEST_PRO_MONTHLY_PRICE_ID,
   PRO_TRIAL_DAYS,
   STRIPE_APP_USER_ID_METADATA_KEY,
   type BillingConfig,
@@ -34,8 +34,8 @@ const config: BillingConfig = {
   stripeSecretKey: "sk_test_placeholder",
   stripeWebhookSecret: "whsec_placeholder",
   stripePrices: {
-    monthly: LOCKED_STRIPE_PRO_MONTHLY_PRICE_ID,
-    annual: LOCKED_STRIPE_PRO_ANNUAL_PRICE_ID,
+    monthly: LOCKED_STRIPE_TEST_PRO_MONTHLY_PRICE_ID,
+    annual: LOCKED_STRIPE_TEST_PRO_ANNUAL_PRICE_ID,
   },
   revenueCatWebhookAuthorization: "Bearer rc",
   revenueCatApiKey: null,
@@ -59,7 +59,10 @@ function fakeStripe() {
         create: async (body: unknown, request: unknown) => {
           checkoutSessions.push(body);
           checkoutRequests.push(request);
-          return { id: "cs_test_123", url: "https://checkout.stripe.test/session" };
+          return {
+            id: "cs_test_123",
+            url: "https://checkout.stripe.test/session",
+          };
         },
       },
     },
@@ -130,13 +133,13 @@ test("checkout maps plan enum to locked prices and writes authenticated UUID met
     };
     payment_method_collection: string;
   };
-  assert.equal(session.line_items[0]?.price, LOCKED_STRIPE_PRO_MONTHLY_PRICE_ID);
+  assert.equal(
+    session.line_items[0]?.price,
+    LOCKED_STRIPE_TEST_PRO_MONTHLY_PRICE_ID,
+  );
   assert.equal(session.line_items[0]?.quantity, 1);
   assert.equal(session.payment_method_collection, "always");
-  assert.equal(
-    session.metadata[STRIPE_APP_USER_ID_METADATA_KEY],
-    user.userId,
-  );
+  assert.equal(session.metadata[STRIPE_APP_USER_ID_METADATA_KEY], user.userId);
   assert.equal(
     session.subscription_data.metadata[STRIPE_APP_USER_ID_METADATA_KEY],
     user.userId,
@@ -156,7 +159,10 @@ test("checkout maps plan enum to locked prices and writes authenticated UUID met
     line_items: Array<{ price: string }>;
     subscription_data: { trial_period_days?: number };
   };
-  assert.equal(annualSession.line_items[0]?.price, LOCKED_STRIPE_PRO_ANNUAL_PRICE_ID);
+  assert.equal(
+    annualSession.line_items[0]?.price,
+    LOCKED_STRIPE_TEST_PRO_ANNUAL_PRICE_ID,
+  );
   assert.equal(annualSession.subscription_data.trial_period_days, undefined);
 });
 
@@ -221,5 +227,10 @@ test("portal uses trusted mapping and rejects client-selected customers", async 
     stripe: stripe as never,
   });
   assert.equal(portal.ok, true);
-  assert.equal((stripe.portalSessions[0] as { customer: string }).customer.startsWith("cus_"), true);
+  assert.equal(
+    (stripe.portalSessions[0] as { customer: string }).customer.startsWith(
+      "cus_",
+    ),
+    true,
+  );
 });
