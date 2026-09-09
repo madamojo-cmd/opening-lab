@@ -131,6 +131,20 @@ Read-only operator proof is required before production activation:
 - Confirm RevenueCat Test Store products are not used for real web Checkout.
 - Confirm sandbox/test configuration is isolated from production/live.
 
+## Validation Modes
+
+Wave 2B browser-contract validation may run against an immutable Vercel Preview.
+That mode proves exact SHA identity, authenticated QA access, onboarding plan
+state, UI request shapes, disclosures, acknowledgement behavior, responsive
+layout, and Free behavior. It may use mocked billing endpoints and is not
+release acceptance or production readiness.
+
+Full release-candidate validation requires the isolated `blundr-staging`
+project deployed with the Vercel Production target, separate from public
+Production. `/api/build-info` and `/api/health` must return `200` and prove the
+exact SHA, database, Maia, worker, feature-profile, and release-evidence
+readiness before release-required registry entries can be marked verified.
+
 ## Tax
 
 Automatic tax remains disabled. User-facing billing disclosure continues to say
@@ -151,6 +165,9 @@ production-launch blocker.
 
 - Focused paywall, billing, entitlement, and architecture tests passed locally
   on the Wave 2B branch.
+- Browser-contract QA, provider configuration checks, and sandbox integration
+  proof are recorded separately. Mocked browser endpoints can never satisfy
+  sandbox integration proof or produce Wave 2B acceptance.
 - Disposable-only billing RLS/security gate with migrations through
   `20260904170758` passed in GitHub Actions on 2026-09-04: run
   `33903045519` tested SHA
@@ -170,5 +187,8 @@ production-launch blocker.
 - Production migration application is out of scope.
 - Stripe and RevenueCat dashboard proof is pending unless safe test credentials
   are configured.
+- Real non-production Checkout, webhook processing, RevenueCat purchase
+  recognition, trusted backend Pro-state verification, idempotency, and
+  Customer Portal evidence are required before Wave 2B acceptance.
 - Tax geography is undecided.
 - Lifecycle email delivery and launch analytics belong to later waves.

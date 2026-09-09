@@ -24,8 +24,11 @@ explains how to use it.
 | `RELEASE-001` | One exact SHA, migration state, and rollback target define release | Blocked |
 
 `partial` is not failure; it is an honest statement that implementation exists
-but required exact-SHA or end-to-end evidence is incomplete. The strict release
-validator rejects all release-critical entries that are not `verified`.
+but required exact-SHA or end-to-end evidence is incomplete. `npm run
+verify:registry` and `npm run verify:registry:structure` validate registry
+structure and blocker records. `npm run verify:registry:release` is the strict
+release-acceptance gate; it rejects every release-critical entry that is not
+`verified` with exact-SHA staging evidence.
 
 ## Status meanings
 

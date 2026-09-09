@@ -48,7 +48,10 @@ function stripeSubscriptionEvent(input: {
 test("Stripe webhook records billing facts but does not grant entitlement", async () => {
   const repository = createInMemoryBillingRepository();
   const first = await processStripeBillingEvent({
-    event: stripeSubscriptionEvent({ id: "evt_1", created: 1_800_000_001 }) as never,
+    event: stripeSubscriptionEvent({
+      id: "evt_1",
+      created: 1_800_000_001,
+    }) as never,
     environment: "test",
     repository,
   });
@@ -58,7 +61,10 @@ test("Stripe webhook records billing facts but does not grant entitlement", asyn
   assert.equal(repository.consumedTrials.has(`test:${userId}`), true);
 
   const duplicate = await processStripeBillingEvent({
-    event: stripeSubscriptionEvent({ id: "evt_1", created: 1_800_000_001 }) as never,
+    event: stripeSubscriptionEvent({
+      id: "evt_1",
+      created: 1_800_000_001,
+    }) as never,
     environment: "test",
     repository,
   });
@@ -175,7 +181,9 @@ test("RevenueCat controls pro entitlement with duplicate and cancellation preced
   assert.equal(repository.entitlements.at(-1)?.active, true);
 
   await processRevenueCatWebhook({
-    body: { event: { ...baseEvent, id: "rc_billing_issue", type: "BILLING_ISSUE" } },
+    body: {
+      event: { ...baseEvent, id: "rc_billing_issue", type: "BILLING_ISSUE" },
+    },
     expectedEnvironment: "test",
     repository,
   });
@@ -233,7 +241,13 @@ test("RevenueCat enforces pro entitlement, Supabase UUID identity, environment i
   );
   assert.deepEqual(
     await processRevenueCatWebhook({
-      body: { event: { ...event, entitlement_id: "pro", app_user_id: "email@example.test" } },
+      body: {
+        event: {
+          ...event,
+          entitlement_id: "pro",
+          app_user_id: "email@example.test",
+        },
+      },
       expectedEnvironment: "test",
       repository,
     }),
@@ -246,7 +260,9 @@ test("RevenueCat enforces pro entitlement, Supabase UUID identity, environment i
   assert.equal(
     (
       await processRevenueCatWebhook({
-        body: { event: { ...event, entitlement_id: "pro", environment: "PRODUCTION" } },
+        body: {
+          event: { ...event, entitlement_id: "pro", environment: "PRODUCTION" },
+        },
         expectedEnvironment: "test",
         repository,
       })
@@ -305,22 +321,24 @@ test("RevenueCat enforces pro entitlement, Supabase UUID identity, environment i
   );
 });
 
+const billingConfig = {
+  environment: "test" as const,
+  appOrigin: "https://blundr.test",
+  stripeSecretKey: "sk_test_placeholder",
+  stripeWebhookSecret: "whsec_placeholder",
+  stripePrices: {
+    monthly: "price_1UBaUQLGvBclDkdEYam8Nz43",
+    annual: "price_1UBaUQLGvBclDkdEZNLeAfpq",
+  },
+  revenueCatWebhookAuthorization: "Bearer rc",
+  revenueCatApiKey: "rc_test_key",
+};
+
 test("RevenueCat reconciliation restores trusted entitlement from subscriber state", async () => {
   const repository = createInMemoryBillingRepository({ knownUsers: [userId] });
   const result = await reconcileRevenueCatSubscriber({
     appUserId: userId,
-    config: {
-      environment: "test",
-      appOrigin: "https://blundr.test",
-      stripeSecretKey: "sk_test_placeholder",
-      stripeWebhookSecret: "whsec_placeholder",
-      stripePrices: {
-        monthly: "price_1UBaUQLGvBclDkdEYam8Nz43",
-        annual: "price_1UBaUQLGvBclDkdEZNLeAfpq",
-      },
-      revenueCatWebhookAuthorization: "Bearer rc",
-      revenueCatApiKey: "rc_test_key",
-    },
+    config: billingConfig,
     repository,
     fetchImpl: async () =>
       new Response(
@@ -336,5 +354,34 @@ test("RevenueCat reconciliation restores trusted entitlement from subscriber sta
   });
   assert.deepEqual(result, { ok: true });
   assert.equal(repository.entitlements.at(-1)?.active, true);
-  assert.equal(repository.entitlements.at(-1)?.expiresAt, "2030-01-01T00:00:00Z");
+  assert.equal(
+    repository.entitlements.at(-1)?.expiresAt,
+    "2030-01-01T00:00:00.000Z",
+  );
+});
+
+test("RevenueCat reconciliation never grants Pro for missing, malformed, or expired pro entitlement", async () => {
+  for (const [label, entitlements] of [
+    ["missing", {}],
+    ["malformed", { pro: { expires_date: "not-a-date" } }],
+    ["expired", { pro: { expires_date: "2000-01-01T00:00:00Z" } }],
+  ] as const) {
+    const repository = createInMemoryBillingRepository({
+      knownUsers: [userId],
+    });
+    const result = await reconcileRevenueCatSubscriber({
+      appUserId: userId,
+      config: billingConfig,
+      repository,
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            subscriber: { entitlements },
+          }),
+          { status: 200 },
+        ),
+    });
+    assert.deepEqual(result, { ok: true }, label);
+    assert.equal(repository.entitlements.at(-1)?.active, false, label);
+  }
 });

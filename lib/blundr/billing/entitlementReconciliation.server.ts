@@ -1,8 +1,27 @@
-import { REVENUECAT_PRO_ENTITLEMENT, type BillingConfig } from "./billingConfig";
+import {
+  REVENUECAT_PRO_ENTITLEMENT,
+  type BillingConfig,
+} from "./billingConfig";
 import {
   createSupabaseBillingRepository,
   type BillingRepository,
 } from "./billingRepository.server";
+
+function text(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function parseProviderExpiration(value: unknown): {
+  expiresAt: string | null;
+  valid: boolean;
+} {
+  const raw = text(value);
+  if (!raw) return { expiresAt: null, valid: false };
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed)
+    ? { expiresAt: new Date(parsed).toISOString(), valid: true }
+    : { expiresAt: null, valid: false };
+}
 
 export async function reconcileRevenueCatSubscriber(input: {
   appUserId: string;
@@ -27,15 +46,22 @@ export async function reconcileRevenueCatSubscriber(input: {
       cache: "no-store",
     },
   );
-  if (!response.ok) return { ok: false, error: "revenuecat_reconciliation_failed" };
+  if (!response.ok)
+    return { ok: false, error: "revenuecat_reconciliation_failed" };
   const body = (await response.json()) as {
     subscriber?: {
       entitlements?: Record<string, { expires_date?: string | null }>;
     };
   };
-  const entitlement = body.subscriber?.entitlements?.[REVENUECAT_PRO_ENTITLEMENT];
-  const expiresAt = entitlement?.expires_date ?? null;
-  const active = !expiresAt || new Date(expiresAt).getTime() > Date.now();
+  const entitlement =
+    body.subscriber?.entitlements?.[REVENUECAT_PRO_ENTITLEMENT];
+  const expiration = parseProviderExpiration(entitlement?.expires_date);
+  const active = Boolean(
+    entitlement &&
+      expiration.valid &&
+      expiration.expiresAt &&
+      Date.parse(expiration.expiresAt) > Date.now(),
+  );
   const repository = input.repository ?? createSupabaseBillingRepository();
   if (!(await repository.userExists(input.appUserId))) {
     return { ok: false, error: "revenuecat_app_user_id_not_found" };
@@ -44,11 +70,15 @@ export async function reconcileRevenueCatSubscriber(input: {
     userId: input.appUserId,
     environment: input.config.environment,
     active,
-    expiresAt,
+    expiresAt: expiration.expiresAt,
     lastVerifiedAt: new Date().toISOString(),
     lastProviderEventAt: null,
     providerSubscriptionId: null,
-    metadata: { reconciliation: true },
+    metadata: {
+      reconciliation: true,
+      revenueCatProEntitlementPresent: Boolean(entitlement),
+      revenueCatExpirationValid: expiration.valid,
+    },
   });
   return { ok: true };
 }

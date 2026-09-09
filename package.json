@@ -62,6 +62,7 @@
     "verify:flags": "node scripts/verify-feature-flags.mjs",
     "verify:feature-profile": "node scripts/validate-staging-feature-profile.mjs",
     "verify:registry": "node scripts/validate-blundr-system-registry.mjs",
+    "verify:registry:structure": "node scripts/validate-blundr-system-registry.mjs",
     "verify:registry:release": "node scripts/validate-blundr-release-registry.mjs",
     "verify:deep-minigame-catalog": "node scripts/validate-deep-minigame-catalog.mjs",
     "performance:release": "node --preserve-symlinks --import tsx scripts/measure-release-performance.mjs",

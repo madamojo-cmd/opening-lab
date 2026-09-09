@@ -11,21 +11,23 @@ const releaseEntries = registry.entries.filter(
 );
 const failures = [];
 
+function hasExactShaEvidence(entry) {
+  return entry.evidence.some(
+    (item) =>
+      item &&
+      item.kind === "exact_sha_staging" &&
+      item.sha === entry.lastVerifiedSha &&
+      typeof item.url === "string" &&
+      item.url.startsWith("https://"),
+  );
+}
+
 for (const entry of releaseEntries) {
   if (entry.status !== "verified")
     failures.push(`${entry.id}: status is ${entry.status}`);
   if (!/^[a-f0-9]{40}$/.test(entry.lastVerifiedSha ?? ""))
     failures.push(`${entry.id}: exact verified SHA is missing`);
-  if (
-    !entry.evidence.some(
-      (item) =>
-        item &&
-        item.kind === "exact_sha_staging" &&
-        item.sha === entry.lastVerifiedSha &&
-        typeof item.url === "string" &&
-        item.url.startsWith("https://"),
-    )
-  )
+  if (!hasExactShaEvidence(entry))
     failures.push(`${entry.id}: exact-SHA staging evidence is missing`);
 }
 

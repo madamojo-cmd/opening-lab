@@ -14,7 +14,10 @@ test("paywall has no preselected paid plan and requires explicit acknowledgement
   assert.match(onboarding, /selected=\{String\(selected \?\? ""\)\}/);
   assert.match(onboarding, /if \(step === "plan"\) return undefined;/);
   assert.doesNotMatch(onboarding, /selected \?\? state\.planIntent/);
-  assert.match(paywall, /const \[acknowledged, setAcknowledged\] = useState\(false\)/);
+  assert.match(
+    paywall,
+    /const \[acknowledged, setAcknowledged\] = useState\(false\)/,
+  );
   assert.match(paywall, /disabled=\{!acknowledged \|\| busy\}/);
   assert.match(paywall, /Start 7-day Pro trial - \$0 today/);
   assert.match(paywall, /\$9\.99\/month after trial/);
@@ -29,7 +32,10 @@ test("checkout uses the Wave 2A authority path plus paid-offer consent", () => {
 
   assert.match(checkoutRoute, /requireAcceptedOffer: true/);
   assert.match(checkoutService, /invalidClientAuthority/);
-  assert.match(checkoutService, /priceForBillingPlan\(input\.config, body\.plan\)/);
+  assert.match(
+    checkoutService,
+    /priceForBillingPlan\(input\.config, body\.plan\)/,
+  );
   assert.match(checkoutService, /STRIPE_APP_USER_ID_METADATA_KEY/);
   assert.match(checkoutService, /claimAcceptedPaidOffer/);
   assert.match(paidOffer, /PAID_OFFER_VERSION = "paid-offer-v1"/);
@@ -76,35 +82,87 @@ test("Wave 2B migration exposes safe read-only client state only", () => {
     "supabase/migrations/20260904170758_blundr_paywall_enforcement_authority.sql",
   );
 
-  assert.match(migration, /create table if not exists public\.blundr_paid_offer_acceptances/);
-  assert.match(migration, /create table if not exists public\.blundr_free_active_opening_selections/);
+  assert.match(
+    migration,
+    /create table if not exists public\.blundr_paid_offer_acceptances/,
+  );
+  assert.match(
+    migration,
+    /create table if not exists public\.blundr_free_active_opening_selections/,
+  );
   assert.match(migration, /enable row level security/);
-  assert.match(migration, /grant select on public\.blundr_paid_offer_acceptances/);
+  assert.match(
+    migration,
+    /grant select on public\.blundr_paid_offer_acceptances/,
+  );
   assert.match(migration, /to authenticated/);
   assert.match(migration, /grant select, insert, update, delete/);
   assert.match(migration, /to service_role/);
   assert.match(migration, /using \(user_id = auth\.uid\(\)\)/);
-  assert.doesNotMatch(migration, /for insert to authenticated|for update to authenticated|for delete to authenticated/);
+  assert.doesNotMatch(
+    migration,
+    /for insert to authenticated|for update to authenticated|for delete to authenticated/,
+  );
   assert.doesNotMatch(migration, /user_metadata|raw_user_meta_data/);
 });
 
 test("Wave 2B browser route checks are backed by real pages and reject 404s", () => {
-  const workflowPath = ".github/workflows/blundr-wave2b-commercial-validation.yml";
+  const workflowPath =
+    ".github/workflows/blundr-wave2b-commercial-validation.yml";
   const workflow = read(workflowPath);
-  const routeTable = workflow.match(/const routeChecks = \[([\s\S]*?)\];/);
+  const browserHarness = read("scripts/wave2b-browser-qa.mjs");
+  const routeTable = browserHarness.match(
+    /const routeChecks = \[([\s\S]*?)\];/,
+  );
+
+  assert.doesNotMatch(workflow, /push:\s*\n\s*branches:/);
+  assert.match(workflow, /workflow_dispatch:\s*\n\s*inputs:/);
+  assert.match(
+    workflow,
+    /preview_url:\s*\n\s*description: Exact immutable non-production deployment URL/,
+  );
+  assert.match(
+    workflow,
+    /expected_sha:\s*\n\s*description: Exact 40-character candidate SHA/,
+  );
+  assert.match(workflow, /WAVE2B_PREVIEW_URL: \$\{\{ inputs\.preview_url \}\}/);
+  assert.match(
+    workflow,
+    /WAVE2B_EXPECTED_SHA: \$\{\{ inputs\.expected_sha \}\}/,
+  );
+  assert.doesNotMatch(workflow, /WAVE2B_PREVIEW_URL: \$\{\{ secrets\./);
+  assert.match(
+    workflow,
+    /expected_sha must be exactly 40 hexadecimal characters/,
+  );
+  assert.match(workflow, /expected_sha does not match the checked-out HEAD/);
+  assert.match(workflow, /\/api\/health did not expose the expected SHA/);
+  assert.match(workflow, /node scripts\/wave2b-browser-qa\.mjs/);
+  assert.match(browserHarness, /classification: "BROWSER_CONTRACT_QA"/);
+  assert.match(browserHarness, /acceptanceEligible: false/);
 
   assert.ok(routeTable, "browser QA routeChecks table must be present");
   assert.doesNotMatch(routeTable[1], /path: "\/rings"/);
   assert.doesNotMatch(routeTable[1], /path: "\/rewards"/);
   assert.doesNotMatch(routeTable[1], /requiredText: \[\/blundr\/i\]/i);
-  assert.doesNotMatch(workflow, /locator\("body"\)\)\.toContainText/);
-  assert.doesNotMatch(workflow, /toContainText\(text, \{ timeout: 15000 \}\)/);
-  assert.match(workflow, /did not produce a main-document response/);
-  assert.match(workflow, /returned HTTP \$\{response\.status\(\)\}/);
-  assert.match(workflow, /ended on unexpected path/);
-  assert.match(workflow, /This page could not be found/);
-  assert.match(workflow, /rendered a Not Found or generic error page/);
-  assert.match(routeTable[1], /label: "progress"[\s\S]*path: "\/progress"[\s\S]*Daily rings[\s\S]*Tempo[\s\S]*Battery[\s\S]*Daily Blundr[\s\S]*STREAK & CONSISTENCY/);
+  assert.doesNotMatch(browserHarness, /locator\("body"\)\)\.toContainText/);
+  assert.doesNotMatch(
+    browserHarness,
+    /toContainText\(text, \{ timeout: 15000 \}\)/,
+  );
+  assert.match(browserHarness, /did not produce a main-document response/);
+  assert.match(browserHarness, /returned HTTP \$\{response\.status\(\)\}/);
+  assert.match(browserHarness, /ended on unexpected path/);
+  assert.match(browserHarness, /This page could not be found/);
+  assert.match(browserHarness, /rendered a Not Found or generic error page/);
+  assert.match(
+    routeTable[1],
+    /label: "settings-billing"[\s\S]*scopeSelector: "#billing"[\s\S]*Manage your Blundr plan from trusted billing state/,
+  );
+  assert.match(
+    routeTable[1],
+    /label: "progress"[\s\S]*path: "\/progress"[\s\S]*Daily rings[\s\S]*Tempo[\s\S]*Battery[\s\S]*Daily Blundr[\s\S]*STREAK & CONSISTENCY/,
+  );
 
   const paths = [...routeTable[1].matchAll(/path: "([^"]+)"/g)].map(
     ([, path]) => path.split(/[?#]/)[0],
@@ -120,4 +178,48 @@ test("Wave 2B browser route checks are backed by real pages and reject 404s", ()
       `${path} must have a real route at ${pagePath}`,
     );
   }
+});
+
+test("Wave 2B distinguishes mocked browser QA from real sandbox integration proof", () => {
+  const workflow = read(
+    ".github/workflows/blundr-wave2b-commercial-validation.yml",
+  );
+  const browserHarness = read("scripts/wave2b-browser-qa.mjs");
+
+  assert.match(workflow, /Run Wave 2B provider configuration check/);
+  assert.match(workflow, /classification: "PROVIDER_CONFIGURATION_CHECK"/);
+  assert.match(workflow, /provider-configuration-check\.json/);
+  assert.match(workflow, /providerConfigurationAvailable/);
+  assert.match(
+    workflow,
+    /sandboxIntegrationProof: "blocked_until_real_provider_journey"/,
+  );
+  assert.match(workflow, /stripePriceVerified/);
+  assert.match(workflow, /revenueCatApiAuthenticated/);
+  assert.match(workflow, /RevenueCat entitlement identifier must be pro/);
+  assert.match(workflow, /RevenueCat offering identifier must be default/);
+
+  assert.match(workflow, /Require real Wave 2B sandbox integration proof/);
+  assert.match(workflow, /classification: "SANDBOX_INTEGRATION_PROOF"/);
+  assert.match(workflow, /status: "blocked_operator_required"/);
+  assert.match(workflow, /acceptanceEligible: false/);
+  assert.match(workflow, /throw new Error\(/);
+  assert.match(workflow, /real non-production Checkout/);
+  assert.match(workflow, /Stripe webhook processing succeeded/);
+  assert.match(workflow, /RevenueCat recognized the Stripe purchase/);
+  assert.match(workflow, /trusted backend Pro state/);
+  assert.match(workflow, /Customer Portal opened/);
+
+  assert.match(
+    browserHarness,
+    /billingCoverage: "mocked_browser_contract_only"/,
+  );
+  assert.match(
+    browserHarness,
+    /providerProof: "separate_sandbox_integration_required"/,
+  );
+  assert.doesNotMatch(workflow, /WAVE2B_ACCEPTED=yes/);
+  assert.doesNotMatch(workflow, /sandbox-proof\.json/);
+  assert.doesNotMatch(workflow, /automated_checkout_not_enabled/);
+  assert.doesNotMatch(workflow, /operator_checkout_required/);
 });
