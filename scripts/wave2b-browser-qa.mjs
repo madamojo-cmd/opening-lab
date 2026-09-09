@@ -1,7 +1,8 @@
 import { chromium, expect } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 
-const baseUrl = process.env.WAVE2B_PREVIEW_URL.replace(/\/+$/, "");
+const baseUrl = (process.env.WAVE2B_PREVIEW_URL ?? "").replace(/\/+$/, "");
 const qaEmail = process.env.WAVE2B_QA_EMAIL;
 const qaPassword = process.env.WAVE2B_QA_PASSWORD;
 const qaUserId = process.env.WAVE2B_QA_SUPABASE_UUID;
@@ -572,6 +573,31 @@ async function snapshot(page, viewport, label) {
   });
 }
 
+export async function hasVisibleRequiredTextMatch(routeScope, text) {
+  const matches = routeScope.getByText(text);
+  const count = await matches.count();
+  for (let index = 0; index < count; index += 1) {
+    if (await matches.nth(index).isVisible()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export async function expectVisibleRequiredText(
+  routeScope,
+  text,
+  options = {},
+) {
+  const timeout = options.timeout ?? 15000;
+  await expect
+    .poll(() => hasVisibleRequiredTextMatch(routeScope, text), {
+      timeout,
+      message: `Expected at least one visible route text match for ${String(text)}`,
+    })
+    .toBe(true);
+}
+
 async function validatePaywall(page, viewport, diagnostics) {
   const sessionSummary = await readBrowserSession(page);
   if (
@@ -844,9 +870,7 @@ async function validateRoutes(page, viewport) {
       : page.locator("main").first();
     await expect(routeScope).toBeVisible({ timeout: 15000 });
     for (const text of check.requiredText) {
-      await expect(routeScope.getByText(text).first()).toBeVisible({
-        timeout: 15000,
-      });
+      await expectVisibleRequiredText(routeScope, text, { timeout: 15000 });
     }
     await snapshot(page, viewport, check.label);
   }
@@ -877,37 +901,50 @@ async function validateKeyboard(page) {
   }
 }
 
-const browser = await chromium.launch();
-const summary = [];
-try {
-  for (const viewport of viewports) {
-    const context = await browser.newContext({ viewport });
-    const page = await context.newPage();
-    const pageDiagnostics = installPageDiagnostics(page);
-    await installRoutes(page);
-    await signIn(page);
-    await installRoutes(page);
-    await validatePaywall(page, viewport, pageDiagnostics);
-    await validateRoutes(page, viewport);
-    await validateKeyboard(page);
-    summary.push({ viewport: viewport.name, status: "passed" });
-    await context.close();
+export async function runWave2BBrowserQa() {
+  const browser = await chromium.launch();
+  const summary = [];
+  try {
+    for (const viewport of viewports) {
+      const context = await browser.newContext({ viewport });
+      const page = await context.newPage();
+      const pageDiagnostics = installPageDiagnostics(page);
+      await installRoutes(page);
+      await signIn(page);
+      await installRoutes(page);
+      await validatePaywall(page, viewport, pageDiagnostics);
+      await validateRoutes(page, viewport);
+      await validateKeyboard(page);
+      summary.push({ viewport: viewport.name, status: "passed" });
+      await context.close();
+    }
+  } finally {
+    await browser.close();
   }
-} finally {
-  await browser.close();
+  await writeFile(
+    `${artifactDir}/browser-qa-summary.json`,
+    `${JSON.stringify(
+      {
+        classification: "BROWSER_CONTRACT_QA",
+        status: "passed",
+        billingCoverage: "mocked_browser_contract_only",
+        providerProof: "separate_sandbox_integration_required",
+        acceptanceEligible: false,
+        summary,
+      },
+      null,
+      2,
+    )}\n`,
+  );
 }
-await writeFile(
-  `${artifactDir}/browser-qa-summary.json`,
-  `${JSON.stringify(
-    {
-      classification: "BROWSER_CONTRACT_QA",
-      status: "passed",
-      billingCoverage: "mocked_browser_contract_only",
-      providerProof: "separate_sandbox_integration_required",
-      acceptanceEligible: false,
-      summary,
-    },
-    null,
-    2,
-  )}\n`,
-);
+
+function isDirectExecution() {
+  return (
+    typeof process.argv[1] === "string" &&
+    import.meta.url === pathToFileURL(process.argv[1]).href
+  );
+}
+
+if (isDirectExecution()) {
+  await runWave2BBrowserQa();
+}

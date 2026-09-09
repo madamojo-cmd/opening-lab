@@ -146,6 +146,8 @@ test("Wave 2B browser route checks are backed by real pages and reject 404s", ()
   assert.doesNotMatch(routeTable[1], /path: "\/rewards"/);
   assert.doesNotMatch(routeTable[1], /requiredText: \[\/blundr\/i\]/i);
   assert.doesNotMatch(browserHarness, /locator\("body"\)\)\.toContainText/);
+  assert.doesNotMatch(browserHarness, /routeScope\.getByText\(text\)\.first/);
+  assert.match(browserHarness, /hasVisibleRequiredTextMatch/);
   assert.doesNotMatch(
     browserHarness,
     /toContainText\(text, \{ timeout: 15000 \}\)/,
@@ -178,6 +180,43 @@ test("Wave 2B browser route checks are backed by real pages and reject 404s", ()
       `${path} must have a real route at ${pagePath}`,
     );
   }
+});
+
+test("Wave 2B route required text accepts a visible duplicate after a hidden match", async () => {
+  const browserHarness = await import("../../scripts/wave2b-browser-qa.mjs");
+  const visibilityByText = new Map<string, boolean[]>([
+    ["Tempo", [false, true]],
+    ["Battery", [false, false]],
+  ]);
+  const fakeScope = {
+    getByText(text: RegExp) {
+      const key = String(text).replace(/^\/|\/[a-z]*$/gi, "");
+      const visibility = visibilityByText.get(key) ?? [];
+      return {
+        async count() {
+          return visibility.length;
+        },
+        nth(index: number) {
+          return {
+            async isVisible() {
+              return visibility[index] === true;
+            },
+          };
+        },
+      };
+    },
+  };
+
+  assert.equal(
+    await browserHarness.hasVisibleRequiredTextMatch(fakeScope, /Tempo/i),
+    true,
+    "hidden first match must not fail when a later duplicate is visible",
+  );
+  assert.equal(
+    await browserHarness.hasVisibleRequiredTextMatch(fakeScope, /Battery/i),
+    false,
+    "required text must still fail when every duplicate is hidden",
+  );
 });
 
 test("Wave 2B distinguishes mocked browser QA from real sandbox integration proof", () => {
