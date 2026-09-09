@@ -31,11 +31,13 @@ jobs:
       WAVE2B_QA_SUPABASE_UUID: ${{ secrets.WAVE2B_QA_SUPABASE_UUID }}
       WAVE2B_EXPECTED_SHA: ${{ inputs.expected_sha }}
       STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+      STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
       STRIPE_PRO_MONTHLY_PRICE_ID: ${{ secrets.STRIPE_PRO_MONTHLY_PRICE_ID }}
       STRIPE_PRO_ANNUAL_PRICE_ID: ${{ secrets.STRIPE_PRO_ANNUAL_PRICE_ID }}
       REVENUECAT_REST_API_KEY: ${{ secrets.REVENUECAT_REST_API_KEY }}
       REVENUECAT_V2_SECRET_API_KEY: ${{ secrets.REVENUECAT_V2_SECRET_API_KEY }}
       REVENUECAT_PROJECT_ID: ${{ secrets.REVENUECAT_PROJECT_ID }}
+      REVENUECAT_SANDBOX_APP_ID: ${{ secrets.REVENUECAT_SANDBOX_APP_ID }}
       REVENUECAT_PRO_ENTITLEMENT_ID: ${{ secrets.REVENUECAT_PRO_ENTITLEMENT_ID }}
       REVENUECAT_OFFERING_ID: ${{ secrets.REVENUECAT_OFFERING_ID }}
       BLUNDR_STAGING_SUPABASE_URL: ${{ secrets.BLUNDR_STAGING_SUPABASE_URL }}
@@ -78,11 +80,13 @@ jobs:
           const providerConfiguration = [
             { env: "WAVE2B_QA_SUPABASE_UUID", name: "WAVE2B_QA_SUPABASE_UUID" },
             { env: "STRIPE_SECRET_KEY", name: "STRIPE_SECRET_KEY" },
+            { env: "STRIPE_WEBHOOK_SECRET", name: "STRIPE_WEBHOOK_SECRET" },
             { env: "STRIPE_PRO_MONTHLY_PRICE_ID", name: "STRIPE_PRO_MONTHLY_PRICE_ID" },
             { env: "STRIPE_PRO_ANNUAL_PRICE_ID", name: "STRIPE_PRO_ANNUAL_PRICE_ID" },
             { env: "REVENUECAT_REST_API_KEY", name: "REVENUECAT_REST_API_KEY" },
             { env: "REVENUECAT_V2_SECRET_API_KEY", name: "REVENUECAT_V2_SECRET_API_KEY" },
             { env: "REVENUECAT_PROJECT_ID", name: "REVENUECAT_PROJECT_ID" },
+            { env: "REVENUECAT_SANDBOX_APP_ID", name: "REVENUECAT_SANDBOX_APP_ID" },
             { env: "REVENUECAT_PRO_ENTITLEMENT_ID", name: "REVENUECAT_PRO_ENTITLEMENT_ID" },
             { env: "REVENUECAT_OFFERING_ID", name: "REVENUECAT_OFFERING_ID" },
             { env: "BLUNDR_STAGING_SUPABASE_URL", name: "BLUNDR_STAGING_SUPABASE_URL" },
@@ -171,6 +175,12 @@ jobs:
           }
           if (process.env.STRIPE_SECRET_KEY && !process.env.STRIPE_SECRET_KEY.startsWith("sk_test_")) {
             fail("STRIPE_SECRET_KEY must be test-mode when provided.");
+          }
+          if (
+            process.env.REVENUECAT_SANDBOX_APP_ID &&
+            process.env.REVENUECAT_SANDBOX_APP_ID !== "appe3b4140fc1"
+          ) {
+            fail("RevenueCat sandbox app identifier must be appe3b4140fc1.");
           }
           if (
             process.env.REVENUECAT_PRO_ENTITLEMENT_ID &&

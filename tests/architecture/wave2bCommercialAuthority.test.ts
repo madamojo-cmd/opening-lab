@@ -196,7 +196,15 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
   );
   assert.match(workflow, /Require real Wave 2B sandbox integration proof/);
   assert.match(workflow, /node scripts\/wave2b-sandbox-integration-proof\.mjs/);
+  assert.match(
+    workflow,
+    /STRIPE_WEBHOOK_SECRET: \$\{\{ secrets\.STRIPE_WEBHOOK_SECRET \}\}/,
+  );
   assert.match(workflow, /REVENUECAT_V2_SECRET_API_KEY/);
+  assert.match(
+    workflow,
+    /REVENUECAT_SANDBOX_APP_ID: \$\{\{ secrets\.REVENUECAT_SANDBOX_APP_ID \}\}/,
+  );
   assert.match(workflow, /BLUNDR_STAGING_SUPABASE_SECRET_KEY/);
   assert.match(
     workflow,
@@ -217,12 +225,28 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
   assert.match(providerCheck, /monthlyPriceVerified/);
   assert.match(providerCheck, /annualPriceVerified/);
   assert.match(providerCheck, /customerPortalConfigured/);
+  assert.match(
+    providerCheck,
+    /STRIPE_WEBHOOK_SECRET must be a Stripe webhook signing secret/,
+  );
+  assert.match(providerCheck, /revenueCatV1ApiAuthenticated/);
   assert.match(providerCheck, /revenueCatV2ApiAuthenticated/);
+  assert.match(providerCheck, /revenueCatSandboxAppVerified/);
+  assert.match(providerCheck, /revenueCatProductMappingVerified/);
+  assert.match(providerCheck, /REVENUECAT_REST_API_KEY/);
   assert.match(providerCheck, /REVENUECAT_V2_SECRET_API_KEY/);
-  assert.match(providerCheck, /api\.revenuecat\.com\/v2\/projects/);
+  assert.match(providerCheck, /REVENUECAT_SANDBOX_APP_ID/);
+  assert.match(providerCheck, /appe3b4140fc1/);
+  assert.match(providerCheck, /REVENUECAT_V2_API_ORIGIN/);
+  assert.match(providerCheck, /api\.revenuecat\.com\/v2/);
+  assert.match(
+    providerCheck,
+    /projects\/\$\{encodeURIComponent\(projectId\)\}/,
+  );
+  assert.match(providerCheck, /apps\/\$\{encodeURIComponent\(appId\)\}/);
   assert.match(providerCheck, /RevenueCat entitlement identifier must be pro/);
   assert.match(providerCheck, /RevenueCat offering identifier must be default/);
-  assert.doesNotMatch(providerCheck, /REVENUECAT_REST_API_KEY/);
+  assert.match(providerCheck, /REVENUECAT_REST_API_KEY/);
 
   assert.match(sandboxProof, /classification: "SANDBOX_INTEGRATION_PROOF"/);
   assert.match(
