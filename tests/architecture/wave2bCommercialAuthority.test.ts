@@ -42,15 +42,40 @@ test("checkout uses the Wave 2A authority path plus paid-offer consent", () => {
   assert.match(paidOffer, /accepted_at/);
   assert.match(paidOffer, /checkout_started_at/);
   assert.match(paidOffer, /paid_offer_stale_or_unavailable/);
+  assert.match(paidOffer, /client_billing_authority_rejected/);
+  assert.match(paidOffer, /priceId/);
+  assert.match(paidOffer, /customerId/);
+  assert.match(paidOffer, /userId/);
+  assert.match(paidOffer, /trialEligible/);
+  assert.match(paidOffer, /entitlement/);
 });
 
 test("billing settings and portal never accept browser customer authority", () => {
   const settings = read("components/settings/SettingsPage.tsx");
+  const billingUpgradeRoute = read("app/billing/upgrade/page.tsx");
+  const billingUpgrade = read("components/billing/BillingUpgradePage.tsx");
+  const paywall = read("components/billing/PaywallPlanSelection.tsx");
+  const billingSuccess = read("components/billing/BillingResultPage.tsx");
   const portalRoute = read("app/api/blundr/billing/portal/route.ts");
   const checkoutService = read("lib/blundr/billing/checkout.server.ts");
 
   assert.match(settings, /\/api\/blundr\/billing\/status/);
   assert.match(settings, /\/api\/blundr\/billing\/portal/);
+  assert.match(settings, /href="\/billing\/upgrade"/);
+  assert.doesNotMatch(settings, /href="\/onboarding\/plan"/);
+  assert.match(billingSuccess, /href="\/billing\/upgrade"/);
+  assert.doesNotMatch(billingSuccess, /href="\/onboarding\/plan"/);
+  assert.match(billingUpgradeRoute, /BillingUpgradePage/);
+  assert.match(billingUpgrade, /<PaywallPlanSelection[\s\S]*mode="upgrade"/);
+  assert.match(
+    billingUpgrade,
+    /access\?\.plan === "pro" && access\.entitlementActive === true/,
+  );
+  assert.match(billingUpgrade, /\/api\/blundr\/billing\/status/);
+  assert.match(billingUpgrade, /\/api\/blundr\/billing\/portal/);
+  assert.match(paywall, /mode\?: "onboarding" \| "upgrade"/);
+  assert.match(paywall, /!upgradeMode \? \(/);
+  assert.match(paywall, /Return to Settings -&gt; Billing/);
   assert.doesNotMatch(settings, /customerId/);
   assert.match(portalRoute, /createBillingPortalSession/);
   assert.match(checkoutService, /client_customer_rejected/);
@@ -111,8 +136,11 @@ test("Wave 2B browser route checks are backed by real pages and reject 404s", ()
     ".github/workflows/blundr-wave2b-commercial-validation.yml";
   const workflow = read(workflowPath);
   const browserHarness = read("scripts/wave2b-browser-qa.mjs");
-  const routeTable = browserHarness.match(
-    /const routeChecks = \[([\s\S]*?)\];/,
+  const billingRouteTable = browserHarness.match(
+    /const billingReturnRouteChecks = \[([\s\S]*?)\];/,
+  );
+  const protectedRouteTable = browserHarness.match(
+    /const protectedRouteChecks = \[([\s\S]*?)\];/,
   );
 
   assert.doesNotMatch(workflow, /push:\s*\n\s*branches:/);
@@ -140,13 +168,43 @@ test("Wave 2B browser route checks are backed by real pages and reject 404s", ()
   assert.match(workflow, /node scripts\/wave2b-browser-qa\.mjs/);
   assert.match(browserHarness, /classification: "BROWSER_CONTRACT_QA"/);
   assert.match(browserHarness, /acceptanceEligible: false/);
-
-  assert.ok(routeTable, "browser QA routeChecks table must be present");
-  assert.doesNotMatch(routeTable[1], /path: "\/rings"/);
-  assert.doesNotMatch(routeTable[1], /path: "\/rewards"/);
-  assert.doesNotMatch(routeTable[1], /requiredText: \[\/blundr\/i\]/i);
-  assert.doesNotMatch(browserHarness, /locator\("body"\)\)\.toContainText/);
+  assert.match(browserHarness, /entitlementSource: null/);
+  assert.match(browserHarness, /trialStatus: "none"/);
+  assert.match(browserHarness, /currentPeriodEndAt: null/);
+  assert.match(browserHarness, /limits: \{/);
+  assert.match(browserHarness, /dailyBlundrCards: 5/);
+  assert.match(browserHarness, /reviewCompletionsPerDay: 5/);
+  assert.match(browserHarness, /activeOpenings: 3/);
+  assert.doesNotMatch(browserHarness, /\btier\b/);
+  assert.doesNotMatch(browserHarness, /\bisPro\b/);
+  assert.doesNotMatch(browserHarness, /\btrialActive\b/);
+  assert.doesNotMatch(browserHarness, /\bcurrentPeriodEnd:/);
+  assert.doesNotMatch(browserHarness, /\bdailyCardLimit\b/);
+  assert.doesNotMatch(browserHarness, /\breviewCompletionLimit\b/);
+  assert.doesNotMatch(browserHarness, /\bactiveOpeningLimit\b/);
   assert.doesNotMatch(browserHarness, /routeScope\.getByText\(text\)\.first/);
+  assert.match(browserHarness, /billingReturnRouteChecks/);
+  assert.match(browserHarness, /protectedRouteChecks/);
+  assert.match(browserHarness, /completeFreeOnboarding/);
+  assert.match(browserHarness, /validateSettingsUpgrade/);
+  assert.match(browserHarness, /pathname === "\/billing\/upgrade"/);
+  assert.match(browserHarness, /Upgrade to Blundr Pro\./);
+  assert.match(browserHarness, /assertCheckoutRequestContainsOnlyPlan/);
+  assert.match(browserHarness, /name: "Continue with Free"[\s\S]*exact: true/);
+
+  assert.ok(
+    billingRouteTable,
+    "browser QA billingReturnRouteChecks table must be present",
+  );
+  assert.ok(
+    protectedRouteTable,
+    "browser QA protectedRouteChecks table must be present",
+  );
+  const allRouteTables = `${billingRouteTable[1]}\n${protectedRouteTable[1]}`;
+  assert.doesNotMatch(allRouteTables, /path: "\/rings"/);
+  assert.doesNotMatch(allRouteTables, /path: "\/rewards"/);
+  assert.doesNotMatch(allRouteTables, /requiredText: \[\/blundr\/i\]/i);
+  assert.doesNotMatch(browserHarness, /locator\("body"\)\)\.toContainText/);
   assert.match(browserHarness, /hasVisibleRequiredTextMatch/);
   assert.doesNotMatch(
     browserHarness,
@@ -158,15 +216,15 @@ test("Wave 2B browser route checks are backed by real pages and reject 404s", ()
   assert.match(browserHarness, /This page could not be found/);
   assert.match(browserHarness, /rendered a Not Found or generic error page/);
   assert.match(
-    routeTable[1],
+    protectedRouteTable[1],
     /label: "settings-billing"[\s\S]*scopeSelector: "#billing"[\s\S]*Manage your Blundr plan from trusted billing state/,
   );
   assert.match(
-    routeTable[1],
+    protectedRouteTable[1],
     /label: "progress"[\s\S]*path: "\/progress"[\s\S]*Daily rings[\s\S]*Tempo[\s\S]*Battery[\s\S]*Daily Blundr[\s\S]*STREAK & CONSISTENCY/,
   );
 
-  const paths = [...routeTable[1].matchAll(/path: "([^"]+)"/g)].map(
+  const paths = [...allRouteTables.matchAll(/path: "([^"]+)"/g)].map(
     ([, path]) => path.split(/[?#]/)[0],
   );
   assert.ok(paths.length > 0, "browser QA must list standalone routes");
@@ -292,11 +350,27 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
     sandboxProof,
     /blundr-staging-git-launc-291807-adamconnor00-gmailcoms-projects\.vercel\.app/,
   );
-  assert.match(sandboxProof, /\$\{label\}CallbackHostSha/);
+  assert.match(sandboxProof, /\$\{label\}Sha/);
+  assert.match(sandboxProof, /verifyPreviewSha\("before"\)/);
+  assert.match(sandboxProof, /verifyPreviewSha\("after"\)/);
   assert.match(sandboxProof, /verifyStableCallbackHostSha\("before"\)/);
   assert.match(sandboxProof, /verifyStableCallbackHostSha\("after"\)/);
   assert.match(sandboxProof, /acceptanceEligible: false/);
   assert.match(sandboxProof, /acceptanceEligible = true/);
+  assert.match(sandboxProof, /pollUntil\("revenuecatProEntitlement"/);
+  assert.match(sandboxProof, /pollUntil\("backendTrustedProState"/);
+  assert.match(sandboxProof, /verifyProviderLedgers/);
+  assert.match(sandboxProof, /stripeProviderEventLedgerExactlyOnce/);
+  assert.match(sandboxProof, /revenueCatWebhookProviderEventProcessed/);
+  assert.match(sandboxProof, /revenueCatTrustedEntitlementWebhookCreated/);
+  assert.match(sandboxProof, /subscriptionCancelVerified/);
+  assert.match(sandboxProof, /userDeleteVerified/);
+  assert.match(sandboxProof, /cleanupSucceeded/);
+  assert.match(sandboxProof, /proof\.cleanup\.completed/);
+  assert.match(
+    sandboxProof,
+    /if \(!mainError && proof\.cleanup\.completed\)[\s\S]*proof\.status = "passed";[\s\S]*proof\.acceptanceEligible = true/,
+  );
   assert.match(sandboxProof, /BLUNDR_STAGING_SUPABASE_SECRET_KEY/);
   assert.match(sandboxProof, /sb_secret_/);
   assert.match(sandboxProof, /auth\/v1\/admin\/users/);
@@ -308,6 +382,13 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
   assert.match(sandboxProof, /REVENUECAT_REST_API_KEY/);
   assert.match(sandboxProof, /backendProState/);
   assert.match(sandboxProof, /customerPortalCreated/);
+  assert.match(sandboxProof, /access\??\.plan !== "free"/);
+  assert.match(sandboxProof, /access\??\.plan === "pro"/);
+  assert.match(sandboxProof, /access\??\.entitlementActive === true/);
+  assert.match(sandboxProof, /access\??\.entitlementSource === "revenuecat"/);
+  assert.doesNotMatch(sandboxProof, /access\?\.tier/);
+  assert.doesNotMatch(sandboxProof, /access\?\.isPro/);
+  assert.doesNotMatch(workflow, /REVENUECAT_WEBHOOK_AUTHORIZATION/);
 
   assert.match(billingConfig, /LOCKED_STRIPE_TEST_PRO_MONTHLY_PRICE_ID/);
   assert.match(billingConfig, /LOCKED_STRIPE_TEST_PRO_ANNUAL_PRICE_ID/);
@@ -325,6 +406,36 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
   assert.doesNotMatch(workflow, /WAVE2B_ACCEPTED=yes/);
   assert.doesNotMatch(workflow, /automated_checkout_not_enabled/);
   assert.doesNotMatch(workflow, /operator_checkout_required/);
+});
+
+test("Wave 2B billing controls have non-text-only evidence destinations", () => {
+  const inventory = read(
+    "docs/operations/wave2b-billing-control-inventory-20260910.md",
+  );
+  for (const control of [
+    "Landing signup plan link",
+    "Pricing plan links",
+    "Onboarding Free card",
+    "Parent Free continuation",
+    "Monthly",
+    "Annual",
+    "Acknowledgement",
+    "Checkout",
+    "Billing success refresh",
+    "Billing success Settings link",
+    "Billing cancel plan-selection/upgrade link",
+    "Settings Upgrade",
+    "Settings Manage Billing",
+    "Settings Refresh",
+    "Subscription Terms",
+    "Upgrade-page return control",
+    "Customer Portal creation and return",
+  ]) {
+    assert.ok(inventory.includes(`| ${control} |`));
+  }
+  assert.doesNotMatch(inventory, /verified solely because/i);
+  assert.match(inventory, /browser-contract and provider-real/);
+  assert.match(inventory, /sandbox proof validates/);
 });
 
 test("Wave 2B sandbox validation excludes retired live Stripe prices from active code", () => {

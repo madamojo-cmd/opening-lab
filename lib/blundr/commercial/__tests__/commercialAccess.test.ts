@@ -61,3 +61,33 @@ test("downgraded users keep stored goals but receive the Free effective Daily ca
   );
   assert.equal(effectiveDailyBlundrCardGoal(1, FREE_COMMERCIAL_ACCESS), 1);
 });
+
+test("CommercialAccess exposes the current nested billing-status contract", () => {
+  const serialized = JSON.parse(JSON.stringify(FREE_COMMERCIAL_ACCESS));
+  assert.deepEqual(serialized, {
+    plan: "free",
+    entitlementActive: false,
+    entitlementSource: null,
+    trialStatus: "none",
+    expiresAt: null,
+    currentPeriodEndAt: null,
+    cancelAtPeriodEnd: false,
+    limits: {
+      dailyBlundrCards: FREE_DAILY_BLUNDR_CARD_LIMIT,
+      reviewCompletionsPerDay: FREE_DAILY_REVIEW_COMPLETION_LIMIT,
+      activeOpenings: FREE_ACTIVE_OPENING_LIMIT,
+      premiumInsights: false,
+    },
+  });
+  for (const obsolete of [
+    "tier",
+    "isPro",
+    "trialActive",
+    "currentPeriodEnd",
+    "dailyCardLimit",
+    "reviewCompletionLimit",
+    "activeOpeningLimit",
+  ]) {
+    assert.equal(Object.hasOwn(serialized, obsolete), false);
+  }
+});

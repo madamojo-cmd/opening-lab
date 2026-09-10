@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Check, CreditCard, Loader2 } from "lucide-react";
 
@@ -21,6 +22,7 @@ type PaidOffer = {
 type PaywallPlanSelectionProps = {
   selected: string;
   onSelect: (value: "free" | "pro_monthly" | "pro_annual") => void;
+  mode?: "onboarding" | "upgrade";
 };
 
 const FREE_FEATURES = [
@@ -49,12 +51,14 @@ function planFromSelection(selected: string): BillingPlan | null {
 export function PaywallPlanSelection({
   selected,
   onSelect,
+  mode = "onboarding",
 }: PaywallPlanSelectionProps) {
   const [offer, setOffer] = useState<PaidOffer | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const paidPlan = planFromSelection(selected);
+  const upgradeMode = mode === "upgrade";
 
   useEffect(() => {
     let cancelled = false;
@@ -122,15 +126,19 @@ export function PaywallPlanSelection({
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 lg:grid-cols-2">
-        <PlanCard
-          active={selected === "free"}
-          title="Blundr Free"
-          price="$0"
-          cta="Continue with Free"
-          features={FREE_FEATURES}
-          onClick={() => onSelect("free")}
-        />
+      <div
+        className={`grid gap-4 ${upgradeMode ? "lg:grid-cols-1" : "lg:grid-cols-2"}`}
+      >
+        {!upgradeMode ? (
+          <PlanCard
+            active={selected === "free"}
+            title="Blundr Free"
+            price="$0"
+            cta="Continue with Free"
+            features={FREE_FEATURES}
+            onClick={() => onSelect("free")}
+          />
+        ) : null}
         <div className="rounded-lg border border-stone-200 bg-white p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -195,7 +203,11 @@ export function PaywallPlanSelection({
                 className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-lg bg-green-800 px-4 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {busy ? (
-                  <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+                  <Loader2
+                    size={16}
+                    className="animate-spin"
+                    aria-hidden="true"
+                  />
                 ) : (
                   <CreditCard size={16} aria-hidden="true" />
                 )}
@@ -207,8 +219,19 @@ export function PaywallPlanSelection({
           ) : null}
         </div>
       ) : null}
+      {upgradeMode ? (
+        <Link
+          href="/settings#billing"
+          className="inline-flex min-h-10 items-center rounded-lg border border-stone-300 px-3 text-sm font-black text-stone-800"
+        >
+          Return to Settings -&gt; Billing
+        </Link>
+      ) : null}
       {message ? (
-        <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm font-bold text-red-800">
+        <p
+          role="alert"
+          className="rounded-lg bg-red-50 p-3 text-sm font-bold text-red-800"
+        >
           {message}
         </p>
       ) : null}
@@ -239,7 +262,9 @@ function PlanCard({
       className={`rounded-lg border p-5 text-left transition ${active ? "border-green-800 bg-green-50" : "border-stone-200 bg-white"}`}
     >
       <span className="block text-2xl font-black text-stone-950">{title}</span>
-      <span className="mt-1 block text-sm font-black text-green-800">{price}</span>
+      <span className="mt-1 block text-sm font-black text-green-800">
+        {price}
+      </span>
       <span className="mt-4 block space-y-2 text-sm leading-6 text-stone-600">
         {features.map((feature) => (
           <span key={feature} className="flex gap-2">

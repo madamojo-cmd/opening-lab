@@ -63,7 +63,7 @@ export function BillingResultPage({ mode }: { mode: "success" | "cancel" }) {
           <Link className="text-green-800 underline" href="/settings#billing">
             Settings -&gt; Billing
           </Link>
-          <Link className="text-green-800 underline" href="/onboarding/plan">
+          <Link className="text-green-800 underline" href="/billing/upgrade">
             Plan selection
           </Link>
         </div>

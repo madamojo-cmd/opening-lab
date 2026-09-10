@@ -5,11 +5,14 @@ import Stripe from "stripe";
 
 const artifactDir = required("ARTIFACT_DIR");
 const baseUrl = required("WAVE2B_PREVIEW_URL").replace(/\/+$/, "");
+const expectedSha = required("WAVE2B_EXPECTED_SHA").toLowerCase();
 const stableCallbackHost =
   "https://blundr-staging-git-launc-291807-adamconnor00-gmailcoms-projects.vercel.app";
+const stableCallbackOrigin = new URL(stableCallbackHost).origin;
 const supabaseUrl = new URL(required("BLUNDR_STAGING_SUPABASE_URL"));
 const supabaseSecretKey = required("BLUNDR_STAGING_SUPABASE_SECRET_KEY");
 const stripe = new Stripe(required("STRIPE_SECRET_KEY"));
+const revenueCatEntitlementId = required("REVENUECAT_PRO_ENTITLEMENT_ID");
 
 const proof = {
   classification: "SANDBOX_INTEGRATION_PROOF",
@@ -18,7 +21,11 @@ const proof = {
   cleanup: {
     attempted: false,
     subscriptionCanceled: false,
+    subscriptionCancelVerified: false,
+    browserClosed: false,
     userDeleted: false,
+    userDeleteVerified: false,
+    completed: false,
   },
   checks: {},
   evidence: {},
@@ -27,7 +34,10 @@ const proof = {
 let ephemeralUser = null;
 let stripeSubscriptionId = null;
 let browser = null;
+let browserContext = null;
 let stripeSubscription = null;
+let stripeSyntheticEventId = null;
+let ephemeralAccessToken = null;
 
 function required(name) {
   const value = String(process.env[name] ?? "").trim();
@@ -40,6 +50,20 @@ function mask(value, label = "MASKED") {
   const text = String(value);
   console.log(`::add-mask::${text}`);
   return `[${label}]`;
+}
+
+function sanitizeError(value) {
+  return String(value ?? "unknown")
+    .replace(
+      /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi,
+      "[redacted-uuid]",
+    )
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted-email]")
+    .replace(/\b(?:sub|cs|evt|cus)_[A-Za-z0-9_]+/g, "[redacted-provider-id]")
+    .replace(
+      /\b(?:sk_live|sk_test|whsec|rk_live|eyJ|vcp_|gh[pousr]_)[A-Za-z0-9_.-]+/g,
+      "[redacted-secret]",
+    );
 }
 
 function assertNonProductionUrl(value, label) {
@@ -84,17 +108,24 @@ function extractSha(body) {
   );
 }
 
-async function verifyStableCallbackHostSha(label) {
-  const expected = required("WAVE2B_EXPECTED_SHA").toLowerCase();
-  const response = await fetch(`${stableCallbackHost}/api/health`, {
+async function verifyDeploymentSha(origin, label) {
+  const response = await fetch(`${origin}/api/health`, {
     redirect: "manual",
   });
   const body = await response.json().catch(() => null);
   const sha = extractSha(body);
-  if (sha?.toLowerCase() !== expected) {
-    throw new Error(`${label}_callback_host_sha_mismatch`);
+  if (sha?.toLowerCase() !== expectedSha) {
+    throw new Error(`${label}_sha_mismatch`);
   }
-  proof.checks[`${label}CallbackHostSha`] = true;
+  proof.checks[`${label}Sha`] = true;
+}
+
+async function verifyStableCallbackHostSha(label) {
+  await verifyDeploymentSha(stableCallbackOrigin, `${label}CallbackHost`);
+}
+
+async function verifyPreviewSha(label) {
+  await verifyDeploymentSha(baseUrl, `${label}Preview`);
 }
 
 function redactedId(value) {
@@ -121,6 +152,25 @@ async function supabaseAdmin(path, init = {}) {
   });
   const body = await response.json().catch(() => null);
   return { response, body };
+}
+
+async function supabaseRest(table, params) {
+  const search = new URLSearchParams(params);
+  const response = await fetch(
+    `${supabaseUrl.origin}/rest/v1/${table}?${search}`,
+    {
+      headers: {
+        apikey: supabaseSecretKey,
+        Authorization: `Bearer ${supabaseSecretKey}`,
+        accept: "application/json",
+      },
+    },
+  );
+  const body = await response.json().catch(() => null);
+  if (!response.ok || !Array.isArray(body)) {
+    throw new Error(`supabase_rest_${table}_failed:${response.status}`);
+  }
+  return body;
 }
 
 async function createEphemeralUser() {
@@ -167,6 +217,12 @@ async function deleteEphemeralUser() {
   );
   proof.cleanup.userDeleted = response.ok;
   if (!response.ok) proof.cleanup.userDeleteStatus = response.status;
+  const verification = await supabaseAdmin(
+    `/auth/v1/admin/users/${encodeURIComponent(ephemeralUser.id)}`,
+    { method: "GET" },
+  );
+  proof.cleanup.userDeleteVerified =
+    verification.response.status === 404 || !verification.body?.user?.id;
 }
 
 async function cancelStripeSubscription() {
@@ -174,20 +230,40 @@ async function cancelStripeSubscription() {
   try {
     const canceled = await stripe.subscriptions.cancel(stripeSubscriptionId);
     proof.cleanup.subscriptionCanceled = canceled.status === "canceled";
+    const verified = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+    proof.cleanup.subscriptionCancelVerified = verified.status === "canceled";
   } catch (error) {
-    proof.cleanup.subscriptionCancelError =
-      error instanceof Error ? error.message : String(error);
+    proof.cleanup.subscriptionCancelError = sanitizeError(
+      error instanceof Error ? error.message : String(error),
+    );
   }
+}
+
+async function closeBrowser() {
+  await browserContext?.close().catch(() => {});
+  await browser?.close();
+  proof.cleanup.browserClosed = true;
+}
+
+function cleanupSucceeded() {
+  return (
+    proof.cleanup.subscriptionCanceled === true &&
+    proof.cleanup.subscriptionCancelVerified === true &&
+    proof.cleanup.browserClosed === true &&
+    proof.cleanup.userDeleted === true &&
+    proof.cleanup.userDeleteVerified === true
+  );
 }
 
 async function appJson(page, path, init = {}) {
   return page.evaluate(
-    async ({ path, init }) => {
+    async ({ path, init, accessToken }) => {
       const response = await fetch(path, {
         ...init,
         headers: {
           accept: "application/json",
           "content-type": "application/json",
+          ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
           ...(init.headers || {}),
         },
         credentials: "same-origin",
@@ -195,7 +271,7 @@ async function appJson(page, path, init = {}) {
       const body = await response.json().catch(() => null);
       return { status: response.status, ok: response.ok, body };
     },
-    { path, init },
+    { path, init, accessToken: ephemeralAccessToken },
   );
 }
 
@@ -217,13 +293,17 @@ async function signIn(page) {
       try {
         const parsed = JSON.parse(localStorage.getItem(key) || "null");
         const user = parsed?.user ?? parsed?.currentSession?.user;
-        if (user?.id) return { id: user.id };
+        const accessToken =
+          parsed?.access_token ?? parsed?.currentSession?.access_token;
+        if (user?.id) return { id: user.id, accessToken };
       } catch {}
     }
-    return { id: null };
+    return { id: null, accessToken: null };
   });
   if (session.id !== ephemeralUser.id)
     throw new Error("ephemeral_user_login_mismatch");
+  if (!session.accessToken) throw new Error("ephemeral_access_token_missing");
+  ephemeralAccessToken = session.accessToken;
   proof.checks.ephemeralUserAuthenticated = true;
 }
 
@@ -263,14 +343,29 @@ async function completeOnboardingToPlan(page) {
 async function validateFreeState(page) {
   const status = await appJson(page, "/api/blundr/billing/status");
   if (!status.ok) throw new Error(`billing_status_failed:${status.status}`);
-  const access = status.body?.data?.access ?? status.body?.data;
-  if (access?.tier === "pro" || access?.isPro === true) {
+  const access = status.body?.data;
+  if (access?.plan !== "free" || access?.entitlementActive !== false) {
     throw new Error("new_ephemeral_user_must_start_free");
   }
   proof.checks.initialBackendFree = true;
 }
 
 async function requestAndAcceptOffer(page) {
+  const spoofed = await appJson(page, "/api/blundr/billing/offer", {
+    method: "POST",
+    body: JSON.stringify({
+      plan: "monthly",
+      priceId: "price_attacker",
+      customerId: "cus_attacker",
+      userId: "22222222-2222-4222-8222-222222222222",
+      trialEligible: false,
+      trialDays: 0,
+      entitlement: "pro",
+    }),
+  });
+  if (spoofed.status !== 400) {
+    throw new Error("paid_offer_client_authority_not_rejected");
+  }
   const offer = await appJson(page, "/api/blundr/billing/offer", {
     method: "POST",
     body: JSON.stringify({ plan: "monthly" }),
@@ -278,13 +373,47 @@ async function requestAndAcceptOffer(page) {
   if (!offer.ok || offer.body?.data?.plan !== "monthly") {
     throw new Error(`paid_offer_failed:${offer.status}`);
   }
-  const offerId = offer.body.data.id;
+  const offerData = offer.body.data;
+  if (offerData.trialEligible !== true) {
+    throw new Error("paid_offer_trial_eligible_required");
+  }
+  if (offerData.trialDays !== 7) {
+    throw new Error("paid_offer_trial_days_mismatch");
+  }
+  const conversionAt = Date.parse(offerData.disclosedConversionAt);
+  const cancelBeforeAt = Date.parse(offerData.cancelBeforeAt);
+  if (
+    !Number.isFinite(conversionAt) ||
+    !Number.isFinite(cancelBeforeAt) ||
+    conversionAt <= Date.now() ||
+    cancelBeforeAt <= Date.now()
+  ) {
+    throw new Error("paid_offer_trial_timestamps_invalid");
+  }
+  const disclosure = String(offerData.disclosure ?? "");
+  for (const pattern of [
+    /\$9\.99\/month/i,
+    /7 days free|7-day/i,
+    /payment method/i,
+    /automatically|automatic/i,
+    /cancel before/i,
+  ]) {
+    if (!pattern.test(disclosure)) {
+      throw new Error("paid_offer_disclosure_incomplete");
+    }
+  }
+  if (!String(offerData.acknowledgement ?? "").trim()) {
+    throw new Error("paid_offer_acknowledgement_missing");
+  }
+  const offerId = offerData.id;
   const accepted = await appJson(page, "/api/blundr/billing/offer/accept", {
     method: "POST",
     body: JSON.stringify({ offerId, plan: "monthly" }),
   });
   if (!accepted.ok)
     throw new Error(`paid_offer_accept_failed:${accepted.status}`);
+  proof.checks.paidOfferClientAuthorityRejected = true;
+  proof.checks.realPaidOfferValidated = true;
   proof.checks.paidOfferAccepted = true;
 }
 
@@ -333,7 +462,20 @@ async function completeStripeCheckout(page, checkoutUrl) {
   await page
     .getByRole("button", { name: /subscribe|start trial|pay/i })
     .click();
-  await page.waitForURL((url) => url.origin === baseUrl, { timeout: 60000 });
+  await page.waitForURL(
+    (url) =>
+      url.origin === stableCallbackOrigin &&
+      url.pathname === "/billing/success",
+    { timeout: 60000 },
+  );
+  const finalUrl = new URL(page.url());
+  assertNonProductionUrl(finalUrl.origin, "stripe_checkout_return_origin");
+  if (finalUrl.origin !== stableCallbackOrigin) {
+    throw new Error("stripe_checkout_return_origin_mismatch");
+  }
+  if (finalUrl.pathname !== "/billing/success") {
+    throw new Error("stripe_checkout_return_path_mismatch");
+  }
   proof.checks.hostedCheckoutCompleted = true;
 }
 
@@ -391,6 +533,7 @@ async function deliverStripeWebhookTwice() {
     request: { id: null, idempotency_key: null },
     type: "customer.subscription.updated",
   };
+  stripeSyntheticEventId = event.id;
   const payload = JSON.stringify(event);
   const header = stripe.webhooks.generateTestHeaderString({
     payload,
@@ -419,7 +562,27 @@ async function deliverStripeWebhookTwice() {
   proof.checks.stripeWebhookDuplicateIdempotent = true;
 }
 
-async function verifyRevenueCatAndBackend(page) {
+async function pollUntil(label, fn, options = {}) {
+  const timeoutMs = options.timeoutMs ?? 180000;
+  const initialDelayMs = options.initialDelayMs ?? 3000;
+  const maxDelayMs = options.maxDelayMs ?? 10000;
+  const deadline = Date.now() + timeoutMs;
+  let delayMs = initialDelayMs;
+  let attempts = 0;
+  while (Date.now() < deadline) {
+    attempts += 1;
+    const result = await fn();
+    if (result?.ok) {
+      proof.evidence[`${label}PollAttempts`] = attempts;
+      return result;
+    }
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    delayMs = Math.min(maxDelayMs, Math.round(delayMs * 1.5));
+  }
+  throw new Error(`${label}_timeout`);
+}
+
+async function readRevenueCatProEntitlement() {
   const rcResponse = await fetch(
     `https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(ephemeralUser.id)}`,
     {
@@ -432,24 +595,86 @@ async function verifyRevenueCatAndBackend(page) {
   if (!rcResponse.ok)
     throw new Error(`revenuecat_v1_subscriber_failed:${rcResponse.status}`);
   const body = await rcResponse.json();
-  const entitlement = body?.subscriber?.entitlements?.pro;
-  if (
-    !entitlement?.expires_date ||
-    Date.parse(entitlement.expires_date) <= Date.now()
-  ) {
-    throw new Error("revenuecat_pro_entitlement_not_active");
-  }
-  proof.checks.revenueCatSubscriberRecognized = true;
-  proof.checks.revenueCatProEntitlement = true;
+  const entitlement = body?.subscriber?.entitlements?.[revenueCatEntitlementId];
+  const expiresAt = Date.parse(entitlement?.expires_date);
+  return {
+    ok: Boolean(Number.isFinite(expiresAt) && expiresAt > Date.now()),
+  };
+}
 
+async function readBackendProState(page) {
   const status = await appJson(page, "/api/blundr/billing/status");
   if (!status.ok)
     throw new Error(`post_purchase_billing_status_failed:${status.status}`);
-  const access = status.body?.data?.access ?? status.body?.data;
-  if (access?.tier !== "pro" && access?.isPro !== true) {
-    throw new Error("backend_pro_state_not_resolved");
-  }
+  const access = status.body?.data;
+  return {
+    ok:
+      access?.plan === "pro" &&
+      access?.entitlementActive === true &&
+      access?.entitlementSource === "revenuecat",
+  };
+}
+
+async function verifyRevenueCatAndBackend(page) {
+  await pollUntil("revenuecatProEntitlement", readRevenueCatProEntitlement);
+  proof.checks.revenueCatSubscriberRecognized = true;
+  proof.checks.revenueCatProEntitlement = true;
+
+  await pollUntil("backendTrustedProState", () => readBackendProState(page));
   proof.checks.backendProState = true;
+}
+
+async function verifyProviderLedgers() {
+  if (!stripeSyntheticEventId) {
+    throw new Error("stripe_synthetic_event_missing_for_ledger_check");
+  }
+  const stripeEvents = await supabaseRest("blundr_billing_provider_events", {
+    select: "processing_status",
+    provider: "eq.stripe",
+    billing_environment: "eq.test",
+    provider_event_id: `eq.${stripeSyntheticEventId}`,
+  });
+  if (
+    stripeEvents.length !== 1 ||
+    stripeEvents[0]?.processing_status !== "processed"
+  ) {
+    throw new Error("stripe_provider_event_idempotency_not_proven");
+  }
+  const revenueCatEvents = await supabaseRest(
+    "blundr_billing_provider_events",
+    {
+      select: "processing_status,normalized_facts",
+      provider: "eq.revenuecat",
+      billing_environment: "eq.test",
+      processing_status: "eq.processed",
+      "normalized_facts->>appUserId": `eq.${ephemeralUser.id}`,
+    },
+  );
+  if (revenueCatEvents.length < 1) {
+    throw new Error("revenuecat_webhook_provider_event_not_found");
+  }
+  const entitlements = await supabaseRest("blundr_trusted_entitlements", {
+    select: "active,source_provider,expires_at,last_provider_event_at,metadata",
+    user_id: `eq.${ephemeralUser.id}`,
+    billing_environment: "eq.test",
+    entitlement_identifier: "eq.pro",
+  });
+  const entitlement = entitlements[0];
+  if (
+    entitlements.length !== 1 ||
+    entitlement?.active !== true ||
+    entitlement?.source_provider !== "revenuecat" ||
+    !entitlement?.last_provider_event_at ||
+    Date.parse(entitlement?.expires_at) <= Date.now()
+  ) {
+    throw new Error("revenuecat_trusted_entitlement_not_webhook_proven");
+  }
+  if (entitlement?.metadata?.reconciliation === true) {
+    throw new Error("revenuecat_entitlement_is_reconciliation_only");
+  }
+  proof.checks.stripeProviderEventLedgerExactlyOnce = true;
+  proof.checks.revenueCatWebhookProviderEventProcessed = true;
+  proof.checks.revenueCatTrustedEntitlementWebhookCreated = true;
 }
 
 async function verifyPortal(page) {
@@ -470,9 +695,12 @@ async function verifyPortal(page) {
   proof.checks.portalClientCustomerRejected = true;
 }
 
+let mainError = null;
+
 try {
   assertNonProductionUrl(baseUrl, "preview_url");
   assertNonProductionUrl(stableCallbackHost, "stable_callback_host");
+  await verifyPreviewSha("before");
   await verifyStableCallbackHostSha("before");
   if (required("STRIPE_SECRET_KEY").startsWith("sk_live_")) {
     throw new Error("live_stripe_key_forbidden");
@@ -490,8 +718,8 @@ try {
 
   ephemeralUser = await createEphemeralUser();
   browser = await chromium.launch();
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  browserContext = await browser.newContext();
+  const page = await browserContext.newPage();
   await signIn(page);
   await completeOnboardingToPlan(page);
   await validateFreeState(page);
@@ -503,20 +731,43 @@ try {
   await deliverStripeWebhookTwice();
   await validateFreeState(page);
   await verifyRevenueCatAndBackend(page);
+  await verifyProviderLedgers();
   await verifyPortal(page);
+  await verifyPreviewSha("after");
   await verifyStableCallbackHostSha("after");
-  await context.close();
-
-  proof.status = "passed";
-  proof.acceptanceEligible = true;
 } catch (error) {
+  mainError = error;
   proof.status = "failed";
-  proof.error = error instanceof Error ? error.message : String(error);
-  throw error;
+  proof.error = sanitizeError(
+    error instanceof Error ? error.message : String(error),
+  );
 } finally {
   proof.cleanup.attempted = true;
-  await cancelStripeSubscription();
-  await browser?.close().catch(() => {});
-  await deleteEphemeralUser();
+  await cancelStripeSubscription().catch((error) => {
+    proof.cleanup.subscriptionCancelError = sanitizeError(
+      error instanceof Error ? error.message : String(error),
+    );
+  });
+  await closeBrowser().catch((error) => {
+    proof.cleanup.browserCloseError = sanitizeError(
+      error instanceof Error ? error.message : String(error),
+    );
+  });
+  await deleteEphemeralUser().catch((error) => {
+    proof.cleanup.userDeleteError = sanitizeError(
+      error instanceof Error ? error.message : String(error),
+    );
+  });
+  proof.cleanup.completed = cleanupSucceeded();
+  if (!mainError && proof.cleanup.completed) {
+    proof.status = "passed";
+    proof.acceptanceEligible = true;
+  } else if (!mainError && !proof.cleanup.completed) {
+    proof.status = "failed";
+    proof.error = "cleanup_failed";
+  }
   await writeProof();
 }
+
+if (mainError) throw mainError;
+if (proof.status !== "passed") throw new Error(proof.error ?? "cleanup_failed");

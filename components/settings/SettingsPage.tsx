@@ -1278,7 +1278,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
                     </button>
                   ) : (
                     <Link
-                      href="/onboarding/plan"
+                      href="/billing/upgrade"
                       className="inline-flex min-h-10 items-center rounded-lg bg-green-800 px-3 text-sm font-black text-white"
                     >
                       Upgrade

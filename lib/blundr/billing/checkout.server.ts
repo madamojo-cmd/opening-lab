@@ -13,10 +13,6 @@ import {
   createSupabaseBillingRepository,
   type BillingRepository,
 } from "./billingRepository.server";
-import {
-  attachCheckoutSessionToPaidOffer,
-  claimAcceptedPaidOffer,
-} from "./paidOffer.server";
 import { createStripeClient } from "./stripeClient.server";
 
 type CheckoutStripe = Pick<Stripe, "customers" | "checkout">;
@@ -30,6 +26,10 @@ type CheckoutTrialAuthority = {
   eligible: boolean;
   reservationId: string | null;
 };
+
+async function loadPaidOfferAuthority() {
+  return import("./paidOffer.server");
+}
 
 function text(value: unknown): string {
   return String(value ?? "").trim();
@@ -66,10 +66,15 @@ export async function createBillingCheckoutSession(input: {
       ? (input.body as Record<string, unknown>)
       : {};
   if (invalidClientAuthority(body)) {
-    return { ok: false, status: 400, error: "client_billing_authority_rejected" };
+    return {
+      ok: false,
+      status: 400,
+      error: "client_billing_authority_rejected",
+    };
   }
   const plan = priceForBillingPlan(input.config, body.plan);
-  if (!plan.ok) return { ok: false, status: 400, error: "invalid_billing_plan" };
+  if (!plan.ok)
+    return { ok: false, status: 400, error: "invalid_billing_plan" };
 
   const repository = input.repository ?? createSupabaseBillingRepository();
   const stripe = input.stripe ?? createStripeClient(input.config);
@@ -90,19 +95,29 @@ export async function createBillingCheckoutSession(input: {
       return customer.id;
     },
   });
-  if (!mapping.stripeCustomerId || mapping.revenueCatAppUserId !== input.user.userId) {
+  if (
+    !mapping.stripeCustomerId ||
+    mapping.revenueCatAppUserId !== input.user.userId
+  ) {
     return { ok: false, status: 503, error: "billing_customer_unavailable" };
   }
 
-  const acceptedOffer = input.requireAcceptedOffer
-    ? await claimAcceptedPaidOffer({
+  const paidOfferAuthority = input.requireAcceptedOffer
+    ? await loadPaidOfferAuthority()
+    : null;
+  const acceptedOffer = paidOfferAuthority
+    ? await paidOfferAuthority.claimAcceptedPaidOffer({
         userId: input.user.userId,
         environment: input.config.environment,
         plan: plan.plan,
       })
     : null;
   if (input.requireAcceptedOffer && !acceptedOffer) {
-    return { ok: false, status: 409, error: "paid_offer_acknowledgement_required" };
+    return {
+      ok: false,
+      status: 409,
+      error: "paid_offer_acknowledgement_required",
+    };
   }
   const trial: CheckoutTrialAuthority = acceptedOffer
     ? {
@@ -142,7 +157,7 @@ export async function createBillingCheckoutSession(input: {
     return { ok: false, status: 503, error: "checkout_session_unavailable" };
   }
   if (input.requireAcceptedOffer && trial.offerId) {
-    await attachCheckoutSessionToPaidOffer({
+    await paidOfferAuthority?.attachCheckoutSessionToPaidOffer({
       offerId: trial.offerId,
       checkoutSessionId: session.id,
     });
@@ -169,7 +184,9 @@ export async function createBillingPortalSession(input: {
   config: BillingConfig;
   repository?: BillingRepository;
   stripe?: Pick<Stripe, "billingPortal">;
-}): Promise<{ ok: true; url: string } | { ok: false; status: number; error: string }> {
+}): Promise<
+  { ok: true; url: string } | { ok: false; status: number; error: string }
+> {
   if (!input.user?.isAuthenticated || !input.user.accessToken) {
     return { ok: false, status: 401, error: "authentication_required" };
   }

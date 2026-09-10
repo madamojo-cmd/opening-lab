@@ -92,7 +92,10 @@ export async function processRevenueCatWebhook(input: {
   body: unknown;
   expectedEnvironment: BillingEnvironment;
   repository?: BillingRepository;
-}): Promise<{ ok: true; duplicate: boolean; entitlementChanged: boolean } | { ok: false; status: number; error: string }> {
+}): Promise<
+  | { ok: true; duplicate: boolean; entitlementChanged: boolean }
+  | { ok: false; status: number; error: string }
+> {
   const body =
     input.body && typeof input.body === "object"
       ? (input.body as Record<string, unknown>)
@@ -108,14 +111,25 @@ export async function processRevenueCatWebhook(input: {
   if (!eventId || !type || !appUserId || !environment) {
     return { ok: false, status: 400, error: "invalid_revenuecat_event" };
   }
-  if (environment !== input.expectedEnvironment && !(environment === "sandbox" && input.expectedEnvironment === "test")) {
+  if (
+    environment !== input.expectedEnvironment &&
+    !(environment === "sandbox" && input.expectedEnvironment === "test")
+  ) {
     return { ok: false, status: 202, error: "revenuecat_environment_ignored" };
   }
+  const billingEnvironment =
+    environment === "sandbox" && input.expectedEnvironment === "test"
+      ? "test"
+      : environment;
   if (!entitlementMatches(event)) {
     return { ok: false, status: 202, error: "revenuecat_entitlement_ignored" };
   }
   if (!SUPABASE_UUID_PATTERN.test(appUserId)) {
-    return { ok: false, status: 400, error: "revenuecat_app_user_id_not_supabase_uuid" };
+    return {
+      ok: false,
+      status: 400,
+      error: "revenuecat_app_user_id_not_supabase_uuid",
+    };
   }
   const originalAppUserId = text(event.original_app_user_id);
   if (
@@ -124,16 +138,24 @@ export async function processRevenueCatWebhook(input: {
     containsForeignSupabaseUuid(event.aliases, appUserId) ||
     containsForeignSupabaseUuid(event.transferred_from, appUserId)
   ) {
-    return { ok: false, status: 202, error: "revenuecat_transfer_requires_manual_reconciliation" };
+    return {
+      ok: false,
+      status: 202,
+      error: "revenuecat_transfer_requires_manual_reconciliation",
+    };
   }
 
   const repository = input.repository ?? createSupabaseBillingRepository();
   if (!(await repository.userExists(appUserId))) {
-    return { ok: false, status: 400, error: "revenuecat_app_user_id_not_found" };
+    return {
+      ok: false,
+      status: 400,
+      error: "revenuecat_app_user_id_not_found",
+    };
   }
   const ledger = await repository.beginProviderEvent({
     provider: "revenuecat",
-    environment,
+    environment: billingEnvironment,
     eventId,
     eventType: type,
     eventOccurredAt:
@@ -162,7 +184,7 @@ export async function processRevenueCatWebhook(input: {
     new Date().toISOString();
   await repository.upsertSubscription({
     userId: appUserId,
-    environment,
+    environment: billingEnvironment,
     provider: "revenuecat",
     providerCustomerId: appUserId,
     providerSubscriptionId: text(event.original_transaction_id) || eventId,
@@ -170,7 +192,10 @@ export async function processRevenueCatWebhook(input: {
     providerPriceId: text(event.product_id) || null,
     planInterval: null,
     status: type.toLowerCase(),
-    trialStartAt: type === "INITIAL_PURCHASE" && event.period_type === "TRIAL" ? eventAt : null,
+    trialStartAt:
+      type === "INITIAL_PURCHASE" && event.period_type === "TRIAL"
+        ? eventAt
+        : null,
     trialEndAt: event.period_type === "TRIAL" ? expirationAt : null,
     currentPeriodEndAt: expirationAt,
     cancelAtPeriodEnd: type === "CANCELLATION",
@@ -179,7 +204,7 @@ export async function processRevenueCatWebhook(input: {
   });
   await repository.upsertTrustedEntitlement({
     userId: appUserId,
-    environment,
+    environment: billingEnvironment,
     active: eventActive(type, expirationAt),
     expiresAt: expirationAt,
     lastVerifiedAt: new Date().toISOString(),
@@ -197,7 +222,7 @@ export async function processRevenueCatWebhook(input: {
   }
   await repository.markProviderEvent({
     provider: "revenuecat",
-    environment,
+    environment: billingEnvironment,
     eventId,
     status: "processed",
   });

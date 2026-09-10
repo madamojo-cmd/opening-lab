@@ -220,6 +220,36 @@ test("RevenueCat controls pro entitlement with duplicate and cancellation preced
   assert.equal(repository.entitlements.at(-1)?.active, true);
 });
 
+test("RevenueCat sandbox webhooks write canonical test billing authority", async () => {
+  const repository = createInMemoryBillingRepository({ knownUsers: [userId] });
+  const result = await processRevenueCatWebhook({
+    body: {
+      event: {
+        id: "rc_sandbox_test_env",
+        type: "INITIAL_PURCHASE",
+        app_user_id: userId,
+        entitlement_ids: ["pro"],
+        environment: "SANDBOX",
+        event_timestamp_ms: 1_800_000_000_000,
+        expiration_at_ms: 1_800_604_800_000,
+        product_id: "stripe_monthly",
+        original_transaction_id: "sub_rc_sandbox",
+        period_type: "TRIAL",
+      },
+    },
+    expectedEnvironment: "test",
+    repository,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(repository.subscriptions.at(-1)?.environment, "test");
+  assert.equal(repository.entitlements.at(-1)?.environment, "test");
+  assert.equal(
+    repository.events.has("revenuecat:test:rc_sandbox_test_env"),
+    true,
+  );
+});
+
 test("RevenueCat enforces pro entitlement, Supabase UUID identity, environment isolation, and transfer safety", async () => {
   const repository = createInMemoryBillingRepository({ knownUsers: [userId] });
   const event = {

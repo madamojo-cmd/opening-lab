@@ -24,7 +24,7 @@ function createOfferFixture(plan) {
     trialDays: 7,
     conversionTimestamp: "2026-09-11T17:00:00.000Z",
     cancelBeforeTimestamp: "2026-09-11T16:59:59.000Z",
-    disclosure: `7 days free, then ${annual ? "$69.99/year" : "$9.99/month"} plus applicable taxes beginning September 11, 2026 at 5:00 PM UTC. Renews automatically until canceled. Cancel before September 11, 2026 at 4:59 PM UTC to avoid the first subscription charge.`,
+    disclosure: `7 days free, then ${annual ? "$69.99/year" : "$9.99/month"} plus applicable taxes beginning September 11, 2026 at 5:00 PM UTC. Requires a payment method. Renews automatically until canceled. Cancel before September 11, 2026 at 4:59 PM UTC to avoid the first subscription charge.`,
     acknowledgement:
       "I understand that my 7-day Blundr Pro trial requires a payment method and will automatically convert to the plan I selected on the date shown above unless I cancel before then.",
   };
@@ -52,6 +52,93 @@ const onboardingValues = {
   review: null,
 };
 
+const billingReturnRouteChecks = [
+  {
+    label: "billing-success",
+    path: "/billing/success?session_id=cs_wave2b_redacted",
+    pathname: "/billing/success",
+    heading: /Subscription confirmation is being processed\./i,
+    requiredText: [/provider reconciliation/i, /Settings -> Billing/i],
+  },
+  {
+    label: "billing-cancel",
+    path: "/billing/cancel",
+    pathname: "/billing/cancel",
+    heading: /Checkout was canceled\./i,
+    requiredText: [/No subscription change was made/i, /Plan selection/i],
+  },
+];
+
+const protectedRouteChecks = [
+  {
+    label: "settings-billing",
+    path: "/settings#billing",
+    pathname: "/settings",
+    heading: /Account settings\./i,
+    scopeSelector: "#billing",
+    requiredText: [
+      /Manage your Blundr plan from trusted billing state\./i,
+      /Current plan: Free/i,
+      /Subscription terms/i,
+      /Upgrade/i,
+    ],
+  },
+  {
+    label: "train",
+    path: "/train",
+    pathname: "/train",
+    heading:
+      /Choose an opening\.|Loading your openings\.|Opening list unavailable\./i,
+    requiredText: [
+      /Unlocked openings only|checking which openings are ready|couldn't load your saved repertoire/i,
+    ],
+  },
+  {
+    label: "daily",
+    path: "/daily",
+    pathname: "/daily",
+    heading: /Your Daily deck\./i,
+    requiredText: [/First try counts/i, /Review · Daily Blundr/i],
+  },
+  {
+    label: "review",
+    path: "/review",
+    pathname: "/review",
+    heading: /Review what needs to stick\./i,
+    requiredText: [/Review queue/i, /Minigames · separate from Daily/i],
+  },
+  {
+    label: "repertoire",
+    path: "/repertoire",
+    pathname: "/repertoire",
+    heading: /Your opening library\./i,
+    requiredText: [/Repertoire/i, /Tempo Cache/i],
+  },
+  {
+    label: "progress",
+    path: "/progress",
+    pathname: "/progress",
+    heading: /Momentum, without noise\./i,
+    requiredText: [
+      /Daily rings/i,
+      /Tempo/i,
+      /Battery/i,
+      /Daily Blundr/i,
+      /STREAK & CONSISTENCY/i,
+    ],
+  },
+  {
+    label: "minigames",
+    path: "/minigames",
+    pathname: "/minigames",
+    heading: /Review what needs to stick\./i,
+    requiredText: [
+      /Minigames · separate from Daily/i,
+      /production practice games/i,
+    ],
+  },
+];
+
 function redactText(value) {
   let text = String(value ?? "");
   for (const forbidden of [qaEmail, qaPassword, qaUserId].filter(Boolean)) {
@@ -73,6 +160,8 @@ function summarizeOnboardingBody(body) {
     ok: body?.ok === true,
     step: typeof body?.data?.step === "string" ? body.data.step : null,
     completed: body?.data?.completed === true,
+    planIntent:
+      typeof body?.data?.planIntent === "string" ? body.data.planIntent : null,
     errorCode: typeof body?.error?.code === "string" ? body.error.code : null,
   };
 }
@@ -194,15 +283,17 @@ async function installRoutes(page) {
           data: {
             plan: "free",
             entitlementActive: false,
-            entitlementSource: "none",
-            trialActive: false,
+            entitlementSource: null,
+            trialStatus: "none",
             expiresAt: null,
-            currentPeriodEnd: null,
+            currentPeriodEndAt: null,
             cancelAtPeriodEnd: false,
-            dailyCardLimit: 5,
-            reviewCompletionLimit: 5,
-            activeOpeningLimit: 3,
-            premiumInsights: false,
+            limits: {
+              dailyBlundrCards: 5,
+              reviewCompletionsPerDay: 5,
+              activeOpenings: 3,
+              premiumInsights: false,
+            },
           },
         }),
       });
@@ -267,6 +358,7 @@ function installPageDiagnostics(page) {
     "/api/blundr/billing/offer",
     "/api/blundr/billing/checkout",
     "/api/blundr/billing/status",
+    "/billing/upgrade",
     "/api/blundr/billing/portal",
   ]);
   function pathFor(url) {
@@ -399,6 +491,19 @@ async function readOnboardingState(page, accessToken) {
   };
 }
 
+async function waitForOnboardingState(page, accessToken, predicate, label) {
+  const deadline = Date.now() + 15000;
+  let latest = null;
+  while (Date.now() < deadline) {
+    latest = await readOnboardingState(page, accessToken);
+    if (latest.ok && predicate(latest)) return latest;
+    await page.waitForTimeout(250);
+  }
+  throw new Error(
+    `Onboarding state did not reach ${label}; latest step is ${latest?.step ?? "unknown"}, completed=${latest?.completed ?? "unknown"}.`,
+  );
+}
+
 async function patchOnboardingStep(page, accessToken, step) {
   const result = await authenticatedJson(
     page,
@@ -472,6 +577,72 @@ async function ensureOnboardingPlanState(page, accessToken, diagnostics) {
   }
   diagnostics.finalOnboarding = state;
   return state;
+}
+
+async function clickExactFreePlanCard(page) {
+  const freeCard = page
+    .locator("button")
+    .filter({ has: page.getByText("Blundr Free", { exact: true }) })
+    .filter({ has: page.getByText("Continue with Free", { exact: true }) });
+  const count = await freeCard.count();
+  if (count !== 1) {
+    throw new Error(`Expected exactly one Free plan card, found ${count}.`);
+  }
+  await freeCard.click();
+}
+
+async function completeFreeOnboarding(page, accessToken, viewport) {
+  await page.goto(`${baseUrl}/onboarding/plan`, {
+    waitUntil: "domcontentloaded",
+  });
+  await page.waitForLoadState("networkidle").catch(() => {});
+  await expect(
+    page.getByRole("heading", { name: /choose how you want to train/i }),
+  ).toBeVisible({ timeout: 15000 });
+  await clickExactFreePlanCard(page);
+  const freeContinue = page.getByRole("button", {
+    name: "Continue with Free",
+    exact: true,
+  });
+  await expect(freeContinue).toBeVisible({ timeout: 15000 });
+  await expect(freeContinue).toBeEnabled();
+  await freeContinue.click();
+  if (/stripe\.com/i.test(page.url())) {
+    throw new Error("Free path must not launch Stripe.");
+  }
+  const readyState = await waitForOnboardingState(
+    page,
+    accessToken,
+    (state) =>
+      state.step === "ready" &&
+      state.completed === false &&
+      state.planIntent === "free",
+    "ready with Free plan intent",
+  );
+  if (readyState.completed) {
+    throw new Error(
+      "Free plan save must not skip the ready confirmation step.",
+    );
+  }
+  await expect(
+    page.getByRole("heading", { name: /Your trainer is ready\./i }),
+  ).toBeVisible({ timeout: 15000 });
+  const startTraining = page.getByRole("button", {
+    name: "Start training",
+    exact: true,
+  });
+  await expect(startTraining).toBeVisible({ timeout: 15000 });
+  await startTraining.click();
+  await waitForOnboardingState(
+    page,
+    accessToken,
+    (state) => state.completed === true && state.step === "ready",
+    "completed ready state",
+  );
+  if (/stripe\.com/i.test(page.url())) {
+    throw new Error("Completing Free onboarding must not launch Stripe.");
+  }
+  await snapshot(page, viewport, "onboarding-free-completed");
 }
 
 async function writePaywallDiagnostics(
@@ -598,6 +769,55 @@ export async function expectVisibleRequiredText(
     .toBe(true);
 }
 
+async function waitForBillingOfferResponse(page, plan, action) {
+  const responsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      url.origin === baseUrl &&
+      url.pathname === "/api/blundr/billing/offer" &&
+      response.request().method() === "POST"
+    );
+  });
+  await action();
+  const response = await responsePromise;
+  if (!response.ok()) {
+    throw new Error(
+      `${plan} offer response failed with HTTP ${response.status()}.`,
+    );
+  }
+  const body = await response.json();
+  if (
+    body?.ok !== true ||
+    body?.data?.plan !== plan ||
+    body.data.id !== createOfferFixture(plan).id
+  ) {
+    throw new Error(
+      `${plan} offer response did not match the billing API contract.`,
+    );
+  }
+  return body.data;
+}
+
+const acknowledgementName =
+  /I understand that my 7-day Blundr Pro trial requires a payment method and will automatically convert to the plan I selected/i;
+
+async function assertCheckoutRequestContainsOnlyPlan(request, plan) {
+  const body = request.postDataJSON();
+  const keys = Object.keys(body ?? {}).sort();
+  if (keys.join(",") !== "plan" || body.plan !== plan) {
+    throw new Error(
+      "Checkout request must contain only the trusted plan enum.",
+    );
+  }
+  if (
+    /price|amount|user|uuid|customer|entitlement|subscription|trial/i.test(
+      JSON.stringify(body),
+    )
+  ) {
+    throw new Error("Checkout request includes client billing authority.");
+  }
+}
+
 async function validatePaywall(page, viewport, diagnostics) {
   const sessionSummary = await readBrowserSession(page);
   if (
@@ -648,6 +868,11 @@ async function validatePaywall(page, viewport, diagnostics) {
       `QA account is not at onboarding plan step; current step is ${currentState.step ?? "unknown"}.`,
     );
   }
+  await validateRouteChecks(page, viewport, billingReturnRouteChecks);
+  await page.goto(`${baseUrl}/onboarding/plan`, {
+    waitUntil: "domcontentloaded",
+  });
+  await page.waitForLoadState("networkidle").catch(() => {});
   await expect(
     page.getByRole("heading", { name: /choose how you want to train/i }),
   ).toBeVisible();
@@ -667,40 +892,13 @@ async function validatePaywall(page, viewport, diagnostics) {
   await expect(monthly).not.toHaveAttribute("aria-pressed", "true");
   await expect(annual).not.toHaveAttribute("aria-pressed", "true");
 
-  async function waitForOfferResponse(plan, action) {
-    const responsePromise = page.waitForResponse((response) => {
-      const url = new URL(response.url());
-      return (
-        url.origin === baseUrl &&
-        url.pathname === "/api/blundr/billing/offer" &&
-        response.request().method() === "POST"
-      );
-    });
-    await action();
-    const response = await responsePromise;
-    if (!response.ok()) {
-      throw new Error(
-        `${plan} offer response failed with HTTP ${response.status()}.`,
-      );
-    }
-    const body = await response.json();
-    if (
-      body?.ok !== true ||
-      body?.data?.plan !== plan ||
-      body.data.id !== createOfferFixture(plan).id
-    ) {
-      throw new Error(
-        `${plan} offer response did not match the billing API contract.`,
-      );
-    }
-    return body.data;
-  }
-
-  const acknowledgementName =
-    /I understand that my 7-day Blundr Pro trial requires a payment method and will automatically convert to the plan I selected/i;
-  const monthlyOffer = await waitForOfferResponse("monthly", async () => {
-    await monthly.click();
-  });
+  const monthlyOffer = await waitForBillingOfferResponse(
+    page,
+    "monthly",
+    async () => {
+      await monthly.click();
+    },
+  );
   const acknowledgement = page.getByRole("checkbox", {
     name: acknowledgementName,
   });
@@ -724,9 +922,13 @@ async function validatePaywall(page, viewport, diagnostics) {
   await expect(checkout).toBeEnabled();
   await snapshot(page, viewport, "onboarding-paywall-monthly");
 
-  const annualOffer = await waitForOfferResponse("annual", async () => {
-    await annual.click();
-  });
+  const annualOffer = await waitForBillingOfferResponse(
+    page,
+    "annual",
+    async () => {
+      await annual.click();
+    },
+  );
   await expect(acknowledgement).toBeVisible();
   await expect(acknowledgement).not.toBeChecked();
   await expect(checkout).toBeDisabled();
@@ -745,96 +947,10 @@ async function validatePaywall(page, viewport, diagnostics) {
   await expect(checkout).toBeEnabled();
   await snapshot(page, viewport, "onboarding-paywall-annual");
 
-  await page.getByRole("button", { name: /continue with free/i }).click();
-  await page.waitForTimeout(300);
-  if (/stripe\.com/i.test(page.url())) {
-    throw new Error("Free path must not launch Stripe.");
-  }
+  await completeFreeOnboarding(page, sessionSummary.accessToken, viewport);
 }
 
-async function validateRoutes(page, viewport) {
-  const routeChecks = [
-    {
-      label: "billing-success",
-      path: "/billing/success?session_id=cs_wave2b_redacted",
-      pathname: "/billing/success",
-      heading: /Subscription confirmation is being processed\./i,
-      requiredText: [/provider reconciliation/i, /Settings -> Billing/i],
-    },
-    {
-      label: "billing-cancel",
-      path: "/billing/cancel",
-      pathname: "/billing/cancel",
-      heading: /Checkout was canceled\./i,
-      requiredText: [/No subscription change was made/i, /Plan selection/i],
-    },
-    {
-      label: "settings-billing",
-      path: "/settings#billing",
-      pathname: "/settings",
-      heading: /Account settings\./i,
-      scopeSelector: "#billing",
-      requiredText: [
-        /Manage your Blundr plan from trusted billing state\./i,
-        /Current plan: Free/i,
-        /Subscription terms/i,
-      ],
-    },
-    {
-      label: "train",
-      path: "/train",
-      pathname: "/train",
-      heading:
-        /Choose an opening\.|Loading your openings\.|Opening list unavailable\./i,
-      requiredText: [
-        /Unlocked openings only|checking which openings are ready|couldn't load your saved repertoire/i,
-      ],
-    },
-    {
-      label: "daily",
-      path: "/daily",
-      pathname: "/daily",
-      heading: /Your Daily deck\./i,
-      requiredText: [/First try counts/i, /Review · Daily Blundr/i],
-    },
-    {
-      label: "review",
-      path: "/review",
-      pathname: "/review",
-      heading: /Review what needs to stick\./i,
-      requiredText: [/Review queue/i, /Minigames · separate from Daily/i],
-    },
-    {
-      label: "repertoire",
-      path: "/repertoire",
-      pathname: "/repertoire",
-      heading: /Your opening library\./i,
-      requiredText: [/Repertoire/i, /Tempo Cache/i],
-    },
-    {
-      label: "progress",
-      path: "/progress",
-      pathname: "/progress",
-      heading: /Momentum, without noise\./i,
-      requiredText: [
-        /Daily rings/i,
-        /Tempo/i,
-        /Battery/i,
-        /Daily Blundr/i,
-        /STREAK & CONSISTENCY/i,
-      ],
-    },
-    {
-      label: "minigames",
-      path: "/minigames",
-      pathname: "/minigames",
-      heading: /Review what needs to stick\./i,
-      requiredText: [
-        /Minigames · separate from Daily/i,
-        /production practice games/i,
-      ],
-    },
-  ];
+async function validateRouteChecks(page, viewport, routeChecks) {
   for (const check of routeChecks) {
     const response = await page.goto(`${baseUrl}${check.path}`, {
       waitUntil: "domcontentloaded",
@@ -876,8 +992,96 @@ async function validateRoutes(page, viewport) {
   }
 }
 
+async function validateSettingsUpgrade(page, viewport) {
+  await page.goto(`${baseUrl}/settings#billing`, {
+    waitUntil: "domcontentloaded",
+  });
+  await page.waitForLoadState("networkidle").catch(() => {});
+  const billingSection = page.locator("#billing");
+  await expect(billingSection).toBeVisible({ timeout: 15000 });
+  const upgrade = billingSection.getByRole("link", {
+    name: "Upgrade",
+    exact: true,
+  });
+  await expect(upgrade).toBeVisible({ timeout: 15000 });
+  await upgrade.click();
+  await page.waitForURL((url) => url.pathname === "/billing/upgrade", {
+    timeout: 15000,
+  });
+  if (new URL(page.url()).pathname !== "/billing/upgrade") {
+    throw new Error("Settings Upgrade did not open /billing/upgrade.");
+  }
+  await expect(
+    page.getByRole("heading", { name: "Upgrade to Blundr Pro." }),
+  ).toBeVisible({ timeout: 15000 });
+  await expect(
+    page.getByRole("button", { name: /continue with free/i }),
+  ).toHaveCount(0);
+  await expect(page.getByText("$9.99/month after trial")).toBeVisible();
+  await expect(page.getByText("$69.99/year after trial")).toBeVisible();
+
+  const monthly = page.getByRole("button", { name: /monthly/i }).first();
+  const annual = page
+    .getByRole("button", { name: /annual|best value/i })
+    .first();
+  const monthlyOffer = await waitForBillingOfferResponse(
+    page,
+    "monthly",
+    async () => {
+      await monthly.click();
+    },
+  );
+  if (!monthlyOffer.disclosure.includes("$9.99/month")) {
+    throw new Error("Upgrade monthly offer disclosure mismatch.");
+  }
+  const acknowledgement = page.getByRole("checkbox", {
+    name: acknowledgementName,
+  });
+  const checkout = page.getByRole("button", { name: /start 7-day pro trial/i });
+  await expect(acknowledgement).toBeVisible({ timeout: 15000 });
+  await expect(acknowledgement).not.toBeChecked();
+  await expect(checkout).toBeDisabled();
+  await acknowledgement.check();
+  await expect(checkout).toBeEnabled();
+
+  await waitForBillingOfferResponse(page, "annual", async () => {
+    await annual.click();
+  });
+  await expect(acknowledgement).not.toBeChecked();
+  await expect(checkout).toBeDisabled();
+  await acknowledgement.check();
+  await expect(checkout).toBeEnabled();
+
+  await waitForBillingOfferResponse(page, "monthly", async () => {
+    await monthly.click();
+  });
+  await acknowledgement.check();
+  const checkoutRequestPromise = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return (
+      url.origin === baseUrl &&
+      url.pathname === "/api/blundr/billing/checkout" &&
+      request.method() === "POST"
+    );
+  });
+  await checkout.click();
+  await assertCheckoutRequestContainsOnlyPlan(
+    await checkoutRequestPromise,
+    "monthly",
+  );
+  await page.waitForURL((url) => url.pathname === "/billing/success", {
+    timeout: 15000,
+  });
+  await snapshot(page, viewport, "settings-upgrade");
+}
+
+async function validateRoutes(page, viewport) {
+  await validateRouteChecks(page, viewport, protectedRouteChecks);
+  await validateSettingsUpgrade(page, viewport);
+}
+
 async function validateKeyboard(page) {
-  await page.goto(`${baseUrl}/onboarding/plan`, {
+  await page.goto(`${baseUrl}/billing/upgrade`, {
     waitUntil: "domcontentloaded",
   });
   await page.keyboard.press("Tab");

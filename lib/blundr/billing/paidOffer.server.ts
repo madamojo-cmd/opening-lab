@@ -52,20 +52,49 @@ function price(plan: BillingPlan) {
       };
 }
 
+function invalidClientAuthority(body: Record<string, unknown>): boolean {
+  return [
+    "priceId",
+    "price_id",
+    "customer",
+    "customerId",
+    "customer_id",
+    "app_user_id",
+    "appUserId",
+    "userId",
+    "user_id",
+    "trial",
+    "trialEligible",
+    "trialDays",
+    "entitlement",
+  ].some((key) => key in body);
+}
+
 export async function createPaidOffer(input: {
   user: CurrentBlundrUser | null;
   plan: unknown;
   config: BillingConfig;
   now?: Date;
 }): Promise<
-  | { ok: true; offer: PaidOffer }
-  | { ok: false; status: number; error: string }
+  { ok: true; offer: PaidOffer } | { ok: false; status: number; error: string }
 > {
   if (!input.user?.isAuthenticated || !input.user.accessToken) {
     return { ok: false, status: 401, error: "authentication_required" };
   }
-  const plan = priceForBillingPlan(input.config, input.plan);
-  if (!plan.ok) return { ok: false, status: 400, error: "invalid_billing_plan" };
+  const body =
+    input.plan && typeof input.plan === "object"
+      ? (input.plan as Record<string, unknown>)
+      : { plan: input.plan };
+  if (invalidClientAuthority(body)) {
+    return {
+      ok: false,
+      status: 400,
+      error: "client_billing_authority_rejected",
+    };
+  }
+  const plan = priceForBillingPlan(input.config, body.plan);
+  if (!plan.ok)
+    return { ok: false, status: 400, error: "invalid_billing_plan" };
   const repository = createSupabaseBillingRepository();
   const trial = await repository.reserveTrial({
     userId: input.user.userId,
@@ -76,7 +105,8 @@ export async function createPaidOffer(input: {
   const conversionAt = trial.eligible ? addDays(now, PRO_TRIAL_DAYS) : now;
   const expiresAt = addMinutes(now, 30);
   const admin = createBlundrSupabaseAdminClient();
-  if (!admin) return { ok: false, status: 503, error: "billing_offer_unavailable" };
+  if (!admin)
+    return { ok: false, status: 503, error: "billing_offer_unavailable" };
   const inserted = await admin
     .from("blundr_paid_offer_acceptances")
     .insert({
@@ -101,7 +131,7 @@ export async function createPaidOffer(input: {
     return { ok: false, status: 503, error: "billing_offer_unavailable" };
   }
   const common =
-    "plus applicable taxes. Renews automatically until canceled.";
+    "plus applicable taxes. Requires a payment method. Renews automatically until canceled.";
   const disclosure = trial.eligible
     ? `7 days free, then ${priced.label} ${common} Cancel before ${conversionAt.toISOString()} to avoid the first subscription charge.`
     : `${priced.label} ${common} Billing begins ${conversionAt.toISOString()}.`;
@@ -137,13 +167,15 @@ export async function acceptPaidOffer(input: {
     return { ok: false, status: 401, error: "authentication_required" };
   }
   const plan = priceForBillingPlan(input.config, input.plan);
-  if (!plan.ok) return { ok: false, status: 400, error: "invalid_billing_plan" };
+  if (!plan.ok)
+    return { ok: false, status: 400, error: "invalid_billing_plan" };
   const offerId = String(input.offerId ?? "").trim();
   if (!/^[0-9a-f-]{36}$/i.test(offerId)) {
     return { ok: false, status: 400, error: "invalid_paid_offer" };
   }
   const admin = createBlundrSupabaseAdminClient();
-  if (!admin) return { ok: false, status: 503, error: "billing_offer_unavailable" };
+  if (!admin)
+    return { ok: false, status: 503, error: "billing_offer_unavailable" };
   const now = new Date().toISOString();
   const updated = await admin
     .from("blundr_paid_offer_acceptances")
@@ -167,10 +199,11 @@ export async function claimAcceptedPaidOffer(input: {
   userId: string;
   environment: BillingConfig["environment"];
   plan: BillingPlan;
-}): Promise<
-  | { offerId: string; trialEligible: boolean; reservationId: string | null }
-  | null
-> {
+}): Promise<{
+  offerId: string;
+  trialEligible: boolean;
+  reservationId: string | null;
+} | null> {
   const admin = createBlundrSupabaseAdminClient();
   if (!admin) return null;
   const now = new Date().toISOString();

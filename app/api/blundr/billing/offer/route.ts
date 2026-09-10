@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   try {
     const result = await createPaidOffer({
       user,
-      plan: body.plan,
+      plan: body,
       config: readBillingConfig(),
     });
     if (result.ok === false) {
