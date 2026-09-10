@@ -281,31 +281,54 @@ async function signIn(page) {
   await page
     .getByRole("textbox", { name: /password/i })
     .fill(ephemeralUser.password);
+  const authResponsePromise = page.waitForResponse(
+    (candidate) => {
+      const url = new URL(candidate.url());
+      return (
+        url.hostname.endsWith(".supabase.co") &&
+        url.pathname === "/auth/v1/token" &&
+        candidate.request().method() === "POST"
+      );
+    },
+    { timeout: 30000 },
+  );
   await Promise.all([
     page.waitForURL((url) => url.origin === baseUrl, { timeout: 30000 }),
     page.getByRole("button", { name: /sign in/i }).click(),
   ]).catch(async () => {
     await page.waitForLoadState("networkidle").catch(() => {});
   });
-  const session = await page.evaluate(async () => {
-    const keys = Object.keys(localStorage).filter((key) =>
-      key.includes("auth-token"),
-    );
-    for (const key of keys) {
-      try {
-        const parsed = JSON.parse(localStorage.getItem(key) || "null");
-        const user = parsed?.user ?? parsed?.currentSession?.user;
-        const accessToken =
-          parsed?.access_token ?? parsed?.currentSession?.access_token;
-        if (user?.id) return { id: user.id, accessToken };
-      } catch {}
-    }
-    return { id: null, accessToken: null };
-  });
+  proof.evidence.login = {
+    formSubmitted: true,
+    resultingOrigin:
+      new URL(page.url()).origin === baseUrl ? "preview" : "other",
+    resultingPathname: new URL(page.url()).pathname,
+    authSessionMechanism: "supabase_password_token_response",
+    authenticatedUserMatch: false,
+    accessTokenAvailable: false,
+    apiSessionAccepted: false,
+  };
+  const authResponse = await authResponsePromise.catch(() => null);
+  if (!authResponse) throw new Error("ephemeral_auth_response_not_observed");
+  if (!authResponse.ok()) {
+    throw new Error(`ephemeral_login_rejected:${authResponse.status()}`);
+  }
+  const authBody = await authResponse.json().catch(() => null);
+  const session = {
+    id: authBody?.user?.id ?? authBody?.session?.user?.id ?? null,
+    accessToken: authBody?.access_token ?? authBody?.session?.access_token,
+  };
+  proof.evidence.login.authenticatedUserMatch = session.id === ephemeralUser.id;
+  proof.evidence.login.accessTokenAvailable = Boolean(session.accessToken);
   if (session.id !== ephemeralUser.id)
     throw new Error("ephemeral_user_login_mismatch");
   if (!session.accessToken) throw new Error("ephemeral_access_token_missing");
   ephemeralAccessToken = session.accessToken;
+  const apiSession = await appJson(page, "/api/blundr/onboarding/v11");
+  proof.evidence.login.apiSessionAccepted = apiSession.ok;
+  if (!apiSession.ok) {
+    throw new Error(`ephemeral_bearer_session_unaccepted:${apiSession.status}`);
+  }
   proof.checks.ephemeralUserAuthenticated = true;
 }
 
