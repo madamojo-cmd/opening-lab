@@ -6,6 +6,9 @@ import { createDefaultTrainingProfile } from "@/lib/blundr/accounts/accountDefau
 import { resetLocalAccountState } from "@/lib/blundr/accounts/localAccountStorage";
 import { appendDeveloperAuditLogEntry } from "@/lib/blundr/accounts/accountRepository";
 import { resolveBlundrDeveloperAccess } from "@/lib/blundr/backend/devAccess";
+import { getCurrentBlundrUser } from "@/lib/blundr/accounts/accountSession";
+import type { CurrentBlundrUser } from "@/lib/blundr/accounts/accountTypes";
+import { resolvePreviewOnboardingSelfResetDecision } from "@/lib/blundr/backend/previewResetAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -13,12 +16,103 @@ function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-async function readBody(request: NextRequest): Promise<Record<string, unknown>> {
-  const contentType = normalizeText(request.headers.get("content-type")).toLowerCase();
+type ResetUserScope = "onboarding" | "full" | "local_demo";
+
+function normalizeResetScope(value: unknown): ResetUserScope {
+  const text = normalizeText(value);
+  return text === "local_demo" || text === "full" ? text : "onboarding";
+}
+
+function hasBearerAuthorization(request: NextRequest): boolean {
+  return normalizeText(request.headers.get("authorization"))
+    .toLowerCase()
+    .startsWith("bearer ");
+}
+
+async function resolvePreviewOnboardingSelfResetAccess(
+  request: NextRequest,
+  body: Record<string, unknown>,
+): Promise<
+  | { allowed: true; user: CurrentBlundrUser; targetUserId: string }
+  | { allowed: false; reason: string }
+> {
+  const hasBearerSession = hasBearerAuthorization(request);
+  const user = hasBearerSession
+    ? await getCurrentBlundrUser({ request, allowLocalFallback: false })
+    : null;
+  const decision = resolvePreviewOnboardingSelfResetDecision({
+    body,
+    user,
+    vercelEnv: process.env.VERCEL_ENV,
+    hasBearerSession,
+  });
+  if (decision.allowed) {
+    if (!user) return { allowed: false, reason: "authenticated_user_required" };
+    return { allowed: true, user, targetUserId: decision.targetUserId };
+  }
+  return { allowed: false, reason: decision.reason };
+}
+
+async function resetAuthenticatedOnboardingState(input: {
+  request: NextRequest;
+  user: CurrentBlundrUser;
+  targetUserId: string;
+  scope: ResetUserScope;
+  allowLocalFallback: boolean;
+}) {
+  const now = new Date().toISOString();
+  const profileResult = await saveTrainingProfile(
+    {
+      userId: input.targetUserId,
+      onboardingCompleted: false,
+      ...createDefaultTrainingProfile(input.targetUserId, now),
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      user: input.user,
+      accessToken: input.user.accessToken ?? null,
+      mode: input.user.mode,
+      allowLocalFallback: input.allowLocalFallback,
+    },
+  );
+
+  if (!profileResult.ok) {
+    return NextResponse.json(profileResult, { status: 500 });
+  }
+
+  await appendDeveloperAuditLogEntry(
+    {
+      actorUserId: input.user.userId ?? null,
+      targetUserId: input.targetUserId,
+      action: "reset_onboarding_state",
+      payload: { scope: input.scope },
+      createdAt: new Date().toISOString(),
+    },
+    {
+      user: input.user,
+      accessToken: input.user.accessToken ?? null,
+      mode: input.user.mode,
+      allowLocalFallback: input.allowLocalFallback,
+    },
+  );
+
+  return NextResponse.json({ ok: true, profile: profileResult.data });
+}
+
+async function readBody(
+  request: NextRequest,
+): Promise<Record<string, unknown>> {
+  const contentType = normalizeText(
+    request.headers.get("content-type"),
+  ).toLowerCase();
   if (contentType.includes("application/json")) {
     return (await request.json().catch(() => ({}))) as Record<string, unknown>;
   }
-  if (contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data")) {
+  if (
+    contentType.includes("application/x-www-form-urlencoded") ||
+    contentType.includes("multipart/form-data")
+  ) {
     const formData = await request.formData().catch(() => new FormData());
     return Object.fromEntries(formData.entries());
   }
@@ -26,16 +120,43 @@ async function readBody(request: NextRequest): Promise<Record<string, unknown>> 
 }
 
 export async function POST(request: NextRequest) {
-  const access = await resolveBlundrDeveloperAccess(request);
-  if (!access.allowed) {
-    return NextResponse.json({ ok: false, error: { code: "developer_access_denied", message: access.reason } }, { status: 403 });
+  const body = await readBody(request);
+  const previewSelfReset = await resolvePreviewOnboardingSelfResetAccess(
+    request,
+    body,
+  );
+  if (previewSelfReset.allowed) {
+    return resetAuthenticatedOnboardingState({
+      request,
+      user: previewSelfReset.user,
+      targetUserId: previewSelfReset.targetUserId,
+      scope: "onboarding",
+      allowLocalFallback: false,
+    });
   }
 
-  const body = await readBody(request);
-  const scope = normalizeText(body.scope) === "local_demo" || normalizeText(body.scope) === "full" ? normalizeText(body.scope) : "onboarding";
-  const targetUserId = normalizeText(body.userId) || access.user?.userId || null;
+  const access = await resolveBlundrDeveloperAccess(request);
+  if (!access.allowed) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: { code: "developer_access_denied", message: access.reason },
+      },
+      { status: 403 },
+    );
+  }
+
+  const scope = normalizeResetScope(body.scope);
+  const targetUserId =
+    normalizeText(body.userId) || access.user?.userId || null;
   if (!targetUserId) {
-    return NextResponse.json({ ok: false, error: { code: "missing_user", message: "A target user is required." } }, { status: 400 });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: { code: "missing_user", message: "A target user is required." },
+      },
+      { status: 400 },
+    );
   }
 
   if (scope === "full" && access.user?.mode === "local_demo") {
@@ -53,37 +174,25 @@ export async function POST(request: NextRequest) {
         payload: { bundleUpdatedAt: bundle.updatedAt },
         createdAt: new Date().toISOString(),
       },
-      { user: access.user, accessToken: access.user?.accessToken ?? null, mode: access.user?.mode, allowLocalFallback: true },
+      {
+        user: access.user,
+        accessToken: access.user?.accessToken ?? null,
+        mode: access.user?.mode,
+        allowLocalFallback: true,
+      },
     );
-    return NextResponse.json({ ok: true, bundle, bootstrap: bootstrap.ok ? bootstrap.data : null });
+    return NextResponse.json({
+      ok: true,
+      bundle,
+      bootstrap: bootstrap.ok ? bootstrap.data : null,
+    });
   }
 
-  const now = new Date().toISOString();
-  const profileResult = await saveTrainingProfile(
-    {
-      userId: targetUserId,
-      onboardingCompleted: false,
-      ...createDefaultTrainingProfile(targetUserId, now),
-      createdAt: now,
-      updatedAt: now,
-    },
-    { user: access.user, accessToken: access.user?.accessToken ?? null, mode: access.user?.mode, allowLocalFallback: true },
-  );
-
-  if (!profileResult.ok) {
-    return NextResponse.json(profileResult, { status: 500 });
-  }
-
-  await appendDeveloperAuditLogEntry(
-    {
-      actorUserId: access.user?.userId ?? null,
-      targetUserId,
-      action: "reset_onboarding_state",
-      payload: { scope },
-      createdAt: new Date().toISOString(),
-    },
-    { user: access.user, accessToken: access.user?.accessToken ?? null, mode: access.user?.mode, allowLocalFallback: true },
-  );
-
-  return NextResponse.json({ ok: true, profile: profileResult.data });
+  return resetAuthenticatedOnboardingState({
+    request,
+    user: access.user!,
+    targetUserId,
+    scope,
+    allowLocalFallback: true,
+  });
 }

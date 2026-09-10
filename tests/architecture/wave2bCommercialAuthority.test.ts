@@ -304,6 +304,39 @@ test("Wave 2B route required text accepts a visible duplicate after a hidden mat
   );
 });
 
+test("Wave 2B browser harness fails immediately when onboarding reset fails", async () => {
+  process.env.WAVE2B_PREVIEW_URL ??= "https://blundr-staging.example.test";
+  process.env.WAVE2B_QA_EMAIL ??= "qa@example.test";
+  process.env.WAVE2B_QA_PASSWORD ??= "not-a-real-password";
+  process.env.WAVE2B_QA_SUPABASE_UUID ??=
+    "11111111-1111-4111-8111-111111111111";
+  process.env.ARTIFACT_DIR ??= "/tmp/blundr-wave2b-test-artifacts";
+  const browserHarness = await import("../../scripts/wave2b-browser-qa.mjs");
+  const message = browserHarness.buildResetFailureMessage({
+    status: 403,
+    errorCode: "developer_access_denied",
+    errorMessage:
+      "User 11111111-1111-4111-8111-111111111111 is not allowlisted.",
+  });
+
+  assert.match(
+    message,
+    /QA onboarding reset failed: HTTP 403 developer_access_denied/,
+  );
+  assert.doesNotMatch(message, /11111111-1111-4111-8111-111111111111/);
+  assert.match(message, /\[redacted(?:-uuid)?\]/);
+
+  const source = read("scripts/wave2b-browser-qa.mjs");
+  assert.match(
+    source,
+    /throw new Error\(buildResetFailureMessage\(diagnostics\.resetAttempt\)\)/,
+  );
+  assert.doesNotMatch(
+    source,
+    /if \(!diagnostics\.resetAttempt\.ok\) return state/,
+  );
+});
+
 test("Wave 2B distinguishes mocked browser QA from real sandbox integration proof", () => {
   const workflow = read(
     ".github/workflows/blundr-wave2b-commercial-validation.yml",

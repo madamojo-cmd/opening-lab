@@ -169,6 +169,17 @@ function redactText(value) {
     );
 }
 
+export function buildResetFailureMessage(resetAttempt) {
+  const status = Number.isFinite(Number(resetAttempt?.status))
+    ? Number(resetAttempt.status)
+    : "unknown";
+  const code = resetAttempt?.errorCode || "unknown_error";
+  const message = resetAttempt?.errorMessage
+    ? `: ${redactText(resetAttempt.errorMessage).slice(0, 500)}`
+    : "";
+  return `QA onboarding reset failed: HTTP ${status} ${code}${message}`;
+}
+
 function summarizeOnboardingBody(body) {
   return {
     ok: body?.ok === true,
@@ -634,6 +645,10 @@ async function resetQaOnboarding(page, accessToken) {
       typeof result.body?.error?.code === "string"
         ? result.body.error.code
         : null,
+    errorMessage:
+      typeof result.body?.error?.message === "string"
+        ? redactText(result.body.error.message).slice(0, 500)
+        : null,
   };
 }
 
@@ -645,7 +660,10 @@ async function ensureOnboardingPlanState(page, accessToken, diagnostics) {
   let currentIndex = onboardingSteps.indexOf(state.step);
   if (state.completed || currentIndex > planIndex) {
     diagnostics.resetAttempt = await resetQaOnboarding(page, accessToken);
-    if (!diagnostics.resetAttempt.ok) return state;
+    if (!diagnostics.resetAttempt.ok) {
+      diagnostics.finalOnboarding = state;
+      throw new Error(buildResetFailureMessage(diagnostics.resetAttempt));
+    }
     state = await readOnboardingState(page, accessToken);
     currentIndex = onboardingSteps.indexOf(state.step);
   }
@@ -926,11 +944,29 @@ async function validatePaywall(page, viewport, diagnostics) {
       "QA authentication did not produce the expected non-production user session.",
     );
   }
-  const state = await ensureOnboardingPlanState(
-    page,
-    sessionSummary.accessToken,
-    diagnostics,
-  );
+  let state;
+  try {
+    state = await ensureOnboardingPlanState(
+      page,
+      sessionSummary.accessToken,
+      diagnostics,
+    );
+  } catch (error) {
+    await writePaywallDiagnostics(
+      page,
+      viewport,
+      diagnostics,
+      sessionSummary,
+      diagnostics.finalOnboarding ??
+        diagnostics.initialOnboarding ?? {
+          status: null,
+          step: null,
+          completed: null,
+        },
+      null,
+    );
+    throw error;
+  }
   const response = await page.goto(`${baseUrl}/onboarding/plan`, {
     waitUntil: "domcontentloaded",
   });
