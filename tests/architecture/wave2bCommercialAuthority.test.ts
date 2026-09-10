@@ -335,6 +335,43 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
     /sandboxIntegrationProof: "blocked_until_real_provider_journey"/,
   );
 
+  assert.match(workflow, /timeout-minutes: 35/);
+  assert.match(workflow, /uses: actions\/cache@v4/);
+  assert.match(workflow, /~\/\.cache\/ms-playwright/);
+  assert.match(workflow, /hashFiles\('package-lock\.json'\)/);
+  assert.doesNotMatch(workflow, /playwright install --with-deps chromium/);
+  assert.match(workflow, /npm exec -- playwright install-deps chromium/);
+  assert.match(workflow, /npm exec -- playwright install chromium/);
+  assert.match(
+    workflow,
+    /Install Chromium system dependencies[\s\S]*timeout-minutes: 8/,
+  );
+  assert.match(
+    workflow,
+    /Install Chromium browser if not cached[\s\S]*timeout-minutes: 8/,
+  );
+  assert.match(workflow, /Launch Chromium smoke test[\s\S]*timeout-minutes: 3/);
+  assert.match(workflow, /import \{ chromium \} from "playwright"/);
+  assert.match(workflow, /Run Wave 2B browser QA[\s\S]*timeout-minutes: 10/);
+  assert.match(
+    workflow,
+    /Run Wave 2B provider configuration check[\s\S]*timeout-minutes: 5/,
+  );
+  assert.match(
+    workflow,
+    /Require real Wave 2B sandbox integration proof[\s\S]*timeout-minutes: 10/,
+  );
+  assert.ok(
+    workflow.indexOf("Preflight non-production configuration") <
+      workflow.indexOf("Restore Playwright browser cache"),
+    "preflight must fail before browser installation starts",
+  );
+  assert.ok(
+    workflow.indexOf("Verify preview commit identity when exposed") <
+      workflow.indexOf("Install Chromium system dependencies"),
+    "preview identity must fail before Chromium installation starts",
+  );
+
   assert.match(providerCheck, /classification: "PROVIDER_CONFIGURATION_CHECK"/);
   assert.match(providerCheck, /provider-configuration-check\.json/);
   assert.match(providerCheck, /STABLE_CALLBACK_HOST/);

@@ -22,7 +22,7 @@ concurrency:
 jobs:
   browser_qa_provider_config_and_blocked_sandbox_proof:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 35
     environment: wave2b-validation
     env:
       WAVE2B_PREVIEW_URL: ${{ inputs.preview_url }}
@@ -58,10 +58,40 @@ jobs:
         run: echo "Exact SHA $GITHUB_SHA"
 
       - name: Install dependencies
-        run: npm ci
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          mkdir -p "$ARTIFACT_DIR"
+          started_at="$(date +%s)"
+          set +e
+          npm ci 2>&1 | tee "$ARTIFACT_DIR/npm-ci.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          elapsed=$(( $(date +%s) - started_at ))
+          printf '{"step":"npm_ci","status":%s,"elapsedSeconds":%s}\n' "$status" "$elapsed" >> "$ARTIFACT_DIR/install-diagnostics.jsonl"
+          exit "$status"
 
-      - name: Install Chromium only
-        run: npx playwright install --with-deps chromium
+      - name: Initialize artifact directory
+        run: |
+          set -euo pipefail
+          mkdir -p "$ARTIFACT_DIR/screenshots"
+          node --version > "$ARTIFACT_DIR/node-version.txt"
+          npm --version > "$ARTIFACT_DIR/npm-version.txt"
+          node <<'NODE'
+          const fs = require("node:fs");
+          const lock = JSON.parse(fs.readFileSync("package-lock.json", "utf8"));
+          const playwrightVersion = lock.packages?.["node_modules/playwright"]?.version ?? lock.dependencies?.playwright?.version ?? "unknown";
+          fs.writeFileSync(
+            `${process.env.ARTIFACT_DIR}/runner-diagnostics.json`,
+            `${JSON.stringify({
+              node: process.version,
+              npmVersionFile: "npm-version.txt",
+              playwrightVersion,
+              runnerOs: process.env.RUNNER_OS ?? null,
+              cacheArtifact: "install-diagnostics.jsonl",
+            }, null, 2)}\n`,
+          );
+          NODE
 
       - name: Preflight non-production configuration
         run: |
@@ -295,18 +325,81 @@ jobs:
           console.log(`Preview SHA identity ${identity.status}.`);
           NODE
 
+      - name: Restore Playwright browser cache
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+
+      - name: Record Playwright cache status
+        run: |
+          set -euo pipefail
+          printf '{"step":"playwright_cache","cacheHit":"%s"}\n' "${{ steps.playwright-cache.outputs.cache-hit }}" >> "$ARTIFACT_DIR/install-diagnostics.jsonl"
+
+      - name: Install Chromium system dependencies
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          started_at="$(date +%s)"
+          set +e
+          npm exec -- playwright install-deps chromium 2>&1 | tee "$ARTIFACT_DIR/playwright-install-deps.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          elapsed=$(( $(date +%s) - started_at ))
+          printf '{"step":"chromium_system_dependencies","status":%s,"elapsedSeconds":%s}\n' "$status" "$elapsed" >> "$ARTIFACT_DIR/install-diagnostics.jsonl"
+          exit "$status"
+
+      - name: Install Chromium browser if not cached
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          started_at="$(date +%s)"
+          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ]; then
+            printf '{"step":"chromium_browser","status":0,"elapsedSeconds":0,"skipped":"cache-hit"}\n' >> "$ARTIFACT_DIR/install-diagnostics.jsonl"
+            exit 0
+          fi
+          set +e
+          npm exec -- playwright install chromium 2>&1 | tee "$ARTIFACT_DIR/playwright-install-chromium.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          elapsed=$(( $(date +%s) - started_at ))
+          printf '{"step":"chromium_browser","status":%s,"elapsedSeconds":%s}\n' "$status" "$elapsed" >> "$ARTIFACT_DIR/install-diagnostics.jsonl"
+          exit "$status"
+
+      - name: Launch Chromium smoke test
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          started_at="$(date +%s)"
+          set +e
+          node --input-type=module <<'NODE' 2>&1 | tee "$ARTIFACT_DIR/chromium-smoke.log"
+          import { chromium } from "playwright";
+          const browser = await chromium.launch({ headless: true });
+          await browser.close();
+          console.log("chromium_launch_smoke_passed");
+          NODE
+          status=${PIPESTATUS[0]}
+          set -e
+          elapsed=$(( $(date +%s) - started_at ))
+          printf '{"step":"chromium_launch_smoke","status":%s,"elapsedSeconds":%s}\n' "$status" "$elapsed" >> "$ARTIFACT_DIR/install-diagnostics.jsonl"
+          exit "$status"
+
       - name: Run Wave 2B browser QA
+        timeout-minutes: 10
         run: |
           set -euo pipefail
           mkdir -p "$ARTIFACT_DIR/screenshots"
           node scripts/wave2b-browser-qa.mjs
 
       - name: Run Wave 2B provider configuration check
+        timeout-minutes: 5
         run: |
           set -euo pipefail
           node scripts/wave2b-provider-configuration-check.mjs
 
       - name: Require real Wave 2B sandbox integration proof
+        timeout-minutes: 10
         run: |
           set -euo pipefail
           node scripts/wave2b-sandbox-integration-proof.mjs
