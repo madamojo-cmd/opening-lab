@@ -277,8 +277,10 @@ async function appJson(page, path, init = {}) {
 
 async function signIn(page) {
   await page.goto(`${baseUrl}/login`, { waitUntil: "domcontentloaded" });
-  await page.getByLabel(/email/i).fill(ephemeralUser.email);
-  await page.getByLabel(/password/i).fill(ephemeralUser.password);
+  await page.getByRole("textbox", { name: /email/i }).fill(ephemeralUser.email);
+  await page
+    .getByRole("textbox", { name: /password/i })
+    .fill(ephemeralUser.password);
   await Promise.all([
     page.waitForURL((url) => url.origin === baseUrl, { timeout: 30000 }),
     page.getByRole("button", { name: /sign in/i }).click(),

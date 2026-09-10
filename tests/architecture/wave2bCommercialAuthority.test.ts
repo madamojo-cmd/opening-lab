@@ -485,6 +485,11 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
   assert.match(sandboxProof, /classification: "SANDBOX_INTEGRATION_PROOF"/);
   assert.match(
     sandboxProof,
+    /getByRole\("textbox", \{ name: \/password\/i \}\)/,
+  );
+  assert.doesNotMatch(sandboxProof, /getByLabel\(\/password\/i\)/);
+  assert.match(
+    sandboxProof,
     /blundr-staging-git-launc-291807-adamconnor00-gmailcoms-projects\.vercel\.app/,
   );
   assert.match(sandboxProof, /\$\{label\}Sha/);
