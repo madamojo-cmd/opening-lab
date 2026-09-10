@@ -94,6 +94,14 @@ function readId(value) {
   return value.id ?? value.app?.id ?? value.data?.id ?? null;
 }
 
+function listItems(value) {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return [];
+  if (Array.isArray(value.items)) return value.items;
+  if (Array.isArray(value.data)) return value.data;
+  return [];
+}
+
 async function revenueCatV2(path) {
   const response = await fetch(`${REVENUECAT_V2_API_ORIGIN}${path}`, {
     headers: {
@@ -250,7 +258,13 @@ try {
     );
   }
 
-  await revenueCatV2(`/projects/${encodeURIComponent(projectId)}`);
+  const projects = await revenueCatV2("/projects");
+  const projectIds = listItems(projects).map(readId).filter(Boolean);
+  if (!projectIds.includes(projectId)) {
+    fail(
+      "RevenueCat configured project was not found in the v2 projects list.",
+    );
+  }
   const [apps, app, entitlement, offering] = await Promise.all([
     revenueCatV2(`/projects/${encodeURIComponent(projectId)}/apps`),
     revenueCatV2(

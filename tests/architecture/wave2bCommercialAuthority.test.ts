@@ -433,9 +433,15 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
   assert.match(providerCheck, /appe3b4140fc1/);
   assert.match(providerCheck, /REVENUECAT_V2_API_ORIGIN/);
   assert.match(providerCheck, /api\.revenuecat\.com\/v2/);
+  assert.match(providerCheck, /revenueCatV2\("\/projects"\)/);
+  assert.match(providerCheck, /listItems\(projects\)\.map\(readId\)/);
   assert.match(
     providerCheck,
-    /projects\/\$\{encodeURIComponent\(projectId\)\}/,
+    /projects\/\$\{encodeURIComponent\(projectId\)\}\/apps/,
+  );
+  assert.doesNotMatch(
+    providerCheck,
+    /revenueCatV2\(`\/projects\/\$\{encodeURIComponent\(projectId\)\}`\)/,
   );
   assert.match(providerCheck, /apps\/\$\{encodeURIComponent\(appId\)\}/);
   assert.match(providerCheck, /RevenueCat entitlement identifier must be pro/);
