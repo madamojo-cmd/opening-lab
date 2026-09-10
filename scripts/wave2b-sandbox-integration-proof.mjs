@@ -275,23 +275,70 @@ async function appJson(page, path, init = {}) {
   );
 }
 
+async function readBrowserSession(page) {
+  return page.evaluate((expectedUserId) => {
+    function findSession(value) {
+      if (!value || typeof value !== "object") return null;
+      if (
+        typeof value.access_token === "string" &&
+        value.access_token &&
+        value.user &&
+        typeof value.user.id === "string"
+      ) {
+        return { accessToken: value.access_token, userId: value.user.id };
+      }
+      for (const child of Object.values(value)) {
+        const found = findSession(child);
+        if (found) return found;
+      }
+      return null;
+    }
+    for (const key of Object.keys(window.localStorage)) {
+      const raw = window.localStorage.getItem(key);
+      if (!raw) continue;
+      try {
+        const found = findSession(JSON.parse(raw));
+        if (found) {
+          return {
+            authenticated: true,
+            accessToken: found.accessToken,
+            userIdPresent: true,
+            userMatchesExpected: found.userId === expectedUserId,
+          };
+        }
+      } catch {
+        // Ignore unrelated localStorage values.
+      }
+    }
+    return {
+      authenticated: false,
+      accessToken: null,
+      userIdPresent: false,
+      userMatchesExpected: false,
+    };
+  }, ephemeralUser.id);
+}
+
+async function waitForEphemeralBrowserSession(page) {
+  const deadline = Date.now() + 20000;
+  let latest = null;
+  while (Date.now() < deadline) {
+    latest = await readBrowserSession(page);
+    if (latest.authenticated && latest.userMatchesExpected) return latest;
+    await page.waitForTimeout(250);
+  }
+  if (latest?.authenticated && !latest.userMatchesExpected) {
+    throw new Error("ephemeral_user_login_mismatch");
+  }
+  throw new Error("ephemeral_session_not_established");
+}
+
 async function signIn(page) {
   await page.goto(`${baseUrl}/login`, { waitUntil: "domcontentloaded" });
   await page.getByRole("textbox", { name: /email/i }).fill(ephemeralUser.email);
   await page
     .getByRole("textbox", { name: /password/i })
     .fill(ephemeralUser.password);
-  const authResponsePromise = page.waitForResponse(
-    (candidate) => {
-      const url = new URL(candidate.url());
-      return (
-        url.hostname.endsWith(".supabase.co") &&
-        url.pathname === "/auth/v1/token" &&
-        candidate.request().method() === "POST"
-      );
-    },
-    { timeout: 30000 },
-  );
   await Promise.all([
     page.waitForURL((url) => url.origin === baseUrl, { timeout: 30000 }),
     page.getByRole("button", { name: /sign in/i }).click(),
@@ -303,25 +350,14 @@ async function signIn(page) {
     resultingOrigin:
       new URL(page.url()).origin === baseUrl ? "preview" : "other",
     resultingPathname: new URL(page.url()).pathname,
-    authSessionMechanism: "supabase_password_token_response",
+    authSessionMechanism: "supabase_browser_persisted_session",
     authenticatedUserMatch: false,
     accessTokenAvailable: false,
     apiSessionAccepted: false,
   };
-  const authResponse = await authResponsePromise.catch(() => null);
-  if (!authResponse) throw new Error("ephemeral_auth_response_not_observed");
-  if (!authResponse.ok()) {
-    throw new Error(`ephemeral_login_rejected:${authResponse.status()}`);
-  }
-  const authBody = await authResponse.json().catch(() => null);
-  const session = {
-    id: authBody?.user?.id ?? authBody?.session?.user?.id ?? null,
-    accessToken: authBody?.access_token ?? authBody?.session?.access_token,
-  };
-  proof.evidence.login.authenticatedUserMatch = session.id === ephemeralUser.id;
+  const session = await waitForEphemeralBrowserSession(page);
+  proof.evidence.login.authenticatedUserMatch = session.userMatchesExpected;
   proof.evidence.login.accessTokenAvailable = Boolean(session.accessToken);
-  if (session.id !== ephemeralUser.id)
-    throw new Error("ephemeral_user_login_mismatch");
   if (!session.accessToken) throw new Error("ephemeral_access_token_missing");
   ephemeralAccessToken = session.accessToken;
   const apiSession = await appJson(page, "/api/blundr/onboarding/v11");

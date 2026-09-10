@@ -488,13 +488,15 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
     /getByRole\("textbox", \{ name: \/password\/i \}\)/,
   );
   assert.doesNotMatch(sandboxProof, /getByLabel\(\/password\/i\)/);
-  assert.match(sandboxProof, /\/auth\/v1\/token/);
   assert.match(
     sandboxProof,
-    /authSessionMechanism: "supabase_password_token_response"/,
+    /authSessionMechanism: "supabase_browser_persisted_session"/,
   );
+  assert.match(sandboxProof, /waitForEphemeralBrowserSession/);
+  assert.match(sandboxProof, /readBrowserSession/);
   assert.match(sandboxProof, /ephemeral_bearer_session_unaccepted/);
-  assert.doesNotMatch(sandboxProof, /key\.includes\("auth-token"\)/);
+  assert.doesNotMatch(sandboxProof, /page\.waitForResponse/);
+  assert.doesNotMatch(sandboxProof, /auth-token/);
   assert.match(
     sandboxProof,
     /blundr-staging-git-launc-291807-adamconnor00-gmailcoms-projects\.vercel\.app/,
