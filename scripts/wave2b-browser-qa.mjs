@@ -1044,7 +1044,15 @@ async function validatePaywall(page, viewport, diagnostics) {
       /7 days free, then \$9\.99\/month plus applicable taxes beginning/i,
     ),
   ).toBeVisible();
-  await expect(page.getByText(/requires a payment method/i)).toBeVisible();
+  await expect(
+    page
+      .locator("p")
+      .filter({
+        hasText:
+          /7 days free, then \$9\.99\/month[\s\S]*requires a payment method/i,
+      })
+      .first(),
+  ).toBeVisible();
   const checkout = page.getByRole("button", { name: /start 7-day pro trial/i });
   await expect(checkout).toBeDisabled();
   await acknowledgement.check();
