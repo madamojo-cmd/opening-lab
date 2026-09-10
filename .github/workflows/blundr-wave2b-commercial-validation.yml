@@ -386,6 +386,7 @@ jobs:
           exit "$status"
 
       - name: Run Wave 2B browser QA
+        id: browser-qa
         timeout-minutes: 10
         run: |
           set -euo pipefail
@@ -393,16 +394,65 @@ jobs:
           node scripts/wave2b-browser-qa.mjs
 
       - name: Run Wave 2B provider configuration check
+        id: provider-configuration
+        continue-on-error: true
         timeout-minutes: 5
         run: |
           set -euo pipefail
           node scripts/wave2b-provider-configuration-check.mjs
 
       - name: Require real Wave 2B sandbox integration proof
+        id: sandbox-integration
         timeout-minutes: 10
         run: |
           set -euo pipefail
           node scripts/wave2b-sandbox-integration-proof.mjs
+
+      - name: Record Wave 2B aggregate result
+        if: always()
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const artifactDir = process.env.ARTIFACT_DIR;
+          function readArtifact(name) {
+            try {
+              return JSON.parse(fs.readFileSync(`${artifactDir}/${name}`, "utf8"));
+            } catch {
+              return null;
+            }
+          }
+          const result = {
+            classification: "WAVE2B_COMMERCIAL_VALIDATION_AGGREGATE",
+            browserQa: {
+              stepOutcome: process.env.BROWSER_QA_OUTCOME,
+              artifactStatus: readArtifact("browser-qa-summary.json")?.status ?? null,
+            },
+            providerConfigurationCheck: {
+              stepOutcome: process.env.PROVIDER_CONFIGURATION_OUTCOME,
+              artifactStatus:
+                readArtifact("provider-configuration-check.json")?.status ?? null,
+            },
+            sandboxIntegrationProof: {
+              stepOutcome: process.env.SANDBOX_INTEGRATION_OUTCOME,
+              artifactStatus:
+                readArtifact("sandbox-integration-proof.json")?.status ?? null,
+              acceptanceEligible:
+                readArtifact("sandbox-integration-proof.json")
+                  ?.acceptanceEligible === true,
+            },
+            providerCheckGatesSandbox: false,
+            mocksCanGrantAcceptance: false,
+          };
+          fs.writeFileSync(
+            `${artifactDir}/wave2b-aggregate-result.json`,
+            `${JSON.stringify(result, null, 2)}\n`,
+          );
+          NODE
+        env:
+          BROWSER_QA_OUTCOME: ${{ steps.browser-qa.outcome }}
+          PROVIDER_CONFIGURATION_OUTCOME: ${{ steps.provider-configuration.outcome }}
+          SANDBOX_INTEGRATION_OUTCOME: ${{ steps.sandbox-integration.outcome }}
 
       - name: Publish Wave 2B validation summary
         if: always()
@@ -417,6 +467,10 @@ jobs:
             echo "- Browser contract QA artifact: browser-qa-summary.json"
             echo "- Provider configuration artifact: provider-configuration-check.json"
             echo "- Sandbox integration proof artifact: sandbox-integration-proof.json"
+            echo "- Aggregate result artifact: wave2b-aggregate-result.json"
+            echo "- Browser QA outcome: ${{ steps.browser-qa.outcome }}"
+            echo "- Provider configuration outcome: ${{ steps.provider-configuration.outcome }}"
+            echo "- Sandbox integration outcome: ${{ steps.sandbox-integration.outcome }}"
             echo "- Production touched: no"
           } >> "$GITHUB_STEP_SUMMARY"
 

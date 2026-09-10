@@ -351,8 +351,18 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
     workflow,
     /node scripts\/wave2b-provider-configuration-check\.mjs/,
   );
+  assert.match(
+    workflow,
+    /Run Wave 2B provider configuration check[\s\S]*continue-on-error: true/,
+  );
   assert.match(workflow, /Require real Wave 2B sandbox integration proof/);
   assert.match(workflow, /node scripts\/wave2b-sandbox-integration-proof\.mjs/);
+  assert.match(workflow, /Record Wave 2B aggregate result/);
+  assert.match(workflow, /wave2b-aggregate-result\.json/);
+  assert.match(workflow, /providerCheckGatesSandbox: false/);
+  assert.match(workflow, /mocksCanGrantAcceptance: false/);
+  assert.match(workflow, /PROVIDER_CONFIGURATION_OUTCOME/);
+  assert.match(workflow, /SANDBOX_INTEGRATION_OUTCOME/);
   assert.match(
     workflow,
     /STRIPE_WEBHOOK_SECRET: \$\{\{ secrets\.STRIPE_WEBHOOK_SECRET \}\}/,
