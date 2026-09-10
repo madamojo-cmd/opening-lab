@@ -102,6 +102,46 @@ function listItems(value) {
   return [];
 }
 
+function isActiveResource(value) {
+  if (!value || typeof value !== "object") return false;
+  if (value.archived_at) return false;
+  if (typeof value.state === "string") return value.state === "active";
+  if (typeof value.is_active === "boolean") return value.is_active;
+  return true;
+}
+
+function isCurrentOffering(value) {
+  if (!value || typeof value !== "object") return false;
+  if (typeof value.is_current === "boolean") return value.is_current;
+  if (typeof value.current === "boolean") return value.current;
+  return false;
+}
+
+function findUniqueLookupResource(
+  items,
+  lookupKey,
+  label,
+  predicate = () => true,
+) {
+  const matches = items.filter(
+    (item) =>
+      item &&
+      typeof item === "object" &&
+      item.lookup_key === lookupKey &&
+      predicate(item),
+  );
+  if (matches.length !== 1) {
+    fail(
+      `RevenueCat ${label} lookup key ${lookupKey} matched ${matches.length} resources.`,
+    );
+  }
+  const resourceId = readId(matches[0]);
+  if (!resourceId) {
+    fail(`RevenueCat ${label} lookup key ${lookupKey} did not expose an id.`);
+  }
+  return { resource: matches[0], resourceId };
+}
+
 async function revenueCatV2(path) {
   const response = await fetch(`${REVENUECAT_V2_API_ORIGIN}${path}`, {
     headers: {
@@ -265,17 +305,13 @@ try {
       "RevenueCat configured project was not found in the v2 projects list.",
     );
   }
-  const [apps, app, entitlement, offering] = await Promise.all([
+  const [apps, app, entitlements, offerings] = await Promise.all([
     revenueCatV2(`/projects/${encodeURIComponent(projectId)}/apps`),
     revenueCatV2(
       `/projects/${encodeURIComponent(projectId)}/apps/${encodeURIComponent(appId)}`,
     ),
-    revenueCatV2(
-      `/projects/${encodeURIComponent(projectId)}/entitlements/${encodeURIComponent(entitlementId)}`,
-    ),
-    revenueCatV2(
-      `/projects/${encodeURIComponent(projectId)}/offerings/${encodeURIComponent(offeringId)}`,
-    ),
+    revenueCatV2(`/projects/${encodeURIComponent(projectId)}/entitlements`),
+    revenueCatV2(`/projects/${encodeURIComponent(projectId)}/offerings`),
   ]);
 
   const appsText = collectStrings(apps).join("\n").toLowerCase();
@@ -287,6 +323,37 @@ try {
       "RevenueCat sandbox app response did not match the configured app id.",
     );
   }
+  const { resourceId: entitlementResourceId } = findUniqueLookupResource(
+    listItems(entitlements),
+    entitlementId,
+    "entitlement",
+    isActiveResource,
+  );
+  const offeringMatches = listItems(offerings).filter(
+    (item) =>
+      item &&
+      typeof item === "object" &&
+      item.lookup_key === offeringId &&
+      isActiveResource(item),
+  );
+  const currentOfferingMatches = offeringMatches.filter(isCurrentOffering);
+  const { resourceId: offeringResourceId } = findUniqueLookupResource(
+    currentOfferingMatches.length ? currentOfferingMatches : offeringMatches,
+    offeringId,
+    "offering",
+  );
+  const [entitlement, offering, offeringPackages] = await Promise.all([
+    revenueCatV2(
+      `/projects/${encodeURIComponent(projectId)}/entitlements/${encodeURIComponent(entitlementResourceId)}`,
+    ),
+    revenueCatV2(
+      `/projects/${encodeURIComponent(projectId)}/offerings/${encodeURIComponent(offeringResourceId)}`,
+    ),
+    revenueCatV2(
+      `/projects/${encodeURIComponent(projectId)}/offerings/${encodeURIComponent(offeringResourceId)}/packages?expand=items.product`,
+    ),
+  ]);
+
   const entitlementText = collectStrings(entitlement).join("\n").toLowerCase();
   if (!entitlementText.includes(entitlementId)) {
     fail("RevenueCat pro entitlement was not found in v2 configuration.");
@@ -295,9 +362,12 @@ try {
   if (!offeringText.includes(offeringId)) {
     fail("RevenueCat default offering was not found in v2 configuration.");
   }
+  const productMappingText = collectStrings([offering, offeringPackages])
+    .join("\n")
+    .toLowerCase();
   if (
-    !offeringText.includes(monthlyPriceId.toLowerCase()) ||
-    !offeringText.includes(annualPriceId.toLowerCase())
+    !productMappingText.includes(monthlyPriceId.toLowerCase()) ||
+    !productMappingText.includes(annualPriceId.toLowerCase())
   ) {
     fail("RevenueCat offering does not reference both sandbox Stripe prices.");
   }
@@ -307,7 +377,11 @@ try {
   proof.checks.revenueCatProjectVerified = true;
   proof.checks.revenueCatSandboxAppVerified = true;
   proof.checks.revenueCatSandboxAppId = appId;
+  proof.checks.revenueCatEntitlementLookupKey = "pro";
+  proof.checks.revenueCatEntitlementResourceVerified = true;
   proof.checks.revenueCatEntitlementIdentifier = "pro";
+  proof.checks.revenueCatOfferingLookupKey = "default";
+  proof.checks.revenueCatOfferingResourceVerified = true;
   proof.checks.revenueCatOfferingIdentifier = "default";
   proof.checks.revenueCatProductMappingVerified = true;
   proof.status = "passed";

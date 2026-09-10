@@ -444,8 +444,32 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
     /revenueCatV2\(`\/projects\/\$\{encodeURIComponent\(projectId\)\}`\)/,
   );
   assert.match(providerCheck, /apps\/\$\{encodeURIComponent\(appId\)\}/);
+  assert.match(providerCheck, /findUniqueLookupResource/);
+  assert.match(providerCheck, /lookup_key === lookupKey/);
+  assert.match(providerCheck, /entitlementResourceId/);
+  assert.match(providerCheck, /offeringResourceId/);
+  assert.match(
+    providerCheck,
+    /entitlements\/\$\{encodeURIComponent\(entitlementResourceId\)\}/,
+  );
+  assert.match(
+    providerCheck,
+    /offerings\/\$\{encodeURIComponent\(offeringResourceId\)\}/,
+  );
+  assert.doesNotMatch(
+    providerCheck,
+    /entitlements\/\$\{encodeURIComponent\(entitlementId\)\}/,
+  );
+  assert.doesNotMatch(
+    providerCheck,
+    /offerings\/\$\{encodeURIComponent\(offeringId\)\}/,
+  );
   assert.match(providerCheck, /RevenueCat entitlement identifier must be pro/);
   assert.match(providerCheck, /RevenueCat offering identifier must be default/);
+  assert.match(providerCheck, /revenueCatEntitlementLookupKey/);
+  assert.match(providerCheck, /revenueCatEntitlementResourceVerified/);
+  assert.match(providerCheck, /revenueCatOfferingLookupKey/);
+  assert.match(providerCheck, /revenueCatOfferingResourceVerified/);
   assert.match(providerCheck, /REVENUECAT_REST_API_KEY/);
 
   assert.match(sandboxProof, /classification: "SANDBOX_INTEGRATION_PROOF"/);
