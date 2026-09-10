@@ -387,6 +387,7 @@ jobs:
 
       - name: Run Wave 2B browser QA
         id: browser-qa
+        continue-on-error: true
         timeout-minutes: 10
         run: |
           set -euo pipefail
@@ -403,6 +404,7 @@ jobs:
 
       - name: Require real Wave 2B sandbox integration proof
         id: sandbox-integration
+        continue-on-error: true
         timeout-minutes: 10
         run: |
           set -euo pipefail
@@ -452,6 +454,46 @@ jobs:
         env:
           BROWSER_QA_OUTCOME: ${{ steps.browser-qa.outcome }}
           PROVIDER_CONFIGURATION_OUTCOME: ${{ steps.provider-configuration.outcome }}
+          SANDBOX_INTEGRATION_OUTCOME: ${{ steps.sandbox-integration.outcome }}
+
+      - name: Require Wave 2B acceptance-critical outcomes
+        if: always()
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const artifactDir = process.env.ARTIFACT_DIR;
+          function readArtifact(name) {
+            try {
+              return JSON.parse(fs.readFileSync(`${artifactDir}/${name}`, "utf8"));
+            } catch {
+              return null;
+            }
+          }
+          const browser = readArtifact("browser-qa-summary.json");
+          const provider = readArtifact("provider-configuration-check.json");
+          const sandbox = readArtifact("sandbox-integration-proof.json");
+          const failures = [];
+          if (process.env.BROWSER_QA_OUTCOME !== "success" || browser?.status !== "passed") {
+            failures.push("BROWSER_QA");
+          }
+          if (
+            process.env.SANDBOX_INTEGRATION_OUTCOME !== "success" ||
+            sandbox?.status !== "passed" ||
+            sandbox?.acceptanceEligible !== true
+          ) {
+            failures.push("SANDBOX_INTEGRATION_PROOF");
+          }
+          if (provider?.status !== "passed") {
+            console.log("Provider configuration check did not pass; see provider-configuration-check.json.");
+          }
+          if (failures.length) {
+            throw new Error(`Wave 2B acceptance-critical validation failed: ${failures.join(", ")}`);
+          }
+          console.log("Wave 2B acceptance-critical browser and sandbox outcomes passed.");
+          NODE
+        env:
+          BROWSER_QA_OUTCOME: ${{ steps.browser-qa.outcome }}
           SANDBOX_INTEGRATION_OUTCOME: ${{ steps.sandbox-integration.outcome }}
 
       - name: Publish Wave 2B validation summary

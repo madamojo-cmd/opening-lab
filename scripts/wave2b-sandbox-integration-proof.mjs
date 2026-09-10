@@ -1,4 +1,4 @@
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import Stripe from "stripe";
@@ -38,6 +38,8 @@ let browserContext = null;
 let stripeSubscription = null;
 let stripeSyntheticEventId = null;
 let ephemeralAccessToken = null;
+let stripeCustomerId = null;
+let testStartedAt = Math.floor(Date.now() / 1000);
 
 function required(name) {
   const value = String(process.env[name] ?? "").trim();
@@ -209,6 +211,17 @@ async function createEphemeralUser() {
   return { email, password, id };
 }
 
+async function findRunSubscriptions() {
+  if (!ephemeralUser?.id) return [];
+  const subscriptions = await stripe.subscriptions.list({
+    limit: 100,
+    created: { gte: testStartedAt - 60 },
+  });
+  return subscriptions.data.filter(
+    (subscription) => subscription.metadata?.app_user_id === ephemeralUser.id,
+  );
+}
+
 async function deleteEphemeralUser() {
   if (!ephemeralUser?.id) return;
   const { response } = await supabaseAdmin(
@@ -226,14 +239,62 @@ async function deleteEphemeralUser() {
 }
 
 async function cancelStripeSubscription() {
-  if (!stripeSubscriptionId) return;
+  if (!stripeSubscriptionId) {
+    const candidates = await findRunSubscriptions().catch(() => []);
+    if (candidates.length === 1) {
+      stripeSubscriptionId = candidates[0].id;
+      stripeSubscription = candidates[0];
+      stripeCustomerId =
+        typeof candidates[0].customer === "string"
+          ? candidates[0].customer
+          : (candidates[0].customer?.id ?? null);
+    }
+  }
+  if (!stripeSubscriptionId) {
+    proof.cleanup.subscriptionNotApplicable = true;
+    proof.cleanup.subscriptionCanceled = true;
+    proof.cleanup.subscriptionCancelVerified = true;
+    return;
+  }
   try {
-    const canceled = await stripe.subscriptions.cancel(stripeSubscriptionId);
+    const existing = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+    const canceled =
+      existing.status === "canceled"
+        ? existing
+        : await stripe.subscriptions.cancel(stripeSubscriptionId);
     proof.cleanup.subscriptionCanceled = canceled.status === "canceled";
     const verified = await stripe.subscriptions.retrieve(stripeSubscriptionId);
     proof.cleanup.subscriptionCancelVerified = verified.status === "canceled";
+    const customer =
+      typeof verified.customer === "string"
+        ? verified.customer
+        : verified.customer?.id;
+    if (customer) stripeCustomerId = customer;
   } catch (error) {
     proof.cleanup.subscriptionCancelError = sanitizeError(
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
+async function deleteEphemeralStripeCustomer() {
+  if (!stripeCustomerId || !ephemeralUser?.id) {
+    proof.cleanup.customerDeleteNotApplicable = true;
+    return;
+  }
+  try {
+    const customer = await stripe.customers.retrieve(stripeCustomerId);
+    if (
+      customer.deleted === true ||
+      customer.metadata?.app_user_id !== ephemeralUser.id
+    ) {
+      proof.cleanup.customerDeleteNotApplicable = true;
+      return;
+    }
+    const deleted = await stripe.customers.del(stripeCustomerId);
+    proof.cleanup.customerDeleted = deleted.deleted === true;
+  } catch (error) {
+    proof.cleanup.customerDeleteError = sanitizeError(
       error instanceof Error ? error.message : String(error),
     );
   }
@@ -251,8 +312,23 @@ function cleanupSucceeded() {
     proof.cleanup.subscriptionCancelVerified === true &&
     proof.cleanup.browserClosed === true &&
     proof.cleanup.userDeleted === true &&
-    proof.cleanup.userDeleteVerified === true
+    proof.cleanup.userDeleteVerified === true &&
+    (proof.cleanup.customerDeleted === true ||
+      proof.cleanup.customerDeleteNotApplicable === true)
   );
+}
+
+async function expectInputCommitted(locator, label) {
+  const committed = await locator.evaluate((input) => {
+    return (
+      input instanceof HTMLInputElement &&
+      typeof input.value === "string" &&
+      input.value.trim().length > 0
+    );
+  });
+  if (!committed) {
+    throw new Error(`${label}_input_not_committed`);
+  }
 }
 
 async function appJson(page, path, init = {}) {
@@ -335,16 +411,35 @@ async function waitForEphemeralBrowserSession(page) {
 
 async function signIn(page) {
   await page.goto(`${baseUrl}/login`, { waitUntil: "domcontentloaded" });
-  await page.getByRole("textbox", { name: /email/i }).fill(ephemeralUser.email);
-  await page
-    .getByRole("textbox", { name: /password/i })
-    .fill(ephemeralUser.password);
-  await Promise.all([
-    page.waitForURL((url) => url.origin === baseUrl, { timeout: 30000 }),
-    page.getByRole("button", { name: /sign in/i }).click(),
-  ]).catch(async () => {
-    await page.waitForLoadState("networkidle").catch(() => {});
-  });
+  await page.waitForLoadState("networkidle").catch(() => {});
+  const form = page
+    .locator("form")
+    .filter({
+      has: page.getByRole("button", { name: "Log in", exact: true }),
+    })
+    .first();
+  await expect(form).toBeVisible({ timeout: 15000 });
+  const email = form
+    .getByLabel("Email", { exact: true })
+    .or(form.locator('input[type="email"]'))
+    .first();
+  const password = form
+    .getByLabel("Password", { exact: true })
+    .or(form.locator('input[autocomplete="current-password"]'))
+    .or(form.locator('input[type="password"]'))
+    .first();
+  await expect(email).toBeVisible({ timeout: 15000 });
+  await expect(password).toBeVisible({ timeout: 15000 });
+  await email.fill(ephemeralUser.email);
+  await password.fill(ephemeralUser.password);
+  await email.blur();
+  await password.blur();
+  await expectInputCommitted(email, "ephemeral_email");
+  await expectInputCommitted(password, "ephemeral_password");
+  const submit = form.getByRole("button", { name: "Log in", exact: true });
+  await expect(submit).toBeVisible({ timeout: 15000 });
+  await expect(submit).toBeEnabled({ timeout: 15000 });
+  await submit.click();
   proof.evidence.login = {
     formSubmitted: true,
     resultingOrigin:
@@ -409,6 +504,29 @@ async function validateFreeState(page) {
     throw new Error("new_ephemeral_user_must_start_free");
   }
   proof.checks.initialBackendFree = true;
+}
+
+async function verifyPostStripeAuthorityOnly() {
+  const entitlements = await supabaseRest("blundr_trusted_entitlements", {
+    select: "active,source_provider,entitlement_identifier,expires_at",
+    user_id: `eq.${ephemeralUser.id}`,
+    billing_environment: "eq.test",
+  });
+  const active = entitlements.filter(
+    (entitlement) => entitlement.active === true,
+  );
+  for (const entitlement of active) {
+    if (entitlement.source_provider !== "revenuecat") {
+      throw new Error("stripe_sourced_paid_entitlement_forbidden");
+    }
+    if (entitlement.entitlement_identifier !== revenueCatEntitlementId) {
+      throw new Error("unexpected_active_entitlement_after_stripe_webhook");
+    }
+    if (Date.parse(entitlement.expires_at) <= Date.now()) {
+      throw new Error("expired_revenuecat_entitlement_after_stripe_webhook");
+    }
+  }
+  proof.checks.postStripeDidNotGrantStripeEntitlement = true;
 }
 
 async function requestAndAcceptOffer(page) {
@@ -511,18 +629,81 @@ async function createCheckout(page) {
   return checkoutUrl.toString();
 }
 
+async function fillVisibleStripeField(page, label, value, options = {}) {
+  const frames = [page, ...page.frames()];
+  for (const frame of frames) {
+    const locator = frame.getByLabel(label).first();
+    if ((await locator.count().catch(() => 0)) === 0) continue;
+    if (!(await locator.isVisible().catch(() => false))) continue;
+    await locator.fill(value, options);
+    return true;
+  }
+  return false;
+}
+
+async function fillOptionalStripeField(page, label, value, options = {}) {
+  await fillVisibleStripeField(page, label, value, options);
+}
+
+async function waitForVisibleStripeField(page, label, timeoutMs = 30000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    for (const frame of [page, ...page.frames()]) {
+      const locator = frame.getByLabel(label).first();
+      if (
+        (await locator.count().catch(() => 0)) > 0 &&
+        (await locator.isVisible().catch(() => false))
+      ) {
+        return true;
+      }
+    }
+    await page.waitForTimeout(250);
+  }
+  return false;
+}
+
 async function completeStripeCheckout(page, checkoutUrl) {
   await page.goto(checkoutUrl, { waitUntil: "domcontentloaded" });
-  await page.getByLabel(/card number/i).fill("4242424242424242");
-  await page.getByLabel(/expiration/i).fill("1234");
-  await page.getByLabel(/cvc/i).fill("123");
-  const name = page.getByLabel(/cardholder name|name on card/i);
-  if (await name.count()) await name.fill("Blundr Wave 2B");
-  const country = page.getByLabel(/country/i);
-  if (await country.count()) await country.selectOption("US").catch(() => {});
-  await page
-    .getByRole("button", { name: /subscribe|start trial|pay/i })
-    .click();
+  await page.waitForLoadState("networkidle").catch(() => {});
+  if (!(await waitForVisibleStripeField(page, /card number/i))) {
+    throw new Error("stripe_checkout_payment_form_missing");
+  }
+  if (
+    !(await fillVisibleStripeField(page, /card number/i, "4242424242424242"))
+  ) {
+    throw new Error("stripe_checkout_card_number_field_missing");
+  }
+  if (!(await fillVisibleStripeField(page, /expiration|expiry/i, "1234"))) {
+    throw new Error("stripe_checkout_expiry_field_missing");
+  }
+  if (!(await fillVisibleStripeField(page, /cvc|security code/i, "123"))) {
+    throw new Error("stripe_checkout_cvc_field_missing");
+  }
+  await fillOptionalStripeField(
+    page,
+    /cardholder name|name on card|full name/i,
+    "Blundr Wave 2B",
+  );
+  await fillOptionalStripeField(page, /zip|postal/i, "10001");
+  for (const frame of [page, ...page.frames()]) {
+    const country = frame.getByLabel(/country/i).first();
+    if (
+      (await country.count().catch(() => 0)) > 0 &&
+      (await country.isVisible().catch(() => false))
+    ) {
+      await country.selectOption("US").catch(() => {});
+      break;
+    }
+  }
+  const submit = page
+    .getByRole("button", {
+      name: /^(subscribe|start trial|start free trial|pay)(\b|$)/i,
+    })
+    .filter({ hasNotText: /apple pay|google pay|link|paypal/i })
+    .first();
+  await expect(submit).toBeVisible({ timeout: 30000 });
+  await expect(submit).toBeEnabled({ timeout: 30000 });
+  await submit.click();
   await page.waitForURL(
     (url) =>
       url.origin === stableCallbackOrigin &&
@@ -542,13 +723,21 @@ async function completeStripeCheckout(page, checkoutUrl) {
 
 async function verifyStripeObjects() {
   const sessions = await stripe.checkout.sessions.list({
-    limit: 10,
+    limit: 100,
+    created: { gte: testStartedAt - 60 },
     expand: ["data.subscription"],
   });
-  const session = sessions.data.find(
-    (candidate) => candidate.metadata?.app_user_id === ephemeralUser.id,
+  const matchingSessions = sessions.data.filter(
+    (candidate) =>
+      candidate.metadata?.app_user_id === ephemeralUser.id &&
+      candidate.status === "complete",
   );
-  if (!session) throw new Error("stripe_checkout_session_not_found");
+  if (matchingSessions.length !== 1) {
+    throw new Error(
+      `stripe_checkout_session_count_mismatch:${matchingSessions.length}`,
+    );
+  }
+  const session = matchingSessions[0];
   if (session.livemode) throw new Error("stripe_session_live_mode_forbidden");
   if (session.payment_method_collection !== "always") {
     throw new Error("checkout_did_not_require_payment_method");
@@ -560,7 +749,12 @@ async function verifyStripeObjects() {
   if (!subscription) throw new Error("stripe_subscription_missing");
   stripeSubscriptionId = subscription.id;
   stripeSubscription = subscription;
+  stripeCustomerId =
+    typeof session.customer === "string"
+      ? session.customer
+      : (session.customer?.id ?? null);
   mask(stripeSubscriptionId, "STRIPE_SUBSCRIPTION_ID");
+  if (stripeCustomerId) mask(stripeCustomerId, "STRIPE_CUSTOMER_ID");
   if (subscription.livemode)
     throw new Error("stripe_subscription_live_mode_forbidden");
   if (subscription.metadata?.app_user_id !== ephemeralUser.id) {
@@ -630,16 +824,27 @@ async function pollUntil(label, fn, options = {}) {
   const deadline = Date.now() + timeoutMs;
   let delayMs = initialDelayMs;
   let attempts = 0;
+  let lastStatus = null;
   while (Date.now() < deadline) {
     attempts += 1;
-    const result = await fn();
+    let result;
+    try {
+      result = await fn();
+    } catch (error) {
+      proof.evidence[`${label}PollAttempts`] = attempts;
+      throw error;
+    }
+    if (result?.status) lastStatus = result.status;
     if (result?.ok) {
       proof.evidence[`${label}PollAttempts`] = attempts;
+      proof.evidence[`${label}LastStatus`] = lastStatus;
       return result;
     }
     await new Promise((resolve) => setTimeout(resolve, delayMs));
     delayMs = Math.min(maxDelayMs, Math.round(delayMs * 1.5));
   }
+  proof.evidence[`${label}PollAttempts`] = attempts;
+  proof.evidence[`${label}LastStatus`] = lastStatus;
   throw new Error(`${label}_timeout`);
 }
 
@@ -653,31 +858,64 @@ async function readRevenueCatProEntitlement() {
       },
     },
   );
+  if ([404, 429].includes(rcResponse.status) || rcResponse.status >= 500) {
+    return { ok: false, status: rcResponse.status };
+  }
   if (!rcResponse.ok)
     throw new Error(`revenuecat_v1_subscriber_failed:${rcResponse.status}`);
   const body = await rcResponse.json();
   const entitlement = body?.subscriber?.entitlements?.[revenueCatEntitlementId];
   const expiresAt = Date.parse(entitlement?.expires_date);
+  if (entitlement && (!Number.isFinite(expiresAt) || expiresAt <= Date.now())) {
+    throw new Error("revenuecat_pro_entitlement_expired_or_malformed");
+  }
   return {
     ok: Boolean(Number.isFinite(expiresAt) && expiresAt > Date.now()),
+    status: rcResponse.status,
   };
 }
 
 async function readBackendProState(page) {
   const status = await appJson(page, "/api/blundr/billing/status");
+  if ([429].includes(status.status) || status.status >= 500) {
+    return { ok: false, status: status.status };
+  }
   if (!status.ok)
     throw new Error(`post_purchase_billing_status_failed:${status.status}`);
   const access = status.body?.data;
+  if (
+    access?.plan === "pro" &&
+    access?.entitlementActive === true &&
+    access?.entitlementSource !== "revenuecat"
+  ) {
+    throw new Error("backend_pro_state_wrong_source");
+  }
   return {
     ok:
       access?.plan === "pro" &&
       access?.entitlementActive === true &&
       access?.entitlementSource === "revenuecat",
+    status: status.status,
   };
 }
 
 async function verifyRevenueCatAndBackend(page) {
-  await pollUntil("revenuecatProEntitlement", readRevenueCatProEntitlement);
+  try {
+    await pollUntil("revenuecatProEntitlement", readRevenueCatProEntitlement);
+  } catch (error) {
+    if (
+      String(error instanceof Error ? error.message : error).includes(
+        "revenuecatProEntitlement_timeout",
+      )
+    ) {
+      proof.evidence.revenueCatConfigurationDiagnosis = [
+        "Verify Track new purchases from server-to-server notifications is enabled for the sandbox Stripe integration.",
+        "Verify App User ID detection reads Stripe metadata field app_user_id.",
+        "Verify the sandbox Stripe connection and Stripe-to-RevenueCat webhook are configured.",
+      ];
+    }
+    throw error;
+  }
   proof.checks.revenueCatSubscriberRecognized = true;
   proof.checks.revenueCatProEntitlement = true;
 
@@ -790,7 +1028,7 @@ try {
   await completeStripeCheckout(page, checkoutUrl);
   await verifyStripeObjects();
   await deliverStripeWebhookTwice();
-  await validateFreeState(page);
+  await verifyPostStripeAuthorityOnly();
   await verifyRevenueCatAndBackend(page);
   await verifyProviderLedgers();
   await verifyPortal(page);
@@ -806,6 +1044,11 @@ try {
   proof.cleanup.attempted = true;
   await cancelStripeSubscription().catch((error) => {
     proof.cleanup.subscriptionCancelError = sanitizeError(
+      error instanceof Error ? error.message : String(error),
+    );
+  });
+  await deleteEphemeralStripeCustomer().catch((error) => {
+    proof.cleanup.customerDeleteError = sanitizeError(
       error instanceof Error ? error.message : String(error),
     );
   });

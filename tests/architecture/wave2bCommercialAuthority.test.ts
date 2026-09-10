@@ -173,6 +173,10 @@ test("Wave 2B browser route checks are backed by real pages and reject 404s", ()
   assert.match(browserHarness, /classification: "BROWSER_CONTRACT_QA"/);
   assert.match(browserHarness, /acceptanceEligible: false/);
   assert.match(browserHarness, /requiredBrowserEnv/);
+  assert.match(browserHarness, /createBrowserQaUser/);
+  assert.match(browserHarness, /deleteBrowserQaUser/);
+  assert.match(browserHarness, /BLUNDR_STAGING_SUPABASE_SECRET_KEY/);
+  assert.match(browserHarness, /browser_qa_supabase_secret_must_be_sb_secret/);
   assert.match(browserHarness, /missing_or_empty:\$\{name\}/);
   assert.match(browserHarness, /missing_or_invalid:WAVE2B_QA_SUPABASE_UUID/);
   assert.match(browserHarness, /expectInputCommitted/);
@@ -398,12 +402,23 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
   assert.match(workflow, /Run Wave 2B browser QA[\s\S]*timeout-minutes: 10/);
   assert.match(
     workflow,
+    /Run Wave 2B browser QA[\s\S]*continue-on-error: true/,
+  );
+  assert.match(
+    workflow,
     /Run Wave 2B provider configuration check[\s\S]*timeout-minutes: 5/,
   );
   assert.match(
     workflow,
     /Require real Wave 2B sandbox integration proof[\s\S]*timeout-minutes: 10/,
   );
+  assert.match(
+    workflow,
+    /Require real Wave 2B sandbox integration proof[\s\S]*continue-on-error: true/,
+  );
+  assert.match(workflow, /Require Wave 2B acceptance-critical outcomes/);
+  assert.match(workflow, /BROWSER_QA/);
+  assert.match(workflow, /SANDBOX_INTEGRATION_PROOF/);
   assert.ok(
     workflow.indexOf("Preflight non-production configuration") <
       workflow.indexOf("Restore Playwright browser cache"),
@@ -485,8 +500,15 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
   assert.match(sandboxProof, /classification: "SANDBOX_INTEGRATION_PROOF"/);
   assert.match(
     sandboxProof,
-    /getByRole\("textbox", \{ name: \/password\/i \}\)/,
+    /getByRole\("button", \{ name: "Log in", exact: true \}\)/,
   );
+  assert.doesNotMatch(sandboxProof, /name: \/sign in\/i/);
+  assert.doesNotMatch(
+    sandboxProof,
+    /\.catch\(async \(\) => \{[\s\S]*waitForLoadState\("networkidle"\)/,
+  );
+  assert.match(sandboxProof, /getByLabel\("Password", \{ exact: true \}\)/);
+  assert.match(sandboxProof, /input\[autocomplete="current-password"\]/);
   assert.doesNotMatch(sandboxProof, /getByLabel\(\/password\/i\)/);
   assert.match(
     sandboxProof,
@@ -511,6 +533,15 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
   assert.match(sandboxProof, /pollUntil\("revenuecatProEntitlement"/);
   assert.match(sandboxProof, /pollUntil\("backendTrustedProState"/);
   assert.match(sandboxProof, /verifyProviderLedgers/);
+  assert.match(sandboxProof, /verifyPostStripeAuthorityOnly/);
+  assert.match(sandboxProof, /stripe_sourced_paid_entitlement_forbidden/);
+  assert.match(sandboxProof, /created: \{ gte: testStartedAt - 60 \}/);
+  assert.match(sandboxProof, /stripe_checkout_session_count_mismatch/);
+  assert.match(sandboxProof, /fillVisibleStripeField/);
+  assert.match(sandboxProof, /waitForVisibleStripeField/);
+  assert.match(sandboxProof, /stripe_checkout_card_number_field_missing/);
+  assert.match(sandboxProof, /revenueCatConfigurationDiagnosis/);
+  assert.match(sandboxProof, /deleteEphemeralStripeCustomer/);
   assert.match(sandboxProof, /stripeProviderEventLedgerExactlyOnce/);
   assert.match(sandboxProof, /revenueCatWebhookProviderEventProcessed/);
   assert.match(sandboxProof, /revenueCatTrustedEntitlementWebhookCreated/);

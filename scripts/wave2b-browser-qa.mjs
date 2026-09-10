@@ -1,4 +1,5 @@
 import { chromium, expect } from "@playwright/test";
+import { randomBytes, randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
@@ -13,6 +14,7 @@ const qaEmail = requiredBrowserEnv("WAVE2B_QA_EMAIL");
 const qaPassword = requiredBrowserEnv("WAVE2B_QA_PASSWORD");
 const qaUserId = requiredBrowserEnv("WAVE2B_QA_SUPABASE_UUID");
 const artifactDir = requiredBrowserEnv("ARTIFACT_DIR");
+const extraSensitiveValues = new Set();
 
 if (
   !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -155,7 +157,12 @@ const protectedRouteChecks = [
 
 function redactText(value) {
   let text = String(value ?? "");
-  for (const forbidden of [qaEmail, qaPassword, qaUserId].filter(Boolean)) {
+  for (const forbidden of [
+    qaEmail,
+    qaPassword,
+    qaUserId,
+    ...extraSensitiveValues,
+  ].filter(Boolean)) {
     text = text.split(forbidden).join("[redacted]");
   }
   return text
@@ -192,9 +199,11 @@ function summarizeOnboardingBody(body) {
 }
 
 function assertNoSensitiveText(text, label) {
-  const forbidden = [qaEmail, process.env.WAVE2B_QA_SUPABASE_UUID].filter(
-    Boolean,
-  );
+  const forbidden = [
+    qaEmail,
+    process.env.WAVE2B_QA_SUPABASE_UUID,
+    ...extraSensitiveValues,
+  ].filter(Boolean);
   for (const value of forbidden) {
     if (text.includes(value)) {
       throw new Error(`${label} exposes private QA identity.`);
@@ -212,6 +221,106 @@ function assertNoSensitiveText(text, label) {
   ) {
     throw new Error(`${label} exposes a UUID.`);
   }
+}
+
+function mask(value) {
+  if (!value) return;
+  extraSensitiveValues.add(String(value));
+  console.log(`::add-mask::${String(value)}`);
+}
+
+function getStagingSupabaseUrl() {
+  return new URL(requiredBrowserEnv("BLUNDR_STAGING_SUPABASE_URL"));
+}
+
+function getStagingSupabaseSecretKey() {
+  return requiredBrowserEnv("BLUNDR_STAGING_SUPABASE_SECRET_KEY");
+}
+
+function assertNonProductionSupabaseUrl(stagingSupabaseUrl) {
+  const host = stagingSupabaseUrl.hostname.toLowerCase();
+  if (stagingSupabaseUrl.protocol !== "https:") {
+    throw new Error("browser_qa_supabase_url_must_be_https");
+  }
+  if (!/supabase\.(co|in)$/.test(host)) {
+    throw new Error("browser_qa_supabase_host_unrecognized");
+  }
+  if (/production|prod/.test(host)) {
+    throw new Error("browser_qa_supabase_url_must_not_be_production");
+  }
+}
+
+async function supabaseAdmin(path, init = {}) {
+  const stagingSupabaseUrl = getStagingSupabaseUrl();
+  const stagingSupabaseSecretKey = getStagingSupabaseSecretKey();
+  const response = await fetch(`${stagingSupabaseUrl.origin}${path}`, {
+    ...init,
+    headers: {
+      apikey: stagingSupabaseSecretKey,
+      Authorization: `Bearer ${stagingSupabaseSecretKey}`,
+      "content-type": "application/json",
+      ...(init.headers ?? {}),
+    },
+  });
+  const body = await response.json().catch(() => null);
+  return { response, body };
+}
+
+async function createBrowserQaUser(viewport) {
+  const stagingSupabaseUrl = getStagingSupabaseUrl();
+  const stagingSupabaseSecretKey = getStagingSupabaseSecretKey();
+  assertNonProductionSupabaseUrl(stagingSupabaseUrl);
+  if (!stagingSupabaseSecretKey.startsWith("sb_secret_")) {
+    throw new Error("browser_qa_supabase_secret_must_be_sb_secret");
+  }
+  const email = `wave2b-browser-${viewport.name}-${Date.now()}-${randomUUID()}@example.test`;
+  const password = `${randomBytes(24).toString("base64url")}aA1!`;
+  mask(email);
+  mask(password);
+  const { response, body } = await supabaseAdmin("/auth/v1/admin/users", {
+    method: "POST",
+    body: JSON.stringify({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        blundr_validation: "wave2b_browser_contract",
+        viewport: viewport.name,
+      },
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`browser_qa_user_create_failed:${response.status}`);
+  }
+  const id = body?.id;
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      String(id ?? ""),
+    )
+  ) {
+    throw new Error("browser_qa_user_id_invalid");
+  }
+  mask(id);
+  return { email, password, id };
+}
+
+async function deleteBrowserQaUser(user) {
+  if (!user?.id) return { attempted: false };
+  const { response } = await supabaseAdmin(
+    `/auth/v1/admin/users/${encodeURIComponent(user.id)}`,
+    { method: "DELETE" },
+  );
+  const verification = await supabaseAdmin(
+    `/auth/v1/admin/users/${encodeURIComponent(user.id)}`,
+    { method: "GET" },
+  );
+  return {
+    attempted: true,
+    deleted: response.ok,
+    deleteStatus: response.status,
+    verified:
+      verification.response.status === 404 || !verification.body?.user?.id,
+  };
 }
 
 async function installRoutes(page) {
@@ -359,11 +468,11 @@ async function expectInputCommitted(locator, label) {
   }
 }
 
-async function waitForExpectedBrowserSession(page, label) {
+async function waitForExpectedBrowserSession(page, label, expectedUserId) {
   const deadline = Date.now() + 20000;
   let latest = null;
   while (Date.now() < deadline) {
-    latest = await readBrowserSession(page);
+    latest = await readBrowserSession(page, expectedUserId);
     if (latest.authenticated && latest.userMatchesExpected) return latest;
     await page.waitForTimeout(250);
   }
@@ -373,7 +482,10 @@ async function waitForExpectedBrowserSession(page, label) {
   throw new Error(`${label}_session_not_established`);
 }
 
-async function signIn(page) {
+async function signIn(
+  page,
+  account = { email: qaEmail, password: qaPassword, id: qaUserId },
+) {
   const response = await page.goto(`${baseUrl}/login?next=/onboarding/plan`, {
     waitUntil: "domcontentloaded",
   });
@@ -402,8 +514,8 @@ async function signIn(page) {
     .first();
   await expect(email).toBeVisible({ timeout: 15000 });
   await expect(password).toBeVisible({ timeout: 15000 });
-  await email.fill(qaEmail);
-  await password.fill(qaPassword);
+  await email.fill(account.email);
+  await password.fill(account.password);
   await email.blur();
   await password.blur();
   await expectInputCommitted(email, "email");
@@ -434,7 +546,7 @@ async function signIn(page) {
   if (!authResponse.ok()) {
     throw new Error(`login_auth_rejected:${authResponse.status()}`);
   }
-  await waitForExpectedBrowserSession(page, "login");
+  await waitForExpectedBrowserSession(page, "login", account.id);
   await page.waitForURL((url) => url.pathname !== "/login", {
     timeout: 15000,
   });
@@ -514,7 +626,7 @@ async function redactPageForScreenshot(page) {
     .catch(() => {});
 }
 
-async function readBrowserSession(page) {
+async function readBrowserSession(page, expectedUserId = qaUserId) {
   return page.evaluate((expectedUserId) => {
     function findSession(value) {
       if (!value || typeof value !== "object") return null;
@@ -555,7 +667,7 @@ async function readBrowserSession(page) {
       userIdPresent: false,
       userMatchesExpected: false,
     };
-  }, qaUserId);
+  }, expectedUserId);
 }
 
 async function authenticatedJson(page, accessToken, path, init = {}) {
@@ -625,7 +737,7 @@ async function patchOnboardingStep(page, accessToken, step) {
   };
 }
 
-async function resetQaOnboarding(page, accessToken) {
+async function resetQaOnboarding(page, accessToken, userId = qaUserId) {
   const result = await authenticatedJson(
     page,
     accessToken,
@@ -634,7 +746,7 @@ async function resetQaOnboarding(page, accessToken) {
       method: "POST",
       body: JSON.stringify({
         scope: "onboarding",
-        userId: qaUserId,
+        userId,
       }),
     },
   );
@@ -656,14 +768,23 @@ async function resetQaOnboarding(page, accessToken) {
   };
 }
 
-async function ensureOnboardingPlanState(page, accessToken, diagnostics) {
+async function ensureOnboardingPlanState(
+  page,
+  accessToken,
+  diagnostics,
+  userId = qaUserId,
+) {
   let state = await readOnboardingState(page, accessToken);
   diagnostics.initialOnboarding = state;
   if (!state.ok) return state;
   const planIndex = onboardingSteps.indexOf("plan");
   let currentIndex = onboardingSteps.indexOf(state.step);
   if (state.completed || currentIndex > planIndex) {
-    diagnostics.resetAttempt = await resetQaOnboarding(page, accessToken);
+    diagnostics.resetAttempt = await resetQaOnboarding(
+      page,
+      accessToken,
+      userId,
+    );
     if (!diagnostics.resetAttempt.ok) {
       diagnostics.finalOnboarding = state;
       throw new Error(buildResetFailureMessage(diagnostics.resetAttempt));
@@ -929,8 +1050,8 @@ async function assertCheckoutRequestContainsOnlyPlan(request, plan) {
   }
 }
 
-async function validatePaywall(page, viewport, diagnostics) {
-  const sessionSummary = await readBrowserSession(page);
+async function validatePaywall(page, viewport, diagnostics, account) {
+  const sessionSummary = await readBrowserSession(page, account.id);
   if (
     !sessionSummary.authenticated ||
     !sessionSummary.accessToken ||
@@ -954,6 +1075,7 @@ async function validatePaywall(page, viewport, diagnostics) {
       page,
       sessionSummary.accessToken,
       diagnostics,
+      account.id,
     );
   } catch (error) {
     await writePaywallDiagnostics(
@@ -1247,17 +1369,27 @@ export async function runWave2BBrowserQa() {
   const summary = [];
   try {
     for (const viewport of viewports) {
+      let account = null;
       const context = await browser.newContext({ viewport });
-      const page = await context.newPage();
-      const pageDiagnostics = installPageDiagnostics(page);
-      await installRoutes(page);
-      await signIn(page);
-      await installRoutes(page);
-      await validatePaywall(page, viewport, pageDiagnostics);
-      await validateRoutes(page, viewport);
-      await validateKeyboard(page);
-      summary.push({ viewport: viewport.name, status: "passed" });
-      await context.close();
+      try {
+        account = await createBrowserQaUser(viewport);
+        const page = await context.newPage();
+        const pageDiagnostics = installPageDiagnostics(page);
+        await installRoutes(page);
+        await signIn(page, account);
+        await installRoutes(page);
+        await validatePaywall(page, viewport, pageDiagnostics, account);
+        await validateRoutes(page, viewport);
+        await validateKeyboard(page);
+        summary.push({ viewport: viewport.name, status: "passed" });
+      } finally {
+        await context.close();
+        const cleanup = await deleteBrowserQaUser(account);
+        summary.push({
+          viewport: viewport.name,
+          cleanup,
+        });
+      }
     }
   } finally {
     await browser.close();
