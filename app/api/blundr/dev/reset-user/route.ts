@@ -9,6 +9,7 @@ import { resolveBlundrDeveloperAccess } from "@/lib/blundr/backend/devAccess";
 import { getCurrentBlundrUser } from "@/lib/blundr/accounts/accountSession";
 import type { CurrentBlundrUser } from "@/lib/blundr/accounts/accountTypes";
 import { resolvePreviewOnboardingSelfResetDecision } from "@/lib/blundr/backend/previewResetAccess";
+import { resetOnboardingV11State } from "@/lib/blundr/onboarding/onboardingV11Reset";
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +82,18 @@ async function resetAuthenticatedOnboardingState(input: {
     return NextResponse.json(profileResult, { status: 500 });
   }
 
+  let onboarding;
+  try {
+    onboarding = await resetOnboardingV11State({
+      user: input.user,
+      targetUserId: input.targetUserId,
+    });
+  } catch (error) {
+    const code =
+      error instanceof Error ? error.message : "onboarding_v11_reset_failed";
+    return NextResponse.json({ ok: false, error: { code } }, { status: 500 });
+  }
+
   await appendDeveloperAuditLogEntry(
     {
       actorUserId: input.user.userId ?? null,
@@ -97,7 +110,11 @@ async function resetAuthenticatedOnboardingState(input: {
     },
   );
 
-  return NextResponse.json({ ok: true, profile: profileResult.data });
+  return NextResponse.json({
+    ok: true,
+    profile: profileResult.data,
+    onboarding,
+  });
 }
 
 async function readBody(

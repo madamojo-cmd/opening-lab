@@ -638,8 +638,12 @@ async function resetQaOnboarding(page, accessToken) {
       }),
     },
   );
+  const onboardingSummary = result.ok
+    ? summarizeOnboardingBody({ ok: true, data: result.body?.onboarding })
+    : {};
   return {
     status: result.status,
+    ...onboardingSummary,
     ok: result.ok,
     errorCode:
       typeof result.body?.error?.code === "string"
