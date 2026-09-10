@@ -164,10 +164,31 @@ test("Wave 2B browser route checks are backed by real pages and reject 404s", ()
     /expected_sha must be exactly 40 hexadecimal characters/,
   );
   assert.match(workflow, /expected_sha does not match the checked-out HEAD/);
+  assert.match(
+    workflow,
+    /String\(process\.env\[config\.env\] \?\? ""\)\.trim\(\)/,
+  );
   assert.match(workflow, /\/api\/health did not expose the expected SHA/);
   assert.match(workflow, /node scripts\/wave2b-browser-qa\.mjs/);
   assert.match(browserHarness, /classification: "BROWSER_CONTRACT_QA"/);
   assert.match(browserHarness, /acceptanceEligible: false/);
+  assert.match(browserHarness, /requiredBrowserEnv/);
+  assert.match(browserHarness, /missing_or_empty:\$\{name\}/);
+  assert.match(browserHarness, /missing_or_invalid:WAVE2B_QA_SUPABASE_UUID/);
+  assert.match(browserHarness, /expectInputCommitted/);
+  assert.match(browserHarness, /`\$\{label\}_input_not_committed`/);
+  assert.match(browserHarness, /expectInputCommitted\(password, "password"\)/);
+  assert.match(browserHarness, /waitForExpectedBrowserSession/);
+  assert.match(browserHarness, /`\$\{label\}_session_not_established`/);
+  assert.match(browserHarness, /login_auth_request_not_observed/);
+  assert.match(browserHarness, /login_auth_rejected/);
+  assert.match(browserHarness, /userMatchesExpected/);
+  assert.match(browserHarness, /url\.pathname === "\/auth\/v1\/token"/);
+  assert.match(
+    browserHarness,
+    /getByRole\("button", \{ name: "Log in", exact: true \}\)/,
+  );
+  assert.doesNotMatch(browserHarness, /name: \/sign in\|log in\|continue\/i/);
   assert.match(browserHarness, /entitlementSource: null/);
   assert.match(browserHarness, /trialStatus: "none"/);
   assert.match(browserHarness, /currentPeriodEndAt: null/);
@@ -241,6 +262,12 @@ test("Wave 2B browser route checks are backed by real pages and reject 404s", ()
 });
 
 test("Wave 2B route required text accepts a visible duplicate after a hidden match", async () => {
+  process.env.WAVE2B_PREVIEW_URL ??= "https://blundr-staging.example.test";
+  process.env.WAVE2B_QA_EMAIL ??= "qa@example.test";
+  process.env.WAVE2B_QA_PASSWORD ??= "not-a-real-password";
+  process.env.WAVE2B_QA_SUPABASE_UUID ??=
+    "11111111-1111-4111-8111-111111111111";
+  process.env.ARTIFACT_DIR ??= "/tmp/blundr-wave2b-test-artifacts";
   const browserHarness = await import("../../scripts/wave2b-browser-qa.mjs");
   const visibilityByText = new Map<string, boolean[]>([
     ["Tempo", [false, true]],

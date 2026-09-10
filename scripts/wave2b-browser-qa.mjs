@@ -2,11 +2,25 @@ import { chromium, expect } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
-const baseUrl = (process.env.WAVE2B_PREVIEW_URL ?? "").replace(/\/+$/, "");
-const qaEmail = process.env.WAVE2B_QA_EMAIL;
-const qaPassword = process.env.WAVE2B_QA_PASSWORD;
-const qaUserId = process.env.WAVE2B_QA_SUPABASE_UUID;
-const artifactDir = process.env.ARTIFACT_DIR;
+function requiredBrowserEnv(name) {
+  const value = String(process.env[name] ?? "");
+  if (!value.trim()) throw new Error(`missing_or_empty:${name}`);
+  return value;
+}
+
+const baseUrl = requiredBrowserEnv("WAVE2B_PREVIEW_URL").replace(/\/+$/, "");
+const qaEmail = requiredBrowserEnv("WAVE2B_QA_EMAIL");
+const qaPassword = requiredBrowserEnv("WAVE2B_QA_PASSWORD");
+const qaUserId = requiredBrowserEnv("WAVE2B_QA_SUPABASE_UUID");
+const artifactDir = requiredBrowserEnv("ARTIFACT_DIR");
+
+if (
+  !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    qaUserId,
+  )
+) {
+  throw new Error("missing_or_invalid:WAVE2B_QA_SUPABASE_UUID");
+}
 
 const viewports = [
   { name: "mobile", width: 390, height: 844 },
@@ -321,26 +335,101 @@ async function installRoutes(page) {
   );
 }
 
+async function expectInputCommitted(locator, label) {
+  const committed = await locator.evaluate((input) => {
+    return (
+      input instanceof HTMLInputElement &&
+      typeof input.value === "string" &&
+      input.value.trim().length > 0
+    );
+  });
+  if (!committed) {
+    throw new Error(`${label}_input_not_committed`);
+  }
+}
+
+async function waitForExpectedBrowserSession(page, label) {
+  const deadline = Date.now() + 20000;
+  let latest = null;
+  while (Date.now() < deadline) {
+    latest = await readBrowserSession(page);
+    if (latest.authenticated && latest.userMatchesExpected) return latest;
+    await page.waitForTimeout(250);
+  }
+  if (latest?.authenticated && !latest.userMatchesExpected) {
+    throw new Error(`${label}_authenticated_unexpected_user`);
+  }
+  throw new Error(`${label}_session_not_established`);
+}
+
 async function signIn(page) {
-  await page.goto(`${baseUrl}/login?next=/onboarding/plan`, {
+  const response = await page.goto(`${baseUrl}/login?next=/onboarding/plan`, {
     waitUntil: "domcontentloaded",
   });
-  const email = page
-    .getByLabel(/email/i)
-    .or(page.locator('input[type="email"]'))
+  if (!response || response.status() < 200 || response.status() >= 400) {
+    throw new Error(
+      `login_page_unavailable:${response?.status() ?? "no_response"}`,
+    );
+  }
+  await page.waitForLoadState("networkidle").catch(() => {});
+
+  const form = page
+    .locator("form")
+    .filter({
+      has: page.getByRole("button", { name: "Log in", exact: true }),
+    })
     .first();
-  const password = page
-    .getByLabel(/password/i)
-    .or(page.locator('input[type="password"]'))
+  await expect(form).toBeVisible({ timeout: 15000 });
+
+  const email = form
+    .getByLabel("Email", { exact: true })
+    .or(form.locator('input[type="email"]'))
+    .first();
+  const password = form
+    .getByLabel("Password", { exact: true })
+    .or(form.locator('input[type="password"]'))
     .first();
   await expect(email).toBeVisible({ timeout: 15000 });
+  await expect(password).toBeVisible({ timeout: 15000 });
   await email.fill(qaEmail);
   await password.fill(qaPassword);
-  const submit = page
-    .getByRole("button", { name: /sign in|log in|continue/i })
-    .first();
+  await email.blur();
+  await password.blur();
+  await expectInputCommitted(email, "email");
+  await expectInputCommitted(password, "password");
+
+  const authResponsePromise = page
+    .waitForResponse(
+      (candidate) => {
+        const url = new URL(candidate.url());
+        return (
+          url.hostname.endsWith(".supabase.co") &&
+          url.pathname === "/auth/v1/token" &&
+          candidate.request().method() === "POST"
+        );
+      },
+      { timeout: 15000 },
+    )
+    .catch(() => null);
+  const submit = form.getByRole("button", { name: "Log in", exact: true });
+  await expect(submit).toBeVisible({ timeout: 15000 });
+  await expect(submit).toBeEnabled({ timeout: 15000 });
   await submit.click();
-  await page.waitForLoadState("networkidle").catch(() => {});
+
+  const authResponse = await authResponsePromise;
+  if (!authResponse) {
+    throw new Error("login_auth_request_not_observed");
+  }
+  if (!authResponse.ok()) {
+    throw new Error(`login_auth_rejected:${authResponse.status()}`);
+  }
+  await waitForExpectedBrowserSession(page, "login");
+  await page.waitForURL((url) => url.pathname !== "/login", {
+    timeout: 15000,
+  });
+  if (new URL(page.url()).pathname === "/login") {
+    throw new Error("login_did_not_leave_login_route");
+  }
 }
 
 function installPageDiagnostics(page) {

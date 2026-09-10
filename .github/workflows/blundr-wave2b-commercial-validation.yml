@@ -93,10 +93,10 @@ jobs:
             { env: "BLUNDR_STAGING_SUPABASE_SECRET_KEY", name: "BLUNDR_STAGING_SUPABASE_SECRET_KEY" },
           ];
           const missingRequired = required
-            .filter((config) => !process.env[config.env])
+            .filter((config) => !String(process.env[config.env] ?? "").trim())
             .map((config) => config.name);
           const missingProviderConfiguration = providerConfiguration
-            .filter((config) => !process.env[config.env])
+            .filter((config) => !String(process.env[config.env] ?? "").trim())
             .map((config) => config.name);
 
           const result = {
