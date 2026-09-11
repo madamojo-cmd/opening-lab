@@ -39,6 +39,8 @@ let stripeSubscription = null;
 let stripeSyntheticEventId = null;
 let ephemeralAccessToken = null;
 let stripeCustomerId = null;
+let acceptedOfferId = null;
+let checkoutSessionId = null;
 let testStartedAt = Math.floor(Date.now() / 1000);
 
 function required(name) {
@@ -135,6 +137,13 @@ function redactedId(value) {
   return `${String(value).slice(0, 6)}...${String(value).slice(-4)}`;
 }
 
+function isStripeCheckoutHost(hostname) {
+  const host = String(hostname ?? "").toLowerCase();
+  return (
+    host === "checkout.stripe.com" || host.endsWith(".checkout.stripe.com")
+  );
+}
+
 async function writeProof() {
   await writeFile(
     `${artifactDir}/sandbox-integration-proof.json`,
@@ -222,6 +231,35 @@ async function findRunSubscriptions() {
   );
 }
 
+async function readPersistedCheckoutSessionId() {
+  if (!ephemeralUser?.id) return null;
+  if (acceptedOfferId) {
+    const offers = await supabaseRest("blundr_paid_offer_acceptances", {
+      select: "checkout_session_id",
+      id: `eq.${acceptedOfferId}`,
+      user_id: `eq.${ephemeralUser.id}`,
+      billing_environment: "eq.test",
+    });
+    const offerSessionId = offers[0]?.checkout_session_id;
+    if (
+      typeof offerSessionId === "string" &&
+      offerSessionId.startsWith("cs_")
+    ) {
+      return offerSessionId;
+    }
+  }
+  const reservations = await supabaseRest("blundr_billing_trial_eligibility", {
+    select: "checkout_session_id",
+    user_id: `eq.${ephemeralUser.id}`,
+    billing_environment: "eq.test",
+  });
+  const trialSessionId = reservations[0]?.checkout_session_id;
+  if (typeof trialSessionId === "string" && trialSessionId.startsWith("cs_")) {
+    return trialSessionId;
+  }
+  return null;
+}
+
 async function deleteEphemeralUser() {
   if (!ephemeralUser?.id) return;
   const { response } = await supabaseAdmin(
@@ -239,6 +277,29 @@ async function deleteEphemeralUser() {
 }
 
 async function cancelStripeSubscription() {
+  if (!stripeSubscriptionId) {
+    const persistedSessionId =
+      checkoutSessionId ??
+      (await readPersistedCheckoutSessionId().catch(() => null));
+    if (persistedSessionId) {
+      checkoutSessionId = persistedSessionId;
+      const session = await stripe.checkout.sessions.retrieve(
+        persistedSessionId,
+        { expand: ["subscription"] },
+      );
+      stripeCustomerId =
+        typeof session.customer === "string"
+          ? session.customer
+          : (session.customer?.id ?? null);
+      const subscription = session.subscription;
+      if (typeof subscription === "string") {
+        stripeSubscriptionId = subscription;
+      } else if (subscription?.id) {
+        stripeSubscriptionId = subscription.id;
+        stripeSubscription = subscription;
+      }
+    }
+  }
   if (!stripeSubscriptionId) {
     const candidates = await findRunSubscriptions().catch(() => []);
     if (candidates.length === 1) {
@@ -585,6 +646,7 @@ async function requestAndAcceptOffer(page) {
     throw new Error("paid_offer_acknowledgement_missing");
   }
   const offerId = offerData.id;
+  acceptedOfferId = offerId;
   const accepted = await appJson(page, "/api/blundr/billing/offer/accept", {
     method: "POST",
     body: JSON.stringify({ offerId, plan: "monthly" }),
@@ -622,9 +684,14 @@ async function createCheckout(page) {
     throw new Error(`checkout_create_failed:${result.status}`);
   }
   const checkoutUrl = new URL(result.body.data.url);
-  if (!/\.stripe\.com$/i.test(checkoutUrl.hostname)) {
+  if (!isStripeCheckoutHost(checkoutUrl.hostname)) {
     throw new Error("checkout_url_not_stripe");
   }
+  checkoutSessionId = await readPersistedCheckoutSessionId();
+  if (!checkoutSessionId) {
+    throw new Error("checkout_session_id_not_persisted");
+  }
+  mask(checkoutSessionId, "STRIPE_CHECKOUT_SESSION_ID");
   proof.checks.checkoutCreatedByBlundr = true;
   return checkoutUrl.toString();
 }
@@ -637,6 +704,20 @@ async function fillVisibleStripeField(page, label, value, options = {}) {
     if (!(await locator.isVisible().catch(() => false))) continue;
     await locator.fill(value, options);
     return true;
+  }
+  return false;
+}
+
+async function fillVisibleStripeFieldByFallbacks(page, field) {
+  const frames = [page, ...page.frames()];
+  for (const frame of frames) {
+    for (const locator of field.locators(frame)) {
+      const target = locator.first();
+      if ((await target.count().catch(() => 0)) === 0) continue;
+      if (!(await target.isVisible().catch(() => false))) continue;
+      await target.fill(field.value, field.options ?? {});
+      return true;
+    }
   }
   return false;
 }
@@ -662,48 +743,252 @@ async function waitForVisibleStripeField(page, label, timeoutMs = 30000) {
   return false;
 }
 
+async function listVisiblePaymentMethodLabels(page) {
+  return page.evaluate(() => {
+    const labels = new Set();
+    const selectors = [
+      'button[role="radio"]',
+      'button[role="tab"]',
+      "button[aria-pressed]",
+      'input[type="radio"]',
+      '[role="radio"]',
+      '[data-testid*="payment"]',
+    ];
+    for (const element of document.querySelectorAll(selectors.join(","))) {
+      const text = [
+        element.getAttribute("aria-label"),
+        element.textContent,
+        element.id
+          ? document.querySelector(`label[for="${CSS.escape(element.id)}"]`)
+              ?.textContent
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (text) labels.add(text.slice(0, 80));
+    }
+    return [...labels];
+  });
+}
+
+async function findVisibleLocator(target, locators) {
+  for (const locator of locators) {
+    const count = await locator.count().catch(() => 0);
+    for (let index = 0; index < count; index += 1) {
+      const candidate = locator.nth(index);
+      if (await candidate.isVisible().catch(() => false)) {
+        return candidate;
+      }
+    }
+  }
+  return null;
+}
+
+async function selectCardPaymentMethod(page) {
+  proof.evidence.checkoutDiagnostics ??= {};
+  proof.evidence.checkoutDiagnostics.paymentMethodLabels =
+    await listVisiblePaymentMethodLabels(page).catch(() => []);
+  const cardName = /^(card|credit card|credit or debit card)$/i;
+  const disallowed = /apple pay|google pay|link|klarna|cash app|amazon pay/i;
+  const card = await findVisibleLocator(page, [
+    page.getByRole("radio", { name: cardName }),
+    page.getByRole("button", { name: cardName }),
+    page.getByRole("tab", { name: cardName }),
+    page.getByLabel(cardName),
+    page.getByText(cardName, { exact: true }),
+  ]);
+  if (!card) {
+    proof.evidence.checkoutDiagnostics.cardFound = false;
+    throw new Error("stripe_checkout_card_payment_method_missing");
+  }
+  const label = await card.innerText().catch(() => "");
+  if (disallowed.test(label)) {
+    throw new Error("stripe_checkout_disallowed_payment_method_selected");
+  }
+  proof.evidence.checkoutDiagnostics.cardFound = true;
+  await card.click();
+  const cardSelected = await card
+    .evaluate((element) => {
+      const input =
+        element instanceof HTMLInputElement
+          ? element
+          : element.querySelector('input[type="radio"]');
+      return (
+        input?.checked === true ||
+        element.getAttribute("aria-checked") === "true" ||
+        element.getAttribute("aria-selected") === "true" ||
+        element.getAttribute("aria-pressed") === "true"
+      );
+    })
+    .catch(() => false);
+  proof.evidence.checkoutDiagnostics.cardSelected = cardSelected;
+  if (
+    !cardSelected &&
+    !(await waitForVisibleStripeField(page, /card number/i, 10000))
+  ) {
+    throw new Error("stripe_checkout_card_payment_method_not_selected");
+  }
+}
+
+async function disableStripeLinkSave(page) {
+  proof.evidence.checkoutDiagnostics ??= {};
+  for (const frame of [page, ...page.frames()]) {
+    const checkbox = frame
+      .getByRole("checkbox", {
+        name: /save my information for faster checkout/i,
+      })
+      .first();
+    if ((await checkbox.count().catch(() => 0)) === 0) continue;
+    if (!(await checkbox.isVisible().catch(() => false))) continue;
+    proof.evidence.checkoutDiagnostics.linkSaveFound = true;
+    if (await checkbox.isChecked().catch(() => false)) {
+      await checkbox.uncheck();
+      proof.evidence.checkoutDiagnostics.linkSaveUnchecked = true;
+    } else {
+      proof.evidence.checkoutDiagnostics.linkSaveUnchecked = false;
+    }
+    return;
+  }
+  proof.evidence.checkoutDiagnostics.linkSaveFound = false;
+}
+
+async function captureCheckoutDiagnostics(page, reason, fields = {}) {
+  proof.evidence.checkoutDiagnostics = {
+    ...(proof.evidence.checkoutDiagnostics ?? {}),
+    reason: sanitizeError(reason),
+    currentHost: new URL(page.url()).hostname,
+    currentPath: new URL(page.url()).pathname,
+    paymentMethodLabels: await listVisiblePaymentMethodLabels(page).catch(
+      () => [],
+    ),
+    frameCount: page.frames().length,
+    frames: page.frames().map((frame) => ({
+      origin: new URL(frame.url() || "about:blank").origin,
+      name: sanitizeError(frame.name()),
+    })),
+    fields,
+  };
+  if (!fields.paymentFieldsEntered) {
+    await page
+      .addStyleTag({
+        content:
+          'input, [autocomplete="email"], [data-testid*="email"] { color: transparent !important; text-shadow: none !important; }',
+      })
+      .catch(() => {});
+    const screenshotPath = `${artifactDir}/stripe-checkout-diagnostic.png`;
+    await page
+      .screenshot({ path: screenshotPath, fullPage: true })
+      .catch(() => {});
+    proof.evidence.checkoutDiagnostics.screenshot =
+      "stripe-checkout-diagnostic.png";
+  } else {
+    proof.evidence.checkoutDiagnostics.screenshotSkipped =
+      "payment_fields_entered";
+  }
+}
+
 async function completeStripeCheckout(page, checkoutUrl) {
   await page.goto(checkoutUrl, { waitUntil: "domcontentloaded" });
   await page.waitForLoadState("networkidle").catch(() => {});
-  if (!(await waitForVisibleStripeField(page, /card number/i))) {
-    throw new Error("stripe_checkout_payment_form_missing");
+  const checkoutPageUrl = new URL(page.url());
+  if (!isStripeCheckoutHost(checkoutPageUrl.hostname)) {
+    throw new Error("stripe_checkout_host_mismatch");
   }
-  if (
-    !(await fillVisibleStripeField(page, /card number/i, "4242424242424242"))
-  ) {
-    throw new Error("stripe_checkout_card_number_field_missing");
-  }
-  if (!(await fillVisibleStripeField(page, /expiration|expiry/i, "1234"))) {
-    throw new Error("stripe_checkout_expiry_field_missing");
-  }
-  if (!(await fillVisibleStripeField(page, /cvc|security code/i, "123"))) {
-    throw new Error("stripe_checkout_cvc_field_missing");
-  }
-  await fillOptionalStripeField(
-    page,
-    /cardholder name|name on card|full name/i,
-    "Blundr Wave 2B",
-  );
-  await fillOptionalStripeField(page, /zip|postal/i, "10001");
-  for (const frame of [page, ...page.frames()]) {
-    const country = frame.getByLabel(/country/i).first();
-    if (
-      (await country.count().catch(() => 0)) > 0 &&
-      (await country.isVisible().catch(() => false))
-    ) {
-      await country.selectOption("US").catch(() => {});
-      break;
+  const fieldStatus = { paymentFieldsEntered: false };
+  try {
+    await selectCardPaymentMethod(page);
+    await disableStripeLinkSave(page);
+    if (!(await waitForVisibleStripeField(page, /card number/i))) {
+      throw new Error("stripe_checkout_payment_form_missing");
     }
+    if (
+      !(await fillVisibleStripeFieldByFallbacks(page, {
+        value: "4242424242424242",
+        locators: (frame) => [
+          frame.getByLabel(/card number/i),
+          frame.locator('input[autocomplete="cc-number"]'),
+          frame.locator('input[name*="cardnumber" i]'),
+        ],
+      }))
+    ) {
+      throw new Error("stripe_checkout_card_number_field_missing");
+    }
+    fieldStatus.cardNumber = "filled";
+    fieldStatus.paymentFieldsEntered = true;
+    if (
+      !(await fillVisibleStripeFieldByFallbacks(page, {
+        value: "1234",
+        locators: (frame) => [
+          frame.getByLabel(/expiration|expiry/i),
+          frame.locator('input[autocomplete="cc-exp"]'),
+          frame.locator('input[name*="exp" i]'),
+        ],
+      }))
+    ) {
+      throw new Error("stripe_checkout_expiry_field_missing");
+    }
+    fieldStatus.expiry = "filled";
+    if (
+      !(await fillVisibleStripeFieldByFallbacks(page, {
+        value: "123",
+        locators: (frame) => [
+          frame.getByLabel(/cvc|security code/i),
+          frame.locator('input[autocomplete="cc-csc"]'),
+          frame.locator('input[name*="cvc" i]'),
+        ],
+      }))
+    ) {
+      throw new Error("stripe_checkout_cvc_field_missing");
+    }
+    fieldStatus.cvc = "filled";
+    await fillOptionalStripeField(
+      page,
+      /cardholder name|name on card|full name/i,
+      "Blundr Wave 2B",
+    );
+    await fillOptionalStripeField(page, /zip|postal/i, "10001");
+    for (const frame of [page, ...page.frames()]) {
+      const country = frame.getByLabel(/country/i).first();
+      if (
+        (await country.count().catch(() => 0)) > 0 &&
+        (await country.isVisible().catch(() => false))
+      ) {
+        await country.selectOption("US").catch(() => {});
+        break;
+      }
+    }
+    const submitCandidates = page
+      .getByRole("button", {
+        name: /^(start trial|start free trial|subscribe|pay)(\b|$)/i,
+      })
+      .filter({ hasNotText: /apple pay|google pay|link|paypal/i });
+    const visibleSubmitIndexes = [];
+    const submitCount = await submitCandidates.count();
+    for (let index = 0; index < submitCount; index += 1) {
+      const candidate = submitCandidates.nth(index);
+      if (
+        (await candidate.isVisible().catch(() => false)) &&
+        (await candidate.isEnabled().catch(() => false))
+      ) {
+        visibleSubmitIndexes.push(index);
+      }
+    }
+    if (visibleSubmitIndexes.length !== 1) {
+      throw new Error(
+        `stripe_checkout_submit_button_count_mismatch:${visibleSubmitIndexes.length}`,
+      );
+    }
+    await submitCandidates.nth(visibleSubmitIndexes[0]).click();
+  } catch (error) {
+    await captureCheckoutDiagnostics(
+      page,
+      error instanceof Error ? error.message : String(error),
+      fieldStatus,
+    );
+    throw error;
   }
-  const submit = page
-    .getByRole("button", {
-      name: /^(subscribe|start trial|start free trial|pay)(\b|$)/i,
-    })
-    .filter({ hasNotText: /apple pay|google pay|link|paypal/i })
-    .first();
-  await expect(submit).toBeVisible({ timeout: 30000 });
-  await expect(submit).toBeEnabled({ timeout: 30000 });
-  await submit.click();
   await page.waitForURL(
     (url) =>
       url.origin === stableCallbackOrigin &&
@@ -722,22 +1007,37 @@ async function completeStripeCheckout(page, checkoutUrl) {
 }
 
 async function verifyStripeObjects() {
-  const sessions = await stripe.checkout.sessions.list({
-    limit: 100,
-    created: { gte: testStartedAt - 60 },
-    expand: ["data.subscription"],
-  });
-  const matchingSessions = sessions.data.filter(
-    (candidate) =>
-      candidate.metadata?.app_user_id === ephemeralUser.id &&
-      candidate.status === "complete",
-  );
-  if (matchingSessions.length !== 1) {
-    throw new Error(
-      `stripe_checkout_session_count_mismatch:${matchingSessions.length}`,
-    );
+  checkoutSessionId =
+    checkoutSessionId ?? (await readPersistedCheckoutSessionId());
+  if (!checkoutSessionId) {
+    throw new Error("checkout_session_id_not_persisted_for_verification");
   }
-  const session = matchingSessions[0];
+  const session = await stripe.checkout.sessions.retrieve(checkoutSessionId, {
+    expand: ["subscription"],
+  });
+  if (session.metadata?.app_user_id !== ephemeralUser.id) {
+    throw new Error("stripe_checkout_session_metadata_user_mismatch");
+  }
+  if (session.status !== "complete") {
+    throw new Error(`stripe_checkout_session_not_complete:${session.status}`);
+  }
+  if (session.mode !== "subscription") {
+    throw new Error("stripe_checkout_mode_mismatch");
+  }
+  const sessionAgeOk =
+    typeof session.created === "number" &&
+    session.created >= testStartedAt - 60;
+  if (!sessionAgeOk) {
+    throw new Error("stripe_checkout_session_outside_validation_window");
+  }
+  const lineItems = await stripe.checkout.sessions.listLineItems(
+    checkoutSessionId,
+    { limit: 10 },
+  );
+  const priceIds = lineItems.data.map((item) => item.price?.id).filter(Boolean);
+  if (priceIds.join(",") !== "price_1UDmveLuqtbLOQt39LJ8Pp4v") {
+    throw new Error("stripe_checkout_session_price_mismatch");
+  }
   if (session.livemode) throw new Error("stripe_session_live_mode_forbidden");
   if (session.payment_method_collection !== "always") {
     throw new Error("checkout_did_not_require_payment_method");
@@ -849,20 +1149,32 @@ async function pollUntil(label, fn, options = {}) {
 }
 
 async function readRevenueCatProEntitlement() {
-  const rcResponse = await fetch(
-    `https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(ephemeralUser.id)}`,
-    {
-      headers: {
-        Authorization: `Bearer ${required("REVENUECAT_REST_API_KEY")}`,
-        Accept: "application/json",
+  let rcResponse;
+  try {
+    rcResponse = await fetch(
+      `https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(ephemeralUser.id)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${required("REVENUECAT_REST_API_KEY")}`,
+          Accept: "application/json",
+        },
       },
-    },
-  );
-  if ([404, 429].includes(rcResponse.status) || rcResponse.status >= 500) {
+    );
+  } catch {
+    return { ok: false, status: "network_error" };
+  }
+  if (rcResponse.status === 429 || rcResponse.status >= 500) {
     return { ok: false, status: rcResponse.status };
   }
-  if (!rcResponse.ok)
+  if ([400, 401, 403].includes(rcResponse.status)) {
     throw new Error(`revenuecat_v1_subscriber_failed:${rcResponse.status}`);
+  }
+  if (rcResponse.status === 404) {
+    throw new Error("revenuecat_v1_subscriber_not_found_or_wrong_context:404");
+  }
+  if (![200, 201].includes(rcResponse.status)) {
+    throw new Error(`revenuecat_v1_subscriber_unexpected:${rcResponse.status}`);
+  }
   const body = await rcResponse.json();
   const entitlement = body?.subscriber?.entitlements?.[revenueCatEntitlementId];
   const expiresAt = Date.parse(entitlement?.expires_date);
@@ -876,7 +1188,12 @@ async function readRevenueCatProEntitlement() {
 }
 
 async function readBackendProState(page) {
-  const status = await appJson(page, "/api/blundr/billing/status");
+  let status;
+  try {
+    status = await appJson(page, "/api/blundr/billing/status");
+  } catch {
+    return { ok: false, status: "network_error" };
+  }
   if ([429].includes(status.status) || status.status >= 500) {
     return { ok: false, status: status.status };
   }

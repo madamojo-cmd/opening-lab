@@ -535,11 +535,31 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
   assert.match(sandboxProof, /verifyProviderLedgers/);
   assert.match(sandboxProof, /verifyPostStripeAuthorityOnly/);
   assert.match(sandboxProof, /stripe_sourced_paid_entitlement_forbidden/);
-  assert.match(sandboxProof, /created: \{ gte: testStartedAt - 60 \}/);
-  assert.match(sandboxProof, /stripe_checkout_session_count_mismatch/);
+  assert.match(sandboxProof, /readPersistedCheckoutSessionId/);
+  assert.match(sandboxProof, /checkout\.sessions\.retrieve\(checkoutSessionId/);
+  assert.doesNotMatch(sandboxProof, /checkout\.sessions\.list\(/);
+  assert.match(sandboxProof, /checkout_session_id_not_persisted/);
+  assert.match(sandboxProof, /stripe_checkout_session_metadata_user_mismatch/);
+  assert.match(sandboxProof, /stripe_checkout_session_price_mismatch/);
+  assert.match(sandboxProof, /selectCardPaymentMethod/);
+  assert.match(sandboxProof, /stripe_checkout_card_payment_method_missing/);
+  assert.match(
+    sandboxProof,
+    /stripe_checkout_card_payment_method_not_selected/,
+  );
+  assert.match(sandboxProof, /disableStripeLinkSave/);
+  assert.match(sandboxProof, /save my information for faster checkout/);
+  assert.match(sandboxProof, /captureCheckoutDiagnostics/);
+  assert.match(sandboxProof, /stripe-checkout-diagnostic\.png/);
   assert.match(sandboxProof, /fillVisibleStripeField/);
+  assert.match(sandboxProof, /fillVisibleStripeFieldByFallbacks/);
   assert.match(sandboxProof, /waitForVisibleStripeField/);
   assert.match(sandboxProof, /stripe_checkout_card_number_field_missing/);
+  assert.match(
+    sandboxProof,
+    /revenuecat_v1_subscriber_not_found_or_wrong_context:404/,
+  );
+  assert.match(sandboxProof, /status: "network_error"/);
   assert.match(sandboxProof, /revenueCatConfigurationDiagnosis/);
   assert.match(sandboxProof, /deleteEphemeralStripeCustomer/);
   assert.match(sandboxProof, /stripeProviderEventLedgerExactlyOnce/);
