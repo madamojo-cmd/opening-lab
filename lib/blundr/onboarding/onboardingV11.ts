@@ -69,6 +69,13 @@ type AuthAdminClient = {
   };
 };
 
+type SafeDatabaseError = {
+  code?: unknown;
+  constraint?: unknown;
+};
+
+type ProfileQueryClient = ReturnType<typeof profileClient>;
+
 function text(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -108,6 +115,37 @@ function readPlanIntent(
   user: CurrentBlundrUser,
 ): OnboardingV11PlanIntent | null {
   return isPlanIntent(user.launchPlanIntent) ? user.launchPlanIntent : null;
+}
+
+function safeDatabaseErrorCode(error: unknown): string | null {
+  const code = (error as SafeDatabaseError | null)?.code;
+  return typeof code === "string" && /^[A-Z0-9_]+$/i.test(code) ? code : null;
+}
+
+function safeDatabaseConstraint(error: unknown): string | null {
+  const constraint = (error as SafeDatabaseError | null)?.constraint;
+  return typeof constraint === "string" && /^[A-Za-z0-9_]+$/.test(constraint)
+    ? constraint
+    : null;
+}
+
+function logOnboardingPersistenceFailure(
+  operation: "select" | "insert" | "update",
+  error: unknown,
+): void {
+  console.error("blundr_onboarding_persistence_failure", {
+    operation,
+    code: safeDatabaseErrorCode(error),
+    constraint: safeDatabaseConstraint(error),
+  });
+}
+
+function throwOnboardingPersistenceUnavailable(
+  operation: "select" | "insert" | "update",
+  error: unknown,
+): never {
+  logOnboardingPersistenceFailure(operation, error);
+  throw new Error("onboarding_persistence_unavailable");
 }
 
 export function mergeOnboardingPlanIntentUserMetadata(
@@ -196,17 +234,17 @@ function profileClient(user: CurrentBlundrUser) {
   });
 }
 
-async function ensureProfile(
+export async function ensureOnboardingV11Profile(
   user: CurrentBlundrUser,
+  client: ProfileQueryClient = profileClient(user),
 ): Promise<ProfileRow | null> {
-  const client = profileClient(user);
   if (!client) return null;
   const { data: existing, error } = await client
     .from("blundr_user_profiles")
     .select("*")
     .eq("user_id", user.userId)
     .maybeSingle();
-  if (error) throw new Error("onboarding_persistence_unavailable");
+  if (error) throwOnboardingPersistenceUnavailable("select", error);
   if (existing) {
     if (user.age13Confirmed && !(existing as ProfileRow).age_confirmed_at) {
       const { data, error: confirmationError } = await client
@@ -216,7 +254,7 @@ async function ensureProfile(
         .select("*")
         .single();
       if (confirmationError || !data)
-        throw new Error("onboarding_persistence_unavailable");
+        throwOnboardingPersistenceUnavailable("update", confirmationError);
       return data as ProfileRow;
     }
     return existing as ProfileRow;
@@ -240,15 +278,31 @@ async function ensureProfile(
     })
     .select("*")
     .single();
-  if (insertError || !data)
-    throw new Error("onboarding_persistence_unavailable");
+  if (insertError) {
+    if (safeDatabaseErrorCode(insertError) === "23505") {
+      const { data: recovered, error: rereadError } = await client
+        .from("blundr_user_profiles")
+        .select("*")
+        .eq("user_id", user.userId)
+        .maybeSingle();
+      if (rereadError || !recovered) {
+        throwOnboardingPersistenceUnavailable("select", rereadError);
+      }
+      return recovered as ProfileRow;
+    }
+    throwOnboardingPersistenceUnavailable("insert", insertError);
+  }
+  if (!data) throwOnboardingPersistenceUnavailable("insert", insertError);
   return data as ProfileRow;
 }
 
 export async function readOnboardingV11State(
   user: CurrentBlundrUser,
 ): Promise<OnboardingV11State> {
-  return normalizeOnboardingV11ProfileRow(await ensureProfile(user), user);
+  return normalizeOnboardingV11ProfileRow(
+    await ensureOnboardingV11Profile(user),
+    user,
+  );
 }
 
 async function savePlanIntent(
@@ -330,7 +384,7 @@ export async function saveOnboardingV11Step(
     .eq("user_id", user.userId)
     .select("*")
     .single();
-  if (error || !data) throw new Error("onboarding_persistence_unavailable");
+  if (error || !data) throwOnboardingPersistenceUnavailable("update", error);
   return normalizeOnboardingV11ProfileRow(data as ProfileRow, user);
 }
 
@@ -422,6 +476,6 @@ export async function completeOnboardingV11(
     .eq("user_id", user.userId)
     .select("*")
     .single();
-  if (error || !data) throw new Error("onboarding_persistence_unavailable");
+  if (error || !data) throwOnboardingPersistenceUnavailable("update", error);
   return normalizeOnboardingV11ProfileRow(data as ProfileRow);
 }
