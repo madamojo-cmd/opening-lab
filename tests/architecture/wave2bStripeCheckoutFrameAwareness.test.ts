@@ -32,6 +32,7 @@ test("Wave 2B Stripe checkout interactions are frame-aware and bounded", () => {
   assert.match(source, /clickVisibleLocatorCenter\(page, card\.locator\)/);
   assert.match(source, /page\.mouse\.click\(/);
   assert.match(source, /scrollLocatorIntoView/);
+  assert.match(source, /isLocatorInViewport/);
   assert.match(source, /cardCoordinateClickAttempted/);
   assert.match(source, /visible_card_text_center/);
   assert.match(source, /pay_with_card_text_button_ancestor/);
@@ -90,6 +91,8 @@ test("Wave 2B Stripe checkout interactions are frame-aware and bounded", () => {
   assert.match(source, /aiAgentDisclosureFrameKind/);
   assert.match(source, /aiAgentDisclosureCheckboxBoundingBox/);
   assert.match(source, /aiAgentDisclosureLabelBoundingBox/);
+  assert.match(source, /aiAgentDisclosureInViewport/);
+  assert.match(source, /aiAgentDisclosureActionable/);
   assert.match(source, /aiAgentDisclosureScrollError/);
   assert.match(source, /visible_text_or_label/);
   assert.match(source, /visible_text_center/);

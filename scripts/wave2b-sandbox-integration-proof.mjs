@@ -1092,6 +1092,25 @@ async function scrollLocatorIntoView(locator) {
   }
 }
 
+async function isLocatorInViewport(locator) {
+  return locator
+    .evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const width = window.innerWidth || document.documentElement.clientWidth;
+      const height =
+        window.innerHeight || document.documentElement.clientHeight;
+      return (
+        rect.width > 0 &&
+        rect.height > 0 &&
+        rect.right > 0 &&
+        rect.bottom > 0 &&
+        rect.left < width &&
+        rect.top < height
+      );
+    })
+    .catch(() => false);
+}
+
 async function findVisibleCardPaymentControl(
   page,
   skippedStrategies = new Set(),
@@ -1361,6 +1380,27 @@ async function acknowledgeStripeAiAgentDisclosure(page) {
       context.name;
     proof.evidence.checkoutDiagnostics.aiAgentDisclosureCheckboxBoundingBox =
       await checkbox.boundingBox().catch(() => null);
+    proof.evidence.checkoutDiagnostics.aiAgentDisclosureInViewport =
+      await isLocatorInViewport(checkbox);
+    if (!proof.evidence.checkoutDiagnostics.aiAgentDisclosureInViewport) {
+      await scrollLocatorIntoView(checkbox).catch((scrollError) => {
+        proof.evidence.checkoutDiagnostics.aiAgentDisclosureScrollError =
+          sanitizeError(
+            scrollError instanceof Error
+              ? scrollError.message
+              : String(scrollError),
+          );
+      });
+      proof.evidence.checkoutDiagnostics.aiAgentDisclosureCheckboxBoundingBox =
+        await checkbox.boundingBox().catch(() => null);
+      proof.evidence.checkoutDiagnostics.aiAgentDisclosureInViewport =
+        await isLocatorInViewport(checkbox);
+    }
+    if (!proof.evidence.checkoutDiagnostics.aiAgentDisclosureInViewport) {
+      proof.evidence.checkoutDiagnostics.aiAgentDisclosureActionable = false;
+      continue;
+    }
+    proof.evidence.checkoutDiagnostics.aiAgentDisclosureActionable = true;
     if (!(await checkbox.isChecked().catch(() => false))) {
       try {
         await scrollLocatorIntoView(checkbox);
