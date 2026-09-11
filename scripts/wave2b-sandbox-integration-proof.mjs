@@ -862,6 +862,15 @@ async function findVisibleLocator(locators) {
 function cardControlCandidates(target) {
   const cardRadio = target.getByRole("radio", { name: /^card$/i });
   const payWithCardText = target.getByText(/^Pay with card$/i);
+
+  const paymentCardByAria = target.locator(
+    '[data-testid*="payment"][aria-label*="card" i]',
+  );
+
+  const paymentCardByText = target
+    .locator('[data-testid*="payment"]')
+    .filter({ hasText: /^\s*(?:pay with )?card\s*$/i });
+
   return [
     {
       strategy: "pay_with_card_button",
@@ -874,6 +883,26 @@ function cardControlCandidates(target) {
     {
       strategy: "pay_with_card_text",
       locator: payWithCardText,
+    },
+    {
+      strategy: "payment_testid_card_aria",
+      locator: paymentCardByAria,
+    },
+    {
+      strategy: "payment_testid_card_text",
+      locator: paymentCardByText,
+    },
+    {
+      strategy: "payment_testid_card_aria_clickable_ancestor",
+      locator: paymentCardByAria.locator(
+        "xpath=ancestor::*[self::button or @role='radio' or self::label or contains(@data-testid, 'accordion-item-button')][1]",
+      ),
+    },
+    {
+      strategy: "payment_testid_card_text_clickable_ancestor",
+      locator: paymentCardByText.locator(
+        "xpath=ancestor::*[self::button or @role='radio' or self::label or contains(@data-testid, 'accordion-item-button')][1]",
+      ),
     },
     {
       strategy: "pay_with_card_text_button_ancestor",
@@ -977,6 +1006,10 @@ async function waitForCardPaymentControl(page, timeoutMs = 20000) {
       "pay_with_card_button",
       "pay_with_card_radio",
       "pay_with_card_text",
+      "payment_testid_card_aria",
+      "payment_testid_card_text",
+      "payment_testid_card_aria_clickable_ancestor",
+      "payment_testid_card_text_clickable_ancestor",
       "pay_with_card_text_button_ancestor",
       "pay_with_card_text_radio_ancestor",
       "pay_with_card_text_label_ancestor",

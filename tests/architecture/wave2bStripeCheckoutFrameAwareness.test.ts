@@ -21,6 +21,9 @@ test("Wave 2B Stripe checkout interactions are frame-aware and bounded", () => {
   assert.match(source, /getByRole\("radio", \{ name: \/pay with card\/i \}\)/);
   assert.match(source, /getByText\(\/\^Pay with card\$\/i\)/);
   assert.match(source, /pay_with_card_text_button_ancestor/);
+  assert.match(source, /payment_testid_card_aria/);
+  assert.match(source, /payment_testid_card_text/);
+  assert.match(source, /\[data-testid\*="payment"\]/);
   assert.match(source, /card_accordion_testid_contains/);
   assert.match(source, /card_role_radio_contains/);
   assert.match(source, /cardFoundFrameKind/);
