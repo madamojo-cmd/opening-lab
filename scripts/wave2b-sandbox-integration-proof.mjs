@@ -1064,15 +1064,32 @@ async function collectCardCandidateDiagnostics(page) {
   return diagnostics;
 }
 
-async function clickVisibleLocatorCenter(page, locator) {
+async function clickVisibleLocatorCenter(
+  page,
+  locator,
+  missingMessage = "visible_card_text_bounding_box_missing",
+) {
   const boundingBox = await locator.boundingBox();
   if (!boundingBox || boundingBox.width <= 0 || boundingBox.height <= 0) {
-    throw new Error("visible_card_text_bounding_box_missing");
+    throw new Error(missingMessage);
   }
   await page.mouse.click(
     boundingBox.x + boundingBox.width / 2,
     boundingBox.y + boundingBox.height / 2,
   );
+}
+
+async function scrollLocatorIntoView(locator) {
+  try {
+    await locator.scrollIntoViewIfNeeded({ timeout: 5000 });
+  } catch {
+    await locator.evaluate((element) => {
+      element.scrollIntoView({
+        block: "center",
+        inline: "center",
+      });
+    });
+  }
 }
 
 async function findVisibleCardPaymentControl(
@@ -1336,8 +1353,17 @@ async function acknowledgeStripeAiAgentDisclosure(page) {
     if ((await checkbox.count().catch(() => 0)) === 0) continue;
     if (!(await checkbox.isVisible().catch(() => false))) continue;
     proof.evidence.checkoutDiagnostics.aiAgentDisclosureFound = true;
+    proof.evidence.checkoutDiagnostics.aiAgentDisclosureFrameKind =
+      context.kind;
+    proof.evidence.checkoutDiagnostics.aiAgentDisclosureFrameOrigin =
+      context.origin;
+    proof.evidence.checkoutDiagnostics.aiAgentDisclosureFrameName =
+      context.name;
+    proof.evidence.checkoutDiagnostics.aiAgentDisclosureCheckboxBoundingBox =
+      await checkbox.boundingBox().catch(() => null);
     if (!(await checkbox.isChecked().catch(() => false))) {
       try {
+        await scrollLocatorIntoView(checkbox);
         await checkbox.check({ timeout: 5000 });
         proof.evidence.checkoutDiagnostics.aiAgentDisclosureStrategy =
           "checkbox_role";
@@ -1353,8 +1379,23 @@ async function acknowledgeStripeAiAgentDisclosure(page) {
           disclosureText,
         ]);
         if (fallback) {
+          proof.evidence.checkoutDiagnostics.aiAgentDisclosureLabelBoundingBox =
+            await fallback.boundingBox().catch(() => null);
+          proof.evidence.checkoutDiagnostics.aiAgentDisclosureText =
+            safeDiagnosticText(
+              await fallback.textContent().catch(() => null),
+              300,
+            );
           proof.evidence.checkoutDiagnostics.aiAgentDisclosureStrategy =
             "visible_text_or_label";
+          await scrollLocatorIntoView(fallback).catch((scrollError) => {
+            proof.evidence.checkoutDiagnostics.aiAgentDisclosureScrollError =
+              sanitizeError(
+                scrollError instanceof Error
+                  ? scrollError.message
+                  : String(scrollError),
+              );
+          });
           await fallback.click({ timeout: 5000 }).catch(async (clickError) => {
             proof.evidence.checkoutDiagnostics.aiAgentDisclosureClickError =
               sanitizeError(
@@ -1362,7 +1403,14 @@ async function acknowledgeStripeAiAgentDisclosure(page) {
                   ? clickError.message
                   : String(clickError),
               );
-            await clickVisibleLocatorCenter(page, fallback);
+            await scrollLocatorIntoView(fallback).catch(() => {});
+            proof.evidence.checkoutDiagnostics.aiAgentDisclosureLabelBoundingBox =
+              await fallback.boundingBox().catch(() => null);
+            await clickVisibleLocatorCenter(
+              page,
+              fallback,
+              "ai_agent_disclosure_bounding_box_missing",
+            );
             proof.evidence.checkoutDiagnostics.aiAgentDisclosureStrategy =
               "visible_text_center";
           });
@@ -1372,8 +1420,6 @@ async function acknowledgeStripeAiAgentDisclosure(page) {
     proof.evidence.checkoutDiagnostics.aiAgentDisclosureChecked = await checkbox
       .isChecked()
       .catch(() => false);
-    proof.evidence.checkoutDiagnostics.aiAgentDisclosureFrameOrigin =
-      context.origin;
     if (
       proof.evidence.checkoutDiagnostics.aiAgentDisclosureFound &&
       !proof.evidence.checkoutDiagnostics.aiAgentDisclosureChecked
