@@ -546,7 +546,15 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
   assert.match(sandboxProof, /waitForCardPaymentControl/);
   assert.match(sandboxProof, /timeoutMs = 20000/);
   assert.match(sandboxProof, /name: \/pay with card\/i/);
+  assert.match(
+    sandboxProof,
+    /getByRole\("radio", \{ name: \/pay with card\/i \}\)/,
+  );
+  assert.match(sandboxProof, /getByText\(\/\^Pay with card\$\/i\)/);
+  assert.match(sandboxProof, /pay_with_card_text_button_ancestor/);
   assert.match(sandboxProof, /card-accordion-item-button/);
+  assert.match(sandboxProof, /card_accordion_testid_contains/);
+  assert.match(sandboxProof, /card_role_radio_contains/);
   assert.match(sandboxProof, /card_radio_button_ancestor/);
   assert.match(sandboxProof, /card_text_button_ancestor/);
   assert.match(sandboxProof, /card_radio_label/);

@@ -18,6 +18,11 @@ test("Wave 2B Stripe checkout interactions are frame-aware and bounded", () => {
     /findVisibleCardPaymentControl\(page\)[\s\S]*stripeInteractionContexts\(page\)/,
   );
   assert.match(source, /cardControlCandidates\(context\.target\)/);
+  assert.match(source, /getByRole\("radio", \{ name: \/pay with card\/i \}\)/);
+  assert.match(source, /getByText\(\/\^Pay with card\$\/i\)/);
+  assert.match(source, /pay_with_card_text_button_ancestor/);
+  assert.match(source, /card_accordion_testid_contains/);
+  assert.match(source, /card_role_radio_contains/);
   assert.match(source, /cardFoundFrameKind/);
   assert.match(source, /cardFoundFrameOrigin/);
   assert.match(source, /cardFoundFrameName/);

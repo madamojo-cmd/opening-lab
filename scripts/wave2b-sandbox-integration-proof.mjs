@@ -861,14 +861,51 @@ async function findVisibleLocator(locators) {
 
 function cardControlCandidates(target) {
   const cardRadio = target.getByRole("radio", { name: /^card$/i });
+  const payWithCardText = target.getByText(/^Pay with card$/i);
   return [
     {
       strategy: "pay_with_card_button",
       locator: target.getByRole("button", { name: /pay with card/i }),
     },
     {
+      strategy: "pay_with_card_radio",
+      locator: target.getByRole("radio", { name: /pay with card/i }),
+    },
+    {
+      strategy: "pay_with_card_text",
+      locator: payWithCardText,
+    },
+    {
+      strategy: "pay_with_card_text_button_ancestor",
+      locator: payWithCardText.locator("xpath=ancestor::button[1]"),
+    },
+    {
+      strategy: "pay_with_card_text_radio_ancestor",
+      locator: payWithCardText.locator("xpath=ancestor::*[@role='radio'][1]"),
+    },
+    {
+      strategy: "pay_with_card_text_label_ancestor",
+      locator: payWithCardText.locator("xpath=ancestor::label[1]"),
+    },
+    {
+      strategy: "pay_with_card_text_accordion_ancestor",
+      locator: payWithCardText.locator(
+        "xpath=ancestor::*[contains(@data-testid, 'accordion-item-button')][1]",
+      ),
+    },
+    {
       strategy: "card_accordion_testid",
       locator: target.locator('[data-testid="card-accordion-item-button"]'),
+    },
+    {
+      strategy: "card_accordion_testid_contains",
+      locator: target
+        .locator('[data-testid*="accordion-item-button"]')
+        .filter({ hasText: /card/i }),
+    },
+    {
+      strategy: "card_role_radio_contains",
+      locator: target.locator('[role="radio"]').filter({ hasText: /card/i }),
     },
     {
       strategy: "card_radio_button_ancestor",
@@ -938,7 +975,15 @@ async function waitForCardPaymentControl(page, timeoutMs = 20000) {
     }
     for (const strategy of [
       "pay_with_card_button",
+      "pay_with_card_radio",
+      "pay_with_card_text",
+      "pay_with_card_text_button_ancestor",
+      "pay_with_card_text_radio_ancestor",
+      "pay_with_card_text_label_ancestor",
+      "pay_with_card_text_accordion_ancestor",
       "card_accordion_testid",
+      "card_accordion_testid_contains",
+      "card_role_radio_contains",
       "card_radio_button_ancestor",
       "card_radio_wrapped_button",
       "card_text_button_ancestor",
