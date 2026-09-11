@@ -790,44 +790,32 @@ async function selectCardPaymentMethod(page) {
   proof.evidence.checkoutDiagnostics ??= {};
   proof.evidence.checkoutDiagnostics.paymentMethodLabels =
     await listVisiblePaymentMethodLabels(page).catch(() => []);
-  const cardName = /^(card|credit card|credit or debit card)$/i;
-  const disallowed = /apple pay|google pay|link|klarna|cash app|amazon pay/i;
   const card = await findVisibleLocator(page, [
-    page.getByRole("radio", { name: cardName }),
-    page.getByRole("button", { name: cardName }),
-    page.getByRole("tab", { name: cardName }),
-    page.getByLabel(cardName),
-    page.getByText(cardName, { exact: true }),
+    page.getByRole("button", { name: /pay with card/i }),
+    page.locator('[data-testid="card-accordion-item-button"]'),
   ]);
   if (!card) {
     proof.evidence.checkoutDiagnostics.cardFound = false;
     throw new Error("stripe_checkout_card_payment_method_missing");
   }
-  const label = await card.innerText().catch(() => "");
-  if (disallowed.test(label)) {
-    throw new Error("stripe_checkout_disallowed_payment_method_selected");
-  }
   proof.evidence.checkoutDiagnostics.cardFound = true;
   await card.click();
-  const cardSelected = await card
-    .evaluate((element) => {
-      const input =
-        element instanceof HTMLInputElement
-          ? element
-          : element.querySelector('input[type="radio"]');
-      return (
-        input?.checked === true ||
-        element.getAttribute("aria-checked") === "true" ||
-        element.getAttribute("aria-selected") === "true" ||
-        element.getAttribute("aria-pressed") === "true"
-      );
-    })
+  const cardSelected = await page
+    .locator('[role="radio"][value="card"], input[type="radio"][value="card"]')
+    .evaluateAll((elements) =>
+      elements.some(
+        (element) => element.getAttribute("aria-checked") === "true",
+      ),
+    )
     .catch(() => false);
+  const cardFieldsMounted = await waitForVisibleStripeField(
+    page,
+    /card number/i,
+    10000,
+  );
   proof.evidence.checkoutDiagnostics.cardSelected = cardSelected;
-  if (
-    !cardSelected &&
-    !(await waitForVisibleStripeField(page, /card number/i, 10000))
-  ) {
+  proof.evidence.checkoutDiagnostics.cardFieldsMounted = cardFieldsMounted;
+  if (!cardSelected && !cardFieldsMounted) {
     throw new Error("stripe_checkout_card_payment_method_not_selected");
   }
 }

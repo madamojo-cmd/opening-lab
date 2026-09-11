@@ -542,6 +542,11 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
   assert.match(sandboxProof, /stripe_checkout_session_metadata_user_mismatch/);
   assert.match(sandboxProof, /stripe_checkout_session_price_mismatch/);
   assert.match(sandboxProof, /selectCardPaymentMethod/);
+  assert.match(sandboxProof, /name: \/pay with card\/i/);
+  assert.match(sandboxProof, /card-accordion-item-button/);
+  assert.match(sandboxProof, /\[role="radio"\]\[value="card"\]/);
+  assert.match(sandboxProof, /cardFieldsMounted/);
+  assert.doesNotMatch(sandboxProof, /force: true/);
   assert.match(sandboxProof, /stripe_checkout_card_payment_method_missing/);
   assert.match(
     sandboxProof,
