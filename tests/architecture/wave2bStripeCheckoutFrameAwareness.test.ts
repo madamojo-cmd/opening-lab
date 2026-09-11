@@ -28,6 +28,11 @@ test("Wave 2B Stripe checkout interactions are frame-aware and bounded", () => {
   assert.match(source, /async function findVisibleCardPaymentControl\(/);
   assert.match(source, /skippedStrategies = new Set\(\)/);
   assert.match(source, /skippedCardStrategies/);
+  assert.match(source, /cardControlStrategyNames\(page\)/);
+  assert.match(source, /clickVisibleLocatorCenter\(page, card\.locator\)/);
+  assert.match(source, /page\.mouse\.click\(/);
+  assert.match(source, /cardCoordinateClickAttempted/);
+  assert.match(source, /visible_card_text_center/);
   assert.match(source, /pay_with_card_text_button_ancestor/);
   assert.match(source, /payment_testid_card_aria/);
   assert.match(source, /payment_testid_card_text/);

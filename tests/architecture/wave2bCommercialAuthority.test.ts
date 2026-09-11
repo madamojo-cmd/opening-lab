@@ -548,6 +548,14 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
   assert.match(sandboxProof, /strategy: "visible_card_text"/);
   assert.match(sandboxProof, /getByText\(\/\^Card\$\/i\)/);
   assert.match(sandboxProof, /skippedCardStrategies/);
+  assert.match(sandboxProof, /cardControlStrategyNames\(page\)/);
+  assert.match(
+    sandboxProof,
+    /clickVisibleLocatorCenter\(page, card\.locator\)/,
+  );
+  assert.match(sandboxProof, /page\.mouse\.click\(/);
+  assert.match(sandboxProof, /cardCoordinateClickAttempted/);
+  assert.match(sandboxProof, /visible_card_text_center/);
   assert.match(
     sandboxProof,
     /button\[data-testid="card-accordion-item-button"\]/,

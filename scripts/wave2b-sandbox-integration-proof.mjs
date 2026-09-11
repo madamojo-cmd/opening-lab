@@ -995,8 +995,8 @@ function cardControlCandidates(target) {
   ];
 }
 
-function cardControlStrategyNames() {
-  return cardControlCandidates(page).map((candidate) => candidate.strategy);
+function cardControlStrategyNames(target) {
+  return cardControlCandidates(target).map((candidate) => candidate.strategy);
 }
 
 function safeDiagnosticText(value, maxLength = 1000) {
@@ -1064,6 +1064,17 @@ async function collectCardCandidateDiagnostics(page) {
   return diagnostics;
 }
 
+async function clickVisibleLocatorCenter(page, locator) {
+  const boundingBox = await locator.boundingBox();
+  if (!boundingBox || boundingBox.width <= 0 || boundingBox.height <= 0) {
+    throw new Error("visible_card_text_bounding_box_missing");
+  }
+  await page.mouse.click(
+    boundingBox.x + boundingBox.width / 2,
+    boundingBox.y + boundingBox.height / 2,
+  );
+}
+
 async function findVisibleCardPaymentControl(
   page,
   skippedStrategies = new Set(),
@@ -1121,7 +1132,7 @@ async function waitForCardPaymentControl(
       ];
       return card;
     }
-    for (const strategy of cardControlStrategyNames()) {
+    for (const strategy of cardControlStrategyNames(page)) {
       strategiesAttempted.add(strategy);
     }
     await page.waitForTimeout(400);
@@ -1236,6 +1247,29 @@ async function selectCardPaymentMethod(page) {
       proof.evidence.checkoutDiagnostics.cardFieldsMounted =
         state.cardFieldsMounted;
       if (state.cardSelected || state.cardFieldsMounted) return;
+      if (card.strategy === "visible_card_text") {
+        try {
+          await clickVisibleLocatorCenter(page, card.locator);
+        } catch (coordinateError) {
+          proof.evidence.checkoutDiagnostics.cardCoordinateClickError =
+            sanitizeError(
+              coordinateError instanceof Error
+                ? coordinateError.message
+                : String(coordinateError),
+            );
+        }
+        const coordinateState = await waitForCardSelectionOrFields(page, 1000);
+        proof.evidence.checkoutDiagnostics.cardCoordinateClickAttempted = true;
+        proof.evidence.checkoutDiagnostics.cardCoordinateClickStrategy =
+          "visible_card_text_center";
+        proof.evidence.checkoutDiagnostics.cardSelected =
+          coordinateState.cardSelected;
+        proof.evidence.checkoutDiagnostics.cardFieldsMounted =
+          coordinateState.cardFieldsMounted;
+        if (coordinateState.cardSelected || coordinateState.cardFieldsMounted) {
+          return;
+        }
+      }
       skippedCardStrategies.add(card.strategy);
       continue;
     }
