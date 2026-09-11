@@ -780,9 +780,52 @@ async function fillOptionalStripeField(page, label, value, options = {}) {
 
 function stripeCardNumberLocators(frame) {
   return [
-    frame.getByLabel(/card number/i),
+    frame.locator("#cardNumber"),
+    frame.getByLabel(/^card number$/i),
     frame.locator('input[autocomplete="cc-number"]'),
     frame.locator('input[name*="cardnumber" i]'),
+  ];
+}
+
+function stripeCardExpiryLocators(frame) {
+  return [
+    frame.locator("#cardExpiry"),
+    frame.getByLabel(/expiration|expiry/i),
+    frame.locator('input[autocomplete="cc-exp"]'),
+    frame.locator('input[name*="exp" i]'),
+  ];
+}
+
+function stripeCardCvcLocators(frame) {
+  return [
+    frame.locator("#cardCvc"),
+    frame.getByLabel(/cvc|security code/i),
+    frame.locator('input[autocomplete="cc-csc"]'),
+    frame.locator('input[name*="cvc" i]'),
+  ];
+}
+
+function stripeCardholderNameLocators(frame) {
+  return [
+    frame.locator("#billingName"),
+    frame.getByLabel(/cardholder name|name on card|full name/i),
+    frame.locator('input[autocomplete="cc-name"]'),
+  ];
+}
+
+function stripeCountryLocators(frame) {
+  return [
+    frame.locator("#billingCountry"),
+    frame.getByLabel(/country/i),
+    frame.locator('[name="billingCountry"]'),
+  ];
+}
+
+function stripePostalCodeLocators(frame) {
+  return [
+    frame.locator("#billingPostalCode"),
+    frame.getByLabel(/zip|postal/i),
+    frame.locator('[name="billingPostalCode"]'),
   ];
 }
 
@@ -873,20 +916,14 @@ function cardControlCandidates(target) {
 
   return [
     {
+      strategy: "card_accordion_testid",
+      locator: target.locator(
+        'button[data-testid="card-accordion-item-button"]',
+      ),
+    },
+    {
       strategy: "pay_with_card_button",
-      locator: target.getByRole("button", { name: /pay with card/i }),
-    },
-    {
-      strategy: "pay_with_card_radio",
-      locator: target.getByRole("radio", { name: /pay with card/i }),
-    },
-    {
-      strategy: "card_radio_direct",
-      locator: cardRadio,
-    },
-    {
-      strategy: "pay_with_card_text",
-      locator: payWithCardText,
+      locator: target.getByRole("button", { name: /^pay with card$/i }),
     },
     {
       strategy: "payment_testid_card_aria",
@@ -913,10 +950,6 @@ function cardControlCandidates(target) {
       locator: payWithCardText.locator("xpath=ancestor::button[1]"),
     },
     {
-      strategy: "pay_with_card_text_radio_ancestor",
-      locator: payWithCardText.locator("xpath=ancestor::*[@role='radio'][1]"),
-    },
-    {
       strategy: "pay_with_card_text_label_ancestor",
       locator: payWithCardText.locator("xpath=ancestor::label[1]"),
     },
@@ -927,18 +960,10 @@ function cardControlCandidates(target) {
       ),
     },
     {
-      strategy: "card_accordion_testid",
-      locator: target.locator('[data-testid="card-accordion-item-button"]'),
-    },
-    {
       strategy: "card_accordion_testid_contains",
       locator: target
         .locator('[data-testid*="accordion-item-button"]')
         .filter({ hasText: /card/i }),
-    },
-    {
-      strategy: "card_role_radio_contains",
-      locator: target.locator('[role="radio"]').filter({ hasText: /card/i }),
     },
     {
       strategy: "card_radio_button_ancestor",
@@ -1006,33 +1031,9 @@ async function waitForCardPaymentControl(page, timeoutMs = 20000) {
       ];
       return card;
     }
-    for (const strategy of [
-      "pay_with_card_button",
-      "pay_with_card_radio",
-      "card_radio_direct",
-      "pay_with_card_text",
-      "payment_testid_card_aria",
-      "payment_testid_card_text",
-      "payment_testid_card_aria_clickable_ancestor",
-      "payment_testid_card_text_clickable_ancestor",
-      "pay_with_card_text_button_ancestor",
-      "payment_testid_card_aria",
-      "payment_testid_card_text",
-      "payment_testid_card_aria_clickable_ancestor",
-      "payment_testid_card_text_clickable_ancestor",
-      "pay_with_card_text_button_ancestor",
-      "pay_with_card_text_radio_ancestor",
-      "pay_with_card_text_label_ancestor",
-      "pay_with_card_text_accordion_ancestor",
-      "card_accordion_testid",
-      "card_accordion_testid_contains",
-      "card_role_radio_contains",
-      "card_radio_button_ancestor",
-      "card_radio_wrapped_button",
-      "card_text_button_ancestor",
-      "visible_card_label_button",
-      "card_radio_label",
-    ]) {
+    for (const strategy of cardControlCandidates(page).map(
+      (candidate) => candidate.strategy,
+    )) {
       strategiesAttempted.add(strategy);
     }
     await page.waitForTimeout(400);
@@ -1047,6 +1048,10 @@ async function waitForCardPaymentControl(page, timeoutMs = 20000) {
 async function isCardPaymentMethodSelected(page) {
   for (const context of stripeInteractionContexts(page)) {
     const candidates = [
+      context.target.locator("#payment-method-accordion-item-title-card"),
+      context.target.locator(
+        'input[name="payment-method-accordion-item-title"][value="card"]',
+      ),
       context.target.getByRole("radio", { name: /^card$/i }),
       context.target.locator('[role="radio"][value="card"]'),
       context.target.locator('input[type="radio"][value="card"]'),
@@ -1086,6 +1091,20 @@ async function waitForCardSelectionOrFields(page, timeoutMs = 10000) {
 
 async function selectCardPaymentMethod(page) {
   proof.evidence.checkoutDiagnostics ??= {};
+  const initialState = await waitForCardSelectionOrFields(page, 2000);
+  proof.evidence.checkoutDiagnostics.initialCardSelected =
+    initialState.cardSelected;
+  proof.evidence.checkoutDiagnostics.initialCardFieldsMounted =
+    initialState.cardFieldsMounted;
+  if (initialState.cardSelected || initialState.cardFieldsMounted) {
+    proof.evidence.checkoutDiagnostics.cardFound = true;
+    proof.evidence.checkoutDiagnostics.cardFoundBy =
+      "already_selected_or_fields_mounted";
+    proof.evidence.checkoutDiagnostics.cardSelected = initialState.cardSelected;
+    proof.evidence.checkoutDiagnostics.cardFieldsMounted =
+      initialState.cardFieldsMounted;
+    return;
+  }
   const selectionDeadline = Date.now() + 30000;
   let cardWasFound = false;
   let lastClickError = null;
@@ -1119,7 +1138,11 @@ async function selectCardPaymentMethod(page) {
         error instanceof Error ? error.message : String(error),
       );
       proof.evidence.checkoutDiagnostics.cardClickRetried = true;
-      await page.waitForTimeout(300);
+      const state = await waitForCardSelectionOrFields(page, 1000);
+      proof.evidence.checkoutDiagnostics.cardSelected = state.cardSelected;
+      proof.evidence.checkoutDiagnostics.cardFieldsMounted =
+        state.cardFieldsMounted;
+      if (state.cardSelected || state.cardFieldsMounted) return;
       continue;
     }
     const state = await waitForCardSelectionOrFields(
@@ -1145,13 +1168,13 @@ async function selectCardPaymentMethod(page) {
 async function disableStripeLinkSave(page) {
   proof.evidence.checkoutDiagnostics ??= {};
   for (const context of stripeInteractionContexts(page)) {
-    const checkbox = context.target
-      .getByRole("checkbox", {
+    const checkbox = await findVisibleLocator([
+      context.target.locator("#enableStripePass"),
+      context.target.getByRole("checkbox", {
         name: /save my information for faster checkout/i,
-      })
-      .first();
-    if ((await checkbox.count().catch(() => 0)) === 0) continue;
-    if (!(await checkbox.isVisible().catch(() => false))) continue;
+      }),
+    ]);
+    if (!checkbox) continue;
     proof.evidence.checkoutDiagnostics.linkSaveFound = true;
     const initiallyChecked = await checkbox.isChecked().catch(() => false);
     proof.evidence.checkoutDiagnostics.linkSaveInitiallyChecked =
@@ -1166,6 +1189,31 @@ async function disableStripeLinkSave(page) {
     return;
   }
   proof.evidence.checkoutDiagnostics.linkSaveFound = false;
+}
+
+async function acknowledgeStripeAiAgentDisclosure(page) {
+  proof.evidence.checkoutDiagnostics ??= {};
+  proof.evidence.checkoutDiagnostics.aiAgentDisclosureFound = false;
+  proof.evidence.checkoutDiagnostics.aiAgentDisclosureChecked = false;
+  for (const context of stripeInteractionContexts(page)) {
+    const checkbox = context.target
+      .getByRole("checkbox", {
+        name: /i am an ai agent acting on behalf of someone else/i,
+      })
+      .first();
+    if ((await checkbox.count().catch(() => 0)) === 0) continue;
+    if (!(await checkbox.isVisible().catch(() => false))) continue;
+    proof.evidence.checkoutDiagnostics.aiAgentDisclosureFound = true;
+    if (!(await checkbox.isChecked().catch(() => false))) {
+      await checkbox.check();
+    }
+    proof.evidence.checkoutDiagnostics.aiAgentDisclosureChecked = await checkbox
+      .isChecked()
+      .catch(() => false);
+    proof.evidence.checkoutDiagnostics.aiAgentDisclosureFrameOrigin =
+      context.origin;
+    return;
+  }
 }
 
 async function listVisiblePrimarySubmitLabels(page) {
@@ -1225,6 +1273,37 @@ async function collectVisibleEnabledStripeButtons(page, name, strategy) {
 }
 
 async function findPrimaryStripeSubmitControl(page) {
+  const hostedPaymentSubmitMatches = [];
+  for (const context of stripeInteractionContexts(page)) {
+    const locator = context.target.locator(
+      'button[data-testid="hosted-payment-submit-button"]',
+    );
+    const count = await locator.count().catch(() => 0);
+    for (let index = 0; index < count; index += 1) {
+      const candidate = locator.nth(index);
+      if (
+        (await candidate.isVisible().catch(() => false)) &&
+        (await candidate.isEnabled().catch(() => false))
+      ) {
+        hostedPaymentSubmitMatches.push({
+          locator: candidate,
+          strategy: "hosted_payment_submit_testid",
+          context: {
+            kind: context.kind,
+            origin: context.origin,
+            name: context.name,
+          },
+        });
+      }
+    }
+  }
+  if (hostedPaymentSubmitMatches.length > 0) {
+    return {
+      matches: hostedPaymentSubmitMatches,
+      strategy: "hosted_payment_submit_testid",
+    };
+  }
+
   const priorities = [
     {
       strategy: "start_trial",
@@ -1363,11 +1442,7 @@ async function completeStripeCheckout(page, checkoutUrl) {
     if (
       !(await fillVisibleStripeFieldByFallbacks(page, {
         value: "1234",
-        locators: (frame) => [
-          frame.getByLabel(/expiration|expiry/i),
-          frame.locator('input[autocomplete="cc-exp"]'),
-          frame.locator('input[name*="exp" i]'),
-        ],
+        locators: stripeCardExpiryLocators,
       }))
     ) {
       throw new Error("stripe_checkout_expiry_field_missing");
@@ -1376,32 +1451,30 @@ async function completeStripeCheckout(page, checkoutUrl) {
     if (
       !(await fillVisibleStripeFieldByFallbacks(page, {
         value: "123",
-        locators: (frame) => [
-          frame.getByLabel(/cvc|security code/i),
-          frame.locator('input[autocomplete="cc-csc"]'),
-          frame.locator('input[name*="cvc" i]'),
-        ],
+        locators: stripeCardCvcLocators,
       }))
     ) {
       throw new Error("stripe_checkout_cvc_field_missing");
     }
     fieldStatus.cvc = "filled";
-    await fillOptionalStripeField(
-      page,
-      /cardholder name|name on card|full name/i,
-      "Blundr Wave 2B",
-    );
-    await fillOptionalStripeField(page, /zip|postal/i, "10001");
+    await fillVisibleStripeFieldByFallbacks(page, {
+      value: "Blundr Wave 2B",
+      locators: stripeCardholderNameLocators,
+    });
+    await fillVisibleStripeFieldByFallbacks(page, {
+      value: "10001",
+      locators: stripePostalCodeLocators,
+    });
     for (const context of stripeInteractionContexts(page)) {
-      const country = context.target.getByLabel(/country/i).first();
-      if (
-        (await country.count().catch(() => 0)) > 0 &&
-        (await country.isVisible().catch(() => false))
-      ) {
+      const country = await findVisibleLocator(
+        stripeCountryLocators(context.target),
+      );
+      if (country) {
         await country.selectOption("US").catch(() => {});
         break;
       }
     }
+    await acknowledgeStripeAiAgentDisclosure(page);
     const submit = await waitForPrimaryStripeSubmitControl(page);
     proof.evidence.checkoutDiagnostics ??= {};
     proof.evidence.checkoutDiagnostics.submitStrategy = submit.strategy;

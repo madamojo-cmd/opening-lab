@@ -545,21 +545,30 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
   assert.match(sandboxProof, /stripeInteractionContexts/);
   assert.match(sandboxProof, /waitForCardPaymentControl/);
   assert.match(sandboxProof, /timeoutMs = 20000/);
-  assert.match(sandboxProof, /name: \/pay with card\/i/);
   assert.match(
     sandboxProof,
-    /getByRole\("radio", \{ name: \/pay with card\/i \}\)/,
+    /button\[data-testid="card-accordion-item-button"\]/,
   );
-  assert.match(sandboxProof, /getByText\(\/\^Pay with card\$\/i\)/);
+  assert.match(sandboxProof, /name: \/\^pay with card\$\/i/);
   assert.match(sandboxProof, /pay_with_card_text_button_ancestor/);
   assert.match(sandboxProof, /card-accordion-item-button/);
   assert.match(sandboxProof, /card_accordion_testid_contains/);
-  assert.match(sandboxProof, /card_role_radio_contains/);
   assert.match(sandboxProof, /card_radio_button_ancestor/);
   assert.match(sandboxProof, /card_text_button_ancestor/);
   assert.match(sandboxProof, /card_radio_label/);
   assert.match(sandboxProof, /visible_card_label_button/);
+  assert.doesNotMatch(sandboxProof, /card_radio_direct/);
+  assert.doesNotMatch(
+    sandboxProof,
+    /getByRole\("radio", \{ name: \/pay with card\/i \}\)/,
+  );
+  assert.match(sandboxProof, /#payment-method-accordion-item-title-card/);
+  assert.match(
+    sandboxProof,
+    /input\[name="payment-method-accordion-item-title"\]\[value="card"\]/,
+  );
   assert.match(sandboxProof, /\[role="radio"\]\[value="card"\]/);
+  assert.match(sandboxProof, /already_selected_or_fields_mounted/);
   assert.match(sandboxProof, /cardFieldsMounted/);
   assert.match(sandboxProof, /processingObserved/);
   assert.match(sandboxProof, /cardCandidateStrategiesAttempted/);
@@ -578,8 +587,22 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
   assert.match(sandboxProof, /fillVisibleStripeField/);
   assert.match(sandboxProof, /fillVisibleStripeFieldByFallbacks/);
   assert.match(sandboxProof, /waitForVisibleStripeFieldByFallbacks/);
+  assert.match(sandboxProof, /#cardNumber/);
+  assert.match(sandboxProof, /#cardExpiry/);
+  assert.match(sandboxProof, /#cardCvc/);
+  assert.match(sandboxProof, /#billingName/);
+  assert.match(sandboxProof, /#billingCountry/);
+  assert.match(sandboxProof, /#billingPostalCode/);
+  assert.match(sandboxProof, /#enableStripePass/);
+  assert.match(sandboxProof, /acknowledgeStripeAiAgentDisclosure/);
+  assert.match(
+    sandboxProof,
+    /i am an ai agent acting on behalf of someone else/i,
+  );
   assert.match(sandboxProof, /stripe_checkout_card_number_field_missing/);
   assert.match(sandboxProof, /findPrimaryStripeSubmitControl/);
+  assert.match(sandboxProof, /hosted-payment-submit-button/);
+  assert.match(sandboxProof, /hosted_payment_submit_testid/);
   assert.match(sandboxProof, /waitForPrimaryStripeSubmitControl/);
   assert.match(
     sandboxProof,
