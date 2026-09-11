@@ -696,10 +696,39 @@ async function createCheckout(page) {
   return checkoutUrl.toString();
 }
 
+function safeOrigin(value) {
+  try {
+    return new URL(value || "about:blank").origin;
+  } catch {
+    return "unknown";
+  }
+}
+
+function stripeInteractionContexts(page) {
+  const contexts = [
+    {
+      target: page,
+      kind: "page",
+      origin: safeOrigin(page.url()),
+      name: "",
+    },
+  ];
+  const mainFrame = page.mainFrame();
+  for (const frame of page.frames()) {
+    if (frame === mainFrame) continue;
+    contexts.push({
+      target: frame,
+      kind: "frame",
+      origin: safeOrigin(frame.url()),
+      name: sanitizeError(frame.name()).slice(0, 120),
+    });
+  }
+  return contexts;
+}
+
 async function fillVisibleStripeField(page, label, value, options = {}) {
-  const frames = [page, ...page.frames()];
-  for (const frame of frames) {
-    const locator = frame.getByLabel(label).first();
+  for (const context of stripeInteractionContexts(page)) {
+    const locator = context.target.getByLabel(label).first();
     if ((await locator.count().catch(() => 0)) === 0) continue;
     if (!(await locator.isVisible().catch(() => false))) continue;
     await locator.fill(value, options);
@@ -709,9 +738,8 @@ async function fillVisibleStripeField(page, label, value, options = {}) {
 }
 
 async function fillVisibleStripeFieldByFallbacks(page, field) {
-  const frames = [page, ...page.frames()];
-  for (const frame of frames) {
-    for (const locator of field.locators(frame)) {
+  for (const context of stripeInteractionContexts(page)) {
+    for (const locator of field.locators(context.target)) {
       const target = locator.first();
       if ((await target.count().catch(() => 0)) === 0) continue;
       if (!(await target.isVisible().catch(() => false))) continue;
@@ -722,58 +750,103 @@ async function fillVisibleStripeFieldByFallbacks(page, field) {
   return false;
 }
 
-async function fillOptionalStripeField(page, label, value, options = {}) {
-  await fillVisibleStripeField(page, label, value, options);
+async function hasVisibleStripeFieldByFallbacks(page, locators) {
+  for (const context of stripeInteractionContexts(page)) {
+    for (const locator of locators(context.target)) {
+      const target = locator.first();
+      if ((await target.count().catch(() => 0)) === 0) continue;
+      if (await target.isVisible().catch(() => false)) return true;
+    }
+  }
+  return false;
 }
 
-async function waitForVisibleStripeField(page, label, timeoutMs = 30000) {
+async function waitForVisibleStripeFieldByFallbacks(
+  page,
+  locators,
+  timeoutMs = 30000,
+) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    for (const frame of [page, ...page.frames()]) {
-      const locator = frame.getByLabel(label).first();
-      if (
-        (await locator.count().catch(() => 0)) > 0 &&
-        (await locator.isVisible().catch(() => false))
-      ) {
-        return true;
-      }
-    }
+    if (await hasVisibleStripeFieldByFallbacks(page, locators)) return true;
     await page.waitForTimeout(250);
   }
   return false;
 }
 
-async function listVisiblePaymentMethodLabels(page) {
-  return page.evaluate(() => {
-    const labels = new Set();
-    const selectors = [
-      'button[role="radio"]',
-      'button[role="tab"]',
-      "button[aria-pressed]",
-      'input[type="radio"]',
-      '[role="radio"]',
-      '[data-testid*="payment"]',
-    ];
-    for (const element of document.querySelectorAll(selectors.join(","))) {
-      const text = [
-        element.getAttribute("aria-label"),
-        element.textContent,
-        element.id
-          ? document.querySelector(`label[for="${CSS.escape(element.id)}"]`)
-              ?.textContent
-          : null,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .replace(/\s+/g, " ")
-        .trim();
-      if (text) labels.add(text.slice(0, 80));
-    }
-    return [...labels];
-  });
+async function fillOptionalStripeField(page, label, value, options = {}) {
+  await fillVisibleStripeField(page, label, value, options);
 }
 
-async function findVisibleLocator(target, locators) {
+function stripeCardNumberLocators(frame) {
+  return [
+    frame.getByLabel(/card number/i),
+    frame.locator('input[autocomplete="cc-number"]'),
+    frame.locator('input[name*="cardnumber" i]'),
+  ];
+}
+
+async function listVisiblePaymentMethodLabels(page) {
+  const labels = new Set();
+  for (const context of stripeInteractionContexts(page)) {
+    const contextLabels = await context.target
+      .evaluate(() => {
+        const values = new Set();
+        const selectors = [
+          'button[role="radio"]',
+          'button[role="tab"]',
+          "button[aria-pressed]",
+          'input[type="radio"]',
+          '[role="radio"]',
+          '[data-testid*="payment"]',
+          '[data-testid*="accordion-item-button"]',
+        ];
+        for (const element of document.querySelectorAll(selectors.join(","))) {
+          const style = window.getComputedStyle(element);
+          if (
+            style.display === "none" ||
+            style.visibility === "hidden" ||
+            style.opacity === "0" ||
+            element.getClientRects().length === 0
+          ) {
+            continue;
+          }
+          const text = [
+            element.getAttribute("aria-label"),
+            element.textContent,
+            element.id
+              ? document.querySelector(`label[for="${CSS.escape(element.id)}"]`)
+                  ?.textContent
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .replace(/\s+/g, " ")
+            .trim();
+          if (text) values.add(text.slice(0, 80));
+        }
+        return [...values];
+      })
+      .catch(() => []);
+    for (const label of contextLabels) labels.add(label);
+  }
+  return [...labels].slice(0, 40);
+}
+
+async function anyVisibleStripeText(page, pattern) {
+  for (const context of stripeInteractionContexts(page)) {
+    const locator = context.target.getByText(pattern).first();
+    if (
+      (await locator.count().catch(() => 0)) > 0 &&
+      (await locator.isVisible().catch(() => false))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function findVisibleLocator(locators) {
   for (const locator of locators) {
     const count = await locator.count().catch(() => 0);
     for (let index = 0; index < count; index += 1) {
@@ -786,36 +859,58 @@ async function findVisibleLocator(target, locators) {
   return null;
 }
 
-async function findVisibleCardPaymentControl(page) {
-  const candidates = [
+function cardControlCandidates(target) {
+  const cardRadio = target.getByRole("radio", { name: /^card$/i });
+  return [
     {
       strategy: "pay_with_card_button",
-      locator: page.getByRole("button", { name: /pay with card/i }),
+      locator: target.getByRole("button", { name: /pay with card/i }),
     },
     {
       strategy: "card_accordion_testid",
-      locator: page.locator('[data-testid="card-accordion-item-button"]'),
+      locator: target.locator('[data-testid="card-accordion-item-button"]'),
     },
     {
-      strategy: "card_radio_role",
-      locator: page
-        .getByRole("radio", { name: /^card$/i })
-        .locator("xpath=ancestor-or-self::button[1]"),
+      strategy: "card_radio_button_ancestor",
+      locator: cardRadio.locator("xpath=ancestor::button[1]"),
     },
     {
       strategy: "card_radio_wrapped_button",
-      locator: page.locator(
+      locator: target.locator(
         'button:has([role="radio"][value="card"]), button:has(input[type="radio"][value="card"])',
       ),
     },
     {
+      strategy: "card_text_button_ancestor",
+      locator: target.getByText(/^Card$/i).locator("xpath=ancestor::button[1]"),
+    },
+    {
       strategy: "visible_card_label_button",
-      locator: page.locator("button").filter({ hasText: /^Card$/i }),
+      locator: target.locator("button").filter({ hasText: /^\s*Card\s*$/i }),
+    },
+    {
+      strategy: "card_radio_label",
+      locator: target.locator('label:has(input[type="radio"][value="card"])'),
     },
   ];
-  for (const candidate of candidates) {
-    const visible = await findVisibleLocator(page, [candidate.locator]);
-    if (visible) return { locator: visible, strategy: candidate.strategy };
+}
+
+async function findVisibleCardPaymentControl(page) {
+  for (const context of stripeInteractionContexts(page)) {
+    for (const candidate of cardControlCandidates(context.target)) {
+      const visible = await findVisibleLocator([candidate.locator]);
+      if (visible) {
+        return {
+          locator: visible,
+          strategy: candidate.strategy,
+          context: {
+            kind: context.kind,
+            origin: context.origin,
+            name: context.name,
+          },
+        };
+      }
+    }
   }
   return null;
 }
@@ -826,16 +921,13 @@ async function waitForCardPaymentControl(page, timeoutMs = 20000) {
   let processingObserved = false;
   while (Date.now() < deadline) {
     proof.evidence.checkoutDiagnostics ??= {};
-    const labels = await listVisiblePaymentMethodLabels(page).catch(() => []);
-    proof.evidence.checkoutDiagnostics.paymentMethodLabels = labels;
+    proof.evidence.checkoutDiagnostics.paymentMethodLabels =
+      await listVisiblePaymentMethodLabels(page).catch(() => []);
     processingObserved =
-      processingObserved ||
-      (await page
-        .getByText(/processing/i)
-        .first()
-        .isVisible()
-        .catch(() => false));
+      processingObserved || (await anyVisibleStripeText(page, /processing/i));
     proof.evidence.checkoutDiagnostics.processingObserved = processingObserved;
+    proof.evidence.checkoutDiagnostics.interactionContextCount =
+      stripeInteractionContexts(page).length;
     const card = await findVisibleCardPaymentControl(page);
     if (card) {
       proof.evidence.checkoutDiagnostics.cardCandidateStrategiesAttempted = [
@@ -847,9 +939,11 @@ async function waitForCardPaymentControl(page, timeoutMs = 20000) {
     for (const strategy of [
       "pay_with_card_button",
       "card_accordion_testid",
-      "card_radio_role",
+      "card_radio_button_ancestor",
       "card_radio_wrapped_button",
+      "card_text_button_ancestor",
       "visible_card_label_button",
+      "card_radio_label",
     ]) {
       strategiesAttempted.add(strategy);
     }
@@ -862,40 +956,108 @@ async function waitForCardPaymentControl(page, timeoutMs = 20000) {
   return null;
 }
 
+async function isCardPaymentMethodSelected(page) {
+  for (const context of stripeInteractionContexts(page)) {
+    const candidates = [
+      context.target.getByRole("radio", { name: /^card$/i }),
+      context.target.locator('[role="radio"][value="card"]'),
+      context.target.locator('input[type="radio"][value="card"]'),
+    ];
+    for (const locator of candidates) {
+      const count = await locator.count().catch(() => 0);
+      for (let index = 0; index < count; index += 1) {
+        const candidate = locator.nth(index);
+        if (
+          (await candidate.getAttribute("aria-checked").catch(() => null)) ===
+          "true"
+        ) {
+          return true;
+        }
+        if (await candidate.isChecked().catch(() => false)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+async function waitForCardSelectionOrFields(page, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const cardSelected = await isCardPaymentMethodSelected(page);
+    const cardFieldsMounted = await hasVisibleStripeFieldByFallbacks(
+      page,
+      stripeCardNumberLocators,
+    );
+    if (cardSelected || cardFieldsMounted) {
+      return { cardSelected, cardFieldsMounted };
+    }
+    await page.waitForTimeout(250);
+  }
+  return { cardSelected: false, cardFieldsMounted: false };
+}
+
 async function selectCardPaymentMethod(page) {
   proof.evidence.checkoutDiagnostics ??= {};
-  const card = await waitForCardPaymentControl(page);
-  if (!card) {
+  const selectionDeadline = Date.now() + 30000;
+  let cardWasFound = false;
+  let lastClickError = null;
+  while (Date.now() < selectionDeadline) {
+    const remainingMs = Math.max(1000, selectionDeadline - Date.now());
+    const card = await waitForCardPaymentControl(
+      page,
+      Math.min(remainingMs, cardWasFound ? 5000 : 20000),
+    );
+    if (!card) {
+      const state = await waitForCardSelectionOrFields(page, 1000);
+      if (state.cardSelected || state.cardFieldsMounted) {
+        proof.evidence.checkoutDiagnostics.cardSelected = state.cardSelected;
+        proof.evidence.checkoutDiagnostics.cardFieldsMounted =
+          state.cardFieldsMounted;
+        return;
+      }
+      break;
+    }
+    cardWasFound = true;
+    proof.evidence.checkoutDiagnostics.cardFound = true;
+    proof.evidence.checkoutDiagnostics.cardFoundBy = card.strategy;
+    proof.evidence.checkoutDiagnostics.cardFoundFrameKind = card.context.kind;
+    proof.evidence.checkoutDiagnostics.cardFoundFrameOrigin =
+      card.context.origin;
+    proof.evidence.checkoutDiagnostics.cardFoundFrameName = card.context.name;
+    try {
+      await card.locator.click({ timeout: Math.min(5000, remainingMs) });
+    } catch (error) {
+      lastClickError = sanitizeError(
+        error instanceof Error ? error.message : String(error),
+      );
+      proof.evidence.checkoutDiagnostics.cardClickRetried = true;
+      await page.waitForTimeout(300);
+      continue;
+    }
+    const state = await waitForCardSelectionOrFields(
+      page,
+      Math.min(10000, Math.max(1000, selectionDeadline - Date.now())),
+    );
+    proof.evidence.checkoutDiagnostics.cardSelected = state.cardSelected;
+    proof.evidence.checkoutDiagnostics.cardFieldsMounted =
+      state.cardFieldsMounted;
+    if (state.cardSelected || state.cardFieldsMounted) return;
+    await page.waitForTimeout(300);
+  }
+  if (!cardWasFound) {
     proof.evidence.checkoutDiagnostics.cardFound = false;
     throw new Error("stripe_checkout_card_payment_method_missing");
   }
-  proof.evidence.checkoutDiagnostics.cardFound = true;
-  proof.evidence.checkoutDiagnostics.cardFoundBy = card.strategy;
-  await card.locator.click();
-  const cardSelected = await page
-    .locator('[role="radio"][value="card"], input[type="radio"][value="card"]')
-    .evaluateAll((elements) =>
-      elements.some(
-        (element) => element.getAttribute("aria-checked") === "true",
-      ),
-    )
-    .catch(() => false);
-  const cardFieldsMounted = await waitForVisibleStripeField(
-    page,
-    /card number/i,
-    10000,
-  );
-  proof.evidence.checkoutDiagnostics.cardSelected = cardSelected;
-  proof.evidence.checkoutDiagnostics.cardFieldsMounted = cardFieldsMounted;
-  if (!cardSelected && !cardFieldsMounted) {
-    throw new Error("stripe_checkout_card_payment_method_not_selected");
+  if (lastClickError) {
+    proof.evidence.checkoutDiagnostics.cardLastClickError = lastClickError;
   }
+  throw new Error("stripe_checkout_card_payment_method_not_selected");
 }
 
 async function disableStripeLinkSave(page) {
   proof.evidence.checkoutDiagnostics ??= {};
-  for (const frame of [page, ...page.frames()]) {
-    const checkbox = frame
+  for (const context of stripeInteractionContexts(page)) {
+    const checkbox = context.target
       .getByRole("checkbox", {
         name: /save my information for faster checkout/i,
       })
@@ -903,18 +1065,98 @@ async function disableStripeLinkSave(page) {
     if ((await checkbox.count().catch(() => 0)) === 0) continue;
     if (!(await checkbox.isVisible().catch(() => false))) continue;
     proof.evidence.checkoutDiagnostics.linkSaveFound = true;
-    if (await checkbox.isChecked().catch(() => false)) {
+    const initiallyChecked = await checkbox.isChecked().catch(() => false);
+    proof.evidence.checkoutDiagnostics.linkSaveInitiallyChecked =
+      initiallyChecked;
+    if (initiallyChecked) {
       await checkbox.uncheck();
-      proof.evidence.checkoutDiagnostics.linkSaveUnchecked = true;
-    } else {
-      proof.evidence.checkoutDiagnostics.linkSaveUnchecked = false;
     }
+    proof.evidence.checkoutDiagnostics.linkSaveUnchecked = !(await checkbox
+      .isChecked()
+      .catch(() => true));
+    proof.evidence.checkoutDiagnostics.linkSaveFrameOrigin = context.origin;
     return;
   }
   proof.evidence.checkoutDiagnostics.linkSaveFound = false;
 }
 
+async function listVisiblePrimarySubmitLabels(page) {
+  const labels = [];
+  for (const context of stripeInteractionContexts(page)) {
+    const locator = context.target.getByRole("button", {
+      name: /^(start trial|start free trial|subscribe|pay)(\b|$)/i,
+    });
+    const count = await locator.count().catch(() => 0);
+    for (let index = 0; index < count; index += 1) {
+      const candidate = locator.nth(index);
+      if (!(await candidate.isVisible().catch(() => false))) continue;
+      const label = await candidate
+        .evaluate((element) =>
+          String(
+            element.getAttribute("aria-label") || element.textContent || "",
+          )
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 80),
+        )
+        .catch(() => "");
+      if (label) labels.push(label);
+    }
+  }
+  return [...new Set(labels)];
+}
+
+async function findPrimaryStripeSubmitControl(page) {
+  const matches = [];
+  for (const context of stripeInteractionContexts(page)) {
+    const locator = context.target
+      .getByRole("button", {
+        name: /^(start trial|start free trial|subscribe|pay)(\b|$)/i,
+      })
+      .filter({ hasNotText: /apple pay|google pay|link|paypal/i });
+    const count = await locator.count().catch(() => 0);
+    for (let index = 0; index < count; index += 1) {
+      const candidate = locator.nth(index);
+      if (
+        (await candidate.isVisible().catch(() => false)) &&
+        (await candidate.isEnabled().catch(() => false))
+      ) {
+        matches.push({
+          locator: candidate,
+          context: {
+            kind: context.kind,
+            origin: context.origin,
+            name: context.name,
+          },
+        });
+      }
+    }
+  }
+  return matches;
+}
+
+async function waitForPrimaryStripeSubmitControl(page, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs;
+  let latestCount = 0;
+  while (Date.now() < deadline) {
+    const matches = await findPrimaryStripeSubmitControl(page);
+    latestCount = matches.length;
+    if (matches.length === 1) return matches[0];
+    await page.waitForTimeout(250);
+  }
+  throw new Error(
+    `stripe_checkout_submit_button_count_mismatch:${latestCount}`,
+  );
+}
+
 async function captureCheckoutDiagnostics(page, reason, fields = {}) {
+  const frameDiagnostics = await Promise.all(
+    page.frames().map(async (frame) => ({
+      origin: safeOrigin(frame.url()),
+      name: sanitizeError(frame.name()).slice(0, 120),
+      title: sanitizeError(await frame.title().catch(() => "")).slice(0, 120),
+    })),
+  );
   proof.evidence.checkoutDiagnostics = {
     ...(proof.evidence.checkoutDiagnostics ?? {}),
     reason: sanitizeError(reason),
@@ -923,11 +1165,12 @@ async function captureCheckoutDiagnostics(page, reason, fields = {}) {
     paymentMethodLabels: await listVisiblePaymentMethodLabels(page).catch(
       () => [],
     ),
+    primarySubmitLabels: await listVisiblePrimarySubmitLabels(page).catch(
+      () => [],
+    ),
+    interactionContextCount: stripeInteractionContexts(page).length,
     frameCount: page.frames().length,
-    frames: page.frames().map((frame) => ({
-      origin: new URL(frame.url() || "about:blank").origin,
-      name: sanitizeError(frame.name()),
-    })),
+    frames: frameDiagnostics,
     fields,
   };
   if (!fields.paymentFieldsEntered) {
@@ -960,17 +1203,18 @@ async function completeStripeCheckout(page, checkoutUrl) {
   try {
     await selectCardPaymentMethod(page);
     await disableStripeLinkSave(page);
-    if (!(await waitForVisibleStripeField(page, /card number/i))) {
+    if (
+      !(await waitForVisibleStripeFieldByFallbacks(
+        page,
+        stripeCardNumberLocators,
+      ))
+    ) {
       throw new Error("stripe_checkout_payment_form_missing");
     }
     if (
       !(await fillVisibleStripeFieldByFallbacks(page, {
         value: "4242424242424242",
-        locators: (frame) => [
-          frame.getByLabel(/card number/i),
-          frame.locator('input[autocomplete="cc-number"]'),
-          frame.locator('input[name*="cardnumber" i]'),
-        ],
+        locators: stripeCardNumberLocators,
       }))
     ) {
       throw new Error("stripe_checkout_card_number_field_missing");
@@ -1009,8 +1253,8 @@ async function completeStripeCheckout(page, checkoutUrl) {
       "Blundr Wave 2B",
     );
     await fillOptionalStripeField(page, /zip|postal/i, "10001");
-    for (const frame of [page, ...page.frames()]) {
-      const country = frame.getByLabel(/country/i).first();
+    for (const context of stripeInteractionContexts(page)) {
+      const country = context.target.getByLabel(/country/i).first();
       if (
         (await country.count().catch(() => 0)) > 0 &&
         (await country.isVisible().catch(() => false))
@@ -1019,28 +1263,19 @@ async function completeStripeCheckout(page, checkoutUrl) {
         break;
       }
     }
-    const submitCandidates = page
-      .getByRole("button", {
-        name: /^(start trial|start free trial|subscribe|pay)(\b|$)/i,
-      })
-      .filter({ hasNotText: /apple pay|google pay|link|paypal/i });
-    const visibleSubmitIndexes = [];
-    const submitCount = await submitCandidates.count();
-    for (let index = 0; index < submitCount; index += 1) {
-      const candidate = submitCandidates.nth(index);
-      if (
-        (await candidate.isVisible().catch(() => false)) &&
-        (await candidate.isEnabled().catch(() => false))
-      ) {
-        visibleSubmitIndexes.push(index);
-      }
-    }
-    if (visibleSubmitIndexes.length !== 1) {
-      throw new Error(
-        `stripe_checkout_submit_button_count_mismatch:${visibleSubmitIndexes.length}`,
-      );
-    }
-    await submitCandidates.nth(visibleSubmitIndexes[0]).click();
+    const submit = await waitForPrimaryStripeSubmitControl(page);
+    proof.evidence.checkoutDiagnostics ??= {};
+    proof.evidence.checkoutDiagnostics.submitFrameKind = submit.context.kind;
+    proof.evidence.checkoutDiagnostics.submitFrameOrigin =
+      submit.context.origin;
+    proof.evidence.checkoutDiagnostics.submitFrameName = submit.context.name;
+    await submit.locator.click();
+    await page.waitForURL(
+      (url) =>
+        url.origin === stableCallbackOrigin &&
+        url.pathname === "/billing/success",
+      { timeout: 60000 },
+    );
   } catch (error) {
     await captureCheckoutDiagnostics(
       page,
@@ -1049,12 +1284,6 @@ async function completeStripeCheckout(page, checkoutUrl) {
     );
     throw error;
   }
-  await page.waitForURL(
-    (url) =>
-      url.origin === stableCallbackOrigin &&
-      url.pathname === "/billing/success",
-    { timeout: 60000 },
-  );
   const finalUrl = new URL(page.url());
   assertNonProductionUrl(finalUrl.origin, "stripe_checkout_return_origin");
   if (finalUrl.origin !== stableCallbackOrigin) {

@@ -542,16 +542,21 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
   assert.match(sandboxProof, /stripe_checkout_session_metadata_user_mismatch/);
   assert.match(sandboxProof, /stripe_checkout_session_price_mismatch/);
   assert.match(sandboxProof, /selectCardPaymentMethod/);
+  assert.match(sandboxProof, /stripeInteractionContexts/);
   assert.match(sandboxProof, /waitForCardPaymentControl/);
   assert.match(sandboxProof, /timeoutMs = 20000/);
   assert.match(sandboxProof, /name: \/pay with card\/i/);
   assert.match(sandboxProof, /card-accordion-item-button/);
+  assert.match(sandboxProof, /card_radio_button_ancestor/);
+  assert.match(sandboxProof, /card_text_button_ancestor/);
+  assert.match(sandboxProof, /card_radio_label/);
   assert.match(sandboxProof, /visible_card_label_button/);
   assert.match(sandboxProof, /\[role="radio"\]\[value="card"\]/);
   assert.match(sandboxProof, /cardFieldsMounted/);
   assert.match(sandboxProof, /processingObserved/);
   assert.match(sandboxProof, /cardCandidateStrategiesAttempted/);
   assert.match(sandboxProof, /cardFoundBy/);
+  assert.match(sandboxProof, /cardFoundFrameOrigin/);
   assert.doesNotMatch(sandboxProof, /force: true/);
   assert.match(sandboxProof, /stripe_checkout_card_payment_method_missing/);
   assert.match(
@@ -564,8 +569,10 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
   assert.match(sandboxProof, /stripe-checkout-diagnostic\.png/);
   assert.match(sandboxProof, /fillVisibleStripeField/);
   assert.match(sandboxProof, /fillVisibleStripeFieldByFallbacks/);
-  assert.match(sandboxProof, /waitForVisibleStripeField/);
+  assert.match(sandboxProof, /waitForVisibleStripeFieldByFallbacks/);
   assert.match(sandboxProof, /stripe_checkout_card_number_field_missing/);
+  assert.match(sandboxProof, /findPrimaryStripeSubmitControl/);
+  assert.match(sandboxProof, /waitForPrimaryStripeSubmitControl/);
   assert.match(
     sandboxProof,
     /revenuecat_v1_subscriber_not_found_or_wrong_context:404/,
