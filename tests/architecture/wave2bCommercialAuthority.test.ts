@@ -545,6 +545,9 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
   assert.match(sandboxProof, /stripeInteractionContexts/);
   assert.match(sandboxProof, /waitForCardPaymentControl/);
   assert.match(sandboxProof, /timeoutMs = 20000/);
+  assert.match(sandboxProof, /strategy: "visible_card_text"/);
+  assert.match(sandboxProof, /getByText\(\/\^Card\$\/i\)/);
+  assert.match(sandboxProof, /skippedCardStrategies/);
   assert.match(
     sandboxProof,
     /button\[data-testid="card-accordion-item-button"\]/,
@@ -572,6 +575,18 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
   assert.match(sandboxProof, /cardFieldsMounted/);
   assert.match(sandboxProof, /processingObserved/);
   assert.match(sandboxProof, /cardCandidateStrategiesAttempted/);
+  assert.match(sandboxProof, /collectCardCandidateDiagnostics/);
+  assert.match(sandboxProof, /cardCandidateDiagnostics/);
+  assert.match(sandboxProof, /matchCount/);
+  assert.match(sandboxProof, /visibleCount/);
+  assert.match(sandboxProof, /tagName/);
+  assert.match(sandboxProof, /ariaLabel/);
+  assert.match(sandboxProof, /dataTestId/);
+  assert.match(sandboxProof, /ariaChecked/);
+  assert.match(sandboxProof, /tabindex/);
+  assert.match(sandboxProof, /textContent/);
+  assert.match(sandboxProof, /boundingBox/);
+  assert.match(sandboxProof, /outerHTML/);
   assert.match(sandboxProof, /cardFoundBy/);
   assert.match(sandboxProof, /cardFoundFrameOrigin/);
   assert.doesNotMatch(sandboxProof, /force: true/);

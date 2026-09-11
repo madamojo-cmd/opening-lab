@@ -904,6 +904,7 @@ async function findVisibleLocator(locators) {
 
 function cardControlCandidates(target) {
   const cardRadio = target.getByRole("radio", { name: /^card$/i });
+  const visibleCardText = target.getByText(/^Card$/i);
   const payWithCardText = target.getByText(/^Pay with card$/i);
 
   const paymentCardByAria = target.locator(
@@ -915,6 +916,10 @@ function cardControlCandidates(target) {
     .filter({ hasText: /^\s*(?:pay with )?card\s*$/i });
 
   return [
+    {
+      strategy: "visible_card_text",
+      locator: visibleCardText,
+    },
     {
       strategy: "card_accordion_testid",
       locator: target.locator(
@@ -990,9 +995,82 @@ function cardControlCandidates(target) {
   ];
 }
 
-async function findVisibleCardPaymentControl(page) {
+function cardControlStrategyNames() {
+  return cardControlCandidates(page).map((candidate) => candidate.strategy);
+}
+
+function safeDiagnosticText(value, maxLength = 1000) {
+  return sanitizeError(String(value ?? ""))
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
+async function collectCardCandidateDiagnostics(page) {
+  const diagnostics = [];
   for (const context of stripeInteractionContexts(page)) {
     for (const candidate of cardControlCandidates(context.target)) {
+      const count = await candidate.locator.count().catch(() => 0);
+      const entry = {
+        strategy: candidate.strategy,
+        contextKind: context.kind,
+        contextOrigin: context.origin,
+        frameName: context.name,
+        matchCount: count,
+        visibleCount: 0,
+        matches: [],
+      };
+      const inspectedCount = Math.min(count, 10);
+      for (let index = 0; index < inspectedCount; index += 1) {
+        const locator = candidate.locator.nth(index);
+        const visible = await locator.isVisible().catch(() => false);
+        if (visible) entry.visibleCount += 1;
+        const metadata = await locator
+          .evaluate((element) => ({
+            tagName: element.tagName,
+            role: element.getAttribute("role"),
+            ariaLabel: element.getAttribute("aria-label"),
+            dataTestId: element.getAttribute("data-testid"),
+            id: element.getAttribute("id"),
+            name: element.getAttribute("name"),
+            value: element.getAttribute("value"),
+            ariaChecked: element.getAttribute("aria-checked"),
+            tabindex: element.getAttribute("tabindex"),
+            textContent: element.textContent,
+            outerHTML: element.outerHTML,
+          }))
+          .catch(() => null);
+        const boundingBox = await locator.boundingBox().catch(() => null);
+        entry.matches.push({
+          index,
+          visible,
+          tagName: metadata?.tagName ?? null,
+          role: metadata?.role ?? null,
+          ariaLabel: safeDiagnosticText(metadata?.ariaLabel, 200),
+          dataTestId: safeDiagnosticText(metadata?.dataTestId, 200),
+          id: safeDiagnosticText(metadata?.id, 200),
+          name: safeDiagnosticText(metadata?.name, 200),
+          value: safeDiagnosticText(metadata?.value, 200),
+          ariaChecked: metadata?.ariaChecked ?? null,
+          tabindex: metadata?.tabindex ?? null,
+          textContent: safeDiagnosticText(metadata?.textContent, 500),
+          boundingBox,
+          outerHTML: safeDiagnosticText(metadata?.outerHTML, 1000),
+        });
+      }
+      diagnostics.push(entry);
+    }
+  }
+  return diagnostics;
+}
+
+async function findVisibleCardPaymentControl(
+  page,
+  skippedStrategies = new Set(),
+) {
+  for (const context of stripeInteractionContexts(page)) {
+    for (const candidate of cardControlCandidates(context.target)) {
+      if (skippedStrategies.has(candidate.strategy)) continue;
       const visible = await findVisibleLocator([candidate.locator]);
       if (visible) {
         return {
@@ -1010,7 +1088,11 @@ async function findVisibleCardPaymentControl(page) {
   return null;
 }
 
-async function waitForCardPaymentControl(page, timeoutMs = 20000) {
+async function waitForCardPaymentControl(
+  page,
+  timeoutMs = 20000,
+  skippedStrategies = new Set(),
+) {
   const deadline = Date.now() + timeoutMs;
   const strategiesAttempted = new Set();
   let processingObserved = false;
@@ -1023,7 +1105,15 @@ async function waitForCardPaymentControl(page, timeoutMs = 20000) {
     proof.evidence.checkoutDiagnostics.processingObserved = processingObserved;
     proof.evidence.checkoutDiagnostics.interactionContextCount =
       stripeInteractionContexts(page).length;
-    const card = await findVisibleCardPaymentControl(page);
+    proof.evidence.checkoutDiagnostics.cardCandidateDiagnostics =
+      await collectCardCandidateDiagnostics(page).catch((error) => [
+        {
+          error: sanitizeError(
+            error instanceof Error ? error.message : String(error),
+          ),
+        },
+      ]);
+    const card = await findVisibleCardPaymentControl(page, skippedStrategies);
     if (card) {
       proof.evidence.checkoutDiagnostics.cardCandidateStrategiesAttempted = [
         ...strategiesAttempted,
@@ -1031,9 +1121,7 @@ async function waitForCardPaymentControl(page, timeoutMs = 20000) {
       ];
       return card;
     }
-    for (const strategy of cardControlCandidates(page).map(
-      (candidate) => candidate.strategy,
-    )) {
+    for (const strategy of cardControlStrategyNames()) {
       strategiesAttempted.add(strategy);
     }
     await page.waitForTimeout(400);
@@ -1108,11 +1196,13 @@ async function selectCardPaymentMethod(page) {
   const selectionDeadline = Date.now() + 30000;
   let cardWasFound = false;
   let lastClickError = null;
+  const skippedCardStrategies = new Set();
   while (Date.now() < selectionDeadline) {
     const remainingMs = Math.max(1000, selectionDeadline - Date.now());
     const card = await waitForCardPaymentControl(
       page,
       Math.min(remainingMs, cardWasFound ? 5000 : 20000),
+      skippedCardStrategies,
     );
     if (!card) {
       const state = await waitForCardSelectionOrFields(page, 1000);
@@ -1137,12 +1227,16 @@ async function selectCardPaymentMethod(page) {
       lastClickError = sanitizeError(
         error instanceof Error ? error.message : String(error),
       );
+      proof.evidence.checkoutDiagnostics.cardLastClickError = lastClickError;
+      proof.evidence.checkoutDiagnostics.cardLastClickFailedStrategy =
+        card.strategy;
       proof.evidence.checkoutDiagnostics.cardClickRetried = true;
       const state = await waitForCardSelectionOrFields(page, 1000);
       proof.evidence.checkoutDiagnostics.cardSelected = state.cardSelected;
       proof.evidence.checkoutDiagnostics.cardFieldsMounted =
         state.cardFieldsMounted;
       if (state.cardSelected || state.cardFieldsMounted) return;
+      skippedCardStrategies.add(card.strategy);
       continue;
     }
     const state = await waitForCardSelectionOrFields(
@@ -1153,6 +1247,7 @@ async function selectCardPaymentMethod(page) {
     proof.evidence.checkoutDiagnostics.cardFieldsMounted =
       state.cardFieldsMounted;
     if (state.cardSelected || state.cardFieldsMounted) return;
+    skippedCardStrategies.add(card.strategy);
     await page.waitForTimeout(300);
   }
   if (!cardWasFound) {

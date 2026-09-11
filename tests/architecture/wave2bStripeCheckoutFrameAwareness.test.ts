@@ -15,14 +15,19 @@ test("Wave 2B Stripe checkout interactions are frame-aware and bounded", () => {
   assert.match(source, /for \(const frame of page\.frames\(\)\)/);
   assert.match(
     source,
-    /findVisibleCardPaymentControl\(page\)[\s\S]*stripeInteractionContexts\(page\)/,
+    /findVisibleCardPaymentControl\([^)]*page[\s\S]*stripeInteractionContexts\(page\)/,
   );
   assert.match(source, /cardControlCandidates\(context\.target\)/);
+  assert.match(source, /strategy: "visible_card_text"/);
+  assert.match(source, /getByText\(\/\^Card\$\/i\)/);
   assert.match(source, /button\[data-testid="card-accordion-item-button"\]/);
   assert.match(
     source,
     /getByRole\("button", \{ name: \/\^pay with card\$\/i \}\)/,
   );
+  assert.match(source, /async function findVisibleCardPaymentControl\(/);
+  assert.match(source, /skippedStrategies = new Set\(\)/);
+  assert.match(source, /skippedCardStrategies/);
   assert.match(source, /pay_with_card_text_button_ancestor/);
   assert.match(source, /payment_testid_card_aria/);
   assert.match(source, /payment_testid_card_text/);
@@ -31,6 +36,19 @@ test("Wave 2B Stripe checkout interactions are frame-aware and bounded", () => {
   assert.match(source, /cardFoundFrameKind/);
   assert.match(source, /cardFoundFrameOrigin/);
   assert.match(source, /cardFoundFrameName/);
+  assert.match(source, /collectCardCandidateDiagnostics\(page\)/);
+  assert.match(source, /cardCandidateDiagnostics/);
+  assert.match(source, /matchCount/);
+  assert.match(source, /visibleCount/);
+  assert.match(source, /tagName/);
+  assert.match(source, /role/);
+  assert.match(source, /ariaLabel/);
+  assert.match(source, /dataTestId/);
+  assert.match(source, /ariaChecked/);
+  assert.match(source, /tabindex/);
+  assert.match(source, /textContent/);
+  assert.match(source, /boundingBox/);
+  assert.match(source, /outerHTML/);
   assert.match(source, /isCardPaymentMethodSelected\(page\)/);
   assert.match(source, /#payment-method-accordion-item-title-card/);
   assert.match(
