@@ -786,20 +786,92 @@ async function findVisibleLocator(target, locators) {
   return null;
 }
 
+async function findVisibleCardPaymentControl(page) {
+  const candidates = [
+    {
+      strategy: "pay_with_card_button",
+      locator: page.getByRole("button", { name: /pay with card/i }),
+    },
+    {
+      strategy: "card_accordion_testid",
+      locator: page.locator('[data-testid="card-accordion-item-button"]'),
+    },
+    {
+      strategy: "card_radio_role",
+      locator: page
+        .getByRole("radio", { name: /^card$/i })
+        .locator("xpath=ancestor-or-self::button[1]"),
+    },
+    {
+      strategy: "card_radio_wrapped_button",
+      locator: page.locator(
+        'button:has([role="radio"][value="card"]), button:has(input[type="radio"][value="card"])',
+      ),
+    },
+    {
+      strategy: "visible_card_label_button",
+      locator: page.locator("button").filter({ hasText: /^Card$/i }),
+    },
+  ];
+  for (const candidate of candidates) {
+    const visible = await findVisibleLocator(page, [candidate.locator]);
+    if (visible) return { locator: visible, strategy: candidate.strategy };
+  }
+  return null;
+}
+
+async function waitForCardPaymentControl(page, timeoutMs = 20000) {
+  const deadline = Date.now() + timeoutMs;
+  const strategiesAttempted = new Set();
+  let processingObserved = false;
+  while (Date.now() < deadline) {
+    proof.evidence.checkoutDiagnostics ??= {};
+    const labels = await listVisiblePaymentMethodLabels(page).catch(() => []);
+    proof.evidence.checkoutDiagnostics.paymentMethodLabels = labels;
+    processingObserved =
+      processingObserved ||
+      (await page
+        .getByText(/processing/i)
+        .first()
+        .isVisible()
+        .catch(() => false));
+    proof.evidence.checkoutDiagnostics.processingObserved = processingObserved;
+    const card = await findVisibleCardPaymentControl(page);
+    if (card) {
+      proof.evidence.checkoutDiagnostics.cardCandidateStrategiesAttempted = [
+        ...strategiesAttempted,
+        card.strategy,
+      ];
+      return card;
+    }
+    for (const strategy of [
+      "pay_with_card_button",
+      "card_accordion_testid",
+      "card_radio_role",
+      "card_radio_wrapped_button",
+      "visible_card_label_button",
+    ]) {
+      strategiesAttempted.add(strategy);
+    }
+    await page.waitForTimeout(400);
+  }
+  proof.evidence.checkoutDiagnostics ??= {};
+  proof.evidence.checkoutDiagnostics.cardCandidateStrategiesAttempted = [
+    ...strategiesAttempted,
+  ];
+  return null;
+}
+
 async function selectCardPaymentMethod(page) {
   proof.evidence.checkoutDiagnostics ??= {};
-  proof.evidence.checkoutDiagnostics.paymentMethodLabels =
-    await listVisiblePaymentMethodLabels(page).catch(() => []);
-  const card = await findVisibleLocator(page, [
-    page.getByRole("button", { name: /pay with card/i }),
-    page.locator('[data-testid="card-accordion-item-button"]'),
-  ]);
+  const card = await waitForCardPaymentControl(page);
   if (!card) {
     proof.evidence.checkoutDiagnostics.cardFound = false;
     throw new Error("stripe_checkout_card_payment_method_missing");
   }
   proof.evidence.checkoutDiagnostics.cardFound = true;
-  await card.click();
+  proof.evidence.checkoutDiagnostics.cardFoundBy = card.strategy;
+  await card.locator.click();
   const cardSelected = await page
     .locator('[role="radio"][value="card"], input[type="radio"][value="card"]')
     .evaluateAll((elements) =>
