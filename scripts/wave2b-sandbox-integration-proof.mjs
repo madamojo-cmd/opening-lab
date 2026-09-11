@@ -881,6 +881,10 @@ function cardControlCandidates(target) {
       locator: target.getByRole("radio", { name: /pay with card/i }),
     },
     {
+      strategy: "card_radio_direct",
+      locator: cardRadio,
+    },
+    {
       strategy: "pay_with_card_text",
       locator: payWithCardText,
     },
@@ -1005,7 +1009,13 @@ async function waitForCardPaymentControl(page, timeoutMs = 20000) {
     for (const strategy of [
       "pay_with_card_button",
       "pay_with_card_radio",
+      "card_radio_direct",
       "pay_with_card_text",
+      "payment_testid_card_aria",
+      "payment_testid_card_text",
+      "payment_testid_card_aria_clickable_ancestor",
+      "payment_testid_card_text_clickable_ancestor",
+      "pay_with_card_text_button_ancestor",
       "payment_testid_card_aria",
       "payment_testid_card_text",
       "payment_testid_card_aria_clickable_ancestor",
