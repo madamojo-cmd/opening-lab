@@ -1325,6 +1325,9 @@ async function acknowledgeStripeAiAgentDisclosure(page) {
   proof.evidence.checkoutDiagnostics.aiAgentDisclosureFound = false;
   proof.evidence.checkoutDiagnostics.aiAgentDisclosureChecked = false;
   for (const context of stripeInteractionContexts(page)) {
+    const disclosureText = context.target.getByText(
+      /i am an ai agent acting on behalf of someone else/i,
+    );
     const checkbox = context.target
       .getByRole("checkbox", {
         name: /i am an ai agent acting on behalf of someone else/i,
@@ -1334,13 +1337,49 @@ async function acknowledgeStripeAiAgentDisclosure(page) {
     if (!(await checkbox.isVisible().catch(() => false))) continue;
     proof.evidence.checkoutDiagnostics.aiAgentDisclosureFound = true;
     if (!(await checkbox.isChecked().catch(() => false))) {
-      await checkbox.check();
+      try {
+        await checkbox.check({ timeout: 5000 });
+        proof.evidence.checkoutDiagnostics.aiAgentDisclosureStrategy =
+          "checkbox_role";
+      } catch (error) {
+        proof.evidence.checkoutDiagnostics.aiAgentDisclosureCheckError =
+          sanitizeError(error instanceof Error ? error.message : String(error));
+        const fallback = await findVisibleLocator([
+          disclosureText.locator("xpath=ancestor::label[1]"),
+          disclosureText.locator("xpath=ancestor::button[1]"),
+          disclosureText.locator(
+            "xpath=ancestor::*[self::label or self::button or @role='checkbox' or @role='button'][1]",
+          ),
+          disclosureText,
+        ]);
+        if (fallback) {
+          proof.evidence.checkoutDiagnostics.aiAgentDisclosureStrategy =
+            "visible_text_or_label";
+          await fallback.click({ timeout: 5000 }).catch(async (clickError) => {
+            proof.evidence.checkoutDiagnostics.aiAgentDisclosureClickError =
+              sanitizeError(
+                clickError instanceof Error
+                  ? clickError.message
+                  : String(clickError),
+              );
+            await clickVisibleLocatorCenter(page, fallback);
+            proof.evidence.checkoutDiagnostics.aiAgentDisclosureStrategy =
+              "visible_text_center";
+          });
+        }
+      }
     }
     proof.evidence.checkoutDiagnostics.aiAgentDisclosureChecked = await checkbox
       .isChecked()
       .catch(() => false);
     proof.evidence.checkoutDiagnostics.aiAgentDisclosureFrameOrigin =
       context.origin;
+    if (
+      proof.evidence.checkoutDiagnostics.aiAgentDisclosureFound &&
+      !proof.evidence.checkoutDiagnostics.aiAgentDisclosureChecked
+    ) {
+      throw new Error("stripe_checkout_ai_agent_disclosure_not_checked");
+    }
     return;
   }
 }

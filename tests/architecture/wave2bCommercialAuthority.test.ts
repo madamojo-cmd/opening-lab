@@ -622,6 +622,11 @@ test("Wave 2B distinguishes mocked browser QA from real sandbox integration proo
     sandboxProof,
     /i am an ai agent acting on behalf of someone else/i,
   );
+  assert.match(sandboxProof, /checkbox\.check\(\{ timeout: 5000 \}\)/);
+  assert.match(sandboxProof, /aiAgentDisclosureStrategy/);
+  assert.match(sandboxProof, /visible_text_or_label/);
+  assert.match(sandboxProof, /visible_text_center/);
+  assert.match(sandboxProof, /stripe_checkout_ai_agent_disclosure_not_checked/);
   assert.match(sandboxProof, /stripe_checkout_card_number_field_missing/);
   assert.match(sandboxProof, /findPrimaryStripeSubmitControl/);
   assert.match(sandboxProof, /hosted-payment-submit-button/);

@@ -84,6 +84,11 @@ test("Wave 2B Stripe checkout interactions are frame-aware and bounded", () => {
   assert.match(source, /save my information for faster checkout/i);
   assert.match(source, /acknowledgeStripeAiAgentDisclosure\(page\)/);
   assert.match(source, /i am an ai agent acting on behalf of someone else/i);
+  assert.match(source, /checkbox\.check\(\{ timeout: 5000 \}\)/);
+  assert.match(source, /aiAgentDisclosureStrategy/);
+  assert.match(source, /visible_text_or_label/);
+  assert.match(source, /visible_text_center/);
+  assert.match(source, /stripe_checkout_ai_agent_disclosure_not_checked/);
   assert.match(source, /findPrimaryStripeSubmitControl\(page\)/);
   assert.match(
     source,
