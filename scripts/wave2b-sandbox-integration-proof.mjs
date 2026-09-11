@@ -1151,23 +1151,23 @@ async function listVisiblePrimarySubmitLabels(page) {
   return [...new Set(labels)];
 }
 
-async function findPrimaryStripeSubmitControl(page) {
+async function collectVisibleEnabledStripeButtons(page, name, strategy) {
   const matches = [];
+
   for (const context of stripeInteractionContexts(page)) {
-    const locator = context.target
-      .getByRole("button", {
-        name: /^(start trial|start free trial|subscribe|pay)(\b|$)/i,
-      })
-      .filter({ hasNotText: /apple pay|google pay|link|paypal/i });
+    const locator = context.target.getByRole("button", { name });
     const count = await locator.count().catch(() => 0);
+
     for (let index = 0; index < count; index += 1) {
       const candidate = locator.nth(index);
+
       if (
         (await candidate.isVisible().catch(() => false)) &&
         (await candidate.isEnabled().catch(() => false))
       ) {
         matches.push({
           locator: candidate,
+          strategy,
           context: {
             kind: context.kind,
             origin: context.origin,
@@ -1177,20 +1177,71 @@ async function findPrimaryStripeSubmitControl(page) {
       }
     }
   }
+
   return matches;
+}
+
+async function findPrimaryStripeSubmitControl(page) {
+  const priorities = [
+    {
+      strategy: "start_trial",
+      name: /^start trial/i,
+    },
+    {
+      strategy: "start_free_trial",
+      name: /^start free trial/i,
+    },
+    {
+      strategy: "subscribe",
+      name: /^subscribe\b/i,
+    },
+    {
+      strategy: "generic_pay",
+      name: /^(?!.*(?:apple pay|google pay|link|paypal|amazon pay|cash app))pay\b/i,
+    },
+  ];
+
+  for (const priority of priorities) {
+    const matches = await collectVisibleEnabledStripeButtons(
+      page,
+      priority.name,
+      priority.strategy,
+    );
+
+    if (matches.length > 0) {
+      return {
+        matches,
+        strategy: priority.strategy,
+      };
+    }
+  }
+
+  return {
+    matches: [],
+    strategy: null,
+  };
 }
 
 async function waitForPrimaryStripeSubmitControl(page, timeoutMs = 10000) {
   const deadline = Date.now() + timeoutMs;
   let latestCount = 0;
+  let latestStrategy = null;
+
   while (Date.now() < deadline) {
-    const matches = await findPrimaryStripeSubmitControl(page);
-    latestCount = matches.length;
-    if (matches.length === 1) return matches[0];
+    const result = await findPrimaryStripeSubmitControl(page);
+
+    latestCount = result.matches.length;
+    latestStrategy = result.strategy;
+
+    if (result.matches.length === 1) {
+      return result.matches[0];
+    }
+
     await page.waitForTimeout(250);
   }
+
   throw new Error(
-    `stripe_checkout_submit_button_count_mismatch:${latestCount}`,
+    `stripe_checkout_submit_button_count_mismatch:${latestStrategy ?? "none"}:${latestCount}`,
   );
 }
 
@@ -1310,6 +1361,7 @@ async function completeStripeCheckout(page, checkoutUrl) {
     }
     const submit = await waitForPrimaryStripeSubmitControl(page);
     proof.evidence.checkoutDiagnostics ??= {};
+    proof.evidence.checkoutDiagnostics.submitStrategy = submit.strategy;
     proof.evidence.checkoutDiagnostics.submitFrameKind = submit.context.kind;
     proof.evidence.checkoutDiagnostics.submitFrameOrigin =
       submit.context.origin;
