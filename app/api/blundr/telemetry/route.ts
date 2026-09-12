@@ -6,12 +6,30 @@ export const dynamic = "force-dynamic";
 const PUBLIC_TELEMETRY_EVENTS = new Set<BlundrAnalyticsEventName>([
   "AUTH_HYDRATION_COMPLETED",
   "AUTH_HYDRATION_FAILED",
+  "SIGNUP_STARTED",
+  "SIGNUP_COMPLETED",
+  "TRAINING_STARTED",
+  "TRAINING_COMPLETED",
+  "DAILY_STARTED",
+  "DAILY_COMPLETED",
+  "PAYWALL_VIEWED",
+  "PLAN_SELECTED",
+  "CHECKOUT_STARTED",
+  "TRIAL_STARTED",
+  "PRO_ACTIVATED",
+  "BILLING_PORTAL_OPENED",
+  "SUBSCRIPTION_CANCEL_SCHEDULED",
+  "ANALYTICS_CONSENT_UPDATED",
 ]);
 const PUBLIC_PAYLOAD_KEYS = new Set([
   "attempt",
+  "cadence",
   "durationMs",
+  "eligible",
   "pathClass",
+  "plan",
   "reason",
+  "source",
 ]);
 
 function sanitizePayload(

@@ -194,6 +194,10 @@ test("Wave 2B browser route checks are backed by real pages and reject 404s", ()
   );
   assert.doesNotMatch(browserHarness, /name: \/sign in\|log in\|continue\/i/);
   assert.match(browserHarness, /entitlementSource: null/);
+  assert.match(browserHarness, /lifecycleState: "free"/);
+  assert.match(browserHarness, /subscriptionStatus: null/);
+  assert.match(browserHarness, /planInterval: null/);
+  assert.match(browserHarness, /providerPriceId: null/);
   assert.match(browserHarness, /trialStatus: "none"/);
   assert.match(browserHarness, /currentPeriodEndAt: null/);
   assert.match(browserHarness, /limits: \{/);

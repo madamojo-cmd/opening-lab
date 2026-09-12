@@ -56,11 +56,7 @@ export async function GET(): Promise<Response> {
       process.env.CRON_SECRET ?? process.env.BLUNDR_GAME_DATA_CRON_SECRET,
     );
   const telemetry = buildTelemetryHealth();
-  const ready =
-    build.ready &&
-    databaseReady &&
-    remoteMaiaReady &&
-    workerReady;
+  const ready = build.ready && databaseReady && remoteMaiaReady && workerReady;
 
   const response = NextResponse.json(
     {

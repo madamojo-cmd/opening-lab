@@ -235,24 +235,24 @@ export function MiniGamePracticeRunner({
           </div>
           <div className="rounded-[18px] border border-stone-200 bg-gradient-to-br from-[#eff4ef] to-[#f7f7f4] p-3">
             <div className="mx-auto w-full max-w-[430px]">
-            <DailyBlundrBoard
-              fen={instance.board.fen}
-              disabled={
-                submitting ||
-                instance.status === "completed" ||
-                instance.status === "revealed" ||
-                instance.status === "expired"
-              }
-              onSquareClick={() => undefined}
-              onMoveAttempt={(attempt) => {
-                void handleMoveAttempt(attempt);
-              }}
-              openingColor={instance.board.orientation}
-              forcedOrientation={instance.board.orientation}
-              boardVisuals={null}
-              squareStyles={{}}
-              animationClassName={null}
-            />
+              <DailyBlundrBoard
+                fen={instance.board.fen}
+                disabled={
+                  submitting ||
+                  instance.status === "completed" ||
+                  instance.status === "revealed" ||
+                  instance.status === "expired"
+                }
+                onSquareClick={() => undefined}
+                onMoveAttempt={(attempt) => {
+                  void handleMoveAttempt(attempt);
+                }}
+                openingColor={instance.board.orientation}
+                forcedOrientation={instance.board.orientation}
+                boardVisuals={null}
+                squareStyles={{}}
+                animationClassName={null}
+              />
             </div>
           </div>
           <div className="mt-3 flex items-center justify-between gap-3 rounded-[16px] border border-stone-200 bg-[#f8f8f5] p-3">
@@ -261,7 +261,8 @@ export function MiniGamePracticeRunner({
                 Complete the secure sequence.
               </div>
               <div className="mt-1 text-xs leading-5 text-stone-600">
-                Attempt {instance.attemptCount + 1} · Retry {instance.retryCount}
+                Attempt {instance.attemptCount + 1} · Retry{" "}
+                {instance.retryCount}
               </div>
             </div>
             <span className="inline-flex min-h-11 items-center justify-center rounded-[13px] bg-green-700 px-4 text-sm font-black text-white shadow-sm">
@@ -287,7 +288,8 @@ export function MiniGamePracticeRunner({
               {instance.goal}
             </p>
             <p className="mt-3 rounded-[1rem] bg-white px-3 py-2 text-xs text-stone-500 ring-1 ring-stone-200">
-              Secure session {instance.instanceId.slice(0, 12)}… · {instance.board.orientation} orientation
+              Secure session {instance.instanceId.slice(0, 12)}… ·{" "}
+              {instance.board.orientation} orientation
             </p>
           </div>
 
@@ -308,7 +310,9 @@ export function MiniGamePracticeRunner({
               <div className="text-[9px] font-black uppercase tracking-[0.16em] text-stone-500">
                 ETA
               </div>
-              <div className="mt-1 text-stone-900">{instance.estimatedTimeSeconds}s</div>
+              <div className="mt-1 text-stone-900">
+                {instance.estimatedTimeSeconds}s
+              </div>
             </div>
           </div>
 

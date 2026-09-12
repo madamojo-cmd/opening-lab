@@ -2,6 +2,7 @@ import "server-only";
 
 import type { CurrentBlundrUser } from "@/lib/blundr/accounts/accountTypes";
 import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
+import { recordCurrentLegalAcceptances } from "@/lib/blundr/legal/legalConsent.server";
 import {
   PRO_TRIAL_DAYS,
   priceForBillingPlan,
@@ -192,6 +193,10 @@ export async function acceptPaidOffer(input: {
   if (updated.error || !updated.data) {
     return { ok: false, status: 409, error: "paid_offer_stale_or_unavailable" };
   }
+  await recordCurrentLegalAcceptances({
+    userId: input.user.userId,
+    context: "upgrade",
+  });
   return { ok: true };
 }
 

@@ -6,6 +6,8 @@ import {
   FREE_COMMERCIAL_ACCESS,
   type CommercialAccess,
 } from "./commercialAccess";
+import { resolveCommercialLifecycleState } from "./commercialLifecycle";
+import type { BillingPlan } from "@/lib/blundr/billing/billingConfig";
 
 type Row = Record<string, unknown>;
 
@@ -49,7 +51,7 @@ export async function resolveCommercialAccess(input: {
       admin
         .from("blundr_billing_subscriptions")
         .select(
-          "status,trial_start_at,trial_end_at,current_period_end_at,cancel_at_period_end,expires_at,last_provider_event_at,last_reconciled_at",
+          "status,trial_start_at,trial_end_at,current_period_end_at,cancel_at_period_end,expires_at,last_provider_event_at,last_reconciled_at,plan_interval,provider_price_id",
         )
         .eq("user_id", input.userId)
         .eq("billing_environment", environment)
@@ -61,33 +63,59 @@ export async function resolveCommercialAccess(input: {
     if (entitlement.error || subscription.error) return FREE_COMMERCIAL_ACCESS;
     const entitlementRow = (entitlement.data ?? null) as Row | null;
     const subscriptionRow = (subscription.data ?? null) as Row | null;
+    const subscriptionStatus = text(subscriptionRow?.status) || null;
+    const planInterval =
+      subscriptionRow?.plan_interval === "monthly" ||
+      subscriptionRow?.plan_interval === "annual"
+        ? (subscriptionRow.plan_interval as BillingPlan)
+        : null;
+    const providerPriceId = text(subscriptionRow?.provider_price_id) || null;
+    const trialEndAt = iso(subscriptionRow?.trial_end_at);
+    const currentPeriodEndAt = iso(subscriptionRow?.current_period_end_at);
+    const subscriptionExpiresAt = iso(subscriptionRow?.expires_at);
+    const cancelAtPeriodEnd = subscriptionRow?.cancel_at_period_end === true;
     const expiresAt = iso(entitlementRow?.expires_at);
     const entitlementActive =
       entitlementRow?.active === true &&
       (!expiresAt || Date.parse(expiresAt) > nowMs);
+    const lifecycleState = resolveCommercialLifecycleState({
+      entitlementActive,
+      subscriptionStatus,
+      trialEndAt,
+      expiresAt: expiresAt ?? subscriptionExpiresAt,
+      currentPeriodEndAt,
+      cancelAtPeriodEnd,
+      planInterval,
+      nowMs,
+    });
     if (!entitlementActive) {
       return {
         ...FREE_COMMERCIAL_ACCESS,
-        trialStatus:
-          text(subscriptionRow?.status) === "trialing" ? "expired" : "none",
-        expiresAt,
-        currentPeriodEndAt: iso(subscriptionRow?.current_period_end_at),
-        cancelAtPeriodEnd:
-          subscriptionRow?.cancel_at_period_end === true,
+        lifecycleState,
+        subscriptionStatus,
+        planInterval,
+        providerPriceId,
+        trialStatus: subscriptionStatus === "trialing" ? "expired" : "none",
+        expiresAt: expiresAt ?? subscriptionExpiresAt,
+        currentPeriodEndAt,
+        cancelAtPeriodEnd,
       };
     }
-    const trialEndAt = iso(subscriptionRow?.trial_end_at);
     const trialActive =
-      text(subscriptionRow?.status) === "trialing" &&
+      subscriptionStatus === "trialing" &&
       Boolean(trialEndAt && Date.parse(trialEndAt) > nowMs);
     return {
       plan: "pro",
       entitlementActive: true,
       entitlementSource: "revenuecat",
+      lifecycleState,
+      subscriptionStatus,
+      planInterval,
+      providerPriceId,
       trialStatus: trialActive ? "active" : "none",
       expiresAt,
-      currentPeriodEndAt: iso(subscriptionRow?.current_period_end_at),
-      cancelAtPeriodEnd: subscriptionRow?.cancel_at_period_end === true,
+      currentPeriodEndAt,
+      cancelAtPeriodEnd,
       limits: {
         dailyBlundrCards: 99,
         reviewCompletionsPerDay: null,

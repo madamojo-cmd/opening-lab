@@ -31,6 +31,7 @@ test("user-controlled Auth metadata is not an entitlement or RLS authority", () 
   assert.deepEqual(planIntentFiles.sort(), [
     "lib/blundr/accounts/accountSession.ts",
     "lib/blundr/onboarding/onboardingV11.ts",
+    "lib/blundr/onboarding/onboardingV11ResetContract.ts",
   ]);
 });
 

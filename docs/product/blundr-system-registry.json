@@ -28,6 +28,24 @@
       "blockers": ["Profile, username, rating-band, goal, training-mode, and timezone persistence are implemented, but exact-SHA browser recovery, uniqueness, preference persistence, and reauthentication evidence is not recorded."]
     },
     {
+      "id": "LEGAL-DATA-RIGHTS-001",
+      "name": "Legal consent and data rights",
+      "contractVersion": "1",
+      "userPromise": "Current Terms and Privacy acknowledgement, account data export, and account deletion use authenticated server authority with immutable legal-history records.",
+      "status": "partial",
+      "releaseRequired": true,
+      "authority": ["lib/blundr/legal", "lib/blundr/privacy", "lib/blundr/accounts/accountDataRights.server.ts", "app/api/blundr/legal", "app/api/blundr/privacy/preferences", "app/api/blundr/account/export", "app/api/blundr/account/delete", "components/settings/SettingsPage.tsx", "supabase/migrations/20260912120000_blundr_wave2c_data_rights_privacy.sql"],
+      "entryPoints": ["/signup", "/settings#privacy", "/settings#account_management", "/api/blundr/legal/status", "/api/blundr/legal/accept", "/api/blundr/privacy/preferences", "/api/blundr/account/export", "/api/blundr/account/delete"],
+      "persistence": ["blundr_user_legal_acceptances", "blundr_user_privacy_preferences", "blundr_account_deletion_audit", "Supabase Auth deletion cascades"],
+      "dependencies": ["AUTH-ACCOUNT-001", "BILLING-ENTITLEMENT-001", "Supabase", "Stripe test-mode cancellation for active billing cleanup"],
+      "featureFlags": [],
+      "fallback": "Unsigned or local-demo users cannot export or delete account data. Account deletion refuses success when active billing cleanup cannot be completed.",
+      "requiredTests": ["tests/architecture/wave2c2dLaunchHardening.test.ts", "tests/security/wave2cDataRightsSecurity.test.ts", "npm run verify:migrations", "authenticated browser journey for Settings privacy/export/deletion controls"],
+      "lastVerifiedSha": null,
+      "evidence": ["Wave 2C adds versioned legal acceptance storage, privacy preference storage, authenticated export/delete APIs, and Settings controls."],
+      "blockers": ["Exact-SHA deployed export/deletion proof is not recorded.", "Provider cancellation behavior must be verified against a disposable sandbox account before production cutover."]
+    },
+    {
       "id": "ONBOARD-001",
       "name": "Onboarding",
       "contractVersion": "1",
@@ -260,6 +278,24 @@
       "lastVerifiedSha": null,
       "evidence": [],
       "blockers": ["Capacity load tests, dashboards, alert routing, backup/PITR, and release-readiness evidence are not implemented or proven.", "Alert delivery and provider/reward/minigame operational dashboards are unproven."]
+    },
+    {
+      "id": "ANALYTICS-CONSENT-001",
+      "name": "Analytics consent",
+      "contractVersion": "1",
+      "userPromise": "Optional product analytics can measure launch funnel behavior only after user consent and without payment details, secrets, or full sensitive objects.",
+      "status": "partial",
+      "releaseRequired": true,
+      "authority": ["lib/blundr/analytics", "lib/blundr/privacy", "app/api/blundr/telemetry", "app/api/blundr/privacy/preferences", "components/settings/SettingsPage.tsx", "components/auth/AppAuthForm.tsx", "components/billing/PaywallPlanSelection.tsx"],
+      "entryPoints": ["/signup", "/onboarding", "/billing/upgrade", "/settings#privacy", "/api/blundr/telemetry", "/api/blundr/privacy/preferences"],
+      "persistence": ["blundr_user_privacy_preferences", "browser localStorage key blundr_optional_analytics_consent"],
+      "dependencies": ["OBSERVABILITY-001", "LEGAL-DATA-RIGHTS-001"],
+      "featureFlags": [],
+      "fallback": "Operational auth telemetry remains allowed; optional funnel events are dropped when consent is absent.",
+      "requiredTests": ["tests/security/telemetryAndStandaloneInstances.test.ts", "tests/architecture/wave2c2dLaunchHardening.test.ts"],
+      "lastVerifiedSha": null,
+      "evidence": ["Wave 2C extends sanitized public telemetry to consent-gated signup, paywall, checkout, trial, Pro, portal, and cancellation funnel events."],
+      "blockers": ["Deployed telemetry sink delivery, retention, and operator dashboard evidence are not recorded."]
     },
     {
       "id": "UI-SHELL-001",

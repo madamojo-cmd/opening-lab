@@ -5,6 +5,8 @@ import {
   normalizeAppNext,
   normalizeMarketingSource,
 } from "@/lib/blundr/routing/appRouteSafety";
+import { BLUNDR_CURRENT_LEGAL_DOCUMENTS } from "@/lib/blundr/legal/legalConsent";
+import { recordCurrentLegalAcceptances } from "@/lib/blundr/legal/legalConsent.server";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +67,8 @@ export async function POST(request: NextRequest) {
         age_16_terms_confirmed: true,
         age_16_confirmed: true,
         age_13_confirmed: true,
+        accepted_terms_version: BLUNDR_CURRENT_LEGAL_DOCUMENTS.terms,
+        accepted_privacy_version: BLUNDR_CURRENT_LEGAL_DOCUMENTS.privacy,
         signup_source: source,
       },
     },
@@ -80,6 +84,25 @@ export async function POST(request: NextRequest) {
       },
       { status: 400 },
     );
+  try {
+    await recordCurrentLegalAcceptances({
+      userId: data.user.id,
+      context: "signup",
+      locale: request.headers.get("accept-language"),
+    });
+  } catch {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: {
+          code: "legal_acceptance_persistence_failed",
+          message:
+            "We created your account, but could not record the current legal acknowledgement. Contact support before continuing.",
+        },
+      },
+      { status: 503 },
+    );
+  }
   return NextResponse.json({
     ok: true,
     data: { requiresEmailConfirmation: !data.session, next },

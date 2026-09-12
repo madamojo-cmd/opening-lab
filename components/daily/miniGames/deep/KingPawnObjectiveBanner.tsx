@@ -12,7 +12,7 @@ export function KingPawnObjectiveBanner({
         Objective
       </span>
       <span className="mt-1 block text-stone-900">
-      Verified objective: {result}
+        Verified objective: {result}
       </span>
     </p>
   );

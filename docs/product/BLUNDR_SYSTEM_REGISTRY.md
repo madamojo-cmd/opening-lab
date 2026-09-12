@@ -7,6 +7,7 @@ explains how to use it.
 | Feature ID | Promise | Current state |
 | --- | --- | --- |
 | `AUTH-ACCOUNT-001` | Authenticated account state survives recovery and reauthentication | Partial |
+| `LEGAL-DATA-RIGHTS-001` | Legal consent, export, and deletion use authenticated server authority | Partial |
 | `ONBOARD-001` | Onboarding owns starter selection and persists completion | Partial |
 | `TRAIN-RUNTIME-001` | Guided opening play uses the versioned runtime | Partial |
 | `TRAIN-MAIA-001` | Maia-labelled continuation uses a proven Maia provider | Partial |
@@ -19,6 +20,7 @@ explains how to use it.
 | `MINIGAME-DEEP-001` | Deep games use server-owned, engine-certified multi-step content | Partial |
 | `DATA-OPENINGS-001` | One versioned opening package is canonical | Partial |
 | `OBSERVABILITY-001` | Failures are measurable without leaking private data | Partial |
+| `ANALYTICS-CONSENT-001` | Optional analytics respects user consent and sends only minimal funnel data | Partial |
 | `BILLING-ENTITLEMENT-001` | Web billing, paid-offer consent, and Free/Pro enforcement read trusted backend entitlement authority | Partial |
 | `COMMERCIAL-LAUNCH-001` | Public launch, legal pages, and onboarding paywall choices never grant paid access without trusted entitlement | Partial |
 | `RELEASE-001` | One exact SHA, migration state, and rollback target define release | Blocked |

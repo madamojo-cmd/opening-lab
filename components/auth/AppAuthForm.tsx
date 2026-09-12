@@ -12,6 +12,7 @@ import {
 import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 import { signInForOnboarding } from "@/lib/blundr/onboarding/onboardingAuth";
 import { resolveAppAuthNextTarget } from "@/lib/blundr/routing/appRouteSafety";
+import { trackBlundrAnalyticsEvent } from "@/lib/blundr/analytics/blundrAnalyticsService";
 import { PasswordField } from "./PasswordField";
 
 export function AppAuthForm({ mode }: { mode: "login" | "signup" }) {
@@ -32,6 +33,7 @@ export function AppAuthForm({ mode }: { mode: "login" | "signup" }) {
     setMessage(null);
 
     if (mode === "signup") {
+      trackBlundrAnalyticsEvent("SIGNUP_STARTED", { source });
       const response = await fetch("/api/blundr/auth/signup", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -60,6 +62,7 @@ export function AppAuthForm({ mode }: { mode: "login" | "signup" }) {
           ? "Check your email to confirm your account, then sign in."
           : "Your account is ready. Sign in to continue.",
       );
+      trackBlundrAnalyticsEvent("SIGNUP_COMPLETED", { source });
       return;
     }
 

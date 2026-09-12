@@ -16,6 +16,10 @@ const freeAccess = {
   plan: "free",
   entitlementActive: false,
   entitlementSource: null,
+  lifecycleState: "free",
+  subscriptionStatus: null,
+  planInterval: null,
+  providerPriceId: null,
   trialStatus: "none",
   expiresAt: null,
   currentPeriodEndAt: null,
@@ -33,6 +37,10 @@ const proAccess = {
   plan: "pro",
   entitlementActive: true,
   entitlementSource: "revenuecat",
+  lifecycleState: "trialing",
+  subscriptionStatus: "trialing",
+  planInterval: "monthly",
+  providerPriceId: "price_test_monthly",
   trialStatus: "active",
 };
 

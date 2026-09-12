@@ -6,9 +6,11 @@ import {
   CheckCircle2,
   Cloud,
   CreditCard,
+  Download,
   LogOut,
   Shield,
   SlidersHorizontal,
+  Trash2,
 } from "lucide-react";
 
 import { BLUNDR_TEMPO_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
@@ -52,6 +54,11 @@ import {
   type BlundrProfilePublic,
 } from "@/lib/blundr/profile/profileTypes";
 import type { CommercialAccess } from "@/lib/blundr/commercial/commercialAccess";
+import { commercialPlanLabel } from "@/lib/blundr/commercial/commercialLifecycle";
+import {
+  BLUNDR_OPTIONAL_ANALYTICS_CONSENT_STORAGE_KEY,
+  type BlundrPrivacyPreferences,
+} from "@/lib/blundr/privacy/privacyPreferences";
 import styles from "./SettingsPage.module.css";
 
 type SettingsPageProps = {
@@ -83,9 +90,7 @@ const SETTINGS_SECTION_LINKS: readonly SectionLink[] = [
 ] as const;
 
 function isSettingsSectionId(value: string): value is BlundrSettingsSectionId {
-  return BLUNDR_SETTINGS_SECTION_IDS.includes(
-    value as BlundrSettingsSectionId,
-  );
+  return BLUNDR_SETTINGS_SECTION_IDS.includes(value as BlundrSettingsSectionId);
 }
 
 function classNames(
@@ -111,17 +116,25 @@ function formatDateTime(value: string | null): string {
 }
 
 function formatBillingStatus(status: CommercialAccess | null): string {
-  if (!status) return "Current plan: Free. Upgrade is available when you are ready.";
-  if (status.plan === "free" && status.expiresAt) {
+  if (!status)
+    return "Current plan: Free. Upgrade is available when you are ready.";
+  if (status.lifecycleState === "past_due") {
+    return "Payment problem. Your provider reported a billing issue; manage billing to update the payment method or contact support if access looks wrong.";
+  }
+  if (status.lifecycleState === "expired") {
     return "Current plan: Free. Your previous Pro access has expired; your learning history and queued Review items remain saved.";
   }
   if (status.plan === "free") {
     return "Current plan: Free. You can train unlimited within your active openings, with 5 Daily cards and 5 Review completions per day.";
   }
-  if (status.trialStatus === "active") {
-    return `Current plan: Blundr Pro trial. Trial ends ${formatDateTime(status.expiresAt ?? status.currentPeriodEndAt)}.${status.cancelAtPeriodEnd ? " Cancellation is scheduled at period end." : ""}`;
+  const planLabel = commercialPlanLabel(status.planInterval);
+  if (status.lifecycleState === "trialing") {
+    return `Current plan: Blundr Pro free trial. Trial ends ${formatDateTime(status.expiresAt ?? status.currentPeriodEndAt)}. Then ${planLabel} until canceled.`;
   }
-  return `Current plan: Blundr Pro.${status.cancelAtPeriodEnd ? " Cancellation is scheduled; access continues until the provider-confirmed expiration." : " Renews automatically until canceled."} ${status.currentPeriodEndAt ? `Next billing date: ${formatDateTime(status.currentPeriodEndAt)}.` : ""}`;
+  if (status.lifecycleState === "canceling") {
+    return `Subscription canceled. Blundr Pro access continues through ${formatDateTime(status.expiresAt ?? status.currentPeriodEndAt)}.`;
+  }
+  return `Current plan: Blundr Pro, ${planLabel}. Renews automatically until canceled.${status.currentPeriodEndAt ? ` Next billing date: ${formatDateTime(status.currentPeriodEndAt)}.` : ""}`;
 }
 
 function Section({ id, title, copy, active, children }: SectionProps) {
@@ -252,6 +265,18 @@ export function SettingsPage({ className }: SettingsPageProps) {
   );
   const [billingBusy, setBillingBusy] = useState(false);
   const [billingMessage, setBillingMessage] = useState<string | null>(null);
+  const [privacyPreferences, setPrivacyPreferences] =
+    useState<BlundrPrivacyPreferences>({
+      optionalAnalyticsConsent: false,
+      analyticsConsentUpdatedAt: null,
+    });
+  const [privacyBusy, setPrivacyBusy] = useState(false);
+  const [privacyMessage, setPrivacyMessage] = useState<string | null>(null);
+  const [accountActionBusy, setAccountActionBusy] = useState(false);
+  const [accountActionMessage, setAccountActionMessage] = useState<
+    string | null
+  >(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [authResolved, setAuthResolved] = useState(false);
   const [activeSectionId, setActiveSectionId] =
     useState<BlundrSettingsSectionId>("account");
@@ -288,7 +313,9 @@ export function SettingsPage({ className }: SettingsPageProps) {
       setTrainingGoalBattery(nextSnapshot.profile.dailyBatteryGoal);
       setTrainingGoalBlundrCards(nextSnapshot.profile.dailyBlundrCardGoal);
       setPreferredTrainingMode(nextSnapshot.profile.preferredTrainingMode);
-      setTacticalHighlightsEnabled(nextSnapshot.profile.tacticalHighlightsEnabled);
+      setTacticalHighlightsEnabled(
+        nextSnapshot.profile.tacticalHighlightsEnabled,
+      );
       setRatingBandId(nextSnapshot.profile.ratingBandId);
       setSelectedStarterPackId(
         nextSnapshot.profile.selectedStarterPackId ?? "classical_attacker",
@@ -324,10 +351,18 @@ export function SettingsPage({ className }: SettingsPageProps) {
               );
           });
         void loadBillingStatus();
+        void loadPrivacyPreferences();
       } else {
         setBlundrUsername(null);
         setUsernameDraft("");
         setBillingStatus(null);
+        setPrivacyPreferences({
+          optionalAnalyticsConsent:
+            window.localStorage.getItem(
+              BLUNDR_OPTIONAL_ANALYTICS_CONSENT_STORAGE_KEY,
+            ) === "true",
+          analyticsConsentUpdatedAt: null,
+        });
       }
     });
 
@@ -389,7 +424,9 @@ export function SettingsPage({ className }: SettingsPageProps) {
     setTrainingGoalBattery(nextSnapshot.profile.dailyBatteryGoal);
     setTrainingGoalBlundrCards(nextSnapshot.profile.dailyBlundrCardGoal);
     setPreferredTrainingMode(nextSnapshot.profile.preferredTrainingMode);
-    setTacticalHighlightsEnabled(nextSnapshot.profile.tacticalHighlightsEnabled);
+    setTacticalHighlightsEnabled(
+      nextSnapshot.profile.tacticalHighlightsEnabled,
+    );
     setRatingBandId(nextSnapshot.profile.ratingBandId);
     setSelectedStarterPackId(
       nextSnapshot.profile.selectedStarterPackId ?? "classical_attacker",
@@ -443,7 +480,9 @@ export function SettingsPage({ className }: SettingsPageProps) {
         setTrainingGoalBattery(snapshot.profile.dailyBatteryGoal);
         setTrainingGoalBlundrCards(snapshot.profile.dailyBlundrCardGoal);
         setPreferredTrainingMode(snapshot.profile.preferredTrainingMode);
-        setTacticalHighlightsEnabled(snapshot.profile.tacticalHighlightsEnabled);
+        setTacticalHighlightsEnabled(
+          snapshot.profile.tacticalHighlightsEnabled,
+        );
         setStatusMessage(
           error instanceof AuthenticatedApiError
             ? error.message
@@ -594,6 +633,108 @@ export function SettingsPage({ className }: SettingsPageProps) {
     }
   }
 
+  async function loadPrivacyPreferences() {
+    setPrivacyMessage(null);
+    try {
+      const response = await authenticatedApiFetch<{
+        ok: true;
+        data: BlundrPrivacyPreferences;
+      }>("/api/blundr/privacy/preferences", { cache: "no-store" });
+      setPrivacyPreferences(response.data);
+      window.localStorage.setItem(
+        BLUNDR_OPTIONAL_ANALYTICS_CONSENT_STORAGE_KEY,
+        String(response.data.optionalAnalyticsConsent),
+      );
+    } catch {
+      setPrivacyMessage("Privacy preferences could not be loaded.");
+    }
+  }
+
+  async function saveOptionalAnalyticsConsent(next: boolean) {
+    setPrivacyBusy(true);
+    setPrivacyMessage(null);
+    window.localStorage.setItem(
+      BLUNDR_OPTIONAL_ANALYTICS_CONSENT_STORAGE_KEY,
+      String(next),
+    );
+    setPrivacyPreferences({
+      optionalAnalyticsConsent: next,
+      analyticsConsentUpdatedAt: new Date().toISOString(),
+    });
+    try {
+      if (authSession) {
+        const response = await authenticatedApiFetch<{
+          ok: true;
+          data: BlundrPrivacyPreferences;
+        }>("/api/blundr/privacy/preferences", {
+          method: "PATCH",
+          body: JSON.stringify({ optionalAnalyticsConsent: next }),
+          cache: "no-store",
+        });
+        setPrivacyPreferences(response.data);
+      }
+      setPrivacyMessage("Privacy preferences saved.");
+    } catch {
+      setPrivacyMessage("Privacy preferences could not be saved.");
+    } finally {
+      setPrivacyBusy(false);
+    }
+  }
+
+  async function exportAccountData() {
+    setAccountActionBusy(true);
+    setAccountActionMessage(null);
+    try {
+      const response = await authenticatedApiFetch<{
+        ok: true;
+        data: unknown;
+      }>("/api/blundr/account/export", { cache: "no-store" });
+      const blob = new Blob([JSON.stringify(response.data, null, 2)], {
+        type: "application/json",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "blundr-account-export.json";
+      link.click();
+      window.URL.revokeObjectURL(url);
+      setAccountActionMessage("Account export downloaded.");
+    } catch {
+      setAccountActionMessage("Account export could not be created.");
+    } finally {
+      setAccountActionBusy(false);
+    }
+  }
+
+  async function deleteAccount() {
+    if (deleteConfirmation !== "DELETE MY ACCOUNT") {
+      setAccountActionMessage("Type DELETE MY ACCOUNT to confirm deletion.");
+      return;
+    }
+    setAccountActionBusy(true);
+    setAccountActionMessage(null);
+    try {
+      await authenticatedApiFetch<{ ok: true }>("/api/blundr/account/delete", {
+        method: "POST",
+        body: JSON.stringify({ confirmation: deleteConfirmation }),
+        cache: "no-store",
+      });
+      await signOutBlundrAccount();
+      setAuthSession(null);
+      setBlundrUsername(null);
+      setUsernameDraft("");
+      setDeleteConfirmation("");
+      refreshSnapshot(null);
+      setAccountActionMessage("Account deleted. Local demo is active.");
+    } catch {
+      setAccountActionMessage(
+        "Account deletion could not be completed. If you have an active subscription, contact billing support before trying again.",
+      );
+    } finally {
+      setAccountActionBusy(false);
+    }
+  }
+
   function handleResetLocalData() {
     if (!window.confirm("Reset local demo data on this device?")) return;
     resetLocalAccountState(BLUNDR_LOCAL_DEMO_USER_ID);
@@ -640,7 +781,8 @@ export function SettingsPage({ className }: SettingsPageProps) {
                 </div>
               </div>
               <div className={styles.navCounter}>
-                {Math.max(activeSectionIndex, 0) + 1}/{SETTINGS_SECTION_LINKS.length}
+                {Math.max(activeSectionIndex, 0) + 1}/
+                {SETTINGS_SECTION_LINKS.length}
               </div>
             </div>
             <div className={styles.navList}>
@@ -657,10 +799,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
                 >
                   <span>{section.label}</span>
                   {activeSectionId === section.id ? (
-                    <CheckCircle2
-                      size={14}
-                      className={styles.navChipIcon}
-                    />
+                    <CheckCircle2 size={14} className={styles.navChipIcon} />
                   ) : null}
                 </button>
               ))}
@@ -1222,7 +1361,9 @@ export function SettingsPage({ className }: SettingsPageProps) {
                     onClick={() => {
                       const next = !tacticalHighlightsEnabled;
                       setTacticalHighlightsEnabled(next);
-                      void saveProfilePatch({ tacticalHighlightsEnabled: next });
+                      void saveProfilePatch({
+                        tacticalHighlightsEnabled: next,
+                      });
                     }}
                     className={classNames(
                       "mt-3 inline-flex items-center justify-between gap-3 rounded-2xl px-4 py-3 text-sm font-black shadow-sm ring-1",
@@ -1298,9 +1439,18 @@ export function SettingsPage({ className }: SettingsPageProps) {
                   >
                     Subscription terms
                   </Link>
+                  <Link
+                    href="/billing/support"
+                    className="inline-flex min-h-10 items-center text-sm font-black text-green-700 underline underline-offset-4"
+                  >
+                    Billing support
+                  </Link>
                 </div>
                 {billingMessage ? (
-                  <p role="alert" className="mt-3 text-sm font-bold text-red-700">
+                  <p
+                    role="alert"
+                    className="mt-3 text-sm font-bold text-red-700"
+                  >
                     {billingMessage}
                   </p>
                 ) : null}
@@ -1328,18 +1478,55 @@ export function SettingsPage({ className }: SettingsPageProps) {
                 <div className="rounded-[1.5rem] bg-stone-50 p-4 ring-1 ring-stone-200">
                   <div className="flex items-center gap-2 text-sm font-black text-stone-950">
                     <Shield size={16} className="text-green-700" />
-                    Policies
+                    Analytics consent
                   </div>
                   <p className="mt-2 text-sm leading-6 text-stone-600">
-                    Read how Blundr handles account data, connected providers,
-                    and diagnostics.
+                    Optional analytics help measure signup, onboarding,
+                    training, paywall, checkout, and billing flows. Operational
+                    telemetry needed for security and reliability can still run.
                   </p>
-                  <Link
-                    href="/privacy"
-                    className="mt-3 inline-flex text-sm font-black text-green-700 underline underline-offset-4"
-                  >
-                    Read the privacy policy
-                  </Link>
+                  <label className="mt-3 flex items-start gap-3 text-sm font-semibold text-stone-700">
+                    <input
+                      type="checkbox"
+                      checked={privacyPreferences.optionalAnalyticsConsent}
+                      disabled={privacyBusy}
+                      onChange={(event) =>
+                        void saveOptionalAnalyticsConsent(event.target.checked)
+                      }
+                      className="mt-1 h-5 w-5 rounded border-stone-300 text-green-800"
+                    />
+                    <span>Allow optional product analytics</span>
+                  </label>
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    <Link
+                      href="/privacy"
+                      className="inline-flex text-sm font-black text-green-700 underline underline-offset-4"
+                    >
+                      Privacy policy
+                    </Link>
+                    <Link
+                      href="/cookies"
+                      className="inline-flex text-sm font-black text-green-700 underline underline-offset-4"
+                    >
+                      Cookie policy
+                    </Link>
+                  </div>
+                  {privacyMessage ? (
+                    <p
+                      className="mt-3 text-sm font-bold text-stone-700"
+                      role="status"
+                    >
+                      {privacyMessage}
+                    </p>
+                  ) : null}
+                  {privacyPreferences.analyticsConsentUpdatedAt ? (
+                    <p className="mt-2 text-xs font-semibold text-stone-500">
+                      Updated{" "}
+                      {formatDateTime(
+                        privacyPreferences.analyticsConsentUpdatedAt,
+                      )}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </Section>
@@ -1347,7 +1534,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
             <Section
               id="account_management"
               title="Account management"
-              copy="Manage local demo data and account recovery flows."
+              copy="Export account data, delete an authenticated account, or reset local demo data."
               active={activeSectionId === "account_management"}
             >
               <div className="grid gap-3 lg:grid-cols-2">
@@ -1373,18 +1560,74 @@ export function SettingsPage({ className }: SettingsPageProps) {
                 </div>
                 <div className="rounded-[1.5rem] bg-[#fbfcf7] p-4 ring-1 ring-stone-200">
                   <div className="text-sm font-black text-stone-950">
-                    Export and deletion
+                    Export my data
                   </div>
                   <p className="mt-2 text-sm leading-6 text-stone-600">
-                    Data export and account deletion requests follow the policy
-                    process for this beta build.
+                    Download a JSON export of first-party Blundr account,
+                    training, progress, legal, privacy, and billing-status
+                    records tied to the current authenticated session.
                   </p>
-                  <Link
-                    href="/privacy"
-                    className="mt-3 inline-flex text-sm font-black text-green-700 underline underline-offset-4"
+                  <button
+                    type="button"
+                    onClick={() => void exportAccountData()}
+                    disabled={!isAuthenticated || accountActionBusy}
+                    className={classNames(
+                      "mt-3 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-black text-stone-700 ring-1 ring-stone-200",
+                      (!isAuthenticated || accountActionBusy) &&
+                        "cursor-not-allowed opacity-60",
+                    )}
                   >
-                    Review privacy policy details
+                    <Download size={16} aria-hidden="true" />
+                    Export my data
+                  </button>
+                </div>
+                <div className="rounded-[1.5rem] border border-red-200 bg-red-50 p-4 lg:col-span-2">
+                  <div className="text-sm font-black text-stone-950">
+                    Delete account
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-stone-600">
+                    Deletion is permanent for your Blundr account. If active
+                    Stripe billing exists, Blundr attempts provider cleanup
+                    first and refuses success if that cleanup fails.
+                  </p>
+                  <label className="mt-3 grid gap-2 text-sm font-bold text-stone-700">
+                    Type DELETE MY ACCOUNT
+                    <input
+                      value={deleteConfirmation}
+                      onChange={(event) =>
+                        setDeleteConfirmation(event.target.value)
+                      }
+                      className="rounded-2xl border border-red-200 bg-white px-4 py-3 text-sm font-medium text-stone-950 outline-none focus:border-red-400"
+                      disabled={!isAuthenticated || accountActionBusy}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => void deleteAccount()}
+                    disabled={
+                      !isAuthenticated ||
+                      accountActionBusy ||
+                      deleteConfirmation !== "DELETE MY ACCOUNT"
+                    }
+                    className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-red-700 px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                    Delete account
+                  </button>
+                  <Link
+                    href="/billing/support"
+                    className="ml-3 inline-flex text-sm font-black text-red-800 underline underline-offset-4"
+                  >
+                    Billing support
                   </Link>
+                  {accountActionMessage ? (
+                    <p
+                      className="mt-3 text-sm font-bold text-stone-700"
+                      role="status"
+                    >
+                      {accountActionMessage}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </Section>
