@@ -9,6 +9,7 @@ import {
   AuthenticatedApiError,
 } from "@/lib/blundr/api/authenticatedApiClient";
 import type { BillingPlan } from "@/lib/blundr/billing/billingConfig";
+import { trackBlundrAnalyticsEvent } from "@/lib/blundr/analytics/blundrAnalyticsService";
 
 type PaidOffer = {
   id: string;
@@ -61,6 +62,18 @@ export function PaywallPlanSelection({
   const upgradeMode = mode === "upgrade";
 
   useEffect(() => {
+    trackBlundrAnalyticsEvent("PAYWALL_VIEWED", { source: mode });
+  }, [mode]);
+
+  useEffect(() => {
+    if (!paidPlan) return;
+    trackBlundrAnalyticsEvent("PLAN_SELECTED", {
+      plan: paidPlan,
+      source: mode,
+    });
+  }, [mode, paidPlan]);
+
+  useEffect(() => {
     let cancelled = false;
     setOffer(null);
     setAcknowledged(false);
@@ -103,6 +116,10 @@ export function PaywallPlanSelection({
           cache: "no-store",
         },
       );
+      trackBlundrAnalyticsEvent("CHECKOUT_STARTED", {
+        plan: paidPlan,
+        eligible: offer.trialEligible,
+      });
       const response = await authenticatedApiFetch<{
         ok: true;
         data: { url: string };

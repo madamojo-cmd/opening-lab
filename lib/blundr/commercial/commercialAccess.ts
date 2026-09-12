@@ -4,6 +4,16 @@ export type CommercialAccess = {
   plan: CommercialPlan;
   entitlementActive: boolean;
   entitlementSource: "revenuecat" | null;
+  lifecycleState:
+    | "free"
+    | "trialing"
+    | "active"
+    | "canceling"
+    | "past_due"
+    | "expired";
+  subscriptionStatus: string | null;
+  planInterval: "monthly" | "annual" | null;
+  providerPriceId: string | null;
   trialStatus: "none" | "active" | "expired";
   expiresAt: string | null;
   currentPeriodEndAt: string | null;
@@ -25,6 +35,10 @@ export const FREE_COMMERCIAL_ACCESS: CommercialAccess = {
   plan: "free",
   entitlementActive: false,
   entitlementSource: null,
+  lifecycleState: "free",
+  subscriptionStatus: null,
+  planInterval: null,
+  providerPriceId: null,
   trialStatus: "none",
   expiresAt: null,
   currentPeriodEndAt: null,
@@ -45,7 +59,10 @@ export function effectiveDailyBlundrCardGoal(
   requested: number,
   access: CommercialAccess,
 ): number {
-  const normalized = Math.max(1, Math.min(PRO_DAILY_BLUNDR_CARD_MAX, requested));
+  const normalized = Math.max(
+    1,
+    Math.min(PRO_DAILY_BLUNDR_CARD_MAX, requested),
+  );
   return isTrustedProAccess(access)
     ? normalized
     : Math.min(FREE_DAILY_BLUNDR_CARD_LIMIT, normalized);

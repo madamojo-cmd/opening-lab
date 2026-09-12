@@ -1,9 +1,28 @@
 import type { BlundrAnalyticsEventName } from "./blundrAnalyticsEvents";
+import { BLUNDR_OPTIONAL_ANALYTICS_CONSENT_STORAGE_KEY } from "@/lib/blundr/privacy/privacyPreferences";
 
 export type BlundrAnalyticsPayload = Record<string, unknown>;
 
 const TELEMETRY_PATH = "/api/blundr/telemetry";
 const PUBLIC_TELEMETRY_EVENTS = new Set<BlundrAnalyticsEventName>([
+  "AUTH_HYDRATION_COMPLETED",
+  "AUTH_HYDRATION_FAILED",
+  "SIGNUP_STARTED",
+  "SIGNUP_COMPLETED",
+  "TRAINING_STARTED",
+  "TRAINING_COMPLETED",
+  "DAILY_STARTED",
+  "DAILY_COMPLETED",
+  "PAYWALL_VIEWED",
+  "PLAN_SELECTED",
+  "CHECKOUT_STARTED",
+  "TRIAL_STARTED",
+  "PRO_ACTIVATED",
+  "BILLING_PORTAL_OPENED",
+  "SUBSCRIPTION_CANCEL_SCHEDULED",
+  "ANALYTICS_CONSENT_UPDATED",
+]);
+const OPERATIONAL_TELEMETRY_EVENTS = new Set<BlundrAnalyticsEventName>([
   "AUTH_HYDRATION_COMPLETED",
   "AUTH_HYDRATION_FAILED",
 ]);
@@ -29,11 +48,16 @@ export function trackBlundrAnalyticsEvent(
   payload: BlundrAnalyticsPayload = {},
 ): void {
   // Product outcomes such as rewards, learning events, and imports are emitted
-  // by their trusted server boundary. The public endpoint is intentionally
-  // limited to auth hydration, which also needs to work while signed out.
+  // by their trusted server boundary. Optional funnel telemetry is consent-gated
+  // and never grants product authority.
   if (!PUBLIC_TELEMETRY_EVENTS.has(name)) return;
-  const body = JSON.stringify({ name, payload: safePayload(payload) });
   if (typeof window === "undefined") return;
+  const optionalAllowed =
+    window.localStorage.getItem(
+      BLUNDR_OPTIONAL_ANALYTICS_CONSENT_STORAGE_KEY,
+    ) === "true";
+  if (!optionalAllowed && !OPERATIONAL_TELEMETRY_EVENTS.has(name)) return;
+  const body = JSON.stringify({ name, payload: safePayload(payload) });
   if (
     navigator.sendBeacon?.(
       TELEMETRY_PATH,

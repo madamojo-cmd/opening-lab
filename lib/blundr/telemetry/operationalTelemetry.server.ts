@@ -16,7 +16,17 @@ export type BlundrOperationalEventName =
   | "mastery_projected"
   | "minigame_instance_created"
   | "reward_completion_applied"
-  | "reward_completion_rejected";
+  | "reward_completion_rejected"
+  | "billing_checkout_started"
+  | "billing_checkout_failed"
+  | "billing_portal_started"
+  | "billing_portal_failed"
+  | "account_export_created"
+  | "account_export_failed"
+  | "account_deletion_completed"
+  | "account_deletion_failed"
+  | "legal_acceptance_failed"
+  | "privacy_preferences_failed";
 
 type SafeValue = string | number | boolean | null;
 
