@@ -1,4 +1,8 @@
 import { Chess } from "chess.js";
+import {
+  canonicalPositionFenFromChess,
+  classifyChessRuleState,
+} from "@/lib/blundr/chess/canonicalPosition";
 import type { ReplayedPly } from "./gameDataTypes";
 
 export type PgnReplayResult =
@@ -36,8 +40,12 @@ export function replayPgn(
   }
   const replay = new Chess();
   const plies: ReplayedPly[] = [];
+  const positionCounts = new Map<string, number>();
+  const initialCanonical = canonicalPositionFenFromChess(replay);
+  positionCounts.set(initialCanonical, 1);
   for (const [index, move] of history.entries()) {
     const fenBefore = replay.fen();
+    const canonicalFenBefore = canonicalPositionFenFromChess(replay);
     const sideToMove = replay.turn() === "w" ? "white" : "black";
     try {
       const applied = replay.move({
@@ -45,14 +53,26 @@ export function replayPgn(
         to: move.to,
         promotion: move.promotion,
       });
+      const fenAfter = replay.fen();
+      const canonicalFenAfter = canonicalPositionFenFromChess(replay);
+      positionCounts.set(
+        canonicalFenAfter,
+        (positionCounts.get(canonicalFenAfter) ?? 0) + 1,
+      );
+      const ruleStateAfter = classifyChessRuleState(replay, positionCounts);
       plies.push({
         ply: index + 1,
         fenBefore,
+        canonicalFenBefore,
+        fenAfter,
+        canonicalFenAfter,
         moveUci: moveUci(move),
         moveSan: applied.san,
         sideToMove,
         isPlayerMove: sideToMove === playerColor,
+        ruleStateAfter,
       });
+      if (ruleStateAfter.terminal) break;
     } catch {
       return { ok: false, reason: "illegal_move" };
     }

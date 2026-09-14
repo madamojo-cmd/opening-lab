@@ -46,6 +46,28 @@ export type GameImportProcessorDeps = {
   maxGames?: number;
 };
 
+type ProcessedCursorState = {
+  processedFingerprints: readonly string[];
+};
+
+function processedCursorState(cursor: string | null): ProcessedCursorState {
+  if (!cursor) return { processedFingerprints: [] };
+  try {
+    const parsed = JSON.parse(cursor) as {
+      processed?: unknown;
+      processedFingerprints?: unknown;
+    };
+    const fingerprints = Array.isArray(parsed.processedFingerprints)
+      ? parsed.processedFingerprints
+          .filter((value): value is string => typeof value === "string")
+          .filter(Boolean)
+      : [];
+    return { processedFingerprints: fingerprints };
+  } catch {
+    return { processedFingerprints: [] };
+  }
+}
+
 export async function processGameImportBatch(
   job: GameImportJob,
   account: ProviderAccountRecord,
@@ -58,6 +80,8 @@ export async function processGameImportBatch(
   const games = deps.games ?? new ExternalGameRepository();
   const now = deps.now ?? (() => new Date());
   const maxGames = Math.min(Math.max(deps.maxGames ?? 25, 1), 100);
+  const processedState = processedCursorState(job.cursor.cursor);
+  const processedFingerprints = new Set(processedState.processedFingerprints);
   const runtimeIndices = createRuntimeEvidenceIndices(
     deps.runtime.nodes,
     deps.runtime.candidates,
@@ -70,19 +94,29 @@ export async function processGameImportBatch(
   const bounds: ProviderRequestBounds = {
     from: new Date(job.cursor.requestedFrom),
     to: new Date(job.cursor.requestedTo),
-    maxGames,
+    maxGames: maxGames + processedFingerprints.size,
   };
+  let processed = 0;
+  const nextFingerprints = new Set(processedFingerprints);
   for await (const raw of deps.source.streamGames(account.username, bounds)) {
     if (!(await jobs.heartbeat(job.id, deps.workerId, now())))
       throw new Error("lease_lost");
+    if (processed >= maxGames) break;
     counts = addImportMetrics(counts, { fetched: 1 });
     const normalized = normalizeProviderGame(raw);
     if (!normalized || !shouldIncludeTimeControl(normalized.timeControl)) {
       counts = addImportMetrics(counts, { excluded: 1 });
+      processed += 1;
       continue;
     }
     const fingerprint =
       normalized.providerFingerprint ?? normalized.fallbackFingerprint;
+    if (processedFingerprints.has(fingerprint)) {
+      counts = addImportMetrics(counts, { duplicate: 1 });
+      continue;
+    }
+    processed += 1;
+    nextFingerprints.add(fingerprint);
     if (await games.hasGame(job.userId, normalized.provider, fingerprint)) {
       counts = addImportMetrics(counts, { duplicate: 1 });
       continue;
@@ -130,10 +164,17 @@ export async function processGameImportBatch(
     }
     counts = addImportMetrics(counts, { analyzed: 1 });
   }
-  const status =
-    counts.fetched >= maxGames ? "partially_completed" : "completed";
+  const status = processed >= maxGames ? "partially_completed" : "completed";
   await jobs.update(job.id, {
     status,
+    cursor: {
+      ...job.cursor,
+      cursor:
+        status === "partially_completed"
+          ? JSON.stringify({ processedFingerprints: [...nextFingerprints] })
+          : null,
+      updatedAt: now().toISOString(),
+    },
     counts,
     leaseOwner: null,
     leaseExpiresAt: null,

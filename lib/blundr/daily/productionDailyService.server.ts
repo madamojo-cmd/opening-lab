@@ -30,6 +30,11 @@ import { applyRewardCompletion } from "@/lib/blundr/rewards/rewardAuthority";
 import { RepertoireOpeningAccessRepository } from "@/lib/blundr/openingAccess/openingAccessRepository";
 import { getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
 import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
+import {
+  buildImportedEvidencePriorityMap,
+  shouldPromoteImportedEvidenceToDailyPriority,
+  type ImportedEvidencePriorityRecord,
+} from "@/lib/blundr/gameData/importedEvidencePriority";
 import { getServerFeatureFlags } from "@/lib/blundr/contracts/serverFeatureFlags";
 import { buildCandidateSet } from "./activities/candidateChoice/candidateSetBuilder";
 import { buildPlanRecall } from "./activities/planRecall/planQuestionBuilder";
@@ -134,10 +139,11 @@ async function assertDailyCardCompletionAvailable(input: {
     now: input.now,
   });
   if (access.plan === "pro" && access.entitlementActive) return;
-  const completedToday = await input.repository.countUniqueCompletedCardsForDate(
-    input.userId,
-    input.session.dateKey,
-  );
+  const completedToday =
+    await input.repository.countUniqueCompletedCardsForDate(
+      input.userId,
+      input.session.dateKey,
+    );
   if (completedToday >= access.limits.dailyBlundrCards) {
     throw new Error("daily_card_limit_reached");
   }
@@ -346,24 +352,23 @@ async function openingAccess(
         updatedAt: String(row.updated_at),
       }
     : null;
-  const repertoireProgress =
-    stored
-      ? {
-          userId: user.userId,
-          selectedStarterPackId:
-            stored.selectedStarterPackId ?? "classical_attacker",
-          unlockedOpeningIds: stored.unlockedOpeningIds,
-          lockedOpeningIds: stored.lockedOpeningIds,
-          availablePoints: stored.openingUnlockPoints,
-          lifetimePoints: stored.openingUnlockPoints,
-          spentPoints: 0,
-          nextUnlockCost: 0,
-          nextUnlockProgressPct: 0,
-          pointEvents: [],
-          unlockEvents: [],
-          updatedAt: stored.updatedAt,
-        }
-      : null;
+  const repertoireProgress = stored
+    ? {
+        userId: user.userId,
+        selectedStarterPackId:
+          stored.selectedStarterPackId ?? "classical_attacker",
+        unlockedOpeningIds: stored.unlockedOpeningIds,
+        lockedOpeningIds: stored.lockedOpeningIds,
+        availablePoints: stored.openingUnlockPoints,
+        lifetimePoints: stored.openingUnlockPoints,
+        spentPoints: 0,
+        nextUnlockCost: 0,
+        nextUnlockProgressPct: 0,
+        pointEvents: [],
+        unlockEvents: [],
+        updatedAt: stored.updatedAt,
+      }
+    : null;
   const environment = readCommercialBillingEnvironment();
   const commercialAccess = await resolveCommercialAccess({
     userId: user.userId,
@@ -375,7 +380,10 @@ async function openingAccess(
     unlockedOpeningIds: repertoireProgress?.unlockedOpeningIds ?? [],
     access: commercialAccess,
   });
-  return new RepertoireOpeningAccessRepository(() => repertoireProgress, policy);
+  return new RepertoireOpeningAccessRepository(
+    () => repertoireProgress,
+    policy,
+  );
 }
 
 async function buildReservation(
@@ -400,6 +408,7 @@ async function buildReservation(
     ]);
   }
   const weaknessScores = new Map<string, number>();
+  const importedEvidenceScores = new Map<string, number>();
   const priorityOpenings = new Set<string>();
   const priorityPositions = new Set<string>();
   let dailyBlundrCardGoal = 10;
@@ -407,27 +416,48 @@ async function buildReservation(
     priorityPositions.add(`${review.openingId}:${review.playKey}`);
   const admin = createBlundrSupabaseAdminClient();
   if (admin) {
-    const [projectionResult, priorityResult, profileResult] = await Promise.all([
-      admin
-        .from("blundr_weakness_projection")
-        .select(
-          "position_key,opening_id,play_key,score,confidence,updated_at,access_decision",
-        )
-        .eq("user_id", user.userId)
-        .eq("access_decision", "active"),
-      admin
-        .from("blundr_daily_priorities")
-        .select("opening_id,status,requested_for")
-        .eq("user_id", user.userId)
-        .in("status", ["queued", "added_today"])
-        .lte("requested_for", dateKey),
-      admin
-        .from("blundr_user_profiles")
-        .select("daily_blundr_card_goal")
-        .eq("user_id", user.userId)
-        .maybeSingle(),
-    ]);
-    if (projectionResult.error || priorityResult.error || profileResult.error)
+    const [projectionResult, priorityResult, profileResult, importedResult] =
+      await Promise.all([
+        admin
+          .from("blundr_weakness_projection")
+          .select(
+            "position_key,opening_id,play_key,score,confidence,updated_at,access_decision",
+          )
+          .eq("user_id", user.userId)
+          .eq("access_decision", "active"),
+        admin
+          .from("blundr_daily_priorities")
+          .select("opening_id,status,requested_for")
+          .eq("user_id", user.userId)
+          .in("status", ["queued", "added_today"])
+          .lte("requested_for", dateKey),
+        admin
+          .from("blundr_user_profiles")
+          .select("daily_blundr_card_goal")
+          .eq("user_id", user.userId)
+          .maybeSingle(),
+        admin
+          .from("blundr_learning_findings")
+          .select(
+            "position_key,opening_id,move_order_key,outcome,import_weight,updated_at,status",
+          )
+          .eq("user_id", user.userId)
+          .eq("status", "active")
+          .in("outcome", [
+            "missed_known_move",
+            "deviated_from_repertoire",
+            "followed_known_repertoire",
+            "alternate_unlocked_continuation",
+          ])
+          .order("updated_at", { ascending: false })
+          .limit(500),
+      ]);
+    if (
+      projectionResult.error ||
+      priorityResult.error ||
+      profileResult.error ||
+      importedResult.error
+    )
       throw new Error("daily_priority_projection_unavailable");
     {
       const parsed = Number(profileResult.data?.daily_blundr_card_goal);
@@ -448,6 +478,39 @@ async function buildReservation(
     }
     for (const priority of priorityResult.data ?? [])
       priorityOpenings.add(String(priority.opening_id));
+    {
+      const importedMap = buildImportedEvidencePriorityMap({
+        userId: user.userId,
+        now,
+        records: (
+          (importedResult.data ?? []) as Array<Record<string, unknown>>
+        ).map((row) => ({
+          userId: user.userId,
+          positionKey: String(row.position_key ?? ""),
+          openingId:
+            row.opening_id === null ? null : String(row.opening_id ?? ""),
+          moveOrderKey:
+            row.move_order_key === null
+              ? null
+              : String(row.move_order_key ?? ""),
+          outcome: String(
+            row.outcome ?? "",
+          ) as ImportedEvidencePriorityRecord["outcome"],
+          importWeight: Number(row.import_weight ?? 0),
+          observedAt: String(row.updated_at ?? now),
+          status: String(
+            row.status ?? "gated_pending",
+          ) as ImportedEvidencePriorityRecord["status"],
+        })),
+      });
+      for (const evidence of importedMap.values()) {
+        importedEvidenceScores.set(evidence.positionKey, evidence.boost);
+        if (shouldPromoteImportedEvidenceToDailyPriority(evidence))
+          priorityPositions.add(
+            `${evidence.openingId}:${evidence.moveOrderKey}`,
+          );
+      }
+    }
   }
   const eligibleNodes = runtime.nodes.filter((node) => {
     const availability = getStage2OpeningAvailability(node.openingId);
@@ -507,7 +570,10 @@ async function buildReservation(
         // Personalized evidence is ordered ahead of runtime fallback, but a
         // newly unlocked repertoire remains a truthful, playable Daily.
         priority:
-          weaknessScores.get(position.positionKey) ??
+          Math.max(
+            weaknessScores.get(position.positionKey) ?? 0,
+            importedEvidenceScores.get(position.positionKey) ?? 0,
+          ) ||
           (priorityPositions.has(`${node.openingId}:${node.playKey}`) ||
           priorityOpenings.has(node.openingId)
             ? 0.5
@@ -615,8 +681,7 @@ async function buildReservation(
           type: "next_plan",
           version: runtime.manifest.packageId,
         }),
-        explanation:
-          "This move keeps your repertoire plan on track.",
+        explanation: "This move keeps your repertoire plan on track.",
       };
       const built = buildPlanRecall({
         openingId: entry.node.openingId,

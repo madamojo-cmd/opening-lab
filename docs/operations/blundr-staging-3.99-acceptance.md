@@ -11,8 +11,8 @@ project and its isolated database only.
 2. Run the complete release-candidate workflow from a clean checkout.
 3. Record the full passing SHA. Do not deploy a dirty checkout or a branch
    name that can move.
-4. Review and apply all 47 additive migrations through head
-   `20260904170758` to the isolated staging database.
+4. Review and apply all 49 additive migrations through head
+   `20260914120000` to the isolated staging database.
 5. Retain the prior accepted full SHA and immutable deployment URL as the
    rollback target.
 
@@ -28,7 +28,7 @@ inside the isolated staging project so `VERCEL_ENV=production`.
 
 - Release: `BLUNDR_RELEASE_ID=blundr-staging-3.99`,
   `BLUNDR_FEATURE_PROFILE_ID=staging-3.99`,
-  `BLUNDR_MIGRATION_HEAD=20260904170758`, and a unique
+  `BLUNDR_MIGRATION_HEAD=20260914120000`, and a unique
   `BLUNDR_RELEASE_EVIDENCE_TOKEN`.
 - Persistence: staging Supabase URL, anon key, service-role key, and
   `NEXT_PUBLIC_BLUNDR_STORAGE_MODE=authenticated`.

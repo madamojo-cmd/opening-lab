@@ -1,34 +1,64 @@
 import { Chess } from "chess.js";
 import { normalizeVisualFen } from "../visual/normalizeVisualFen";
-import type { OpeningTree, RepertoireContinuation, RepertoireLineInput, RepertoireNode } from "./openingTypes";
+import type {
+  OpeningTree,
+  RepertoireContinuation,
+  RepertoireLineInput,
+  RepertoireNode,
+} from "./openingTypes";
 
-function moveToUci(move: { from: string; to: string; promotion?: string }): string {
+function moveToUci(move: {
+  from: string;
+  to: string;
+  promotion?: string;
+}): string {
   return `${move.from}${move.to}${move.promotion ?? ""}`;
 }
 
 export function transpositionKeyForFen(fen: string): string {
-  return fen.split(" ").slice(0, 2).join(" ");
+  return normalizeVisualFen(fen);
 }
 
-function cloneContinuations(continuations: RepertoireContinuation[]): RepertoireContinuation[] {
+function cloneContinuations(
+  continuations: RepertoireContinuation[],
+): RepertoireContinuation[] {
   return continuations.map((continuation) => ({ ...continuation }));
 }
 
-function addNode(nodesByFen4: Record<string, RepertoireNode[]>, nodesByTranspositionKey: Record<string, RepertoireNode[]>, node: RepertoireNode): void {
+function addNode(
+  nodesByFen4: Record<string, RepertoireNode[]>,
+  nodesByTranspositionKey: Record<string, RepertoireNode[]>,
+  node: RepertoireNode,
+): void {
   const existing = nodesByFen4[node.fen4] ?? [];
-  const sameNode = existing.find((candidate) => candidate.lineId === node.lineId && candidate.ply === node.ply);
+  const sameNode = existing.find(
+    (candidate) =>
+      candidate.lineId === node.lineId && candidate.ply === node.ply,
+  );
   if (sameNode) {
     for (const continuation of node.continuations) {
-      if (!sameNode.continuations.some((existingContinuation) => existingContinuation.uci === continuation.uci && existingContinuation.lineId === continuation.lineId)) {
+      if (
+        !sameNode.continuations.some(
+          (existingContinuation) =>
+            existingContinuation.uci === continuation.uci &&
+            existingContinuation.lineId === continuation.lineId,
+        )
+      ) {
         sameNode.continuations.push({ ...continuation });
       }
     }
     sameNode.terminal = sameNode.terminal && node.terminal;
     return;
   }
-  const stored = { ...node, continuations: cloneContinuations(node.continuations) };
+  const stored = {
+    ...node,
+    continuations: cloneContinuations(node.continuations),
+  };
   nodesByFen4[node.fen4] = [...existing, stored];
-  nodesByTranspositionKey[node.transpositionKey] = [...(nodesByTranspositionKey[node.transpositionKey] ?? []), stored];
+  nodesByTranspositionKey[node.transpositionKey] = [
+    ...(nodesByTranspositionKey[node.transpositionKey] ?? []),
+    stored,
+  ];
 }
 
 export function buildOpeningTree(lines: RepertoireLineInput[]): OpeningTree {
@@ -47,7 +77,13 @@ export function buildOpeningTree(lines: RepertoireLineInput[]): OpeningTree {
       try {
         const move = game.move(san);
         if (!move) {
-          invalidSan.push({ openingId: line.openingId, lineId: line.lineId, ply, san, reason: "illegal_or_unparseable_san" });
+          invalidSan.push({
+            openingId: line.openingId,
+            lineId: line.lineId,
+            ply,
+            san,
+            reason: "illegal_or_unparseable_san",
+          });
           stopped = true;
           break;
         }
@@ -76,7 +112,13 @@ export function buildOpeningTree(lines: RepertoireLineInput[]): OpeningTree {
           lineLength: line.movesSan.length,
         });
       } catch {
-        invalidSan.push({ openingId: line.openingId, lineId: line.lineId, ply, san, reason: "san_exception" });
+        invalidSan.push({
+          openingId: line.openingId,
+          lineId: line.lineId,
+          ply,
+          san,
+          reason: "san_exception",
+        });
         stopped = true;
         break;
       }
@@ -108,10 +150,16 @@ export function buildOpeningTree(lines: RepertoireLineInput[]): OpeningTree {
     nodesByTranspositionKey,
     invalidSan,
     lineCount: lines.length,
-    nodeCount: Object.values(nodesByFen4).reduce((sum, nodes) => sum + nodes.length, 0),
+    nodeCount: Object.values(nodesByFen4).reduce(
+      (sum, nodes) => sum + nodes.length,
+      0,
+    ),
   };
 }
 
-export function getNodesForFen(tree: OpeningTree, fen: string): RepertoireNode[] {
+export function getNodesForFen(
+  tree: OpeningTree,
+  fen: string,
+): RepertoireNode[] {
   return tree.nodesByFen4[normalizeVisualFen(fen)] ?? [];
 }

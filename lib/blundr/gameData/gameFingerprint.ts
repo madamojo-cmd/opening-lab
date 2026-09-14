@@ -36,6 +36,8 @@ export function findingFingerprint(input: {
   segmentId: string;
   positionKey: string;
   category: string;
+  outcome?: string;
+  userMoveUci?: string;
 }): string {
   return createDeterministicIdentity("finding", [
     input.userId,
@@ -43,5 +45,7 @@ export function findingFingerprint(input: {
     input.segmentId,
     input.positionKey,
     input.category,
+    input.outcome ?? "",
+    input.userMoveUci ?? "",
   ]);
 }

@@ -1,4 +1,5 @@
 /** Versioned cross-layer contracts. Keep server-only answers out of these browser-safe types. */
+import { canonicalPositionFen } from "@/lib/blundr/chess/canonicalPosition";
 
 export const BLUNDR_CONTRACT_VERSION = "2026-07-13.v1" as const;
 export const BLUNDR_CONTENT_VERSION = "stage2-approved-content-v1" as const;
@@ -43,10 +44,18 @@ function stableHash(value: string): string {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
+function canonicalIdentityFen(value: string): string {
+  try {
+    return canonicalPositionFen(value);
+  } catch {
+    return value;
+  }
+}
+
 export function createPositionIdentity(input: IdentityInput): PositionIdentity {
   const identity: PositionIdentity = {
     positionKey: "",
-    canonicalFen: text(input.canonicalFen),
+    canonicalFen: canonicalIdentityFen(text(input.canonicalFen)),
     openingId: text(input.openingId) || null,
     expectedMoveUci: text(input.expectedMoveUci) || null,
     repertoireSide: input.repertoireSide ?? "unknown",

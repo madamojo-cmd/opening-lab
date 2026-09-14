@@ -148,9 +148,9 @@
       "dependencies": ["AUTH-ACCOUNT-001"],
       "featureFlags": ["BLUNDR_FEATURE_LEARNING_CORE_V2", "BLUNDR_FEATURE_LEARNING_CORE_V2_READ"],
       "fallback": "Unavailable acknowledgement, projection, or persistence is visible and prevents a durable completion rather than writing local authenticated state or showing data as unseen.",
-      "requiredTests": ["lib/blundr/reviewQueue/__tests__", "lib/blundr/daily/bridges/mistakeToReview/__tests__/mistakeToReview.test.ts", "lib/blundr/learning/__tests__", "lib/blundr/daily/__tests__/productionDailyRuntimeComposition.test.ts", "tests/integration", "tests/security"],
+      "requiredTests": ["lib/blundr/reviewQueue/__tests__", "lib/blundr/daily/bridges/mistakeToReview/__tests__/mistakeToReview.test.ts", "lib/blundr/learning/__tests__", "lib/blundr/daily/__tests__/productionDailyRuntimeComposition.test.ts", "lib/blundr/gameData/__tests__/wave2eImportedEvidencePriority.test.ts", "tests/integration", "tests/security"],
       "lastVerifiedSha": null,
-      "evidence": [],
+      "evidence": ["Wave 2E adds a bounded imported-game evidence priority signal for Review without directly mutating FSRS/mastery state."],
       "blockers": ["The durable learning acknowledgement/outbox, canonical FSRS scheduler, and truthful Mastery/weakness projection authority are not implemented.", "The Review Queue inbox is read-only; lifecycle changes depend on projection writers and are not mutated by the client.", "Complete deployed review-to-progress evidence is not recorded."]
     },
     {
@@ -166,9 +166,9 @@
       "dependencies": ["AUTH-ACCOUNT-001", "REVIEW-SRS-001", "TRAIN-RUNTIME-001"],
       "featureFlags": ["BLUNDR_FEATURE_DAILY_CORE_V2", "BLUNDR_FEATURE_DAILY_PRODUCTION_STORE", "BLUNDR_FEATURE_LEARNING_CORE_V2", "BLUNDR_FEATURE_LEARNING_CORE_V2_READ", "BLUNDR_FEATURE_LEARNING_CORE_V2_WRITE", "BLUNDR_FEATURE_OPENING_ACCESS_V2"],
       "fallback": "A missing current authority flag returns one shared unavailable capability to Review and Daily; failed or stale action writes leave the reserved deck unchanged and return a safe retryable error; no local, adaptive-experiment, minigame, or mixed-test substitute is enabled.",
-      "requiredTests": ["lib/blundr/daily/__tests__/productionDailyCapability.test.ts", "lib/blundr/daily/__tests__/productionDailyRuntimeComposition.test.ts", "lib/blundr/daily/__tests__/dailyActionHttp.test.ts", "components/daily/ProductionDailyBlundrScreen.component.test.tsx", "npm run verify:feature-profile", "npm run verify:flags", "tests/integration/step3ActivityJourneys.integration.test.ts"],
+      "requiredTests": ["lib/blundr/daily/__tests__/productionDailyCapability.test.ts", "lib/blundr/daily/__tests__/productionDailyRuntimeComposition.test.ts", "lib/blundr/daily/__tests__/dailyActionHttp.test.ts", "lib/blundr/gameData/__tests__/wave2eImportedEvidencePriority.test.ts", "components/daily/ProductionDailyBlundrScreen.component.test.tsx", "npm run verify:feature-profile", "npm run verify:flags", "tests/integration/step3ActivityJourneys.integration.test.ts"],
       "lastVerifiedSha": null,
-      "evidence": [],
+      "evidence": ["Wave 2E adds imported-game evidence as a capped deterministic Daily candidate priority signal after opening-access filtering."],
       "blockers": ["The production Daily authority requires exact-SHA disposable database proof and owner staging acceptance."]
     },
     {
@@ -198,13 +198,13 @@
       "releaseRequired": true,
       "authority": ["lib/blundr/gameData", "app/api/blundr/game-data", "future protected import worker"],
       "entryPoints": ["/settings", "/api/blundr/game-data", "future protected import cron/worker"],
-      "persistence": ["Provider links", "games", "analysis and weakness records", "future idempotent import jobs and leases"],
+      "persistence": ["Provider links", "games", "analysis and weakness records", "auditable imported-game evidence", "future idempotent import jobs and leases"],
       "dependencies": ["Chess.com", "Lichess", "AUTH-ACCOUNT-001"],
       "featureFlags": ["BLUNDR_FEATURE_PROVIDER_INGESTION"],
       "fallback": "Provider or worker failure is reported; queued is not completion, and no sample games or weaknesses are generated.",
-      "requiredTests": ["lib/blundr/gameData/__tests__", "tests/integration", "tests/security"],
+      "requiredTests": ["lib/blundr/gameData/__tests__", "lib/blundr/gameData/__tests__/wave2eCanonicalPositionIdentity.test.ts", "lib/blundr/gameData/__tests__/wave2eImportPersonalization.test.ts", "lib/blundr/gameData/__tests__/wave2eImportedEvidencePriority.test.ts", "tests/integration", "tests/security"],
       "lastVerifiedSha": null,
-      "evidence": [],
+      "evidence": ["Wave 2E adds shared canonical FEN4 identity, legal replay rule-state capture, provider termination metadata, auditable imported evidence, and idempotent evidence persistence for imported real-game personalization."],
       "blockers": ["The protected leased import worker, production cron, stale-lease recovery, and completion authority are not implemented.", "Live provider QA and import-to-training evidence are incomplete."]
     },
     {

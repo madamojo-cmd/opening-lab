@@ -15,6 +15,10 @@ import {
   loadDailyReviewCompletionCounts,
   MAX_DAILY_REVIEW_COMPLETIONS_PER_FREE_USER,
 } from "./dailyReviewLimit.server";
+import {
+  buildImportedEvidencePriorityMap,
+  type ImportedEvidencePriorityRecord,
+} from "@/lib/blundr/gameData/importedEvidencePriority";
 import type {
   ReviewQueueItem,
   ReviewQueueLifecycleState,
@@ -36,9 +40,7 @@ function number(value: unknown): number {
   return Math.max(0, Number(value) || 0);
 }
 
-function repertoireSide(
-  value: unknown,
-): ReviewQueueItem["repertoireSide"] {
+function repertoireSide(value: unknown): ReviewQueueItem["repertoireSide"] {
   const side = text(value) as ReviewQueueItem["repertoireSide"];
   if (side === "white" || side === "black" || side === "unknown") return side;
   return "unknown";
@@ -69,7 +71,10 @@ function computeSyncState(input: {
   return stale ? "stale" : input.itemCount ? "ready" : "empty";
 }
 
-function latestTimestamp(left: string | null, right: string | null): string | null {
+function latestTimestamp(
+  left: string | null,
+  right: string | null,
+): string | null {
   if (!left) return right;
   if (!right) return left;
   return Date.parse(left) >= Date.parse(right) ? left : right;
@@ -81,24 +86,27 @@ function representativeOrder(
 ): number {
   return (
     right.score - left.score ||
-    Date.parse(right.lastMissedAt ?? "") - Date.parse(left.lastMissedAt ?? "") ||
+    Date.parse(right.lastMissedAt ?? "") -
+      Date.parse(left.lastMissedAt ?? "") ||
     Date.parse(right.updatedAt) - Date.parse(left.updatedAt) ||
     left.positionKey.localeCompare(right.positionKey)
   );
 }
 
 function publicItem(item: InternalReviewQueueItem): ReviewQueueItem {
-  const { canonicalFen: _canonicalFen, expectedMoveUci: _expectedMoveUci, ...safe } = item;
+  const {
+    canonicalFen: _canonicalFen,
+    expectedMoveUci: _expectedMoveUci,
+    ...safe
+  } = item;
   return safe;
 }
 
-export function filterReviewQueueItemsForPreferredAuthority(
-  input: {
-    items: InternalReviewQueueItem[];
-    includeResolved: boolean;
-    deferredAuthorityKeys?: ReadonlySet<string>;
-  },
-): ReviewQueueItem[] {
+export function filterReviewQueueItemsForPreferredAuthority(input: {
+  items: InternalReviewQueueItem[];
+  includeResolved: boolean;
+  deferredAuthorityKeys?: ReadonlySet<string>;
+}): ReviewQueueItem[] {
   const grouped = new Map<string, InternalReviewQueueItem[]>();
   for (const item of input.items) {
     const authorityKey =
@@ -152,7 +160,9 @@ export function filterReviewQueueItemsForPreferredAuthority(
     if (!lifecycleEligible.length) continue;
     const sorted = [...lifecycleEligible].sort(representativeOrder);
     const representative = { ...sorted[0] };
-    representative.score = Math.max(...lifecycleEligible.map((item) => item.score));
+    representative.score = Math.max(
+      ...lifecycleEligible.map((item) => item.score),
+    );
     representative.missCount = lifecycleEligible.reduce(
       (sum, item) => sum + item.missCount,
       0,
@@ -181,7 +191,9 @@ export async function loadReviewQueuePage(input: {
   page: number;
   limit: number;
   includeResolved: boolean;
-}): Promise<{ ok: true; data: ReviewQueuePage } | { ok: false; error: string }> {
+}): Promise<
+  { ok: true; data: ReviewQueuePage } | { ok: false; error: string }
+> {
   const flags = getServerFeatureFlags();
   if (!flags.learning_core_v2_read)
     return { ok: false, error: "feature_disabled" };
@@ -196,9 +208,14 @@ export async function loadReviewQueuePage(input: {
     12_000,
     Math.max(requestedTo * 4, requestedTo + 250),
   );
-  const lifecycleStates = ["active", "remediating", "resolved", "legacy_unclassified"] as const;
+  const lifecycleStates = [
+    "active",
+    "remediating",
+    "resolved",
+    "legacy_unclassified",
+  ] as const;
 
-  const [weaknesses, jobs] = await Promise.all([
+  const [weaknesses, importedFindings, jobs] = await Promise.all([
     client
       .from("blundr_weakness_projection")
       .select(
@@ -211,6 +228,16 @@ export async function loadReviewQueuePage(input: {
       .order("updated_at", { ascending: false })
       .range(0, scanLimit - 1),
     client
+      .from("blundr_learning_findings")
+      .select(
+        "finding_id,position_key,canonical_fen,opening_id,move_order_key,expected_move_uci,outcome,import_weight,updated_at,status",
+      )
+      .eq("user_id", input.userId)
+      .eq("status", "active")
+      .in("outcome", ["missed_known_move", "deviated_from_repertoire"])
+      .order("updated_at", { ascending: false })
+      .range(0, scanLimit - 1),
+    client
       .from("blundr_game_import_jobs")
       .select("status,updated_at")
       .eq("user_id", input.userId)
@@ -218,7 +245,8 @@ export async function loadReviewQueuePage(input: {
       .limit(1),
   ]);
 
-  if (weaknesses.error) return { ok: false, error: "query_failed" };
+  if (weaknesses.error || importedFindings.error)
+    return { ok: false, error: "query_failed" };
 
   const weaknessRows = (weaknesses.data ?? []) as unknown as Row[];
   const items: InternalReviewQueueItem[] = weaknessRows
@@ -235,18 +263,62 @@ export async function loadReviewQueuePage(input: {
       recommendedDailyIntervention: text(row.recommended_daily_intervention),
       lifecycleState: lifecycle(row.lifecycle_state),
       missCount: number(row.lapse_count),
-      lastMissedAt: row.last_evidence_at === null ? null : text(row.last_evidence_at),
+      lastMissedAt:
+        row.last_evidence_at === null ? null : text(row.last_evidence_at),
       updatedAt: text(row.updated_at),
       canonicalFen: null,
       expectedMoveUci: null,
     }))
     .filter((item) => Boolean(item.positionKey));
 
+  const importedRows = (importedFindings.data ?? []) as unknown as Row[];
+  const importedMap = buildImportedEvidencePriorityMap({
+    userId: input.userId,
+    now: generatedAt,
+    records: importedRows.map((row) => ({
+      userId: input.userId,
+      positionKey: text(row.position_key),
+      openingId: row.opening_id === null ? null : text(row.opening_id),
+      moveOrderKey:
+        row.move_order_key === null ? null : text(row.move_order_key),
+      outcome: text(row.outcome) as ImportedEvidencePriorityRecord["outcome"],
+      importWeight: number(row.import_weight),
+      observedAt: text(row.updated_at) || generatedAt,
+      status: text(row.status) as ImportedEvidencePriorityRecord["status"],
+    })),
+  });
+  for (const imported of importedMap.values()) {
+    const representative = importedRows.find(
+      (row) => text(row.position_key) === imported.positionKey,
+    );
+    items.push({
+      mistakeId: text(representative?.finding_id) || imported.positionKey,
+      positionKey: imported.positionKey,
+      openingId: imported.openingId,
+      playKey: imported.moveOrderKey,
+      repertoireSide: "unknown",
+      category: "opening_move",
+      score: imported.boost,
+      confidence: Math.min(1, 0.45 + imported.missCount * 0.1),
+      explanation:
+        "A recent imported game missed this unlocked repertoire position.",
+      recommendedDailyIntervention: "review_position",
+      lifecycleState: "active",
+      missCount: imported.missCount,
+      lastMissedAt: imported.lastObservedAt,
+      updatedAt: imported.lastObservedAt,
+      canonicalFen: text(representative?.canonical_fen) || null,
+      expectedMoveUci: text(representative?.expected_move_uci) || null,
+    });
+  }
+
   if (items.length) {
     const positionKeys = [...new Set(items.map((item) => item.positionKey))];
     const events = await client
       .from("blundr_learning_events")
-      .select("position_key,repertoire_side,canonical_fen,expected_move_uci,occurred_at,deleted_at")
+      .select(
+        "position_key,repertoire_side,canonical_fen,expected_move_uci,occurred_at,deleted_at",
+      )
       .eq("user_id", input.userId)
       .in("position_key", positionKeys)
       .is("deleted_at", null)
@@ -255,7 +327,10 @@ export async function loadReviewQueuePage(input: {
       const rows = (events.data ?? []) as unknown as Row[];
       const byPositionKey = new Map<
         string,
-        Pick<InternalReviewQueueItem, "repertoireSide" | "canonicalFen" | "expectedMoveUci">
+        Pick<
+          InternalReviewQueueItem,
+          "repertoireSide" | "canonicalFen" | "expectedMoveUci"
+        >
       >();
       for (const row of rows) {
         const key = text(row.position_key);
@@ -309,7 +384,9 @@ export async function loadReviewQueuePage(input: {
   }
   const deferredAuthorityKeys = new Set(
     Array.from(dailyCompletionCounts.counts.entries())
-      .filter(([, count]) => count >= MAX_DAILY_REVIEW_COMPLETIONS_PER_FREE_USER)
+      .filter(
+        ([, count]) => count >= MAX_DAILY_REVIEW_COMPLETIONS_PER_FREE_USER,
+      )
       .map(([key]) => key),
   );
 

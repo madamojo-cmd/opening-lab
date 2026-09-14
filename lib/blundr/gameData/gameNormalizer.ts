@@ -18,11 +18,13 @@ export type RawProviderGame = {
   black: string;
   playedAt: string;
   result: string;
+  terminationReason?: string | null;
   timeControl?: string | null;
   rated?: boolean | null;
   variant?: string | null;
   pgn: string;
   moves: readonly string[];
+  metadata?: Readonly<Record<string, string | number | boolean | null>>;
 };
 
 export function normalizeProviderGame(
@@ -64,11 +66,13 @@ export function normalizeProviderGame(
     }),
     username,
     result: raw.result as ProviderGameRecord["result"],
+    terminationReason: raw.terminationReason?.trim() || null,
     timeControl: raw.timeControl?.trim() || null,
     rated: raw.rated ?? null,
     variant,
     pgn: raw.pgn,
     playerColor: color,
+    providerMetadata: raw.metadata ?? {},
     classificationState: "pending",
     processingVersion: BLUNDR_RUNTIME_VERSION,
     classifierVersion: BLUNDR_CLASSIFIER_VERSION,
