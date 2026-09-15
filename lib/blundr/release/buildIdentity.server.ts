@@ -79,7 +79,7 @@ export type BlundrBuildIdentity = {
 
 export function readBlundrBuildIdentity(): BlundrBuildIdentity {
   const gitSha = text(
-    process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.BLUNDR_BUILD_GIT_SHA,
+    process.env.BLUNDR_BUILD_GIT_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA,
   );
   const releaseId = text(process.env.BLUNDR_RELEASE_ID);
   const featureProfileId = text(process.env.BLUNDR_FEATURE_PROFILE_ID);

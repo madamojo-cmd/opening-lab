@@ -48,6 +48,13 @@ test("health telemetry readiness is based on sink delivery, not configuration al
   assert.doesNotMatch(healthRoute, /delivery:\s*endpointConfigured/);
 });
 
+test("explicit Blundr build SHA overrides generic Vercel git metadata", () => {
+  assert.match(
+    identity,
+    /process\.env\.BLUNDR_BUILD_GIT_SHA \?\? process\.env\.VERCEL_GIT_COMMIT_SHA/,
+  );
+});
+
 test("golden runner records ten API and database journeys", () => {
   const journeyNames = [...runner.matchAll(/await journey\("([^"]+)"/g)].map(
     (match) => match[1],
