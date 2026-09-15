@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 
 import {
   buildGithubEnvironmentExport,
+  classifyManagementApiStatus,
   deriveProjectApiUrl,
   extractBrowserSafeApiKeys,
+  fetchManagementJson,
   validateCandidateProjectAgainstManagementList,
   validateDisposableProjectMetadata,
   validateReferenceTopology,
@@ -113,5 +115,83 @@ assert.equal(
   "https://example-ref.supabase.co",
 );
 assert.throws(() => deriveProjectApiUrl("invalid/ref"));
+
+assert.equal(classifyManagementApiStatus(401), "authentication");
+assert.equal(classifyManagementApiStatus(403), "authorization");
+assert.equal(classifyManagementApiStatus(404), "project_identity");
+assert.equal(classifyManagementApiStatus(429), "service");
+assert.equal(classifyManagementApiStatus(503), "service");
+assert.equal(classifyManagementApiStatus(422), "request_rejected");
+
+{
+  const originalFetch = globalThis.fetch;
+  let capturedAuthorization = "";
+  globalThis.fetch = async (_url, init) => {
+    capturedAuthorization = String(init?.headers?.authorization ?? "");
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  const result = await fetchManagementJson(
+    "https://api.supabase.com/v1/projects/example-ref",
+    "fixture-token",
+    "project_metadata",
+  );
+  assert.deepEqual(result, { ok: true });
+  assert.equal(capturedAuthorization, "Bearer fixture-token");
+  globalThis.fetch = originalFetch;
+}
+
+{
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ message: "must-not-leak" }), {
+      status: 403,
+      headers: { "content-type": "application/json" },
+    });
+  await assert.rejects(
+    () =>
+      fetchManagementJson(
+        "https://api.supabase.com/v1/projects/example-ref",
+        "secret-token",
+        "project_metadata",
+      ),
+    (error) => {
+      assert.equal(
+        error.message,
+        "Management API project_metadata failed: status=403 category=authorization",
+      );
+      assert.equal(error.message.includes("secret-token"), false);
+      assert.equal(error.message.includes("must-not-leak"), false);
+      return true;
+    },
+  );
+  globalThis.fetch = originalFetch;
+}
+
+{
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    throw new Error("socket hang up with secret-token");
+  };
+  await assert.rejects(
+    () =>
+      fetchManagementJson(
+        "https://api.supabase.com/v1/projects/example-ref",
+        "secret-token",
+        "project_list",
+      ),
+    (error) => {
+      assert.equal(
+        error.message,
+        "Management API project_list failed: category=network",
+      );
+      assert.equal(error.message.includes("secret-token"), false);
+      return true;
+    },
+  );
+  globalThis.fetch = originalFetch;
+}
 
 console.log("PR-01 disposable project preflight fixtures passed.");

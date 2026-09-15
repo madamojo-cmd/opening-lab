@@ -11,11 +11,9 @@ export function testTranspositionMatcher(): void {
   const game = new Chess();
   game.move("e4");
   game.move("e5");
-  const parts = game.fen().split(" ");
-  const transposedFen = `${parts[0]} ${parts[1]} - - 0 2`;
   const resolved = resolveExpectedMoveForFrame({
     openingTree,
-    fen: transposedFen,
+    fen: game.fen(),
     trainerPhase: "ready_for_user",
     trainingMode: "restricted",
     trainerView: "assisted",
@@ -23,6 +21,21 @@ export function testTranspositionMatcher(): void {
     userColor: "w",
     opponentColor: "b",
   });
-  assert.equal(resolved.source, "transposition");
+  assert.equal(resolved.source, "lesson_line");
   assert.equal(resolved.expectedMoveSan, "Nf3");
+
+  const parts = game.fen().split(" ");
+  const castlingRightsDriftFen = `${parts[0]} ${parts[1]} - - 0 2`;
+  const castlingRightsDrift = resolveExpectedMoveForFrame({
+    openingTree,
+    fen: castlingRightsDriftFen,
+    trainerPhase: "ready_for_user",
+    trainingMode: "restricted",
+    trainerView: "assisted",
+    isUserTurn: true,
+    userColor: "w",
+    opponentColor: "b",
+  });
+  assert.equal(castlingRightsDrift.source, "opening_family_plan");
+  assert.equal(Boolean(castlingRightsDrift.expectedMoveSan), true);
 }

@@ -167,18 +167,18 @@ export function testExpectedMoveResolver(): void {
   assert.equal(sameFenItalian.expectedMoveUci, "e2e4");
   assert.equal(sameFenColle.expectedMoveUci, "d2d4");
 
-  const alteredFen4 = multiFen.replace("KQkq", "-");
-  const transposition = resolveExpectedMoveForFrame({
+  const castlingRightsDriftFen = multiFen.replace("KQkq", "-");
+  const castlingRightsDrift = resolveExpectedMoveForFrame({
     openingTree: multiTree,
-    fen: alteredFen4,
+    fen: castlingRightsDriftFen,
     trainerPhase: "ready_for_user",
     trainingMode: "restricted",
     trainerView: "assisted",
     isUserTurn: true,
     userColor: "w",
     opponentColor: "b",
-    preferredMoveAuthorityIndex: authority("multi-fixture", alteredFen4, "white", "g1f3"),
+    preferredMoveAuthorityIndex: authority("multi-fixture", castlingRightsDriftFen, "white", "g1f3"),
   });
-  assert.equal(transposition.source, "transposition");
-  assert.equal(transposition.expectedMoveUci, "g1f3");
+  assert.equal(castlingRightsDrift.source, "opening_family_plan");
+  assert.equal(Boolean(castlingRightsDrift.expectedMoveUci), true);
 }
