@@ -8,26 +8,12 @@ import {
 } from "@/lib/blundr/maia/maiaRuntimeConfig";
 import { MaiaRemoteRuntimeAdapter } from "@/lib/blundr/maia/maiaRemoteRuntimeAdapter";
 import { readBlundrBuildIdentity } from "@/lib/blundr/release/buildIdentity.server";
+import { probeBlundrTelemetrySink } from "@/lib/blundr/telemetry/telemetrySink.server";
 
 export const dynamic = "force-dynamic";
 
 function configured(value: string | undefined): boolean {
   return Boolean(String(value ?? "").trim());
-}
-
-function buildTelemetryHealth(): {
-  ready: boolean;
-  optional: boolean;
-  configured: boolean;
-  delivery: "degraded" | "console_only";
-} {
-  const endpointConfigured = configured(process.env.BLUNDR_TELEMETRY_ENDPOINT);
-  return {
-    ready: false,
-    optional: true,
-    configured: endpointConfigured,
-    delivery: endpointConfigured ? "degraded" : "console_only",
-  };
 }
 
 export async function GET(): Promise<Response> {
@@ -55,8 +41,14 @@ export async function GET(): Promise<Response> {
     configured(
       process.env.CRON_SECRET ?? process.env.BLUNDR_GAME_DATA_CRON_SECRET,
     );
-  const telemetry = buildTelemetryHealth();
-  const ready = build.ready && databaseReady && remoteMaiaReady && workerReady;
+  const telemetry = await probeBlundrTelemetrySink();
+  const telemetryRequired = build.expected.requiresTelemetry === true;
+  const ready =
+    build.ready &&
+    databaseReady &&
+    remoteMaiaReady &&
+    workerReady &&
+    (!telemetryRequired || telemetry.ready);
 
   const response = NextResponse.json(
     {

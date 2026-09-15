@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import type { BlundrAnalyticsEventName } from "@/lib/blundr/analytics/blundrAnalyticsEvents";
+import {
+  deliverBlundrTelemetryEvent,
+  sanitizeBlundrTelemetryPayload,
+} from "@/lib/blundr/telemetry/telemetrySink.server";
 
 export const dynamic = "force-dynamic";
 
@@ -36,20 +40,13 @@ function sanitizePayload(
   value: unknown,
 ): Record<string, string | number | boolean | null> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .filter(([key]) => PUBLIC_PAYLOAD_KEYS.has(key))
-      .slice(0, 32)
-      .map(([key, raw]) => [
-        key,
-        typeof raw === "string"
-          ? raw.slice(0, 160)
-          : typeof raw === "number" && Number.isFinite(raw)
-            ? raw
-            : typeof raw === "boolean"
-              ? raw
-              : null,
-      ]),
+  return sanitizeBlundrTelemetryPayload(
+    Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).filter(([key]) =>
+        PUBLIC_PAYLOAD_KEYS.has(key),
+      ),
+    ),
+    { maxEntries: 32, maxStringLength: 160 },
   );
 }
 
@@ -64,33 +61,15 @@ export async function POST(request: Request) {
       { error: "invalid_telemetry_event" },
       { status: 400 },
     );
+  const eventName = name as BlundrAnalyticsEventName;
   const event = {
-    name,
+    name: eventName,
     payload: sanitizePayload(body?.payload),
     receivedAt: new Date().toISOString(),
   };
-  const endpoint = String(process.env.BLUNDR_TELEMETRY_ENDPOINT ?? "").trim();
-  if (endpoint) {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(process.env.BLUNDR_TELEMETRY_TOKEN
-          ? { authorization: `Bearer ${process.env.BLUNDR_TELEMETRY_TOKEN}` }
-          : {}),
-      },
-      body: JSON.stringify(event),
-      signal: AbortSignal.timeout(1500),
-    }).catch(() => null);
-    if (!response?.ok) {
-      console.warn(
-        "[blundr.telemetry] sink unavailable",
-        JSON.stringify({ name: event.name }),
-      );
-      return NextResponse.json({ accepted: true, delivered: false });
-    }
-  } else {
-    console.info("[blundr.telemetry]", JSON.stringify(event));
-  }
-  return NextResponse.json({ accepted: true, delivered: true });
+  const delivery = await deliverBlundrTelemetryEvent(event);
+  return NextResponse.json({
+    accepted: true,
+    delivered: delivery.delivered,
+  });
 }

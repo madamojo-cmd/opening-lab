@@ -40,6 +40,14 @@ test("canonical release routes are no-store and fail closed", () => {
   assert.doesNotMatch(identity, /authorization.*release evidence/i);
 });
 
+test("health telemetry readiness is based on sink delivery, not configuration alone", () => {
+  assert.match(healthRoute, /probeBlundrTelemetrySink/);
+  assert.match(healthRoute, /telemetryRequired/);
+  assert.match(healthRoute, /telemetry\.ready/);
+  assert.doesNotMatch(healthRoute, /ready:\s*false/);
+  assert.doesNotMatch(healthRoute, /delivery:\s*endpointConfigured/);
+});
+
 test("golden runner records ten API and database journeys", () => {
   const journeyNames = [...runner.matchAll(/await journey\("([^"]+)"/g)].map(
     (match) => match[1],
