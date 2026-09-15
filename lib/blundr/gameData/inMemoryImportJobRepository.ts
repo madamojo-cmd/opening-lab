@@ -8,6 +8,7 @@ export class InMemoryImportJobRepository {
       .filter(
         (job) =>
           job.status === "queued" ||
+          job.status === "partially_completed" ||
           (job.status === "retryable_error" && job.attemptCount < 5),
       )
       .slice(0, limit);
@@ -49,7 +50,13 @@ export class InMemoryImportJobRepository {
       (job) =>
         job.userId === input.userId &&
         job.provider === input.provider &&
-        ["queued", "leased", "running"].includes(job.status),
+        [
+          "queued",
+          "leased",
+          "running",
+          "partially_completed",
+          "retryable_error",
+        ].includes(job.status),
     );
     if (existing) return existing;
     const now = new Date().toISOString();
@@ -90,6 +97,10 @@ export class InMemoryImportJobRepository {
     const job = this.jobs.get(jobId);
     if (
       !job ||
+      !["queued", "partially_completed", "retryable_error"].includes(
+        job.status,
+      ) ||
+      job.attemptCount >= 5 ||
       (job.leaseExpiresAt && Date.parse(job.leaseExpiresAt) > now.valueOf())
     )
       return null;

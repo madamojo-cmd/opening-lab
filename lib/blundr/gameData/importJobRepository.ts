@@ -23,6 +23,7 @@ export class ImportJobRepository {
         .filter(
           (job) =>
             job.status === "queued" ||
+            job.status === "partially_completed" ||
             (job.status === "retryable_error" &&
               job.attemptCount < MAX_IMPORT_ATTEMPTS),
         )
@@ -30,7 +31,7 @@ export class ImportJobRepository {
     const result = await client
       .from("blundr_game_import_jobs")
       .select("*")
-      .in("status", ["queued", "retryable_error"])
+      .in("status", ["queued", "partially_completed", "retryable_error"])
       .lt("attempt_count", MAX_IMPORT_ATTEMPTS)
       .order("created_at", { ascending: true })
       .limit(limit);
@@ -86,9 +87,13 @@ export class ImportJobRepository {
         (job) =>
           job.userId === input.userId &&
           job.provider === input.provider &&
-          ["queued", "leased", "running", "retryable_error"].includes(
-            job.status,
-          ),
+          [
+            "queued",
+            "leased",
+            "running",
+            "partially_completed",
+            "retryable_error",
+          ].includes(job.status),
       );
       if (existing) return existing;
       const localJob: GameImportJob = {
@@ -167,9 +172,13 @@ export class ImportJobRepository {
           (job) =>
             job.userId === userId &&
             job.provider === provider &&
-            ["queued", "leased", "running", "retryable_error"].includes(
-              job.status,
-            ),
+            [
+              "queued",
+              "leased",
+              "running",
+              "partially_completed",
+              "retryable_error",
+            ].includes(job.status),
         ) ?? null
       );
     const result = await client
@@ -177,7 +186,13 @@ export class ImportJobRepository {
       .select("*")
       .eq("user_id", userId)
       .eq("provider", provider)
-      .in("status", ["queued", "leased", "running", "retryable_error"])
+      .in("status", [
+        "queued",
+        "leased",
+        "running",
+        "partially_completed",
+        "retryable_error",
+      ])
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -198,7 +213,9 @@ export class ImportJobRepository {
       const job = jobs.get(jobId);
       if (
         !job ||
-        !["queued", "retryable_error"].includes(job.status) ||
+        !["queued", "partially_completed", "retryable_error"].includes(
+          job.status,
+        ) ||
         job.attemptCount >= MAX_IMPORT_ATTEMPTS ||
         (job.leaseExpiresAt && Date.parse(job.leaseExpiresAt) > now.valueOf())
       )
@@ -234,7 +251,7 @@ export class ImportJobRepository {
       .eq("id", jobId)
       .eq("attempt_count", currentJob.attemptCount)
       .or(`lease_expires_at.is.null,lease_expires_at.lt.${now.toISOString()}`)
-      .in("status", ["queued", "retryable_error"])
+      .in("status", ["queued", "partially_completed", "retryable_error"])
       .select("*")
       .maybeSingle();
     return result.data ? mapJob(result.data) : null;

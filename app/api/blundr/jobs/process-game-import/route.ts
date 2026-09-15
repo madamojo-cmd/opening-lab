@@ -5,6 +5,11 @@ import {
   MAX_IMPORT_ATTEMPTS,
 } from "@/lib/blundr/gameData/importJobRepository";
 import type { ProviderErrorCode } from "@/lib/blundr/gameData/gameDataTypes";
+import {
+  importWorkerDeadline,
+  sanitizeImportWorkerError,
+  shouldStartImportJob,
+} from "@/lib/blundr/gameData/importWorkerBudget";
 import { ProviderAccountRepository } from "@/lib/blundr/gameData/providerAccountRepository";
 import { processGameImportBatch } from "@/lib/blundr/gameData/jobs/processGameImportBatch";
 import { loadTrainingRuntimePackage } from "@/lib/blundr/trainingRuntime/trainingRuntimeLoader";
@@ -15,23 +20,8 @@ import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTe
 
 export const dynamic = "force-dynamic";
 
-function sanitizedImportError(error: unknown): ProviderErrorCode {
-  const message = error instanceof Error ? error.message : "";
-  const code = message.trim().toLowerCase();
-  return [
-    "account_not_found",
-    "rate_limited",
-    "provider_unavailable",
-    "network_timeout",
-    "malformed_provider_payload",
-    "invalid_game",
-    "lease_lost",
-  ].includes(code)
-    ? (code as ProviderErrorCode)
-    : "unknown";
-}
-
 async function processJobs(request: Request) {
+  const deadlineAt = importWorkerDeadline();
   const expected = String(
     process.env.CRON_SECRET ?? process.env.BLUNDR_GAME_DATA_CRON_SECRET ?? "",
   ).trim();
@@ -49,7 +39,8 @@ async function processJobs(request: Request) {
   const accounts = new ProviderAccountRepository();
   const runtime = await loadTrainingRuntimePackage();
   const results = [];
-  for (const pending of await jobs.nextPending(3)) {
+  for (const pending of await jobs.nextPending(1)) {
+    if (!shouldStartImportJob({ deadlineAt })) break;
     const leased = await jobs.lease(pending.id, `cron-${crypto.randomUUID()}`);
     if (!leased) continue;
     await emitBlundrOperationalEvent("import_leased", {
@@ -77,6 +68,7 @@ async function processJobs(request: Request) {
         runtime,
         jobs,
         workerId: leased.leaseOwner ?? "cron",
+        deadlineAt,
         source:
           leased.provider === "chesscom"
             ? new ChessComClient()
@@ -104,7 +96,7 @@ async function processJobs(request: Request) {
         leased.attemptCount >= MAX_IMPORT_ATTEMPTS
           ? "dead_letter"
           : "retryable_error";
-      const errorCode = sanitizedImportError(error);
+      const errorCode = sanitizeImportWorkerError(error) as ProviderErrorCode;
       await jobs.update(leased.id, {
         status,
         errorCode,

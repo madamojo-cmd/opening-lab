@@ -18,6 +18,13 @@ import { InMemoryImportJobRepository } from "../inMemoryImportJobRepository";
 import { buildImportedFindingLearningEventInput } from "../importedFindingProjection";
 import { buildSuccessfulProviderSyncAccount } from "../providerAccountSync";
 import { processGameImportBatch } from "../jobs/processGameImportBatch";
+import {
+  createImportProviderAbortSignal,
+  hasImportBatchBudget,
+  IMPORT_WORKER_MIN_JOB_START_MS,
+  sanitizeImportWorkerError,
+  shouldStartImportJob,
+} from "../importWorkerBudget";
 import type {
   RuntimeCandidateMove,
   RuntimeOpeningNode,
@@ -558,6 +565,7 @@ test("in-memory import jobs deduplicate concurrent sync requests and lease takeo
     ),
     null,
   );
+  repository.recoverStranded(new Date("2026-01-01T00:02:00Z"));
   assert.ok(
     await repository.lease(
       jobs[0].id,
@@ -615,6 +623,50 @@ test("provider import jobs recover stranded work and retain cumulative attempts"
   assert.equal(retry?.attemptCount, 3);
 });
 
+test("partially completed import jobs remain active and resumable", async () => {
+  const repository = new InMemoryImportJobRepository();
+  const cursor = {
+    provider: "chesscom" as const,
+    cursor: JSON.stringify({ processedFingerprints: ["game-a"] }),
+    requestedFrom: "2026-01-01T00:00:00Z",
+    requestedTo: "2026-01-02T00:00:00Z",
+    updatedAt: "2026-01-01T00:01:00Z",
+  };
+  const job = await repository.enqueue({
+    userId: "resume-user",
+    provider: "chesscom",
+    cursor,
+    correlationId: "resume",
+  });
+  await repository.update(job.id, {
+    status: "partially_completed",
+    leaseOwner: null,
+    leaseExpiresAt: null,
+  });
+
+  const duplicateEnqueue = await repository.enqueue({
+    userId: "resume-user",
+    provider: "chesscom",
+    cursor: { ...cursor, cursor: null },
+    correlationId: "resume-duplicate",
+  });
+  assert.equal(duplicateEnqueue.id, job.id);
+
+  const pending = await repository.nextPending(3);
+  assert.equal(
+    pending.some((candidate) => candidate.id === job.id),
+    true,
+  );
+  const leased = await repository.lease(
+    job.id,
+    "worker-resume",
+    new Date("2026-01-01T00:02:00Z"),
+  );
+  assert.equal(leased?.status, "leased");
+  assert.equal(leased?.attemptCount, 1);
+  assert.equal(leased?.cursor.cursor, cursor.cursor);
+});
+
 test("protected import worker route uses existing job lease and batch authorities", () => {
   const source = readFileSync(
     resolve(process.cwd(), "app/api/blundr/jobs/process-game-import/route.ts"),
@@ -623,11 +675,213 @@ test("protected import worker route uses existing job lease and batch authoritie
   assert.match(source, /authorization/);
   assert.match(source, /x-blundr-cron-secret/);
   assert.match(source, /isGameDataWorkerEnabled/);
-  assert.match(source, /jobs\.nextPending\(3\)/);
+  assert.match(source, /importWorkerDeadline/);
+  assert.match(source, /shouldStartImportJob/);
+  assert.match(source, /jobs\.nextPending\(1\)/);
   assert.match(source, /jobs\.lease\(/);
   assert.match(source, /processGameImportBatch/);
+  assert.match(source, /deadlineAt/);
   assert.match(source, /retryable_error/);
   assert.match(source, /dead_letter/);
+});
+
+test("worker budget helpers leave room for checkpointing and prevent another job", () => {
+  const deadlineAt = Date.parse("2026-07-14T00:04:00.000Z");
+  assert.equal(
+    shouldStartImportJob({
+      deadlineAt,
+      nowMs: deadlineAt - IMPORT_WORKER_MIN_JOB_START_MS - 1,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldStartImportJob({
+      deadlineAt,
+      nowMs: deadlineAt - IMPORT_WORKER_MIN_JOB_START_MS,
+    }),
+    false,
+  );
+  assert.equal(
+    hasImportBatchBudget({
+      deadlineAt,
+      nowMs: deadlineAt - 45_001,
+      minRemainingMs: 45_000,
+    }),
+    true,
+  );
+  assert.equal(
+    hasImportBatchBudget({
+      deadlineAt,
+      nowMs: deadlineAt - 45_000,
+      minRemainingMs: 45_000,
+    }),
+    false,
+  );
+});
+
+test("provider timeout signal aborts before route hard deadline and sanitizes", async () => {
+  const signal = createImportProviderAbortSignal({
+    deadlineAt: Date.now() + 50,
+    timeoutBufferMs: 45,
+  });
+  assert.ok(signal);
+  const reason = await new Promise<string>((resolve) => {
+    signal.addEventListener(
+      "abort",
+      () => resolve(sanitizeImportWorkerError(signal.reason)),
+      { once: true },
+    );
+  });
+  assert.equal(reason, "network_timeout");
+});
+
+test("long import exits with a graceful checkpoint before worker budget is exhausted", async () => {
+  const job = importJobFixture({ id: "job-budget" });
+  const jobs = new TestImportJobRepository(job);
+  const games = new TestExternalGameRepository();
+  const access = {
+    openingId: "london-white",
+    repertoireSide: "white" as const,
+    decision: "active" as const,
+    checkedAt: "2026-07-14T00:00:00.000Z",
+    authorityVersion: "test",
+    expiresAt: null,
+  };
+  let nowMs = Date.parse("2026-07-14T00:00:00.000Z");
+  const gameA = rawGameFixture("budget-a", pgn, [
+    "d2d4",
+    "d7d5",
+    "c2c4",
+    "e7e6",
+  ]);
+  const gameB = rawGameFixture("budget-b", divergentPgn, [
+    "d2d4",
+    "d7d5",
+    "f2f3",
+    "e7e6",
+  ]);
+
+  const result = await processGameImportBatch(job, providerAccountFixture, {
+    runtime: runtimePackageFixture(),
+    jobs: jobs as never,
+    games: games as never,
+    workerId: "worker-a",
+    maxGames: 10,
+    deadlineAt: nowMs + 25_000,
+    minRemainingMs: 10_000,
+    now: () => new Date(nowMs),
+    access: () => access,
+    source: {
+      async *streamGames(_username, bounds) {
+        assert.ok(bounds.signal, "provider stream should receive abort signal");
+        nowMs += 10_000;
+        yield gameA;
+        nowMs += 10_000;
+        yield gameB;
+      },
+    },
+  });
+
+  assert.equal(result.status, "partially_completed");
+  assert.equal(games.games.size, 1);
+  assert.equal(games.findings.size, 1);
+  const checkpoint = jobs.jobs.get(job.id);
+  assert.equal(checkpoint?.status, "partially_completed");
+  assert.equal(checkpoint?.leaseOwner, null);
+  assert.equal(checkpoint?.leaseExpiresAt, null);
+  assert.ok(checkpoint?.cursor.cursor);
+  assert.equal(checkpoint?.counts.analyzed, 1);
+});
+
+test("budget checkpoint resumes from cursor without duplicate games or findings", async () => {
+  const initialJob = importJobFixture({ id: "job-budget-resume" });
+  const jobs = new TestImportJobRepository(initialJob);
+  const games = new TestExternalGameRepository();
+  const access = {
+    openingId: "london-white",
+    repertoireSide: "white" as const,
+    decision: "active" as const,
+    checkedAt: "2026-07-14T00:00:00.000Z",
+    authorityVersion: "test",
+    expiresAt: null,
+  };
+  const gameA = rawGameFixture("budget-resume-a", pgn, [
+    "d2d4",
+    "d7d5",
+    "c2c4",
+    "e7e6",
+  ]);
+  const gameB = rawGameFixture("budget-resume-b", divergentPgn, [
+    "d2d4",
+    "d7d5",
+    "f2f3",
+    "e7e6",
+  ]);
+  const gameC = rawGameFixture(
+    "budget-resume-c",
+    `[Event "fixture"]\n[White "alice"]\n[Black "bob"]\n[Result "1-0"]\n\n1. d4 d5 2. c4 e6 3. Nc3 Nf6`,
+    ["d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6"],
+  );
+  let nowMs = Date.parse("2026-07-14T00:00:00.000Z");
+  await processGameImportBatch(initialJob, providerAccountFixture, {
+    runtime: runtimePackageFixture(),
+    jobs: jobs as never,
+    games: games as never,
+    workerId: "worker-a",
+    maxGames: 10,
+    deadlineAt: nowMs + 25_000,
+    minRemainingMs: 10_000,
+    now: () => new Date(nowMs),
+    access: () => access,
+    source: {
+      async *streamGames() {
+        nowMs += 10_000;
+        yield gameA;
+        nowMs += 10_000;
+        yield gameB;
+      },
+    },
+  });
+  const firstCounts = {
+    games: games.games.size,
+    findings: games.findings.size,
+  };
+  assert.deepEqual(firstCounts, { games: 1, findings: 1 });
+
+  await jobs.update(initialJob.id, {
+    status: "leased",
+    leaseOwner: "worker-a",
+    leaseExpiresAt: "2026-07-14T00:01:00.000Z",
+  });
+  const resumed = jobs.jobs.get(initialJob.id)!;
+  const secondResult = await processGameImportBatch(
+    resumed,
+    providerAccountFixture,
+    {
+      runtime: runtimePackageFixture(),
+      jobs: jobs as never,
+      games: games as never,
+      workerId: "worker-a",
+      maxGames: 10,
+      deadlineAt: Date.parse("2026-07-14T00:10:00.000Z"),
+      minRemainingMs: 10_000,
+      now: () => new Date("2026-07-14T00:02:00.000Z"),
+      access: () => access,
+      source: {
+        async *streamGames() {
+          yield gameA;
+          yield gameB;
+          yield gameC;
+        },
+      },
+    },
+  );
+
+  assert.equal(secondResult.status, "completed");
+  assert.equal(secondResult.counts.duplicate, 1);
+  assert.equal(games.games.size, 3);
+  assert.equal(games.findings.size, 3);
+  assert.equal(jobs.jobs.get(initialJob.id)?.cursor.cursor, null);
 });
 
 test("game import processor resumes by stable game identity and does not duplicate evidence", async () => {
