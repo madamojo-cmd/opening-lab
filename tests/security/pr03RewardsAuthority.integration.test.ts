@@ -179,8 +179,8 @@ async function main() {
     );
     assert.equal(
       await countPendingPresentations(userAId),
-      1,
-      "one verified Daily completion creates one pending completion presentation",
+      0,
+      "one verified Daily completion must not create an all-rings presentation",
     );
     const compatibilityRetry = await service.rpc(
       "blundr_apply_reward_transaction_v2",
@@ -200,8 +200,8 @@ async function main() {
     assert.equal(retry.data.duplicate, true);
     assert.equal(
       await countPendingPresentations(userAId),
-      1,
-      "repeating the Daily completion must not duplicate its presentation",
+      0,
+      "repeating the Daily completion must not create a presentation",
     );
     const conflict = await service.rpc(
       REWARD_RPC,
@@ -235,6 +235,7 @@ async function main() {
     const lineFingerprint = createHash("sha256")
       .update(`${scope}:line`)
       .digest("hex");
+    const allRingsDay = "2026-08-09";
     assert.equal(
       (
         await service.from("blundr_trainer_sessions_v2").insert({
@@ -249,7 +250,7 @@ async function main() {
           state: "completed",
           state_version: 2,
           terminal_completion_id: terminalCompletionId,
-          completed_at: new Date().toISOString(),
+          completed_at: `${allRingsDay}T12:00:00.000Z`,
         })
       ).error,
       null,
@@ -354,7 +355,11 @@ async function main() {
     );
     assert.equal(checkmateEvidence.error, null);
     assert.equal(checkmateEvidence.data.status, "inserted");
-    const pendingBeforeTempo = await countPendingPresentations(userAId);
+    assert.equal(
+      await countPendingPresentations(userAId),
+      0,
+      "one or two verified rings must not create a pending reward presentation",
+    );
     const tempoReward = await service.rpc(
       REWARD_RPC,
       rewardArgs(
@@ -369,8 +374,8 @@ async function main() {
     assert.equal(tempoReward.data.dayRecord.dailyTempo.progress, 1);
     assert.equal(
       await countPendingPresentations(userAId),
-      pendingBeforeTempo + 1,
-      "verified Tempo completion creates one pending completion presentation",
+      0,
+      "one verified same-day ring must not create a pending reward presentation",
     );
     assert.equal(
       (
@@ -387,8 +392,6 @@ async function main() {
       true,
     );
 
-    const pendingBeforeContinuationReward =
-      await countPendingPresentations(userAId);
     const continuationReward = await service.rpc(
       REWARD_RPC,
       rewardArgs(
@@ -403,8 +406,8 @@ async function main() {
     assert.equal(continuationReward.data.dayRecord.dailyBattery.progress, 1);
     assert.equal(
       await countPendingPresentations(userAId),
-      pendingBeforeContinuationReward + 1,
-      "verified Battery completion creates one pending completion presentation",
+      0,
+      "two verified same-day rings must not create a pending reward presentation",
     );
     assert.equal(
       (
@@ -422,12 +425,10 @@ async function main() {
     );
     assert.equal(
       await countPendingPresentations(userAId),
-      pendingBeforeContinuationReward + 1,
-      "repeating the Battery completion must not duplicate its presentation",
+      0,
+      "repeating the Battery completion must not create a presentation",
     );
-    const allRingsDay = new Date().toISOString().slice(0, 10);
     const allRingsDailySession = await seedCompletedDaily(userAId, allRingsDay);
-    const pendingBeforeAllRings = await countPendingPresentations(userAId);
     const allRingsDailyReward = await service.rpc(
       REWARD_RPC,
       rewardArgs(
@@ -442,8 +443,8 @@ async function main() {
     assert.equal(allRingsDailyReward.data.dayRecord.dailyBlundr.progress, 1);
     assert.equal(
       await countPendingPresentations(userAId),
-      pendingBeforeAllRings + 1,
-      "the third same-day verified ring must create exactly one new presentation",
+      1,
+      "the third same-day verified ring must create exactly one presentation",
     );
     assert.equal(
       (
@@ -461,8 +462,8 @@ async function main() {
     );
     assert.equal(
       await countPendingPresentations(userAId),
-      pendingBeforeAllRings + 1,
-      "repeating the third completion must not duplicate its presentation",
+      1,
+      "repeating the third completion must not duplicate the presentation",
     );
     assert.ok(
       (
@@ -577,6 +578,11 @@ async function main() {
       claimedCount += 1;
     }
     assert.equal(claimedCount, pendingBeforeClaims);
+    assert.equal(
+      await countPendingPresentations(userAId),
+      0,
+      "acknowledgement clears the pending reward presentation",
+    );
     const nextClaim = await service.rpc("blundr_claim_reward_presentation_v2", {
       p_user_id: userAId,
       p_claimed_by: `other-${scope}`,
