@@ -235,7 +235,7 @@ async function main() {
     const lineFingerprint = createHash("sha256")
       .update(`${scope}:line`)
       .digest("hex");
-    const allRingsDay = "2026-08-09";
+    const trainerCompletedAt = new Date().toISOString();
     assert.equal(
       (
         await service.from("blundr_trainer_sessions_v2").insert({
@@ -250,7 +250,7 @@ async function main() {
           state: "completed",
           state_version: 2,
           terminal_completion_id: terminalCompletionId,
-          completed_at: `${allRingsDay}T12:00:00.000Z`,
+          completed_at: trainerCompletedAt,
         })
       ).error,
       null,
@@ -355,6 +355,25 @@ async function main() {
     );
     assert.equal(checkmateEvidence.error, null);
     assert.equal(checkmateEvidence.data.status, "inserted");
+    const batteryCompletion = await service
+      .from("blundr_continuation_completions_v1")
+      .select("completed_at")
+      .eq("completion_id", checkmateEvidenceId)
+      .single();
+    assert.equal(batteryCompletion.error, null);
+    assert.ok(batteryCompletion.data?.completed_at);
+    const authoritativeBatteryCompletedAt = batteryCompletion.data.completed_at;
+    const allRingsDay = authoritativeBatteryCompletedAt.slice(0, 10);
+    assert.equal(
+      (
+        await service
+          .from("blundr_trainer_sessions_v2")
+          .update({ completed_at: authoritativeBatteryCompletedAt })
+          .eq("session_id", trainerSessionId)
+          .eq("user_id", userAId)
+      ).error,
+      null,
+    );
     assert.equal(
       await countPendingPresentations(userAId),
       0,
