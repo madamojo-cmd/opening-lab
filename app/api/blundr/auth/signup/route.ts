@@ -28,7 +28,8 @@ export async function POST(request: NextRequest) {
         ok: false,
         error: {
           code: "age_confirmation_required",
-          message: "Confirm that you meet Blundr’s 16+ launch age requirement.",
+          message:
+            "Please accept the Terms of Service and Privacy Policy and confirm that you meet the eligibility requirements to continue.",
         },
       },
       { status: 422 },

@@ -44,8 +44,8 @@ export function BillingResultPage({ mode }: { mode: "success" | "cancel" }) {
         <p className="mt-3 text-sm leading-6 text-stone-600" role="status">
           {mode === "success"
             ? access?.plan === "pro"
-              ? "Your trusted Pro entitlement is active."
-              : "Blundr is waiting for provider reconciliation before showing Pro as active."
+              ? "Your active Pro subscription is ready."
+              : "Your subscription is still being confirmed. Please check again shortly."
             : "No subscription change was made. You can keep training free or choose a Pro plan again."}
         </p>
         {mode === "success" ? (
@@ -61,7 +61,7 @@ export function BillingResultPage({ mode }: { mode: "success" | "cancel" }) {
         ) : null}
         <div className="mt-6 flex flex-wrap gap-3 text-sm font-black">
           <Link className="text-green-800 underline" href="/settings#billing">
-            Settings -&gt; Billing
+            Settings → Billing
           </Link>
           <Link className="text-green-800 underline" href="/billing/upgrade">
             Plan selection

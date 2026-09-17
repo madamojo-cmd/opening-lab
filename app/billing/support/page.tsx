@@ -16,7 +16,7 @@ export default function BillingSupportPage() {
         <p className="mt-4 text-base leading-7 text-stone-600">
           Contact Blundr support for unexpected charges, payment problems,
           cancellation questions, duplicate subscriptions, refund requests, or
-          entitlement issues.
+          subscription-access issues.
         </p>
         <div className="mt-8 space-y-4">
           {[
@@ -25,7 +25,7 @@ export default function BillingSupportPage() {
             "Cancellation help",
             "Refund request",
             "Duplicate subscription",
-            "Pro entitlement issue",
+            "Pro subscription-access issue",
           ].map((item) => (
             <div
               key={item}

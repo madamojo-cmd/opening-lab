@@ -133,7 +133,7 @@ export function ReviewHub({
           Minigames · separate from Daily
         </div>
         <h2 className="mt-2 text-base font-black tracking-[-0.02em] text-stone-950">
-          {enabledGameCount || "Three"} production practice games
+          {enabledGameCount || "Three"} chess minigames
         </h2>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           {productionGames.map((definition) => {
@@ -169,7 +169,7 @@ export function ReviewHub({
           })}
           {hasUnavailableGames ? (
             <div className="rounded-[16px] border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
-              Deep minigames are not enabled for this staging environment yet.
+              Minigames are temporarily unavailable. Please try again later.
             </div>
           ) : null}
         </div>

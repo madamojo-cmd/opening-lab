@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
         ok: false,
         error: {
           code: "missing_onboarding_state",
-          message: "Onboarding state is required.",
+          message: "We couldn’t save your setup. Please try again.",
         },
       },
       { status: 400 },
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
         ok: false,
         error: {
           code: "authentication_required",
-          message: "A user session is required.",
+          message: "Please sign in to continue.",
         },
       },
       { status: 401 },

@@ -122,7 +122,7 @@ function LiveConnectedGameDataPanel() {
         error.code === "feature_disabled"
       )
         setMessage(
-          "Connected game data is not enabled for this staging environment yet.",
+          "Connected game data is temporarily unavailable. Please try again later.",
         );
     }
   }, []);
@@ -208,7 +208,7 @@ function LiveConnectedGameDataPanel() {
       setMessage(
         error instanceof AuthenticatedApiError
           ? error.message
-          : "The provider could not be disconnected.",
+          : "We couldn’t disconnect this account. Please try again.",
       );
     } finally {
       setBusy(null);

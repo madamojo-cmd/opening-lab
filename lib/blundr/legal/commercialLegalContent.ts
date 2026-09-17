@@ -25,7 +25,7 @@ export const COMMERCIAL_LEGAL_DOCUMENTS: Record<
   pricing: {
     slug: "pricing",
     title: "Pricing | Blundr",
-    description: "Blundr Free and Pro launch pricing and entitlements.",
+    description: "Blundr Free and Pro launch pricing and plans.",
     sourceFile: "01_PRICING_AND_ENTITLEMENTS.md",
   },
   terms: {

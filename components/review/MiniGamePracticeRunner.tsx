@@ -162,12 +162,12 @@ export function MiniGamePracticeRunner({
         revision: instance.revision,
       });
       if (next) setInstance(next);
-      else setError("The server could not update this practice session.");
+      else setError("We couldn’t save this practice session. Please try again.");
     } catch (requestError) {
       setError(
         requestError instanceof Error && requestError.message
           ? requestError.message
-          : "The server could not update this practice session.",
+          : "We couldn’t save this practice session. Please try again.",
       );
     } finally {
       setSubmitting(false);
@@ -193,8 +193,8 @@ export function MiniGamePracticeRunner({
             {instance.prompt}
           </h1>
           <p className="mt-3 max-w-[720px] text-[13px] leading-[1.55] text-stone-600 max-[820px]:text-[11px]">
-            A representative production minigame. Daily Blundr progress remains
-            separate.
+            Focused practice with a chess minigame. Daily Blundr progress
+            remains separate.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <span className="inline-flex min-h-8 items-center rounded-full border border-green-200 bg-green-50 px-3 text-[10px] font-black uppercase tracking-[0.16em] text-green-800">
@@ -226,7 +226,7 @@ export function MiniGamePracticeRunner({
                 Practice board
               </div>
               <div className="mt-1 text-sm font-black text-stone-950">
-                Verified scenario
+                Practice challenge
               </div>
             </div>
             <div className="rounded-full bg-[#f8f8f5] px-3 py-1 text-xs font-bold text-stone-600 ring-1 ring-stone-200">

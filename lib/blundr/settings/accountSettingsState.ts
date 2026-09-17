@@ -72,7 +72,7 @@ export function buildAccountSettingsSnapshot(input: {
     email: session?.email ? normalizeText(session.email) : user.email ?? null,
     isAuthenticated: Boolean(session),
     isLocalDemo: !session,
-    accountStatusLabel: session?.email ? `Signed in as ${session.email}` : "Local demo on this device",
+    accountStatusLabel: session?.email ? `Signed in as ${session.email}` : "On-device training on this device",
     currentUserId: userId,
     dailyGoalSummary: `${profile.dailyTempoGoal} Tempo \u00b7 ${profile.dailyBatteryGoal} Battery \u00b7 ${profile.dailyBlundrCardGoal} Daily cards`,
     devToolsEnabled: isClientDevToolsEnabled(),
@@ -102,10 +102,10 @@ export async function signOutBlundrAccount(): Promise<BlundrSettingsLogoutResult
         switchedToLocalDemo = true;
       }
     } catch {
-      message = "Sign-out failed. Tempo kept local demo available.";
+      message = "Sign-out failed. On-device training remains available.";
     }
   } else {
-    message = "Local demo is already active.";
+    message = "On-device training is already active.";
     switchedToLocalDemo = true;
   }
 

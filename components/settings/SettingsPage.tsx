@@ -725,7 +725,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
       setUsernameDraft("");
       setDeleteConfirmation("");
       refreshSnapshot(null);
-      setAccountActionMessage("Account deleted. Local demo is active.");
+      setAccountActionMessage("Account deleted. On-device training is active.");
     } catch {
       setAccountActionMessage(
         "Account deletion could not be completed. If you have an active subscription, contact billing support before trying again.",
@@ -736,11 +736,11 @@ export function SettingsPage({ className }: SettingsPageProps) {
   }
 
   function handleResetLocalData() {
-    if (!window.confirm("Reset local demo data on this device?")) return;
+    if (!window.confirm("Reset on-device training data?")) return;
     resetLocalAccountState(BLUNDR_LOCAL_DEMO_USER_ID);
     setAuthSession(null);
     refreshSnapshot(null);
-    setStatusMessage("Local demo data reset.");
+    setStatusMessage("On-device training data reset.");
   }
 
   return (
@@ -856,7 +856,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
                       <p className="mt-2 text-sm leading-6 text-stone-600">
                         {isAuthenticated
                           ? "Your account is active. Supported preferences and progress can sync across devices."
-                          : "Local demo stores progress on this device. Sign in or create an account when you want cross-device sync."}
+                          : "On-device training stores progress on this device. Sign in or create an account when you want cross-device sync."}
                       </p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <span className="rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-stone-500 ring-1 ring-stone-200">
@@ -964,11 +964,11 @@ export function SettingsPage({ className }: SettingsPageProps) {
                             resetLocalAccountState(BLUNDR_LOCAL_DEMO_USER_ID);
                             setAuthSession(null);
                             refreshSnapshot(null);
-                            setStatusMessage("Kept the local demo active.");
+                            setStatusMessage("Kept on-device training active.");
                           }}
                           className="inline-flex items-center justify-center gap-2 rounded-2xl bg-stone-100 px-4 py-3 text-sm font-black text-stone-700"
                         >
-                          Continue local demo
+                          Continue on this device
                         </button>
                       </div>
                     </div>
@@ -1036,7 +1036,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
                         </>
                       ) : (
                         <div className="mt-1 font-black text-stone-950">
-                          Local demo
+                          On-device training
                         </div>
                       )}
                       {isAuthenticated ? (
@@ -1396,7 +1396,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
             <Section
               id="billing"
               title="Billing"
-              copy="Manage your Blundr plan from trusted billing state."
+              copy="Manage your Blundr plan and subscription access."
               active={activeSectionId === "billing"}
             >
               <div className="rounded-[1.5rem] border border-stone-200 bg-[#fbfcf7] p-4">
@@ -1467,11 +1467,11 @@ export function SettingsPage({ className }: SettingsPageProps) {
                 <div className="rounded-[1.5rem] bg-[#fbfcf7] p-4 ring-1 ring-stone-200">
                   <div className="flex items-center gap-2 text-sm font-black text-stone-950">
                     <Cloud size={16} className="text-green-700" />
-                    Local demo vs account
+                    On-device training and your account
                   </div>
                   <p className="mt-2 text-sm leading-6 text-stone-600">
                     {isLocalDemo
-                      ? "Local demo stores progress on this device. Sign in when you want cross-device sync."
+                      ? "On-device training stores progress on this device. Sign in when you want cross-device sync."
                       : "Your signed-in account stores preferences and progress in your Blundr account. Local data still stays on this device."}
                   </p>
                 </div>
@@ -1534,7 +1534,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
             <Section
               id="account_management"
               title="Account management"
-              copy="Export account data, delete an authenticated account, or reset local demo data."
+              copy="Export account data, delete an authenticated account, or reset on-device training data."
               active={activeSectionId === "account_management"}
             >
               <div className="grid gap-3 lg:grid-cols-2">
@@ -1543,7 +1543,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
                     Device data
                   </div>
                   <p className="mt-2 text-sm leading-6 text-stone-600">
-                    Reset clears local demo progress on this device. It does not
+                    Reset clears on-device training progress. It does not
                     delete your authenticated account data.
                   </p>
                   <button
@@ -1555,7 +1555,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
                       !isLocalDemo && "cursor-not-allowed opacity-60",
                     )}
                   >
-                    Reset local demo data
+                    Reset on-device training data
                   </button>
                 </div>
                 <div className="rounded-[1.5rem] bg-[#fbfcf7] p-4 ring-1 ring-stone-200">

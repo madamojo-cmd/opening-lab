@@ -15,7 +15,7 @@ export function OpeningMasteryMap({
         <div>
           <h2 className={styles.sectionTitle}>Mastery map</h2>
           <p className={styles.sectionCopy}>
-            Runtime-backed branches, collapsed for a quick overview.
+            Opening lines, grouped for a quick overview.
           </p>
         </div>
         <button

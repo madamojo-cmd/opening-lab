@@ -1,6 +1,9 @@
 import { ReviewHub } from "@/components/review/ReviewHub";
 
-export const metadata = { title: "Minigames | Blundr", description: "Focused practice with the three production minigames." };
+export const metadata = {
+  title: "Minigames | Blundr",
+  description: "Focused practice with three chess minigames.",
+};
 
 /** A route alias around the existing production Review hub, not a new catalog. */
 export default function MinigamesPage() {

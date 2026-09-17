@@ -317,12 +317,12 @@ export function BlundrLandingPage() {
           <h2>Start free. Upgrade when you want more volume.</h2>
           <p>
             Free includes focused opening training, Daily Blundr, Review, rings,
-            rewards, and basic progress. Pro is planned for unlimited active
+            rewards, and basic progress. Pro unlocks unlimited active
             repertoire, higher Daily targets, unlimited Review, and deeper
-            mastery, weak-area, trend, and next-action views.
+            mastery, weak-area, trend, and next-action insights.
           </p>
           <a href="/pricing" className={styles.textLink}>
-            Compare launch plans
+            Compare plans
           </a>
         </div>
         <div className={styles.planCards} aria-label="Blundr plan availability">
@@ -338,7 +338,9 @@ export function BlundrLandingPage() {
           </div>
           <div className={styles.planCard}>
             <h3>Pro</h3>
-            <p className={styles.planPrice}>7-day trial planned</p>
+            <p className={styles.planPrice}>
+              Eligible users can start with a 7-day free trial.
+            </p>
             <ul>
               <li>$9.99/month after trial</li>
               <li>$69.99/year after trial</li>

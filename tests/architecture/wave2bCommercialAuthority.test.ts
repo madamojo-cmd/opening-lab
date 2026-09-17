@@ -75,7 +75,7 @@ test("billing settings and portal never accept browser customer authority", () =
   assert.match(billingUpgrade, /\/api\/blundr\/billing\/portal/);
   assert.match(paywall, /mode\?: "onboarding" \| "upgrade"/);
   assert.match(paywall, /!upgradeMode \? \(/);
-  assert.match(paywall, /Return to Settings -&gt; Billing/);
+  assert.match(paywall, /Return to Settings → Billing/);
   assert.doesNotMatch(settings, /customerId/);
   assert.match(portalRoute, /createBillingPortalSession/);
   assert.match(checkoutService, /client_customer_rejected/);
@@ -246,7 +246,7 @@ test("Wave 2B browser route checks are backed by real pages and reject 404s", ()
   assert.match(browserHarness, /rendered a Not Found or generic error page/);
   assert.match(
     protectedRouteTable[1],
-    /label: "settings-billing"[\s\S]*scopeSelector: "#billing"[\s\S]*Manage your Blundr plan from trusted billing state/,
+    /label: "settings-billing"[\s\S]*scopeSelector: "#billing"[\s\S]*Manage your Blundr plan and subscription access\./,
   );
   assert.match(
     protectedRouteTable[1],

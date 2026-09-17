@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error: "invalid_completion_request",
-        message: "Completion evidence is required.",
+        message: "We couldn’t save your completion. Please try again.",
       },
       { status: 400 },
     );

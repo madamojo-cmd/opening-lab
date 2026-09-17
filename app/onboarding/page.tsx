@@ -60,7 +60,10 @@ function classNames(...classes: Array<string | false | null | undefined>): strin
   return classes.filter(Boolean).join(" ");
 }
 
-function getErrorMessage(error: unknown, fallback = "Something went wrong. Try again or continue in local demo."): string {
+function getErrorMessage(
+  error: unknown,
+  fallback = "Something went wrong. Please try again.",
+): string {
   const message = normalizeText(typeof error === "string" ? error : (error as { message?: unknown })?.message);
   return message || fallback;
 }

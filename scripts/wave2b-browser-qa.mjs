@@ -74,7 +74,7 @@ const billingReturnRouteChecks = [
     path: "/billing/success?session_id=cs_wave2b_redacted",
     pathname: "/billing/success",
     heading: /Subscription confirmation is being processed\./i,
-    requiredText: [/provider reconciliation/i, /Settings -> Billing/i],
+    requiredText: [/Settings\s*(?:->|→)\s*Billing/i, /Plan selection/i],
   },
   {
     label: "billing-cancel",
@@ -93,7 +93,7 @@ const protectedRouteChecks = [
     heading: /Account settings\./i,
     scopeSelector: "#billing",
     requiredText: [
-      /Manage your Blundr plan from trusted billing state\./i,
+      /Manage your Blundr plan and subscription access\./i,
       /Current plan: Free/i,
       /Subscription terms/i,
       /Upgrade/i,
@@ -150,7 +150,7 @@ const protectedRouteChecks = [
     heading: /Review what needs to stick\./i,
     requiredText: [
       /Minigames · separate from Daily/i,
-      /production practice games/i,
+      /chess minigames/i,
     ],
   },
 ];

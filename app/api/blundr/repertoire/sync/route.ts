@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     {
       error: "client_authored_repertoire_disabled",
       message:
-        "Repertoire changes require a server-confirmed reward or unlock transaction.",
+        "This opening must be unlocked before it can be added to your repertoire.",
     },
     { status: 405, headers: { Allow: "GET" } },
   );

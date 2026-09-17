@@ -534,12 +534,22 @@ function getClient(accessToken?: string | null): SupabaseClientType | null {
 async function runClientOperation<T>(accessToken: string | null | undefined, operation: (client: SupabaseClientType) => Promise<PersistenceResult<T>>): Promise<PersistenceResult<T>> {
   const client = getClient(accessToken);
   if (!client) {
-    return err("supabase_unavailable", "Supabase credentials are not available.", null, false);
+    return err(
+      "supabase_unavailable",
+      "This feature is temporarily unavailable. Please try again.",
+      null,
+      false,
+    );
   }
   try {
     return await operation(client);
   } catch (cause) {
-    return err("supabase_operation_failed", "Supabase operation failed.", cause, true);
+    return err(
+      "supabase_operation_failed",
+      "We couldn’t complete that request. Please try again.",
+      cause,
+      true,
+    );
   }
 }
 

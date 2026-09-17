@@ -211,7 +211,7 @@ export function PaywallPlanSelection({
               </label>
               <p className="mt-3 text-sm leading-6 text-amber-900">
                 Card required. One introductory trial per eligible customer.
-                Manage or cancel anytime in Settings -&gt; Billing.
+                Manage or cancel anytime in Settings → Billing.
               </p>
               <button
                 type="button"
@@ -241,7 +241,7 @@ export function PaywallPlanSelection({
           href="/settings#billing"
           className="inline-flex min-h-10 items-center rounded-lg border border-stone-300 px-3 text-sm font-black text-stone-800"
         >
-          Return to Settings -&gt; Billing
+          Return to Settings → Billing
         </Link>
       ) : null}
       {message ? (

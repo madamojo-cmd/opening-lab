@@ -133,11 +133,10 @@ export function BlundrProfilePage() {
               Profile
             </div>
             <h1 className="mt-3 text-[34px] font-black leading-[1.05] tracking-[-0.05em] text-stone-950 max-[820px]:text-[27px]">
-              Your Blundr identity.
+              Your Blundr profile.
             </h1>
             <p className="mt-3 max-w-[720px] text-[13px] leading-[1.55] text-stone-600 max-[820px]:text-[11px]">
-              Public username and private account identity remain clearly
-              separated.
+              Your username is public. Your account details stay private.
             </p>
           </div>
           <Link href="/settings" className={styles.settingsLink}>
@@ -164,8 +163,7 @@ export function BlundrProfilePage() {
                         : "Choose your name"}
                     </h1>
                     <p className="mt-2 text-sm leading-6 text-stone-600">
-                      Your Blundr username is the public identity attached to
-                      this training account.
+                      Your Blundr username is visible to other users.
                     </p>
                   </div>
                 </div>

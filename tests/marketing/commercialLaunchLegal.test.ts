@@ -73,7 +73,9 @@ const signup = readFileSync(
   resolve(root, "components/auth/AppAuthForm.tsx"),
   "utf8",
 );
-assert.match(signup, /at least 16 years old/);
+assert.match(signup, /Terms of Service/);
+assert.match(signup, /Privacy Policy/);
+assert.match(signup, /confirm that I meet the eligibility requirements/i);
 assert.doesNotMatch(signup, /13\+/);
 assert.doesNotMatch(signup, /at least 13/i);
 

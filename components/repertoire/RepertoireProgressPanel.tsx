@@ -231,11 +231,11 @@ export function RepertoireProgressPanel({
           <div className={styles.errorBody}>
             <BlundrAssetImage
               asset={BLUNDR_EMPTY_STATE_ASSETS.errorSafeFallback}
-              alt="Safe fallback"
+              alt="Opening overview"
               variant="emptyState"
             />
             <div className={styles.errorCopy}>
-              <div className={styles.kicker}>Safe fallback</div>
+              <div className={styles.kicker}>Opening overview</div>
               <p className={styles.stateText}>{errorMessage}</p>
             </div>
           </div>

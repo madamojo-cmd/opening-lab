@@ -120,7 +120,7 @@ export function TempoCacheCard({
           <div className={styles.detailPanel}>
             <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-green-700">
               <span className="inline-flex h-2 w-2 rounded-full bg-green-500" />
-              Closed state
+              Completed
             </div>
             <p className="mt-2 text-sm leading-6 text-stone-700">
               Tempo Cache rewards never replace deterministic training. They

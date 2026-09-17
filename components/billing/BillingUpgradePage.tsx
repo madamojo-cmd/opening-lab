@@ -82,7 +82,7 @@ export function BillingUpgradePage() {
               Blundr Pro is already active.
             </h2>
             <p className="mt-2 text-sm leading-6 text-stone-700">
-              Manage your provider-confirmed subscription from Settings Billing.
+              Manage your active subscription from Settings → Billing.
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <button
@@ -98,7 +98,7 @@ export function BillingUpgradePage() {
                 href="/settings#billing"
                 className="inline-flex min-h-10 items-center rounded-lg border border-stone-300 px-3 text-sm font-black text-stone-800"
               >
-                Return to Settings -&gt; Billing
+                Return to Settings → Billing
               </Link>
             </div>
           </div>

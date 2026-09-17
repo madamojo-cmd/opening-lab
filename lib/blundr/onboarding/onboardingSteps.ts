@@ -30,7 +30,7 @@ export const ONBOARDING_STEPS: readonly OnboardingStepDefinition[] = [
     id: "account",
     label: "Account / Save Progress",
     shortLabel: "Account",
-    description: "Choose local demo or email/password sign-in.",
+    description: "Choose on-device training or email/password sign-in.",
   },
   {
     id: "rating",

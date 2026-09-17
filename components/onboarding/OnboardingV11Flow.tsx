@@ -247,10 +247,9 @@ export function OnboardingV11Flow({
               >
                 Privacy Policy
               </Link>
-              , and I confirm that I am at least 16 years old (or the minimum
-              age required by law where I live, if higher). If I am not legally
-              able to enter this agreement on my own, I confirm that my parent
-              or legal guardian has reviewed and agreed to these Terms.
+              {" "}
+              and confirm that I meet the eligibility requirements in the
+              Terms.
             </span>
           </label>
         </div>

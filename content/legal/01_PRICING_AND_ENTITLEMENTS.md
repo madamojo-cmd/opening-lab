@@ -97,7 +97,7 @@ Supporting line:
 
 Required, unchecked checkbox before account onboarding can proceed:
 
-`I agree to the Terms of Service and Privacy Policy, and I confirm that I am at least 16 years old (or the minimum age required by law where I live, if higher). If I am not legally able to enter this agreement on my own, I confirm that my parent or legal guardian has reviewed and agreed to these Terms.`
+`I agree to the Terms of Service and Privacy Policy and confirm that I meet the eligibility requirements in the Terms.`
 
 No account may be created for a person under 16 through the standard launch flow.
 

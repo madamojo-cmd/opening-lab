@@ -329,8 +329,8 @@ function ResetBrandPanel({ tone }: { tone: "loading" | "invalid" | "ready" }) {
       </div>
       <div className="relative z-10 flex items-end justify-between gap-4">
         <div className="rounded-[22px] border border-white/20 bg-white/12 p-4 text-sm leading-6 text-green-50 shadow-sm backdrop-blur">
-          Recovery only continues after the browser has a valid Supabase
-          recovery session.
+          Recovery only continues after the browser has a valid recovery
+          session.
         </div>
         <BlundrAssetImage
           asset={tempoAsset}
