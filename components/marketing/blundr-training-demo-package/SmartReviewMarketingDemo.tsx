@@ -94,15 +94,29 @@ export function SmartReviewMarketingDemo({ Board }: Props) {
 
         <div className={styles.product} role="img" aria-label="A missed Fried Liver position is added to review, returns as the same position, and is then solved correctly.">
           <div className={styles.boardFrame} aria-hidden="true">
-            <Board
-              fen={fen}
-              orientation="white"
-              highlightedSquares={highlights}
-              highlightColor={stage === 1 ? "amber" : "green"}
-              lastMove={lastMove}
-              interactive={false}
-              animationDurationMs={reducedMotion ? 0 : 620}
-            />
+            <div className={styles.boardArea}>
+              <div className={styles.coordRanks} aria-hidden="true">
+                {["8", "7", "6", "5", "4", "3", "2", "1"].map((rank) => (
+                  <span key={rank}>{rank}</span>
+                ))}
+              </div>
+              <div className={styles.coordFiles} aria-hidden="true">
+                {["a", "b", "c", "d", "e", "f", "g", "h"].map((file) => (
+                  <span key={file}>{file}</span>
+                ))}
+              </div>
+              <div className={styles.boardSurface}>
+                <Board
+                  fen={fen}
+                  orientation="white"
+                  highlightedSquares={highlights}
+                  highlightColor={stage === 1 ? "amber" : "green"}
+                  lastMove={lastMove}
+                  interactive={false}
+                  animationDurationMs={reducedMotion ? 0 : 620}
+                />
+              </div>
+            </div>
             <div className={styles.boardLabels}>
               <span>White at bottom</span>
               <span>Position under review</span>

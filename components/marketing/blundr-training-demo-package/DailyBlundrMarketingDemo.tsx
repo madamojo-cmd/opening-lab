@@ -85,15 +85,29 @@ export function DailyBlundrMarketingDemo({ Board }: Props) {
         </div>
         <div className={styles.product} role="img" aria-label="Demonstration of a Daily Blundr opening review exercise.">
           <div className={styles.boardFrame} aria-hidden="true">
-            <Board
-              fen={moveVisible ? dailyBlundrDemo.completedFen : dailyBlundrDemo.startingFen}
-              orientation="black"
-              highlightedSquares={stage >= 1 ? ["e6", "d5"] : []}
-              highlightColor="green"
-              lastMove={moveVisible ? ["e6", "d5"] : null}
-              interactive={false}
-              animationDurationMs={reducedMotion ? 0 : 620}
-            />
+            <div className={styles.boardArea}>
+              <div className={styles.coordRanks} aria-hidden="true">
+                {["1", "2", "3", "4", "5", "6", "7", "8"].map((rank) => (
+                  <span key={rank}>{rank}</span>
+                ))}
+              </div>
+              <div className={styles.coordFiles} aria-hidden="true">
+                {["h", "g", "f", "e", "d", "c", "b", "a"].map((file) => (
+                  <span key={file}>{file}</span>
+                ))}
+              </div>
+              <div className={styles.boardSurface}>
+                <Board
+                  fen={moveVisible ? dailyBlundrDemo.completedFen : dailyBlundrDemo.startingFen}
+                  orientation="black"
+                  highlightedSquares={stage >= 1 ? ["e6", "d5"] : []}
+                  highlightColor="green"
+                  lastMove={moveVisible ? ["e6", "d5"] : null}
+                  interactive={false}
+                  animationDurationMs={reducedMotion ? 0 : 620}
+                />
+              </div>
+            </div>
             <div className={styles.boardLabels}>
               <span>Black at bottom</span>
               <span>Recall the move</span>

@@ -68,7 +68,7 @@ export function DailyRingsMarketingDemo() {
 
   return (
     <section ref={sectionRef} id="consistency" className={styles.section} aria-labelledby="consistency-marketing-title">
-      <div className={styles.inner}>
+      <div className={styles.layout}>
         <div className={styles.copy}>
           <p className={styles.eyebrow}>Consistency</p>
           <h2 id="consistency-marketing-title">Make progress a habit.</h2>

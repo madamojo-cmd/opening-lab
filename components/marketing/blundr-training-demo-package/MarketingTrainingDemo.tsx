@@ -106,17 +106,38 @@ export function MarketingTrainingDemo({ Board, tempoImageSrc }: Props) {
         </div>
         <div className={styles.visual} role="img" aria-label="Animated demonstration showing Blundr teaching an Italian Game continuation and adding the position to personalized review.">
           <div className={styles.boardFrame} aria-hidden="true">
-            <Board
-              fen={fen}
-              orientation="white"
-              arrows={teachingVisible ? landingOpeningDemo.teaching.arrows : []}
-              highlightedSquares={highlightedSquares}
-              highlightColor="blue"
-              emphasizedSquare={stage === 2 ? "c5" : null}
-              lastMove={lastMove}
-              interactive={false}
-              animationDurationMs={reducedMotion ? 0 : 620}
-            />
+            <div className={styles.boardHeader}>
+              <span>Opponent</span>
+              <span className={styles.toMove}>Black to move</span>
+            </div>
+            <div className={styles.boardArea}>
+              <div className={styles.afterPill}>After 3. Bc4</div>
+              <div className={styles.coordRanks} aria-hidden="true">
+                {["8", "7", "6", "5", "4", "3", "2", "1"].map((rank) => (
+                  <span key={rank}>{rank}</span>
+                ))}
+              </div>
+              <div className={styles.coordFiles} aria-hidden="true">
+                {["a", "b", "c", "d", "e", "f", "g", "h"].map((file) => (
+                  <span key={file}>{file}</span>
+                ))}
+              </div>
+              <Board
+                fen={fen}
+                orientation="white"
+                arrows={teachingVisible ? landingOpeningDemo.teaching.arrows : []}
+                highlightedSquares={highlightedSquares}
+                highlightColor="blue"
+                emphasizedSquare={stage === 2 ? "c5" : null}
+                lastMove={lastMove}
+                interactive={false}
+                animationDurationMs={reducedMotion ? 0 : 620}
+              />
+            </div>
+            <div className={styles.boardFooter}>
+              <span>You</span>
+              <span className={styles.footerNote}>Italian Game · White</span>
+            </div>
           </div>
           <aside className={`${styles.cue} ${cueVisible ? styles.visible : ""}`} aria-hidden="true">
             <div className={styles.cueHead}><img src={tempoImageSrc} alt="" /><span>Tempo cue</span></div>
