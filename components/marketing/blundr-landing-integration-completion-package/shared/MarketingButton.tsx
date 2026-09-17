@@ -1,0 +1,2 @@
+import styles from "./MarketingButton.module.css";
+export function MarketingButton({ href, children, secondary=false, disabled=false, className="" }: { href:string; children:React.ReactNode; secondary?:boolean; disabled?:boolean; className?:string }) { return <a href={disabled?undefined:href} aria-disabled={disabled||undefined} className={`${styles.base} ${secondary?styles.secondary:styles.primary} ${disabled?styles.disabled:""} ${className}`}>{children}</a>; }

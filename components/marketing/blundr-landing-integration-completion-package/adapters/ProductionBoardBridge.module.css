@@ -1,0 +1,29 @@
+.boardRoot {
+  width: 100%;
+  min-width: 0;
+}
+
+.positionMotionA {
+  animation: marketingBoardPositionA var(--blundr-marketing-move-ms) ease both;
+}
+
+.positionMotionB {
+  animation: marketingBoardPositionB var(--blundr-marketing-move-ms) ease both;
+}
+
+@keyframes marketingBoardPositionA {
+  from { opacity: 0.82; }
+  to { opacity: 1; }
+}
+
+@keyframes marketingBoardPositionB {
+  from { opacity: 0.82; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .positionMotionA,
+  .positionMotionB {
+    animation: none;
+  }
+}

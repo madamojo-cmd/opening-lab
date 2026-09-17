@@ -69,6 +69,7 @@ const nextConfig: NextConfig = {
   experimental: {
     webpackBuildWorker: false,
     workerThreads: true,
+    useTypeScriptCli: false,
   },
   turbopack: {
     root: projectRoot,
