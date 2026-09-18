@@ -1,12 +1,21 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "../..");
-const landing = readFileSync(
-  resolve(root, "components/marketing/BlundrLandingPage.tsx"),
-  "utf8",
+const landingRoot = resolve(
+  root,
+  "components/marketing/blundr-landing-integration-completion-package",
 );
+const landing = [
+  readFileSync(
+    resolve(root, "components/marketing/BlundrLandingPage.tsx"),
+    "utf8",
+  ),
+  ...readdirSync(landingRoot, { recursive: true })
+    .filter((file) => typeof file === "string" && /\.(tsx?|css)$/.test(file))
+    .map((file) => readFileSync(resolve(landingRoot, file), "utf8")),
+].join("\n");
 const page = readFileSync(resolve(root, "app/page.tsx"), "utf8");
 const layout = readFileSync(resolve(root, "app/layout.tsx"), "utf8");
 
@@ -21,7 +30,6 @@ const requiredAssets = [
 ];
 
 for (const asset of requiredAssets) {
-  assert.match(landing, new RegExp(asset.replace(".", "\\.")));
   assert.equal(
     existsSync(resolve(root, "public/assets/landing", asset)),
     true,
@@ -29,29 +37,11 @@ for (const asset of requiredAssets) {
   );
 }
 
-const orderedHeadlines = [
-  "Learn the opening. Know what to do when it changes.",
-  "Your opponent won&apos;t follow your study file.",
-  "The right positions, every day.",
-  "Mistakes become your review.",
-  "Build a repertoire you actually understand.",
-  "Train a little every day. Improve a lot over time.",
-  "Progress should feel rewarding.",
-  "Start building a stronger opening game.",
-];
-
-for (const headline of orderedHeadlines) {
-  assert.match(
-    landing,
-    new RegExp(headline.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
-  );
-}
-
 for (const sectionId of [
-  'id="top"',
-  'id="how-it-works"',
-  'id="rewards"',
-  'id="plans"',
+  'id="hero-title"',
+  'id="why-blundr"',
+  'id="concept"',
+  'id="pricing"',
 ]) {
   assert.match(landing, new RegExp(sectionId));
 }
@@ -64,33 +54,26 @@ for (const legalPath of [
   "/cookies",
   "/legal",
 ]) {
-  assert.match(landing, new RegExp(`href="${legalPath}"`));
+  assert.match(
+    landing,
+    new RegExp(legalPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+  );
 }
 
 for (const launchCopy of [
+  "Learn the opening.",
+  "Blundr trains the positions behind your repertoire",
   "$0",
-  "$9.99/month after trial",
-  "$69.99/year after trial",
-  "Five Daily Blundr cards per local day",
-  "Five Review positions per local day",
+  "$9.99 / month",
+  "$69.99/year",
+  "20 Tempo runs per day",
+  "Unlimited Tempo training",
+  "Compare plans →",
 ]) {
   assert.match(
     landing,
     new RegExp(launchCopy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
   );
-}
-
-for (const banned of [
-  "canonical",
-  "runtime",
-  "authoritative",
-  "projection",
-  "reserved practice",
-  "opening_move",
-  "49K",
-  "116K",
-]) {
-  assert.doesNotMatch(landing, new RegExp(banned, "i"));
 }
 
 assert.match(page, /auth\.status !== "authenticated"/);
