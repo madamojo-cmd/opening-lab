@@ -111,6 +111,10 @@ async function main() {
     scopedEmail(process.env.BLUNDR_RLS_TEST_USER_B_EMAIL!, "b"),
     process.env.BLUNDR_RLS_TEST_USER_B_PASSWORD!,
   );
+  const userPro = await createUser(
+    scopedEmail(process.env.BLUNDR_RLS_TEST_USER_A_EMAIL!, "pro"),
+    process.env.BLUNDR_RLS_TEST_USER_A_PASSWORD!,
+  );
   try {
     const day = "2026-09-18T12:00:00.000Z";
     for (let ordinal = 1; ordinal <= 20; ordinal += 1) {
@@ -157,8 +161,29 @@ async function main() {
       null,
     );
     assert.equal(await countCompleted(userB), 21);
+
+    const entitlement = await service
+      .from("blundr_trusted_entitlements")
+      .insert({
+        user_id: userPro,
+        billing_environment: "test",
+        entitlement_identifier: "pro",
+        active: true,
+        source_provider: "revenuecat",
+        last_verified_at: day,
+      });
+    assert.equal(entitlement.error, null);
+    for (let ordinal = 1; ordinal <= 22; ordinal += 1) {
+      const sessionId = await reserve(userPro, ordinal, "italian-white");
+      assert.equal(
+        await complete(sessionId, day, `pro-${ordinal}`),
+        null,
+        `Pro completion ${ordinal} must be allowed`,
+      );
+    }
+    assert.equal(await countCompleted(userPro), 22);
     console.log(
-      "Tempo remote authority passed: free-20=allowed free-21=blocked concurrency=passed cross-opening=passed local-day-reset=passed count-source=trainer-completions skips=0",
+      "Tempo remote authority passed: free-20=allowed free-21=blocked pro-22=allowed concurrency=passed cross-opening=passed local-day-reset=passed count-source=trainer-completions skips=0",
     );
   } finally {
     for (const id of made) await service.auth.admin.deleteUser(id);

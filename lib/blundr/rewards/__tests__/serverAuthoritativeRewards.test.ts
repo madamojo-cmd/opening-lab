@@ -253,10 +253,12 @@ test("Free Tempo limit counts verified local-day completions atomically", () => 
   assert.match(freeTempoLimitMigration, /completed_at is not null/i);
   assert.match(
     freeTempoLimitMigration,
-    /completed_at at time zone p\.time_zone/i,
+    /completed_at at time zone v_time_zone/i,
   );
   assert.match(freeTempoLimitMigration, /v_completed_count >= 20/i);
   assert.match(freeTempoLimitMigration, /free_tempo_daily_limit_reached/i);
+  assert.match(freeTempoLimitMigration, /completion_time_zone_unavailable/i);
+  assert.match(freeTempoLimitMigration, /blundr_is_valid_iana_time_zone/i);
   assert.match(freeTempoLimitMigration, /blundr_trusted_entitlements/i);
   assert.match(freeTempoLimitMigration, /app\.blundr_billing_environment/i);
   assert.match(

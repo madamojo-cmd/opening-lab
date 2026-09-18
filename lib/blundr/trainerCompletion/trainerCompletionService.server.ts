@@ -42,6 +42,17 @@ function text(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+function requireValidTimeZone(value: unknown): string {
+  const timeZone = text(value);
+  if (!timeZone) throw new Error("completion_time_zone_unavailable");
+  try {
+    new Intl.DateTimeFormat("en-CA", { timeZone }).format();
+  } catch {
+    throw new Error("completion_time_zone_unavailable");
+  }
+  return timeZone;
+}
+
 function trainerRequestFingerprint(input: {
   userId: string;
   sessionId: string;
@@ -101,7 +112,7 @@ async function requireTempoQuotaForReservation(
     .eq("user_id", userId)
     .maybeSingle();
   if (profile.error) dbUnavailable();
-  const timeZone = text(profile.data?.time_zone) || null;
+  const timeZone = requireValidTimeZone(profile.data?.time_zone);
   const now = new Date();
   const localDate = getLocalDateKeyForTimeZone(now, timeZone);
   const completed = await client

@@ -15,6 +15,7 @@ declare
   );
   v_is_pro boolean;
   v_completed_count integer;
+  v_time_zone text;
 begin
   if old.state <> 'active' or new.state <> 'completed' then
     return new;
@@ -40,6 +41,14 @@ begin
     return new;
   end if;
 
+  select time_zone into v_time_zone
+  from public.blundr_user_profiles
+  where user_id = new.user_id;
+  if not found or v_time_zone is null
+    or not public.blundr_is_valid_iana_time_zone(v_time_zone) then
+    raise exception 'completion_time_zone_unavailable';
+  end if;
+
   select count(*) into v_completed_count
   from public.blundr_trainer_sessions_v2 s
   join public.blundr_user_profiles p on p.user_id = s.user_id
@@ -47,9 +56,8 @@ begin
     and s.state = 'completed'
     and s.terminal_completion_id is not null
     and s.completed_at is not null
-    and p.time_zone is not null
-    and (s.completed_at at time zone p.time_zone)::date =
-      (new.completed_at at time zone p.time_zone)::date;
+    and (s.completed_at at time zone v_time_zone)::date =
+      (new.completed_at at time zone v_time_zone)::date;
 
   if v_completed_count >= 20 then
     raise exception 'free_tempo_daily_limit_reached';
