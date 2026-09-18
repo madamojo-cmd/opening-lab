@@ -79,7 +79,7 @@ drop function if exists public.blundr_enforce_free_tempo_daily_limit_v1();
 
 create or replace function public.blundr_commit_trainer_action_v2(
   p_user_id uuid, p_session_id text, p_action jsonb,
-  p_billing_environment text default 'test'
+  p_billing_environment text
 ) returns jsonb
 language plpgsql
 security definer
@@ -99,8 +99,8 @@ $$;
 create or replace function public.blundr_apply_completion_reward_v3(
   p_user_id uuid, p_completion_id text, p_source text, p_evidence_id text,
   p_idempotency_key text, p_policy_version text,
-  p_randomness_key_version text default null,
-  p_billing_environment text default 'test'
+  p_randomness_key_version text,
+  p_billing_environment text
 ) returns jsonb
 language plpgsql
 security definer

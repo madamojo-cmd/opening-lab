@@ -11,6 +11,13 @@ const migration = readFileSync(
   ),
   "utf8",
 );
+const tempoMigration = readFileSync(
+  resolve(
+    process.cwd(),
+    "supabase/migrations/20260918130000_blundr_free_tempo_daily_limit.sql",
+  ),
+  "utf8",
+);
 
 test("Trainer completion is a service-only session authority", () => {
   for (const contract of [
@@ -57,5 +64,21 @@ test("Trainer terminal evidence extends only the existing Rewards v2 writer", ()
   assert.doesNotMatch(
     migration,
     /opening-nodes|candidate-moves|blundr-opening-runtime/,
+  );
+});
+
+test("billing-aware Trainer RPC preserves the unambiguous legacy overload", () => {
+  const normalizedTempoMigration = tempoMigration.replace(/\s+/g, " ");
+  assert.match(
+    normalizedTempoMigration,
+    /create or replace function public\.blundr_commit_trainer_action_v2\( p_user_id uuid, p_session_id text, p_action jsonb, p_billing_environment text \)/i,
+  );
+  assert.doesNotMatch(
+    tempoMigration,
+    /create or replace function public\.blundr_commit_trainer_action_v2\([\s\S]*p_billing_environment text default/i,
+  );
+  assert.match(
+    normalizedTempoMigration,
+    /return public\.blundr_commit_trainer_action_v2\( p_user_id, p_session_id, p_action \)/i,
   );
 });
