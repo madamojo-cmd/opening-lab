@@ -465,6 +465,24 @@ async function main() {
       1,
       "the third same-day verified ring must create exactly one presentation",
     );
+    const allRingsPresentations = await service
+      .from("blundr_reward_presentations_v2")
+      .select("envelope")
+      .eq("user_id", userAId)
+      .is("acknowledged_at", null)
+      .is("dismissed_at", null);
+    assert.equal(allRingsPresentations.error, null);
+    assert.equal(allRingsPresentations.data?.length, 1);
+    const allRingsEnvelope = allRingsPresentations.data?.[0]?.envelope as
+      | Record<string, unknown>
+      | undefined;
+    assert.equal(allRingsEnvelope?.allRingsClosed, true);
+    if (allRingsDailyReward.data.randomEvaluation === "unavailable") {
+      assert.equal(allRingsEnvelope?.randomEvaluation, "unavailable");
+      assert.equal("rarity" in (allRingsEnvelope ?? {}), false);
+      assert.equal("rewardGrants" in (allRingsEnvelope ?? {}), false);
+      assert.equal("rewardRollId" in (allRingsEnvelope ?? {}), false);
+    }
     assert.equal(
       (
         await service.rpc(

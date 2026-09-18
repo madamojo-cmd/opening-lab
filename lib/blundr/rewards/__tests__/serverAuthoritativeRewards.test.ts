@@ -298,7 +298,7 @@ test("billing-aware reward RPC does not shadow the legacy seven-argument overloa
   );
   assert.doesNotMatch(
     freeTempoLimitMigration,
-    /create or replace function public\.blundr_apply_completion_reward_v3\([\s\S]*p_randomness_key_version text default|p_billing_environment text default/i,
+    /create or replace function public\.blundr_apply_completion_reward_v3\( p_user_id uuid, p_completion_id text, p_source text, p_evidence_id text, p_idempotency_key text, p_policy_version text, p_randomness_key_version text, p_billing_environment text \) returns jsonb[\s\S]*?(?:p_randomness_key_version text default|p_billing_environment text default)/i,
   );
   assert.match(
     normalizedFreeTempoMigration,
@@ -307,6 +307,33 @@ test("billing-aware reward RPC does not shadow the legacy seven-argument overloa
   assert.match(
     normalizedFreeTempoMigration,
     /grant execute on function public\.blundr_apply_completion_reward_v3\( uuid, text, text, text, text, text, text, text \)/i,
+  );
+});
+
+test("all-rings presentation is deterministic when HMAC randomness is unavailable", () => {
+  const normalizedFreeTempoMigration = freeTempoLimitMigration.replace(
+    /\s+/g,
+    " ",
+  );
+  assert.match(
+    normalizedFreeTempoMigration,
+    /alter function public\.blundr_apply_completion_reward_v3\( uuid, text, text, text, text, text, text \) rename to blundr_apply_completion_reward_v3_core/i,
+  );
+  assert.match(
+    normalizedFreeTempoMigration,
+    /create or replace function public\.blundr_ensure_all_rings_presentation_v1\( p_user_id uuid, p_result jsonb, p_policy_version text \)/i,
+  );
+  assert.match(
+    normalizedFreeTempoMigration,
+    /allRingsClosedThisAction[\s\S]*blundr_reward_presentations_v2[\s\S]*on conflict do nothing/i,
+  );
+  assert.match(
+    normalizedFreeTempoMigration,
+    /'randomEvaluation', coalesce\(p_result->>'randomEvaluation', 'unavailable'\)/i,
+  );
+  assert.doesNotMatch(
+    normalizedFreeTempoMigration,
+    /'rarity'\s*,|'rewardGrants'\s*,|'rewardRollId'\s*,/i,
   );
 });
 
