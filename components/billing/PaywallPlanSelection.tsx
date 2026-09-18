@@ -28,7 +28,7 @@ type PaywallPlanSelectionProps = {
 
 const FREE_FEATURES = [
   "up to 3 active openings",
-  "unlimited training in active openings",
+  "20 Tempo runs per day",
   "5 Daily cards daily",
   "5 Review positions daily",
   "rings, streaks, rewards",
@@ -39,6 +39,7 @@ const PRO_FEATURES = [
   "unlimited active repertoire",
   "Daily target up to 99",
   "unlimited Review Queue",
+  "Unlimited Tempo training",
   "full mastery and weak-area insights",
   "full progress and next-action views",
 ] as const;

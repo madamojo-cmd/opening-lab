@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
+import { readCommercialBillingEnvironment } from "@/lib/blundr/commercial/commercialAccess.server";
 
 export const REWARD_POLICY_VERSION = "rewards-v2-20260805";
 
@@ -24,6 +25,7 @@ function failure(error: unknown): RewardAuthorityFailure {
     "continuation_trainer_terminal_unverified",
     "continuation_completion_idempotency_conflict",
     "completion_projection_idempotency_conflict",
+    "free_tempo_daily_limit_reached",
     "invalid_daily_blundr_reward_target",
     "completion_evidence_unverified",
   ];
@@ -78,6 +80,7 @@ export async function applyRewardCompletion(input: {
       p_policy_version: REWARD_POLICY_VERSION,
       p_randomness_key_version:
         process.env.BLUNDR_REWARDS_HMAC_KEY_VERSION?.trim() || null,
+      p_billing_environment: readCommercialBillingEnvironment(),
     },
   );
   return error || !data

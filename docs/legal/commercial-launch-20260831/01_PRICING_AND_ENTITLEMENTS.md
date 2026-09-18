@@ -24,7 +24,7 @@ New eligible customers may start Blundr Pro with a 7-day free trial. A valid pay
 | Ads | None | None |
 | Active repertoire openings | Up to 3 unlocked openings at a time | Unlimited unlocked openings |
 | Opening unlock progression and rewards | Same progression system | Same progression system |
-| Train | Unlimited within active openings | Unlimited across active repertoire |
+| Train | Up to 20 Tempo runs per local day across active openings | Unlimited Tempo training across active repertoire |
 | Assisted / Plain training | Included | Included |
 | Continuation Play | Included | Included |
 | Daily Blundr | Up to 5 cards per local day | User-selected target from 1–99 cards per local day |
@@ -54,7 +54,7 @@ Keep training free, or try everything in Blundr Pro for 7 days.
 **Blundr Free — $0**
 
 - Up to 3 active openings
-- Unlimited training in those openings
+- Up to 20 Tempo training runs per local day across those openings
 - 5 Daily Blundr cards per day
 - 5 Review positions per day
 - Daily rings, streaks, and rewards
@@ -69,7 +69,7 @@ Button: **Continue with Free**
 - Daily Blundr target up to 99 cards per day
 - Unlimited Review Queue
 - Full mastery, weak-area, trend, and next-action views
-- Unlimited training across your active repertoire
+- Unlimited Tempo training across your active repertoire
 - Daily rings, streaks, and rewards
 
 Plan choices, neither preselected:

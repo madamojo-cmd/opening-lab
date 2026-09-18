@@ -21,6 +21,7 @@ export type CommercialAccess = {
   limits: {
     dailyBlundrCards: number;
     reviewCompletionsPerDay: number | null;
+    dailyTempoRunsPerDay: number | null;
     activeOpenings: number | null;
     premiumInsights: boolean;
   };
@@ -29,6 +30,7 @@ export type CommercialAccess = {
 export const FREE_ACTIVE_OPENING_LIMIT = 3;
 export const FREE_DAILY_BLUNDR_CARD_LIMIT = 5;
 export const FREE_DAILY_REVIEW_COMPLETION_LIMIT = 5;
+export const FREE_DAILY_TEMPO_RUN_LIMIT = 20;
 export const PRO_DAILY_BLUNDR_CARD_MAX = 99;
 
 export const FREE_COMMERCIAL_ACCESS: CommercialAccess = {
@@ -46,6 +48,7 @@ export const FREE_COMMERCIAL_ACCESS: CommercialAccess = {
   limits: {
     dailyBlundrCards: FREE_DAILY_BLUNDR_CARD_LIMIT,
     reviewCompletionsPerDay: FREE_DAILY_REVIEW_COMPLETION_LIMIT,
+    dailyTempoRunsPerDay: FREE_DAILY_TEMPO_RUN_LIMIT,
     activeOpenings: FREE_ACTIVE_OPENING_LIMIT,
     premiumInsights: false,
   },

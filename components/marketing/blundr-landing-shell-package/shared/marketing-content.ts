@@ -32,13 +32,13 @@ export const PRICING_PLANS = [
     key: "free", label: "Free", title: "Build the habit", price: "$0",
     description: "Build a focused repertoire at no cost.", cta: "Start training free",
     href: MARKETING_ROUTES.signup,
-    features: ["Up to 3 active openings", "Unlimited Train within those openings", "5 Daily Blundr cards per local day", "5 Review positions per local day", "Daily rings and rewards", "Core repertoire progress"],
+    features: ["Up to 3 active openings", "20 Tempo runs per day", "5 Daily Blundr cards per local day", "5 Review positions per local day", "Daily rings and rewards", "Core repertoire progress"],
   },
   {
     key: "pro", label: "Pro", title: "Remove the limits", price: "$9.99/month",
     secondaryPrice: "$69.99/year", description: "Eligible users can start with a 7-day free trial.",
     cta: "Start 7-day free trial", href: MARKETING_ROUTES.upgrade,
-    features: ["Unlimited active repertoire", "Unlimited opening training", "Daily target adjustable from 1–99", "Unlimited Review", "Daily rings and rewards", "Deeper mastery, weakness, trend, and next-action insights"],
+    features: ["Unlimited active repertoire", "Unlimited Tempo training", "Daily target adjustable from 1–99", "Unlimited Review", "Daily rings and rewards", "Deeper mastery, weakness, trend, and next-action insights"],
   },
 ] as const;
 

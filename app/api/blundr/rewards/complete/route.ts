@@ -33,6 +33,7 @@ function statusForDatabaseError(message: string): number {
   if (message.includes("completion_date_out_of_range")) return 400;
   if (message.includes("invalid_completion")) return 400;
   if (message.includes("account_not_ready")) return 409;
+  if (message.includes("free_tempo_daily_limit_reached")) return 409;
   return 503;
 }
 
@@ -79,7 +80,9 @@ export async function POST(request: Request) {
       {
         error: message,
         message:
-          "That completion wasn't rewarded because it couldn't be confirmed. Try again.",
+          message === "free_tempo_daily_limit_reached"
+            ? "You’ve reached the 20 Tempo runs available on Free today. Upgrade to Blundr Pro for unlimited Tempo training."
+            : "That completion wasn't rewarded because it couldn't be confirmed. Try again.",
       },
       { status: statusForDatabaseError(message) },
     );

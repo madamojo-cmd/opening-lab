@@ -203,6 +203,7 @@ test("Wave 2B browser route checks are backed by real pages and reject 404s", ()
   assert.match(browserHarness, /limits: \{/);
   assert.match(browserHarness, /dailyBlundrCards: 5/);
   assert.match(browserHarness, /reviewCompletionsPerDay: 5/);
+  assert.match(browserHarness, /dailyTempoRunsPerDay: 20/);
   assert.match(browserHarness, /activeOpenings: 3/);
   assert.doesNotMatch(browserHarness, /\btier\b/);
   assert.doesNotMatch(browserHarness, /\bisPro\b/);
@@ -246,7 +247,7 @@ test("Wave 2B browser route checks are backed by real pages and reject 404s", ()
   assert.match(browserHarness, /rendered a Not Found or generic error page/);
   assert.match(
     protectedRouteTable[1],
-    /label: "settings-billing"[\s\S]*scopeSelector: "#billing"[\s\S]*Manage your Blundr plan and subscription access\./,
+    /label: "settings-billing"[\s\S]*scopeSelector: "#billing"[\s\S]*Manage your Blundr plan and subscription access\\\./,
   );
   assert.match(
     protectedRouteTable[1],

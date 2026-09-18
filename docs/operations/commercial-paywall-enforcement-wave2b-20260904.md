@@ -20,7 +20,7 @@ Blundr Free:
 
 - $0, no card, no ads.
 - Up to 3 active unlocked openings.
-- Unlimited Train inside the active openings.
+- Up to 20 Tempo training runs per user-local day across the active openings.
 - Assisted and plain training, Continuation Play, rewards, rings, streaks,
   basic progress, and minigames remain available.
 - Daily Blundr is capped at 5 completed cards per user-local day.
@@ -30,7 +30,7 @@ Blundr Free:
 
 Blundr Pro:
 
-- Unlimited active repertoire and Train.
+- Unlimited active repertoire and Tempo training.
 - Daily Blundr target from 1 to 99.
 - All available Review Queue items.
 - Complete mastery, weak-area, trend, progress, and next-action intelligence.
@@ -84,6 +84,10 @@ When Pro expires, the resolver returns Free:
   `lib/blundr/gameData/gameDataService.ts` and
   `lib/blundr/openingAccess` apply Free active-opening policy before training
   access is granted.
+- Tempo:
+  `blundr_apply_completion_reward_v3` counts verified `opening_run_completed`
+  records by user-local day inside the existing per-user transaction lock and
+  rejects the 21st Free completion with `free_tempo_daily_limit_reached`.
 - Active-opening selection:
   `/api/blundr/repertoire/active-openings` writes only through authenticated,
   ownership-protected server code.

@@ -27,6 +27,7 @@ const freeAccess = {
   limits: {
     dailyBlundrCards: 5,
     reviewCompletionsPerDay: 5,
+    dailyTempoRunsPerDay: 20,
     activeOpenings: 3,
     premiumInsights: false,
   },

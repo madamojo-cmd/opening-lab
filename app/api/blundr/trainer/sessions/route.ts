@@ -30,7 +30,7 @@ export async function POST(request: Request) {
         ? error.message
         : "trainer_session_persistence_unavailable";
     const status =
-      code === "opening_locked"
+      code === "free_tempo_daily_limit_reached" || code === "opening_locked"
         ? 403
         : code === "trainer_line_unverified"
           ? 422

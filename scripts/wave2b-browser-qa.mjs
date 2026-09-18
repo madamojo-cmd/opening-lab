@@ -148,10 +148,7 @@ const protectedRouteChecks = [
     path: "/minigames",
     pathname: "/minigames",
     heading: /Review what needs to stick\./i,
-    requiredText: [
-      /Minigames · separate from Daily/i,
-      /chess minigames/i,
-    ],
+    requiredText: [/Minigames · separate from Daily/i, /chess minigames/i],
   },
 ];
 
@@ -429,6 +426,7 @@ async function installRoutes(page) {
             limits: {
               dailyBlundrCards: 5,
               reviewCompletionsPerDay: 5,
+              dailyTempoRunsPerDay: 20,
               activeOpenings: 3,
               premiumInsights: false,
             },

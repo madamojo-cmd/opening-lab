@@ -125,7 +125,7 @@ function formatBillingStatus(status: CommercialAccess | null): string {
     return "Current plan: Free. Your previous Pro access has expired; your learning history and queued Review items remain saved.";
   }
   if (status.plan === "free") {
-    return "Current plan: Free. You can train unlimited within your active openings, with 5 Daily cards and 5 Review completions per day.";
+    return "Current plan: Free. You can complete up to 20 Tempo runs per day, with 5 Daily cards and 5 Review completions per day.";
   }
   const planLabel = commercialPlanLabel(status.planInterval);
   if (status.lifecycleState === "trialing") {

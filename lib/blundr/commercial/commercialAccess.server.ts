@@ -119,6 +119,7 @@ export async function resolveCommercialAccess(input: {
       limits: {
         dailyBlundrCards: 99,
         reviewCompletionsPerDay: null,
+        dailyTempoRunsPerDay: null,
         activeOpenings: null,
         premiumInsights: true,
       },

@@ -3674,10 +3674,17 @@ function BlundrApp({
         authoritativeTrainerSessionRef.current = session;
         setAuthoritativeTrainerSession(session);
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) return;
         authoritativeTrainerSessionRef.current = null;
         setAuthoritativeTrainerSession(null);
+        if (
+          error instanceof AuthenticatedApiError &&
+          error.code === "free_tempo_daily_limit_reached"
+        ) {
+          router.push("/billing/upgrade");
+          return;
+        }
         pushRuntimeCriticalIssue("trainer_session_persistence_unavailable");
       });
     return () => {

@@ -7,6 +7,7 @@ import {
   FREE_COMMERCIAL_ACCESS,
   FREE_DAILY_BLUNDR_CARD_LIMIT,
   FREE_DAILY_REVIEW_COMPLETION_LIMIT,
+  FREE_DAILY_TEMPO_RUN_LIMIT,
   isTrustedProAccess,
   PRO_DAILY_BLUNDR_CARD_MAX,
   type CommercialAccess,
@@ -27,6 +28,7 @@ const proAccess: CommercialAccess = {
   limits: {
     dailyBlundrCards: PRO_DAILY_BLUNDR_CARD_MAX,
     reviewCompletionsPerDay: null,
+    dailyTempoRunsPerDay: null,
     activeOpenings: null,
     premiumInsights: true,
   },
@@ -83,6 +85,7 @@ test("CommercialAccess exposes the current nested billing-status contract", () =
     limits: {
       dailyBlundrCards: FREE_DAILY_BLUNDR_CARD_LIMIT,
       reviewCompletionsPerDay: FREE_DAILY_REVIEW_COMPLETION_LIMIT,
+      dailyTempoRunsPerDay: FREE_DAILY_TEMPO_RUN_LIMIT,
       activeOpenings: FREE_ACTIVE_OPENING_LIMIT,
       premiumInsights: false,
     },
