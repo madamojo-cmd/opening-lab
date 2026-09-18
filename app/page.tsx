@@ -593,7 +593,7 @@ function buildRuntimePlaceholderRepertoires(): Repertoire[] {
     id: entry.openingId,
     name: entry.openingName,
     color: entry.side,
-    description: `Runtime-backed local crawled package line pool loading for ${entry.openingName}.`,
+    description: `Loading training lines for ${entry.openingName}…`,
     lines: [],
     runtimeLoading: true,
   }));
@@ -9733,7 +9733,9 @@ function BlundrApp({
           return;
         }
         const message =
-          error instanceof Error ? error.message : "Visual model failed";
+          error instanceof Error
+            ? error.message
+            : "Something went wrong while preparing the training view. Please try again.";
         setVisualDebugSnapshot((prev) => ({
           ...prev,
           error: message,

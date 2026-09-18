@@ -560,7 +560,7 @@ function LegacyOnboardingPage() {
               </div>
             </div>
             <p className="mt-4 text-sm leading-6 text-stone-600">
-              Restoring your local onboarding state and account profile.
+              Loading your setup…
             </p>
           </div>
         </div>

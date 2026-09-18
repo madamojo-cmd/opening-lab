@@ -67,7 +67,7 @@ export function BillingUpgradePage() {
         <p className="text-xs font-black uppercase text-green-700">Billing</p>
         <h1 className="mt-3 text-3xl font-black">Upgrade to Blundr Pro.</h1>
         <p className="mt-3 text-sm leading-6 text-stone-600">
-          Choose Monthly or Annual, review the current server-generated offer,
+          Choose Monthly or Annual, review your price and trial terms before checkout,
           and acknowledge the seven-day trial terms before Checkout.
         </p>
 

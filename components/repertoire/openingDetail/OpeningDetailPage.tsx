@@ -20,16 +20,13 @@ export function OpeningDetailPage({ model }: { model: MasteryMapReadModel }) {
       <div className={styles.inner}>
         <header className={styles.pageHeader}>
           <div>
-            <p className={styles.pageKicker}>
-              Repertoire · Opening intelligence
-            </p>
+            <p className={styles.pageKicker}>Repertoire · Opening progress</p>
             <h1 className={styles.pageTitle} aria-label={model.openingName}>
               {model.openingName} <span aria-hidden="true">mastery.</span>
             </h1>
             <p className={styles.pageCopy}>
-              Access, intelligence values, Mastery Map, weak branches,
-              connected-game intelligence and progress stay backed by the live
-              opening model.
+              Your Mastery Map, weak lines, game insights, and progress update
+              as you train.
             </p>
           </div>
           <div className={styles.pageActions}>

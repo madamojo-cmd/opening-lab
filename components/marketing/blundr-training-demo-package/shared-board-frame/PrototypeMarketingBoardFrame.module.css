@@ -151,6 +151,8 @@
 
 .overlayBadge {
   position: absolute;
+  width: max-content;
+  height: auto;
   z-index: 9;
   left: 50%;
   top: 17px;

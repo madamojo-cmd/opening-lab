@@ -38,7 +38,7 @@ export function WeakBranchCards({
         <div>
           <h2 className={styles.sectionTitle}>Practice next</h2>
           <p className={styles.sectionCopy}>
-            Weak branches are ranked from the current mastery evidence.
+            Weak lines are ranked by where you need the most review.
           </p>
         </div>
       </div>
@@ -62,9 +62,7 @@ export function WeakBranchCards({
           ))}
         </div>
       ) : (
-        <p className={styles.bodyCopy}>
-          No sufficiently evidenced weak branches.
-        </p>
+        <p className={styles.bodyCopy}>No weak lines to review yet.</p>
       )}
       {message ? (
         <p role="status" className={styles.statusMessage}>

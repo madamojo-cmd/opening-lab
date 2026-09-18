@@ -43,7 +43,7 @@ export function OnboardingRouteGate({ children }: { children: ReactNode }) {
       setChecked(true);
       return;
     }
-    if (signedOutPublicPath && auth.status !== "authenticated") {
+    if (signedOutPublicPath && auth.status === "signed_out") {
       setChecked(true);
       return;
     }
@@ -82,11 +82,11 @@ export function OnboardingRouteGate({ children }: { children: ReactNode }) {
   if (
     isOnboardingV11Enabled() &&
     signedOutPublicPath &&
-    auth.status !== "authenticated"
+    auth.status === "signed_out"
   )
     return <>{children}</>;
   if (isOnboardingV11Enabled() && !exempt && auth.status === "loading")
-    return <main className="min-h-screen bg-stone-50" aria-busy="true" />;
+    return <>{children}</>;
   if (
     isOnboardingV11Enabled() &&
     !exempt &&

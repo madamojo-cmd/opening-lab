@@ -50,7 +50,7 @@ export function AuthenticatedAccountHydrationGate({
       setState("ready");
       return;
     }
-    if (signedOutPublicPath && auth.status !== "authenticated") {
+    if (signedOutPublicPath && auth.status === "signed_out") {
       setState("ready");
       return;
     }
@@ -161,7 +161,7 @@ export function AuthenticatedAccountHydrationGate({
   }, [auth.status, exempt, pathname, router, signedOutPublicPath]);
 
   if (exempt) return <>{children}</>;
-  if (signedOutPublicPath && auth.status !== "authenticated")
+  if (signedOutPublicPath && auth.status === "signed_out")
     return <>{children}</>;
   if (auth.status === "signed_out") {
     return (

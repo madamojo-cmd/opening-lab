@@ -487,9 +487,8 @@ export function Figma5303HomeScreen({
             Your training, distilled.
           </h1>
           <p className="mt-3 max-w-[720px] text-[13px] leading-[1.55] text-stone-600 max-[820px]:text-[11px]">
-            A calm daily workspace that keeps the real Tempo, Battery and
-            Blundr rings at the center without the old phone-inside-a-page
-            frame.
+            Tempo, Battery, and Daily Blundr work together in one focused
+            training system.
           </p>
         </div>
         <div className="flex gap-2 max-[820px]:hidden">
@@ -764,7 +763,7 @@ export default function Figma5303DashboardDailyReviewApp() {
           <TempoAvatar size={26} />
           <span style={{ fontFamily: G.inter, fontWeight: 900, fontSize: 20, color: G.green, letterSpacing: "-0.3px" }}>Blundr</span>
         </div>
-        <span style={{ fontFamily: G.inter, fontWeight: 400, fontSize: 12, color: G.textMuted }}>mobile prototype</span>
+        <span style={{ fontFamily: G.inter, fontWeight: 400, fontSize: 12, color: G.textMuted }}>Your training workspace</span>
       </div>
 
       {/* Screen switcher (mobile/tablet) */}

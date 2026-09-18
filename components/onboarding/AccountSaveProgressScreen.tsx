@@ -246,7 +246,7 @@ export function AccountSaveProgressScreen({
                     signing in.
                   </p>
                   <p className="mt-2 text-xs font-semibold text-stone-500">
-                    Tempo keeps your setup moving even when auth is unavailable.
+                    Your setup is saved securely as you continue.
                   </p>
                 </div>
               </div>
@@ -260,13 +260,13 @@ export function AccountSaveProgressScreen({
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
             <BlundrAssetImage
               asset={BLUNDR_TEMPO_ASSETS.sad}
-              alt="Tempo sad"
+              alt="Tempo"
               variant="tempoInline"
               className="mx-auto sm:mx-0 sm:shrink-0"
             />
             <div className="min-w-0 flex-1">
               <div className="text-xs font-black uppercase tracking-[0.18em] text-red-700">
-                Auth failed
+                Sign-in is temporarily unavailable
               </div>
               <p className="mt-2 text-sm leading-6 text-red-900">{authError}</p>
             </div>

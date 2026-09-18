@@ -6,6 +6,7 @@ const auth = vi.hoisted(() => ({
   getSession: vi.fn(),
   subscribe: vi.fn(),
   onChange: null as ((session: unknown) => void) | null,
+  onChanges: [] as Array<(session: unknown) => void>,
   unsubscribe: vi.fn(),
 }));
 const navigation = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
@@ -20,6 +21,7 @@ vi.mock("@/lib/blundr/onboarding/onboardingAuth", () => ({
   getOnboardingAuthSession: auth.getSession,
   subscribeToOnboardingAuth: (callback: (session: unknown) => void) => {
     auth.onChange = callback;
+    auth.onChanges.push(callback);
     auth.subscribe();
     return auth.unsubscribe;
   },
@@ -70,6 +72,7 @@ afterEach(() => {
   auth.subscribe.mockReset();
   auth.unsubscribe.mockReset();
   auth.onChange = null;
+  auth.onChanges = [];
   navigation.replace.mockReset();
   navigation.push.mockReset();
   mockedAuthenticatedApiFetch.mockReset();
@@ -145,6 +148,57 @@ describe("auth hydration gates", () => {
       expect(screen.getByText("Protected content")).toBeInTheDocument(),
     );
     expect(navigation.replace).not.toHaveBeenCalled();
+  });
+
+  it("suppresses the public landing until auth resolves signed out", async () => {
+    auth.getSession.mockReturnValue(new Promise(() => undefined));
+    render(
+      <OnboardingRouteGate>
+        <AuthenticatedAccountHydrationGate>
+          <p>Marketing landing</p>
+        </AuthenticatedAccountHydrationGate>
+      </OnboardingRouteGate>,
+    );
+
+    expect(screen.queryByText("Marketing landing")).not.toBeInTheDocument();
+
+    await waitFor(() => expect(auth.onChanges).toHaveLength(2));
+    await act(async () => {
+      auth.onChanges.forEach((callback) => callback(null));
+    });
+    expect(screen.getByText("Marketing landing")).toBeInTheDocument();
+  });
+
+  it("transitions from auth loading directly to the hydrated app", async () => {
+    auth.getSession.mockResolvedValue(signedInSession);
+    mockedAuthenticatedApiFetch.mockResolvedValue({
+      ok: true,
+      data: { step: "complete", completed: true },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          ok: true,
+          data: { profile: { userId: signedInSession.userId } },
+        }),
+      ),
+    );
+
+    render(
+      <OnboardingRouteGate>
+        <AuthenticatedAccountHydrationGate>
+          <p>Authenticated Home</p>
+        </AuthenticatedAccountHydrationGate>
+      </OnboardingRouteGate>,
+    );
+
+    expect(screen.queryByText("Authenticated Home")).not.toBeInTheDocument();
+    expect(screen.queryByText("Marketing landing")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByText("Authenticated Home")).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("Marketing landing")).not.toBeInTheDocument();
   });
 
   it.each(["/billing/success", "/billing/cancel"])(

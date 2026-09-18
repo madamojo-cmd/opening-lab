@@ -373,7 +373,7 @@ export function ProductionDailyBlundrScreen() {
               <Sparkles className="text-green-700" size={20} />
               <h2 className="mt-3 text-lg font-black">Deck complete</h2>
               <p className="mt-2 text-sm leading-6 text-stone-700">
-                Reserved Daily deck complete. Refresh to check for more cards.
+                You finished today’s Daily deck. Refresh to check for new cards.
               </p>
               <button
                 type="button"
@@ -481,7 +481,7 @@ export function ProductionDailyBlundrScreen() {
                   className="mt-4 rounded-[1.15rem] border border-green-200/80 bg-green-50/90 p-4"
                 >
                   <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
-                    Verified move
+                    Correct move
                   </div>
                   <div className="mt-1 text-lg font-black text-stone-950">
                     {teaching.moveSan}
@@ -495,7 +495,7 @@ export function ProductionDailyBlundrScreen() {
                     </p>
                   ) : null}
                   <p className="mt-2 text-xs text-green-800">
-                    The board shows the resulting verified position.
+                    The board now shows the position after your move.
                   </p>
                 </div>
               ) : null}

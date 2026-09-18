@@ -120,7 +120,7 @@ export function MiniGamePracticeRunner({
         kind="loading"
         eyebrow="Minigames"
         title="Loading a secure practice game."
-        copy="The server is reserving an answer-safe practice instance."
+        copy="Loading a secure practice game."
       />
     );
   if (!instance)

@@ -304,9 +304,8 @@ export function ProgressDashboard({
           <div className={styles.heroKicker}>PROGRESS</div>
           <h1 className={styles.heroTitle}>Momentum, without noise.</h1>
           <p className={styles.heroLead}>
-            The exact Daily rings remain primary, while streak consistency,
-            volume, recall quality, repertoire growth, weak areas and recent
-            activity spread cleanly across the desktop canvas.
+            Track your Daily rings, streaks, training volume, recall, repertoire
+            growth, weak areas, and recent activity in one place.
           </p>
         </div>
 
@@ -585,8 +584,8 @@ export function ProgressDashboard({
               ))
             ) : (
               <div className={styles.emptyState}>
-                Tempo has not recorded a recent activity yet. Finish one opening
-                run or Daily Blundr session and this area will fill in.
+                No recent activity yet. Finish an opening run or Daily Blundr
+                session to start tracking progress here.
               </div>
             )}
           </div>

@@ -728,7 +728,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
       setAccountActionMessage("Account deleted. On-device training is active.");
     } catch {
       setAccountActionMessage(
-        "Account deletion could not be completed. If you have an active subscription, contact billing support before trying again.",
+        "Deleting your Blundr account is permanent. We’ll also handle any active subscription before completing deletion.",
       );
     } finally {
       setAccountActionBusy(false);
@@ -762,7 +762,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
                 Account settings.
               </h1>
               <p className="mt-3 max-w-[720px] text-[13px] leading-[1.55] text-stone-600 max-[820px]:text-[11px]">
-                Manage your identity, training preferences, and daily goals.
+                Manage your account, training preferences, and daily goals.
               </p>
             </div>
             <Link href="/profile" className={styles.profileLink}>
@@ -1564,8 +1564,8 @@ export function SettingsPage({ className }: SettingsPageProps) {
                   </div>
                   <p className="mt-2 text-sm leading-6 text-stone-600">
                     Download a JSON export of first-party Blundr account,
-                    training, progress, legal, privacy, and billing-status
-                    records tied to the current authenticated session.
+                    training, progress, legal, privacy, and billing records
+                    tied to your account.
                   </p>
                   <button
                     type="button"
@@ -1586,9 +1586,8 @@ export function SettingsPage({ className }: SettingsPageProps) {
                     Delete account
                   </div>
                   <p className="mt-2 text-sm leading-6 text-stone-600">
-                    Deletion is permanent for your Blundr account. If active
-                    Stripe billing exists, Blundr attempts provider cleanup
-                    first and refuses success if that cleanup fails.
+                    Deleting your Blundr account is permanent. We’ll also handle
+                    any active subscription before completing deletion.
                   </p>
                   <label className="mt-3 grid gap-2 text-sm font-bold text-stone-700">
                     Type DELETE MY ACCOUNT
