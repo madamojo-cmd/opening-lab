@@ -30,6 +30,7 @@ export type BlundrBoardSurfaceFooterContext = {
 export type BlundrBoardSurfaceProps = {
   fen: string;
   renderConfig: BlundrBoardRenderConfig;
+  presentation?: "application" | "bare";
   disabled?: boolean;
   onMoveAttempt?: (attempt: DailyBlundrBoardMoveAttempt) => void;
   onSquareClick?: (
@@ -75,6 +76,7 @@ function squareFromCoords(
 export function BlundrBoardSurface({
   fen,
   renderConfig,
+  presentation = "application",
   disabled,
   onMoveAttempt,
   onSquareClick,
@@ -123,96 +125,112 @@ export function BlundrBoardSurface({
   const ranks = orientation === "white" ? [...board] : [...board].reverse();
   const boardAnimationClass = String(animationClassName ?? "").trim();
 
+  const boardBody = (
+    <div className="relative aspect-square w-full">
+      <VisualRecipeLayer
+        primitives={[]}
+        surfaceVisuals={boardVisuals}
+        centerFor={(square) =>
+          squareToBoardPoint(square, orientation) ?? { x: 0, y: 0 }
+        }
+      />
+      <div className="relative z-10 grid h-full w-full grid-cols-8">
+        {ranks.map((rank, rankIndex) =>
+          (orientation === "white" ? rank : [...rank].reverse()).map(
+            (piece, fileIndex) => {
+              const square = squareFromCoords(
+                fileIndex,
+                rankIndex,
+                orientation,
+              );
+              const rowIndex =
+                orientation === "white" ? rankIndex : 7 - rankIndex;
+              const colIndex =
+                orientation === "white" ? fileIndex : 7 - fileIndex;
+              const isDark = (rowIndex + colIndex) % 2 === 1;
+              const isSelected = selectedSquare === square;
+              const legalMove = legalMoves.find((move) => move.to === square);
+              const legalTargetStyle = legalMove
+                ? {
+                    background: `radial-gradient(circle, ${legalMove.captured ? "rgba(239,68,68,.38)" : "rgba(22,163,74,.46)"} 0%, ${legalMove.captured ? "rgba(239,68,68,.38)" : "rgba(22,163,74,.46)"} 18%, transparent 23%)`,
+                    boxShadow: legalMove.captured
+                      ? "inset 0 0 0 3px rgba(239,68,68,.58)"
+                      : "inset 0 0 0 2px rgba(22,163,74,.30)",
+                  }
+                : undefined;
+              return (
+                <button
+                  key={square}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => {
+                    if (disabled) return;
+                    onSquareClick?.(square, piece);
+                    if (squareClickMode) return;
+                    const outcome = resolveDailyBoardClick({
+                      fen,
+                      selectedSquare,
+                      square,
+                      piece,
+                      turn: game.turn(),
+                      squareClickMode,
+                    });
+                    setSelectedSquare(outcome.nextSelectedSquare);
+                    if (outcome.attempt) onMoveAttempt?.(outcome.attempt);
+                  }}
+                  className={`relative flex aspect-square items-center justify-center text-2xl font-black transition ${isDark ? renderConfig.theme.squareDarkClassName : renderConfig.theme.squareLightClassName} ${isSelected ? "ring-4 ring-inset ring-green-800" : ""} ${squareClickMode ? "cursor-pointer" : ""}`}
+                  aria-label={square}
+                  style={{
+                    ...(squareStyles?.[square] ?? {}),
+                    ...(legalTargetStyle ?? {}),
+                  }}
+                >
+                  <span
+                    aria-hidden
+                    className={`pointer-events-none flex h-full w-full items-center justify-center leading-none antialiased ${resolveBoardPieceTypographyClasses(renderConfig.pieceSetId)} ${piece?.color === "w" ? resolveBoardPieceToneClasses("w") : resolveBoardPieceToneClasses("b")}`}
+                    style={{
+                      fontSize: resolveBoardPieceSizeStyle(
+                        renderConfig.pieceSetId,
+                      ),
+                      transform: "translateY(-1px)",
+                    }}
+                  >
+                    {piece
+                      ? renderBoardPieceGlyph(
+                          piece.color as "w" | "b",
+                          piece.type,
+                          renderConfig.pieceSetId,
+                        )
+                      : ""}
+                  </span>
+                </button>
+              );
+            },
+          ),
+        )}
+      </div>
+    </div>
+  );
+
+  if (presentation === "bare") {
+    return (
+      <div
+        className={boardAnimationClass}
+        data-board-theme={renderConfig.boardThemeId}
+        data-piece-set={renderConfig.pieceSetId}
+      >
+        {boardBody}
+      </div>
+    );
+  }
+
   return (
     <div
       className={`overflow-hidden rounded-[1.45rem] border border-stone-200 bg-white shadow-[0_18px_42px_rgba(20,17,12,0.10)] ${boardAnimationClass}`.trim()}
       data-board-theme={renderConfig.boardThemeId}
       data-piece-set={renderConfig.pieceSetId}
     >
-      <div className="relative aspect-square w-full">
-        <VisualRecipeLayer
-          primitives={[]}
-          surfaceVisuals={boardVisuals}
-          centerFor={(square) =>
-            squareToBoardPoint(square, orientation) ?? { x: 0, y: 0 }
-          }
-        />
-        <div className="relative z-10 grid h-full w-full grid-cols-8">
-          {ranks.map((rank, rankIndex) =>
-            (orientation === "white" ? rank : [...rank].reverse()).map(
-              (piece, fileIndex) => {
-                const square = squareFromCoords(
-                  fileIndex,
-                  rankIndex,
-                  orientation,
-                );
-                const rowIndex =
-                  orientation === "white" ? rankIndex : 7 - rankIndex;
-                const colIndex =
-                  orientation === "white" ? fileIndex : 7 - fileIndex;
-                const isDark = (rowIndex + colIndex) % 2 === 1;
-                const isSelected = selectedSquare === square;
-                const legalMove = legalMoves.find((move) => move.to === square);
-                const legalTargetStyle = legalMove
-                  ? {
-                      background: `radial-gradient(circle, ${legalMove.captured ? "rgba(239,68,68,.38)" : "rgba(22,163,74,.46)"} 0%, ${legalMove.captured ? "rgba(239,68,68,.38)" : "rgba(22,163,74,.46)"} 18%, transparent 23%)`,
-                      boxShadow: legalMove.captured
-                        ? "inset 0 0 0 3px rgba(239,68,68,.58)"
-                        : "inset 0 0 0 2px rgba(22,163,74,.30)",
-                    }
-                  : undefined;
-                return (
-                  <button
-                    key={square}
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => {
-                      if (disabled) return;
-                      onSquareClick?.(square, piece);
-                      if (squareClickMode) return;
-                      const outcome = resolveDailyBoardClick({
-                        fen,
-                        selectedSquare,
-                        square,
-                        piece,
-                        turn: game.turn(),
-                        squareClickMode,
-                      });
-                      setSelectedSquare(outcome.nextSelectedSquare);
-                      if (outcome.attempt) onMoveAttempt?.(outcome.attempt);
-                    }}
-                    className={`relative flex aspect-square items-center justify-center text-2xl font-black transition ${isDark ? renderConfig.theme.squareDarkClassName : renderConfig.theme.squareLightClassName} ${isSelected ? "ring-4 ring-inset ring-green-800" : ""} ${squareClickMode ? "cursor-pointer" : ""}`}
-                    aria-label={square}
-                    style={{
-                      ...(squareStyles?.[square] ?? {}),
-                      ...(legalTargetStyle ?? {}),
-                    }}
-                  >
-                    <span
-                      aria-hidden
-                      className={`pointer-events-none flex h-full w-full items-center justify-center leading-none antialiased ${resolveBoardPieceTypographyClasses(renderConfig.pieceSetId)} ${piece?.color === "w" ? resolveBoardPieceToneClasses("w") : resolveBoardPieceToneClasses("b")}`}
-                      style={{
-                        fontSize: resolveBoardPieceSizeStyle(
-                          renderConfig.pieceSetId,
-                        ),
-                        transform: "translateY(-1px)",
-                      }}
-                    >
-                      {piece
-                        ? renderBoardPieceGlyph(
-                            piece.color as "w" | "b",
-                            piece.type,
-                            renderConfig.pieceSetId,
-                          )
-                        : ""}
-                    </span>
-                  </button>
-                );
-              },
-            ),
-          )}
-        </div>
-      </div>
+      {boardBody}
       {footer?.({ orientation, selectedSquare, squareClickMode })}
     </div>
   );

@@ -11,6 +11,7 @@ import styles from "./ProductionBoardBridge.module.css";
 export type ProductionBoardProps = {
   fen: string;
   orientation: "white" | "black";
+  presentation?: "application" | "bare";
   arrows?: readonly unknown[];
   highlightedSquares?: readonly string[];
   highlightColor?: "blue" | "green" | "amber";
@@ -124,6 +125,7 @@ function buildBoardVisuals(arrows: readonly unknown[] = []): BoardVisualUiModel 
 export function ProductionChessBoard({
   fen,
   orientation,
+  presentation,
   arrows = [],
   highlightedSquares = [],
   highlightColor = "blue",
@@ -175,6 +177,7 @@ export function ProductionChessBoard({
       <BlundrBoardSurface
         fen={fen}
         renderConfig={renderConfig}
+        presentation={presentation}
         disabled={!interactive}
         boardVisuals={boardVisuals}
         squareStyles={squareStyles}

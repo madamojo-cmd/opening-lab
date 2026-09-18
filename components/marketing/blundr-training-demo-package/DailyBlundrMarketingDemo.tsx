@@ -2,6 +2,10 @@
 
 import { useEffect, useRef, useState, type ComponentType } from "react";
 import { dailyBlundrDemo } from "./daily-blundr-demo";
+import {
+  PROTOTYPE_BOARD_FRAME_PRESETS,
+  PrototypeMarketingBoardFrame,
+} from "./shared-board-frame/PrototypeMarketingBoardFrame";
 import styles from "./DailyBlundrMarketingDemo.module.css";
 
 export type DailyMarketingBoardProps = {
@@ -20,7 +24,7 @@ type Stage = 0 | 1 | 2 | 3 | 4 | 5;
 export function DailyBlundrMarketingDemo({ Board }: Props) {
   const [stage, setStage] = useState<Stage>(0);
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [inView, setInView] = useState(true);
+  const [inView, setInView] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
   const timers = useRef<number[]>([]);
 
@@ -84,35 +88,24 @@ export function DailyBlundrMarketingDemo({ Board }: Props) {
           <p className={styles.close}>No study-plan maintenance. No random puzzle feed. Just the positions that need your attention next.</p>
         </div>
         <div className={styles.product} role="img" aria-label="Demonstration of a Daily Blundr opening review exercise.">
-          <div className={styles.boardFrame} aria-hidden="true">
-            <div className={styles.boardArea}>
-              <div className={styles.coordRanks} aria-hidden="true">
-                {["1", "2", "3", "4", "5", "6", "7", "8"].map((rank) => (
-                  <span key={rank}>{rank}</span>
-                ))}
-              </div>
-              <div className={styles.coordFiles} aria-hidden="true">
-                {["h", "g", "f", "e", "d", "c", "b", "a"].map((file) => (
-                  <span key={file}>{file}</span>
-                ))}
-              </div>
-              <div className={styles.boardSurface}>
-                <Board
-                  fen={moveVisible ? dailyBlundrDemo.completedFen : dailyBlundrDemo.startingFen}
-                  orientation="black"
-                  highlightedSquares={stage >= 1 ? ["e6", "d5"] : []}
-                  highlightColor="green"
-                  lastMove={moveVisible ? ["e6", "d5"] : null}
-                  interactive={false}
-                  animationDurationMs={reducedMotion ? 0 : 620}
-                />
-              </div>
-            </div>
-            <div className={styles.boardLabels}>
-              <span>Black at bottom</span>
-              <span>Recall the move</span>
-            </div>
-          </div>
+          <PrototypeMarketingBoardFrame
+            {...PROTOTYPE_BOARD_FRAME_PRESETS.daily}
+            board={
+              <Board
+                fen={
+                  moveVisible
+                    ? dailyBlundrDemo.completedFen
+                    : dailyBlundrDemo.startingFen
+                }
+                orientation="black"
+                highlightedSquares={stage >= 1 ? ["e6", "d5"] : []}
+                highlightColor="green"
+                lastMove={moveVisible ? ["e6", "d5"] : null}
+                interactive={false}
+                animationDurationMs={reducedMotion ? 0 : 620}
+              />
+            }
+          />
           <aside className={styles.card} aria-hidden="true">
             <div className={styles.head}><div><span>Daily Blundr</span><small>{stage === 5 ? "2" : "1"} of 12</small></div><b>Move</b></div>
             {!resultVisible ? (

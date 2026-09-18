@@ -2,6 +2,10 @@
 
 import { useEffect, useRef, useState, type ComponentType } from "react";
 import { landingOpeningDemo, type DemoArrow } from "./landing-opening-demo";
+import {
+  PROTOTYPE_BOARD_FRAME_PRESETS,
+  PrototypeMarketingBoardFrame,
+} from "./shared-board-frame/PrototypeMarketingBoardFrame";
 import styles from "./MarketingTrainingDemo.module.css";
 
 export type MarketingBoardProps = {
@@ -26,7 +30,7 @@ type Stage = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 export function MarketingTrainingDemo({ Board, tempoImageSrc }: Props) {
   const [stage, setStage] = useState<Stage>(0);
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [inView, setInView] = useState(true);
+  const [inView, setInView] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
   const timers = useRef<number[]>([]);
 
@@ -93,6 +97,17 @@ export function MarketingTrainingDemo({ Board, tempoImageSrc }: Props) {
   const lastMove: readonly [string, string] | null =
     stage >= 1 && stage <= 3 ? ["f8", "c5"] : stage >= 4 ? ["c2", "c3"] : null;
 
+  const trainingStatus: string =
+    stage === 0
+      ? "Black to move"
+      : stage <= 2
+        ? "… Bc5"
+        : stage === 3
+          ? "c3 prepares d4"
+          : stage <= 5
+            ? "4. c3"
+            : "saved for review";
+
   return (
     <section ref={sectionRef} id="training-demo" className={styles.section} aria-labelledby="training-demo-title">
       <div className={styles.inner}>
@@ -105,40 +120,28 @@ export function MarketingTrainingDemo({ Board, tempoImageSrc }: Props) {
           <p className={styles.close}>Know the opening. Understand the position. Handle the deviation.</p>
         </div>
         <div className={styles.visual} role="img" aria-label="Animated demonstration showing Blundr teaching an Italian Game continuation and adding the position to personalized review.">
-          <div className={styles.boardFrame} aria-hidden="true">
-            <div className={styles.boardHeader}>
-              <span>Opponent</span>
-              <span className={styles.toMove}>Black to move</span>
-            </div>
-            <div className={styles.boardArea}>
-              <div className={styles.afterPill}>After 3. Bc4</div>
-              <div className={styles.coordRanks} aria-hidden="true">
-                {["8", "7", "6", "5", "4", "3", "2", "1"].map((rank) => (
-                  <span key={rank}>{rank}</span>
-                ))}
+          <PrototypeMarketingBoardFrame
+            {...PROTOTYPE_BOARD_FRAME_PRESETS.training}
+            topRight={trainingStatus}
+            board={
+              <div className={styles.boardArea}>
+                <div className={styles.afterPill}>After 3. Bc4</div>
+                <Board
+                  fen={fen}
+                  orientation="white"
+                  arrows={
+                    teachingVisible ? landingOpeningDemo.teaching.arrows : []
+                  }
+                  highlightedSquares={highlightedSquares}
+                  highlightColor="blue"
+                  emphasizedSquare={stage === 2 ? "c5" : null}
+                  lastMove={lastMove}
+                  interactive={false}
+                  animationDurationMs={reducedMotion ? 0 : 620}
+                />
               </div>
-              <div className={styles.coordFiles} aria-hidden="true">
-                {["a", "b", "c", "d", "e", "f", "g", "h"].map((file) => (
-                  <span key={file}>{file}</span>
-                ))}
-              </div>
-              <Board
-                fen={fen}
-                orientation="white"
-                arrows={teachingVisible ? landingOpeningDemo.teaching.arrows : []}
-                highlightedSquares={highlightedSquares}
-                highlightColor="blue"
-                emphasizedSquare={stage === 2 ? "c5" : null}
-                lastMove={lastMove}
-                interactive={false}
-                animationDurationMs={reducedMotion ? 0 : 620}
-              />
-            </div>
-            <div className={styles.boardFooter}>
-              <span>You</span>
-              <span className={styles.footerNote}>Italian Game · White</span>
-            </div>
-          </div>
+            }
+          />
           <aside className={`${styles.cue} ${cueVisible ? styles.visible : ""}`} aria-hidden="true">
             <div className={styles.cueHead}><img src={tempoImageSrc} alt="" /><span>Tempo cue</span></div>
             <h3>{landingOpeningDemo.teaching.title}</h3>

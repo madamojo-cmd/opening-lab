@@ -11,7 +11,7 @@ const mix = (from: number, to: number, amount: number) => from + (to - from) * e
 export function DailyRingsMarketingDemo() {
   const sectionRef = useRef<HTMLElement>(null);
   const animationRef = useRef(0);
-  const [inView, setInView] = useState(true);
+  const [inView, setInView] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [display, setDisplay] = useState<DisplayState>({ tempo: 6, battery: 2, streak: 2, final: false });

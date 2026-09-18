@@ -162,7 +162,8 @@ export function MiniGamePracticeRunner({
         revision: instance.revision,
       });
       if (next) setInstance(next);
-      else setError("We couldn’t save this practice session. Please try again.");
+      else
+        setError("We couldn’t save this practice session. Please try again.");
     } catch (requestError) {
       setError(
         requestError instanceof Error && requestError.message

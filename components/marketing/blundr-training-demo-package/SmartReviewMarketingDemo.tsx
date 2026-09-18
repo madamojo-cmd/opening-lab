@@ -2,6 +2,10 @@
 
 import { useEffect, useRef, useState, type ComponentType } from "react";
 import { reviewMarketingDemo as demo } from "./review-marketing-demo";
+import {
+  PROTOTYPE_BOARD_FRAME_PRESETS,
+  PrototypeMarketingBoardFrame,
+} from "./shared-board-frame/PrototypeMarketingBoardFrame";
 import styles from "./SmartReviewMarketingDemo.module.css";
 
 export type ReviewMarketingBoardProps = {
@@ -19,7 +23,7 @@ type Stage = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
 export function SmartReviewMarketingDemo({ Board }: Props) {
   const [stage, setStage] = useState<Stage>(0);
-  const [inView, setInView] = useState(true);
+  const [inView, setInView] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
   const timers = useRef<number[]>([]);
@@ -93,36 +97,47 @@ export function SmartReviewMarketingDemo({ Board }: Props) {
         </div>
 
         <div className={styles.product} role="img" aria-label="A missed Fried Liver position is added to review, returns as the same position, and is then solved correctly.">
-          <div className={styles.boardFrame} aria-hidden="true">
-            <div className={styles.boardArea}>
-              <div className={styles.coordRanks} aria-hidden="true">
-                {["8", "7", "6", "5", "4", "3", "2", "1"].map((rank) => (
-                  <span key={rank}>{rank}</span>
-                ))}
-              </div>
-              <div className={styles.coordFiles} aria-hidden="true">
-                {["a", "b", "c", "d", "e", "f", "g", "h"].map((file) => (
-                  <span key={file}>{file}</span>
-                ))}
-              </div>
-              <div className={styles.boardSurface}>
-                <Board
-                  fen={fen}
-                  orientation="white"
-                  highlightedSquares={highlights}
-                  highlightColor={stage === 1 ? "amber" : "green"}
-                  lastMove={lastMove}
-                  interactive={false}
-                  animationDurationMs={reducedMotion ? 0 : 620}
-                />
-              </div>
-            </div>
-            <div className={styles.boardLabels}>
-              <span>White at bottom</span>
-              <span>Position under review</span>
-            </div>
-            <div className={`${styles.returned} ${replayVisible ? styles.visible : ""}`}>↻ Same position returns</div>
-          </div>
+          <PrototypeMarketingBoardFrame
+            {...PROTOTYPE_BOARD_FRAME_PRESETS.review}
+            overlayBadge={
+              <>
+                <svg
+                  aria-hidden="true"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                >
+                  <path
+                    d="M20 12a8 8 0 1 1-2.343-5.657"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M20 4v6h-6"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                <span>Same position returns</span>
+              </>
+            }
+            overlayBadgeVisible={replayVisible}
+            board={
+              <Board
+                fen={fen}
+                orientation="white"
+                highlightedSquares={highlights}
+                highlightColor={stage === 1 ? "amber" : "green"}
+                lastMove={lastMove}
+                interactive={false}
+                animationDurationMs={reducedMotion ? 0 : 620}
+              />
+            }
+          />
 
           <aside className={styles.card} aria-hidden="true">
             <div className={styles.head}><div><span>{replayVisible ? "Replay" : "Review"}</span><small>Fried Liver · Black</small></div><b>Attempt {replayVisible ? "2" : "1"}</b></div>
