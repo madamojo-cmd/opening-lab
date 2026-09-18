@@ -55,11 +55,11 @@ describe("onboarding V11 migration contract", () => {
       .filter((file) => file.endsWith(".sql"))
       .sort();
 
-    assert.equal(migrations.length, 49);
+    assert.equal(migrations.length, 50);
     assert.ok(migrations.includes(migrationFile));
     assert.equal(
       migrations.at(-1),
-      "20260914120000_blundr_wave2e_imported_game_evidence.sql",
+      "20260918130000_blundr_free_tempo_daily_limit.sql",
     );
   });
 });
