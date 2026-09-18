@@ -211,6 +211,7 @@ jobs:
             test -n "${!name:-}" || { echo "$name is required"; exit 1; }
           done
           BLUNDR_RLS_TEST_PROJECT_REF="$BLUNDR_RLS_FRESH_PROJECT_REF" npm run test:pr03-remote-authority
+          node --preserve-symlinks --import tsx tests/security/tempoDailyLimitRemoteAuthority.integration.test.ts
 
   supabase-rls-upgrade:
     needs: source-identity
@@ -318,6 +319,7 @@ jobs:
             test -n "${!name:-}" || { echo "$name is required"; exit 1; }
           done
           npm run test:pr03-remote-authority
+          node --preserve-symlinks --import tsx tests/security/tempoDailyLimitRemoteAuthority.integration.test.ts
 
   production-build:
     needs:

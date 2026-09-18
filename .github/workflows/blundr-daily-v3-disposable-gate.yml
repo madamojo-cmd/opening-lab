@@ -294,6 +294,14 @@ jobs:
           mkdir -p "$LOG_DIR"
           node --preserve-symlinks --import tsx tests/security/trainerCompletionRemoteAuthority.integration.test.ts | tee "$LOG_DIR/trainer-completion-remote-authority.log"
 
+      - id: tempo_daily_limit_remote_authority
+        name: Tempo daily limit remote authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          node --preserve-symlinks --import tsx tests/security/tempoDailyLimitRemoteAuthority.integration.test.ts | tee "$LOG_DIR/tempo-daily-limit-remote-authority.log"
+
       - id: pr01_migration_authority_regression
         name: PR-01 migration authority regression
         shell: bash
