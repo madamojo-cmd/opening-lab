@@ -8,6 +8,7 @@ import type {
   ProviderGameRecord,
 } from "./gameDataTypes";
 import type { RuntimeOpeningNode } from "@/lib/blundr/trainingRuntime/trainingRuntimeSchema";
+import { canonicalPositionFen } from "@/lib/blundr/chess/canonicalPosition";
 
 export type SegmentMatchInput = {
   game: ProviderGameRecord;
@@ -19,11 +20,18 @@ export type SegmentMatchInput = {
 export function matchOpeningSegments(
   input: SegmentMatchInput,
 ): OpeningSegmentRecord[] {
-  const byFen = new Map<string, RuntimeOpeningNode[]>();
+  const byPlayKey = new Map<string, RuntimeOpeningNode[]>();
+  const byCanonicalFen = new Map<string, RuntimeOpeningNode[]>();
   for (const node of input.nodes) {
-    const list = byFen.get(node.playKey) ?? [];
-    list.push(node);
-    byFen.set(node.playKey, list);
+    const playKeyList = byPlayKey.get(node.playKey) ?? [];
+    playKeyList.push(node);
+    byPlayKey.set(node.playKey, playKeyList);
+    if (node.canonicalFen) {
+      const key = canonicalPositionFen(node.canonicalFen);
+      const fenList = byCanonicalFen.get(key) ?? [];
+      fenList.push(node);
+      byCanonicalFen.set(key, fenList);
+    }
   }
   const segments: OpeningSegmentRecord[] = [];
   for (const ply of input.plies) {
@@ -31,11 +39,17 @@ export function matchOpeningSegments(
       .slice(0, Math.max(0, ply.ply - 1))
       .map((entry) => entry.moveUci)
       .join(",");
-    const candidates =
-      byFen.get(playKey) ??
-      byFen.get(ply.fenBefore.split(" ").slice(0, 4).join(" ")) ??
-      byFen.get(ply.fenBefore) ??
-      [];
+    const candidates = [
+      ...(byPlayKey.get(playKey) ?? []),
+      ...(byCanonicalFen.get(ply.canonicalFenBefore) ?? []),
+    ].filter(
+      (node, index, nodes) =>
+        nodes.findIndex(
+          (entry) =>
+            entry.openingId === node.openingId &&
+            entry.playKey === node.playKey,
+        ) === index,
+    );
     for (const node of candidates) {
       const side = input.game.playerColor;
       if (node.sideToMove !== side) continue;
@@ -44,6 +58,7 @@ export function matchOpeningSegments(
         input.game.fallbackFingerprint,
         node.openingId,
         side,
+        node.playKey,
       ]);
       const existing = segments.find(
         (segment) => segment.segmentId === segmentId,

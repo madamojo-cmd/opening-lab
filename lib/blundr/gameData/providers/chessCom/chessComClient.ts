@@ -66,6 +66,7 @@ export class ChessComClient {
     username: string,
     month: string,
     cursor?: Pick<ChessComArchiveCursor, "etag" | "lastModified">,
+    signal?: AbortSignal,
   ): Promise<{
     games: readonly RawProviderGame[];
     nextCursor: string | null;
@@ -74,7 +75,7 @@ export class ChessComClient {
     const response = await fetchJson(
       this.fetcher,
       `${CHESS_COM_HOST}/pub/player/${encodeURIComponent(username)}/games/${month}`,
-      { headers: chessComHeaders(cursor?.etag, cursor?.lastModified) },
+      { headers: chessComHeaders(cursor?.etag, cursor?.lastModified), signal },
     );
     if (response.status === 304)
       return { games: [], nextCursor: null, notModified: true };
@@ -96,7 +97,12 @@ export class ChessComClient {
     let count = 0;
     for (const month of months) {
       if (bounds.signal?.aborted) return;
-      const page = await this.fetchArchivePage(username, month);
+      const page = await this.fetchArchivePage(
+        username,
+        month,
+        undefined,
+        bounds.signal,
+      );
       for (const game of page.games) {
         if (count++ >= bounds.maxGames) return;
         yield game;

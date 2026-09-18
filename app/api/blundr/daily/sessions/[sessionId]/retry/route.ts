@@ -7,6 +7,7 @@ import {
   applyDailyCompletionReward,
   publicDailySession,
 } from "@/lib/blundr/daily/productionDailyService.server";
+import { ProductionDailyRepository } from "@/lib/blundr/daily/productionDailyRepository.server";
 import { classifyDailyActionHttpFailure } from "@/lib/blundr/daily/dailyActionHttp.server";
 import { emitBlundrOperationalEvent } from "@/lib/blundr/telemetry/operationalTelemetry.server";
 
@@ -50,10 +51,14 @@ export async function POST(
       userId: user.userId,
       session: result.session,
     });
+    const cardsCompletedToday = await new ProductionDailyRepository().countUniqueCompletedCardsForDate(
+      user.userId,
+      result.session.dateKey,
+    );
     return NextResponse.json({
       result: result.result,
       presentation: result.presentation,
-      session: publicDailySession(result.session),
+      session: publicDailySession(result.session, { cardsCompletedToday }),
     });
   } catch (error) {
     const failure = classifyDailyActionHttpFailure(error);

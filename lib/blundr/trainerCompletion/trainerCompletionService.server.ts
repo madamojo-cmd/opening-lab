@@ -8,6 +8,15 @@ import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAd
 import { loadOpeningAccess } from "@/lib/blundr/gameData/gameDataService";
 import type { CurrentBlundrUser } from "@/lib/blundr/accounts/accountTypes";
 import { resolveLearningAttemptAuthority } from "@/lib/blundr/learning/core/learningAttemptAuthority";
+import {
+  isTrustedProAccess,
+  FREE_DAILY_TEMPO_RUN_LIMIT,
+} from "@/lib/blundr/commercial/commercialAccess";
+import {
+  readCommercialBillingEnvironment,
+  resolveCommercialAccess,
+} from "@/lib/blundr/commercial/commercialAccess.server";
+import { getLocalDateKeyForTimeZone } from "@/lib/blundr/daily-rings/dailyRingDate";
 import { prepareLearningEventV2 } from "@/lib/blundr/learning/core/learningEventService.server";
 import {
   resolveVerifiedTrainerRuntimeLine,
@@ -31,6 +40,17 @@ function dbUnavailable(): never {
 
 function text(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+function requireValidTimeZone(value: unknown): string {
+  const timeZone = text(value);
+  if (!timeZone) throw new Error("completion_time_zone_unavailable");
+  try {
+    new Intl.DateTimeFormat("en-CA", { timeZone }).format();
+  } catch {
+    throw new Error("completion_time_zone_unavailable");
+  }
+  return timeZone;
 }
 
 function trainerRequestFingerprint(input: {
@@ -77,6 +97,47 @@ async function requireOpeningAccess(
   return snapshot;
 }
 
+async function requireTempoQuotaForReservation(
+  client: ReturnType<typeof createBlundrSupabaseAdminClient>,
+  userId: string,
+) {
+  const access = await resolveCommercialAccess({
+    userId,
+    environment: readCommercialBillingEnvironment(),
+  });
+  if (isTrustedProAccess(access)) return;
+  const profile = await client
+    .from("blundr_user_profiles")
+    .select("time_zone")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (profile.error) dbUnavailable();
+  const timeZone = requireValidTimeZone(profile.data?.time_zone);
+  const now = new Date();
+  const localDate = getLocalDateKeyForTimeZone(now, timeZone);
+  const completed = await client
+    .from("blundr_trainer_sessions_v2")
+    .select("completed_at,terminal_completion_id")
+    .eq("user_id", userId)
+    .eq("state", "completed")
+    .not("terminal_completion_id", "is", null)
+    .not("completed_at", "is", null)
+    .gte(
+      "completed_at",
+      new Date(now.valueOf() - 72 * 60 * 60 * 1000).toISOString(),
+    );
+  if (completed.error) dbUnavailable();
+  const count = (completed.data ?? []).filter(
+    (row) =>
+      getLocalDateKeyForTimeZone(
+        new Date(String(row.completed_at)),
+        timeZone,
+      ) === localDate,
+  ).length;
+  if (count >= FREE_DAILY_TEMPO_RUN_LIMIT)
+    throw new Error("free_tempo_daily_limit_reached");
+}
+
 /** Server creates the only accepted session identity. Browser session IDs are ignored. */
 export async function reserveTrainerSession(input: {
   user: CurrentBlundrUser;
@@ -109,6 +170,7 @@ export async function reserveTrainerSession(input: {
       return publicSession(resumed.data, line);
     }
   }
+  await requireTempoQuotaForReservation(client, input.user.userId);
   const serverSessionSeed = randomUUID();
   const sqlSessionId = `trainer-session:${createHash("sha256")
     .update(
@@ -323,6 +385,7 @@ export async function commitTrainerAction(input: {
       expected_version: expectedVersion,
       learning_event: prepared.event,
     },
+    p_billing_environment: readCommercialBillingEnvironment(),
   });
   if (result.error) throw new Error("trainer_action_persistence_unavailable");
   const data = result.data as Record<string, unknown> | null;

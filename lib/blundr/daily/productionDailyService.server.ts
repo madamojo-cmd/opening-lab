@@ -30,6 +30,11 @@ import { applyRewardCompletion } from "@/lib/blundr/rewards/rewardAuthority";
 import { RepertoireOpeningAccessRepository } from "@/lib/blundr/openingAccess/openingAccessRepository";
 import { getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
 import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
+import {
+  buildImportedEvidencePriorityMap,
+  shouldPromoteImportedEvidenceToDailyPriority,
+  type ImportedEvidencePriorityRecord,
+} from "@/lib/blundr/gameData/importedEvidencePriority";
 import { getServerFeatureFlags } from "@/lib/blundr/contracts/serverFeatureFlags";
 import { buildCandidateSet } from "./activities/candidateChoice/candidateSetBuilder";
 import { buildPlanRecall } from "./activities/planRecall/planQuestionBuilder";
@@ -47,6 +52,12 @@ import type { DailyReservationIdentity } from "./productionDailyTypes";
 import { runtimeSequenceToFen } from "./runtimeSequence";
 import { selectProductionDailyBoardCards } from "./productionDailyDeckSelection";
 import { resolveServerDailyTaskCount } from "./core/adaptiveDailyPolicy";
+import { loadFreeActiveOpeningPolicy } from "@/lib/blundr/commercial/activeOpenings.server";
+import {
+  readCommercialBillingEnvironment,
+  resolveCommercialAccess,
+} from "@/lib/blundr/commercial/commercialAccess.server";
+import { effectiveDailyBlundrCardGoal } from "@/lib/blundr/commercial/commercialAccess";
 
 // Request-time Daily selection uses only verified runtime data. Bound the
 // amount of chess reconstruction per reservation so a large runtime package
@@ -99,6 +110,43 @@ function dailyTaskEvidence(input: DailyTaskEvidenceInput) {
     revealOccurred: input.evidenceType === "reveal",
     evidenceType: input.evidenceType,
   };
+}
+
+function hasCompletedDailyCard(
+  session: ProductionDailySession,
+  cardFingerprint: string,
+): boolean {
+  return (
+    session.state.attempts.some(
+      (attempt) =>
+        attempt.card.cardFingerprint === cardFingerprint &&
+        attempt.outcome === "correct",
+    ) ||
+    session.state.activityProgress?.[cardFingerprint]?.status === "completed"
+  );
+}
+
+async function assertDailyCardCompletionAvailable(input: {
+  repository: ProductionDailyRepository;
+  session: ProductionDailySession;
+  userId: string;
+  cardFingerprint: string;
+  now: string;
+}): Promise<void> {
+  if (hasCompletedDailyCard(input.session, input.cardFingerprint)) return;
+  const access = await resolveCommercialAccess({
+    userId: input.userId,
+    now: input.now,
+  });
+  if (access.plan === "pro" && access.entitlementActive) return;
+  const completedToday =
+    await input.repository.countUniqueCompletedCardsForDate(
+      input.userId,
+      input.session.dateKey,
+    );
+  if (completedToday >= access.limits.dailyBlundrCards) {
+    throw new Error("daily_card_limit_reached");
+  }
 }
 
 async function dailyLearningEvent(
@@ -304,24 +352,37 @@ async function openingAccess(
         updatedAt: String(row.updated_at),
       }
     : null;
-  return new RepertoireOpeningAccessRepository(() =>
-    stored
-      ? {
-          userId: user.userId,
-          selectedStarterPackId:
-            stored.selectedStarterPackId ?? "classical_attacker",
-          unlockedOpeningIds: stored.unlockedOpeningIds,
-          lockedOpeningIds: stored.lockedOpeningIds,
-          availablePoints: stored.openingUnlockPoints,
-          lifetimePoints: stored.openingUnlockPoints,
-          spentPoints: 0,
-          nextUnlockCost: 0,
-          nextUnlockProgressPct: 0,
-          pointEvents: [],
-          unlockEvents: [],
-          updatedAt: stored.updatedAt,
-        }
-      : null,
+  const repertoireProgress = stored
+    ? {
+        userId: user.userId,
+        selectedStarterPackId:
+          stored.selectedStarterPackId ?? "classical_attacker",
+        unlockedOpeningIds: stored.unlockedOpeningIds,
+        lockedOpeningIds: stored.lockedOpeningIds,
+        availablePoints: stored.openingUnlockPoints,
+        lifetimePoints: stored.openingUnlockPoints,
+        spentPoints: 0,
+        nextUnlockCost: 0,
+        nextUnlockProgressPct: 0,
+        pointEvents: [],
+        unlockEvents: [],
+        updatedAt: stored.updatedAt,
+      }
+    : null;
+  const environment = readCommercialBillingEnvironment();
+  const commercialAccess = await resolveCommercialAccess({
+    userId: user.userId,
+    environment,
+  });
+  const policy = await loadFreeActiveOpeningPolicy({
+    userId: user.userId,
+    environment,
+    unlockedOpeningIds: repertoireProgress?.unlockedOpeningIds ?? [],
+    access: commercialAccess,
+  });
+  return new RepertoireOpeningAccessRepository(
+    () => repertoireProgress,
+    policy,
   );
 }
 
@@ -347,29 +408,63 @@ async function buildReservation(
     ]);
   }
   const weaknessScores = new Map<string, number>();
+  const importedEvidenceScores = new Map<string, number>();
   const priorityOpenings = new Set<string>();
   const priorityPositions = new Set<string>();
+  let dailyBlundrCardGoal = 10;
   for (const review of await readDueReviewKeys(user.userId, now))
     priorityPositions.add(`${review.openingId}:${review.playKey}`);
   const admin = createBlundrSupabaseAdminClient();
   if (admin) {
-    const [projectionResult, priorityResult] = await Promise.all([
-      admin
-        .from("blundr_weakness_projection")
-        .select(
-          "position_key,opening_id,play_key,score,confidence,updated_at,access_decision",
-        )
-        .eq("user_id", user.userId)
-        .eq("access_decision", "active"),
-      admin
-        .from("blundr_daily_priorities")
-        .select("opening_id,status,requested_for")
-        .eq("user_id", user.userId)
-        .in("status", ["queued", "added_today"])
-        .lte("requested_for", dateKey),
-    ]);
-    if (projectionResult.error || priorityResult.error)
+    const [projectionResult, priorityResult, profileResult, importedResult] =
+      await Promise.all([
+        admin
+          .from("blundr_weakness_projection")
+          .select(
+            "position_key,opening_id,play_key,score,confidence,updated_at,access_decision",
+          )
+          .eq("user_id", user.userId)
+          .eq("access_decision", "active"),
+        admin
+          .from("blundr_daily_priorities")
+          .select("opening_id,status,requested_for")
+          .eq("user_id", user.userId)
+          .in("status", ["queued", "added_today"])
+          .lte("requested_for", dateKey),
+        admin
+          .from("blundr_user_profiles")
+          .select("daily_blundr_card_goal")
+          .eq("user_id", user.userId)
+          .maybeSingle(),
+        admin
+          .from("blundr_learning_findings")
+          .select(
+            "position_key,opening_id,move_order_key,outcome,import_weight,updated_at,status",
+          )
+          .eq("user_id", user.userId)
+          .eq("status", "active")
+          .in("outcome", [
+            "missed_known_move",
+            "deviated_from_repertoire",
+            "followed_known_repertoire",
+            "alternate_unlocked_continuation",
+          ])
+          .order("updated_at", { ascending: false })
+          .limit(500),
+      ]);
+    if (
+      projectionResult.error ||
+      priorityResult.error ||
+      profileResult.error ||
+      importedResult.error
+    )
       throw new Error("daily_priority_projection_unavailable");
+    {
+      const parsed = Number(profileResult.data?.daily_blundr_card_goal);
+      if (Number.isFinite(parsed)) {
+        dailyBlundrCardGoal = Math.max(1, Math.min(99, Math.trunc(parsed)));
+      }
+    }
     {
       for (const projection of projectionResult.data ?? []) {
         const score = Number(projection.score);
@@ -383,6 +478,39 @@ async function buildReservation(
     }
     for (const priority of priorityResult.data ?? [])
       priorityOpenings.add(String(priority.opening_id));
+    {
+      const importedMap = buildImportedEvidencePriorityMap({
+        userId: user.userId,
+        now,
+        records: (
+          (importedResult.data ?? []) as Array<Record<string, unknown>>
+        ).map((row) => ({
+          userId: user.userId,
+          positionKey: String(row.position_key ?? ""),
+          openingId:
+            row.opening_id === null ? null : String(row.opening_id ?? ""),
+          moveOrderKey:
+            row.move_order_key === null
+              ? null
+              : String(row.move_order_key ?? ""),
+          outcome: String(
+            row.outcome ?? "",
+          ) as ImportedEvidencePriorityRecord["outcome"],
+          importWeight: Number(row.import_weight ?? 0),
+          observedAt: String(row.updated_at ?? now),
+          status: String(
+            row.status ?? "gated_pending",
+          ) as ImportedEvidencePriorityRecord["status"],
+        })),
+      });
+      for (const evidence of importedMap.values()) {
+        importedEvidenceScores.set(evidence.positionKey, evidence.boost);
+        if (shouldPromoteImportedEvidenceToDailyPriority(evidence))
+          priorityPositions.add(
+            `${evidence.openingId}:${evidence.moveOrderKey}`,
+          );
+      }
+    }
   }
   const eligibleNodes = runtime.nodes.filter((node) => {
     const availability = getStage2OpeningAvailability(node.openingId);
@@ -442,7 +570,10 @@ async function buildReservation(
         // Personalized evidence is ordered ahead of runtime fallback, but a
         // newly unlocked repertoire remains a truthful, playable Daily.
         priority:
-          weaknessScores.get(position.positionKey) ??
+          Math.max(
+            weaknessScores.get(position.positionKey) ?? 0,
+            importedEvidenceScores.get(position.positionKey) ?? 0,
+          ) ||
           (priorityPositions.has(`${node.openingId}:${node.playKey}`) ||
           priorityOpenings.has(node.openingId)
             ? 0.5
@@ -485,10 +616,10 @@ async function buildReservation(
       side: entry.side,
       why:
         entry.priority > 0.5
-          ? "This position is prioritized from a verified weakness projection."
+          ? "This position comes from an area of your repertoire that needs more work."
           : entry.priority > 0.1
-            ? "This position is prioritized from your authoritative review evidence."
-            : "This position comes from an unlocked, verified opening line.",
+            ? "This position comes from moves you have missed before."
+            : "This position comes from an unlocked opening line.",
       interaction: options?.length ? "choice" : "move",
       options,
       steps: privateSteps?.map(
@@ -529,7 +660,7 @@ async function buildReservation(
       entry,
       "daily_move_recall",
       "Missing Move",
-      "Play the missing move from this verified opening position.",
+      "Play the missing move from this opening position.",
       [primary.moveUci],
       "This move keeps the approved opening plan on track.",
     );
@@ -537,7 +668,7 @@ async function buildReservation(
     if (featureFlags.daily_plan_recall && labels.length >= 2) {
       const question = {
         type: "next_plan" as const,
-        prompt: "Which move matches the verified plan for this position?",
+        prompt: "Which move keeps your opening plan on track?",
         choices: labels.map((move) => ({
           id: move.moveUci,
           label: legalByUci.get(move.moveUci) ?? move.moveUci,
@@ -550,8 +681,7 @@ async function buildReservation(
           type: "next_plan",
           version: runtime.manifest.packageId,
         }),
-        explanation:
-          "The selected move is the verified runtime repertoire choice.",
+        explanation: "This move keeps your repertoire plan on track.",
       };
       const built = buildPlanRecall({
         openingId: entry.node.openingId,
@@ -597,9 +727,9 @@ async function buildReservation(
           entry,
           built.activityId,
           "Candidate choice",
-          "Choose the move that best preserves the verified plan.",
+          "Choose the move that best preserves your opening plan.",
           [primary.moveUci],
-          "The selected move is the verified runtime repertoire choice.",
+          "This move keeps your repertoire plan on track.",
           options,
           built.solution.acceptedIds,
         );
@@ -746,8 +876,18 @@ async function buildReservation(
 
   if (!eligibleNodes.length)
     throw new Error("daily_opening_selection_required");
-  const taskCount = resolveServerDailyTaskCount({});
-  const selected = selectProductionDailyBoardCards(cards, taskCount);
+  const desiredTaskCount = Math.max(
+    resolveServerDailyTaskCount({}),
+    effectiveDailyBlundrCardGoal(
+      dailyBlundrCardGoal,
+      await resolveCommercialAccess({ userId: user.userId }),
+    ),
+  );
+  const reservationTaskCount = Math.max(
+    1,
+    Math.min(desiredTaskCount, cards.length),
+  );
+  const selected = selectProductionDailyBoardCards(cards, reservationTaskCount);
   const deck = buildDeterministicDailyDeck({
     userId: user.userId,
     dateKey,
@@ -761,7 +901,7 @@ async function buildReservation(
       stableKey,
       cardFingerprint: publicCard.cardFingerprint,
     })),
-    limit: taskCount,
+    limit: desiredTaskCount,
   });
   const privateById = new Map(
     selected.map((entry) => [
@@ -926,6 +1066,15 @@ export async function applyDailyAction(input: {
           feedback: step.explanation,
         }).state
       : nextState;
+    if (finalStep) {
+      await assertDailyCardCompletionAvailable({
+        repository,
+        session,
+        userId: input.user.userId,
+        cardFingerprint: input.cardFingerprint,
+        now,
+      });
+    }
     const next = {
       ...session,
       state: completedState,
@@ -1073,6 +1222,15 @@ export async function applyDailyAction(input: {
           ? "Correct. The approved move keeps the opening plan on track."
           : "Recorded. Review the position and try the line again.",
   });
+  if (correct && reduced.result === "accepted") {
+    await assertDailyCardCompletionAvailable({
+      repository,
+      session,
+      userId: input.user.userId,
+      cardFingerprint: input.cardFingerprint,
+      now,
+    });
+  }
   const next = {
     ...session,
     state: reduced.state,
@@ -1162,6 +1320,7 @@ export async function applyDailyAction(input: {
 
 export function publicDailySession(
   session: ProductionDailySession,
+  options: { cardsCompletedToday?: number } = {},
 ): ProductionDailyPublicSession {
-  return toPublicDailySession(session);
+  return toPublicDailySession(session, options);
 }

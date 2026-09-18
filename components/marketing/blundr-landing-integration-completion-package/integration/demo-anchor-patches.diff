@@ -1,0 +1,3 @@
+*** MarketingTrainingDemo.tsx
+- <section ref={sectionRef} className={styles.section}
++ <section ref={sectionRef} id="training-demo" className={styles.section}

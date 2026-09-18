@@ -47,6 +47,9 @@ export type RepertoireProgress = {
   selectedStarterPackId: StarterPackId;
   unlockedOpeningIds: string[];
   lockedOpeningIds: string[];
+  commercialPlan?: "free" | "pro";
+  activeOpeningIds?: string[];
+  activeOpeningSelectionRequired?: boolean;
   availablePoints: number;
   lifetimePoints: number;
   spentPoints: number;

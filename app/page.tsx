@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from "react";
 import { Chess } from "chess.js";
 import {
   BarChart3,
@@ -53,6 +53,7 @@ import { compileVisualRecipe } from "@/lib/blundr/visualRecipe/visualRecipeCompi
 import { useVisualRecipePlayback } from "@/components/board/useVisualRecipePlayback";
 import { ProjectiveTacticalOverlay } from "@/components/board/ProjectiveTacticalOverlay";
 import { ProfileSettingsIcon } from "@/components/navigation/ProfileSettingsIcon";
+import { BlundrLandingPage } from "@/components/marketing/BlundrLandingPage";
 import { TempoDailyBlundrCard } from "@/components/daily/TempoDailyBlundrCard";
 import { ReviewTabDailyBlundrPanel } from "@/components/daily/ReviewTabDailyBlundrPanel";
 import { DailyRingsCard } from "@/components/daily-rings/DailyRingsCard";
@@ -78,6 +79,7 @@ import {
   reserveAuthoritativeTrainerSession,
   type AuthoritativeTrainerSession,
 } from "@/lib/blundr/trainerCompletion/trainerCompletionClient";
+import { loadDailyRingSnapshot } from "@/lib/blundr/daily-rings/dailyRingService";
 import { persistContinuationCheckmate } from "@/lib/blundr/continuation/continuationCheckmateClient";
 import {
   loadOpponentVariationMemory,
@@ -115,8 +117,11 @@ import { computeTrainerPresentationFrame } from "@/lib/blundr/presentation/train
 import { buildOpponentReplyFeedback } from "@/lib/blundr/presentation/opponentReplyCopy";
 import {
   resolveTrainerEvaluationDisplay,
+  resolveTrainerEvaluationBarDisplay,
   type TrainerEvaluationDisplay,
+  type TrainerEvaluationBarDisplay,
 } from "@/lib/blundr/presentation/trainerEvaluationDisplay";
+import { resolveTrainBoardWorkspaceMaxWidth } from "@/lib/blundr/presentation/trainBoardLayout";
 import {
   attributeLastMove,
   decideTrainerPhaseActionGate,
@@ -246,18 +251,26 @@ import type {
   TrainerDebugSnapshot,
 } from "@/lib/blundr/debug/trainerDebugTypes";
 import type { UserTrainingProfile } from "@/lib/blundr/accounts/accountTypes";
+import { createDefaultTrainingProfile } from "@/lib/blundr/accounts/accountDefaults";
 import {
   getLocalAccountCurrentUserId,
   getLocalTrainingProfile,
+  upsertLocalTrainingProfile,
 } from "@/lib/blundr/accounts/localAccountStorage";
+import {
+  authenticatedApiFetch,
+  AuthenticatedApiError,
+} from "@/lib/blundr/api/authenticatedApiClient";
 import { getBlundrStorageModeSetting } from "@/lib/blundr/backend/backendEnv";
 import { BLUNDR_LOCAL_DEMO_USER_ID } from "@/lib/blundr/persistence/persistenceKeys";
 import { BLUNDR_BOARD_PREFERENCES_CHANGED_EVENT } from "@/lib/blundr/board/boardPreferenceEvents";
 import {
   readLocalBoardPreferences,
+  areBoardPreferencesEquivalent,
   writeLocalBoardPreferences,
 } from "@/lib/blundr/board/boardPreferenceService";
 import { shouldShowOnboarding } from "@/lib/blundr/onboarding/onboardingRouting";
+import { useOnboardingAuthSession } from "@/lib/blundr/onboarding/useOnboardingAuthSession";
 import { getRatingBandLabel } from "@/lib/blundr/onboarding/ratingBand";
 import { loadRepertoireProgress } from "@/lib/blundr/repertoire/repertoireProgressService";
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
@@ -580,7 +593,7 @@ function buildRuntimePlaceholderRepertoires(): Repertoire[] {
     id: entry.openingId,
     name: entry.openingName,
     color: entry.side,
-    description: `Runtime-backed local crawled package line pool loading for ${entry.openingName}.`,
+    description: `Loading training lines for ${entry.openingName}…`,
     lines: [],
     runtimeLoading: true,
   }));
@@ -853,8 +866,7 @@ type BoardSettings = {
   showEvalBar: boolean;
   showCaptured: boolean;
   showOpponentCue: boolean;
-  projectiveTacticLinesEnabled: boolean;
-  projectiveTacticLabelsEnabled: boolean;
+  tacticalHighlightsEnabled: boolean;
 };
 type CapturedSummary = {
   whiteCaptured: string[];
@@ -897,9 +909,72 @@ const DEFAULT_BOARD_SETTINGS: BoardSettings = {
   showEvalBar: true,
   showCaptured: true,
   showOpponentCue: true,
-  projectiveTacticLinesEnabled: true,
-  projectiveTacticLabelsEnabled: true,
+  tacticalHighlightsEnabled: true,
 };
+function normalizeBoardSettings(value: unknown): BoardSettings {
+  const record =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  const legacyHighlightsDisabled =
+    record.projectiveTacticLinesEnabled === false ||
+    record.projectiveTacticLabelsEnabled === false;
+  return {
+    boardTheme: normalizeHomeBoardTheme(record.boardTheme ?? record.boardThemeId),
+    pieceStyle: normalizeHomeBoardPieceStyle(
+      record.pieceStyle ?? record.pieceSetId,
+    ),
+    showAttack:
+      typeof record.showAttack === "boolean"
+        ? record.showAttack
+        : DEFAULT_BOARD_SETTINGS.showAttack,
+    showDefense:
+      typeof record.showDefense === "boolean"
+        ? record.showDefense
+        : DEFAULT_BOARD_SETTINGS.showDefense,
+    showPlan:
+      typeof record.showPlan === "boolean"
+        ? record.showPlan
+        : DEFAULT_BOARD_SETTINGS.showPlan,
+    showMoveDots:
+      typeof record.showMoveDots === "boolean"
+        ? record.showMoveDots
+        : DEFAULT_BOARD_SETTINGS.showMoveDots,
+    showEvalBar:
+      typeof record.showEvalBar === "boolean"
+        ? record.showEvalBar
+        : DEFAULT_BOARD_SETTINGS.showEvalBar,
+    showCaptured:
+      typeof record.showCaptured === "boolean"
+        ? record.showCaptured
+        : DEFAULT_BOARD_SETTINGS.showCaptured,
+    showOpponentCue:
+      typeof record.showOpponentCue === "boolean"
+        ? record.showOpponentCue
+        : DEFAULT_BOARD_SETTINGS.showOpponentCue,
+    tacticalHighlightsEnabled:
+      typeof record.tacticalHighlightsEnabled === "boolean"
+        ? record.tacticalHighlightsEnabled
+        : legacyHighlightsDisabled
+          ? false
+          : DEFAULT_BOARD_SETTINGS.tacticalHighlightsEnabled,
+  };
+}
+
+function areBoardSettingsEquivalent(a: BoardSettings, b: BoardSettings): boolean {
+  return (
+    a.boardTheme === b.boardTheme &&
+    a.pieceStyle === b.pieceStyle &&
+    a.showAttack === b.showAttack &&
+    a.showDefense === b.showDefense &&
+    a.showPlan === b.showPlan &&
+    a.showMoveDots === b.showMoveDots &&
+    a.showEvalBar === b.showEvalBar &&
+    a.showCaptured === b.showCaptured &&
+    a.showOpponentCue === b.showOpponentCue &&
+    a.tacticalHighlightsEnabled === b.tacticalHighlightsEnabled
+  );
+}
 function isHomeDefaultBoardTheme(theme: BoardTheme): boolean {
   return theme === "default" || theme === "classic" || theme === "slate";
 }
@@ -2966,6 +3041,9 @@ function BlundrApp({
     useState<RepertoireProgress>(() =>
       loadRepertoireProgress({ userId: getLocalAccountCurrentUserId() }),
     );
+  const [dailyRingSnapshot, setDailyRingSnapshot] = useState(() =>
+    loadDailyRingSnapshot({ userId: getLocalAccountCurrentUserId() }),
+  );
   const [latestCompletionResult, setLatestCompletionResult] =
     useState<DailyRingCompletionResultLike | null>(null);
   const [customRepertoires, setCustomRepertoires] = useState<Repertoire[]>([]);
@@ -3046,6 +3124,11 @@ function BlundrApp({
   const [boardSettings, setBoardSettings] = useState<BoardSettings>(
     DEFAULT_BOARD_SETTINGS,
   );
+  const [boardEvaluationStatus, setBoardEvaluationStatus] = useState<
+    "idle" | "pending" | "ready" | "unavailable"
+  >("idle");
+  const [boardEvaluationDisplay, setBoardEvaluationDisplay] =
+    useState<TrainerEvaluationDisplay | null>(null);
   const [ratingFilter, setRatingFilter] = useState(
     () => getStage2RatingBandByFilterValue(DEFAULT_STAGE2_RATING_BAND_ID).value,
   );
@@ -3094,7 +3177,7 @@ function BlundrApp({
     [],
   );
   const [thinkingStep, setThinkingStep] = useState<ThinkingStep>("idle");
-  const [pipelineNote, setPipelineNote] = useState("Ready");
+  const [pipelineNote, setPipelineNote] = useState("Cue prepared.");
   const [visualReady, setVisualReady] = useState(false);
   const [brain, setBrain] = useState<LiveBrain>({
     ratingLabel: "Club",
@@ -3382,6 +3465,8 @@ function BlundrApp({
   const opponentReplyTimeoutRef = useRef<number | null>(null);
   const brainAbortRef = useRef<AbortController | null>(null);
   const visualAbortRef = useRef<AbortController | null>(null);
+  const boardEvaluationAbortRef = useRef<AbortController | null>(null);
+  const boardEvaluationSeqRef = useRef(0);
   useEffect(() => {
     setBlundrDebugEnabled(isBlundrDebugEnabled());
   }, []);
@@ -3411,6 +3496,11 @@ function BlundrApp({
       clearProjectiveTacticOverlay("feature_disabled");
     return () => clearProjectiveTacticOverlay("unmount");
   }, []);
+  useEffect(() => {
+    if (!PROJECTIVE_TACTICS_ENABLED || !boardSettings.tacticalHighlightsEnabled) {
+      clearProjectiveTacticOverlay("feature_disabled");
+    }
+  }, [boardSettings.tacticalHighlightsEnabled]);
   useEffect(() => {
     if (shouldClearProjectiveTacticsOnViewMode(trainerView))
       clearProjectiveTacticOverlay("view_mode_switch");
@@ -3584,10 +3674,17 @@ function BlundrApp({
         authoritativeTrainerSessionRef.current = session;
         setAuthoritativeTrainerSession(session);
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) return;
         authoritativeTrainerSessionRef.current = null;
         setAuthoritativeTrainerSession(null);
+        if (
+          error instanceof AuthenticatedApiError &&
+          error.code === "free_tempo_daily_limit_reached"
+        ) {
+          router.push("/billing/upgrade");
+          return;
+        }
         pushRuntimeCriticalIssue("trainer_session_persistence_unavailable");
       });
     return () => {
@@ -7502,8 +7599,20 @@ function BlundrApp({
   const mistakes = Object.values(progress.mistakes).sort(
     (a, b) => b.count - a.count,
   );
-  const cpWhite = evalForWhite(engineLines[0]?.cp, game.turn() as ChessColor);
-  const evaluationDisplay = resolveTrainerEvaluationDisplay(cpWhite);
+  const evaluationBarDisplay = resolveTrainerEvaluationBarDisplay({
+    enabled: boardSettings.showEvalBar,
+    confirmedEvaluation: boardEvaluationDisplay,
+    state:
+      trainingMode === "continuation" &&
+      userExplicitlyEnteredContinuation &&
+      continuationAnalysisStatus === "error"
+        ? "unavailable"
+        : boardEvaluationStatus === "unavailable"
+          ? "unavailable"
+          : boardEvaluationStatus === "ready"
+            ? "ready"
+            : "pending",
+  });
   const captured = capturedSummary(game);
   const adaptiveOpeningMoveHistoryUci = (
     buildRuntimePlayKeyBeforeFromSanHistory(moveHistory) ?? ""
@@ -7962,6 +8071,41 @@ function BlundrApp({
         ariaLabel: `Last move rating: ${lastContinuationUserMoveRating?.visibleBadgeLabel ?? "Best"}`,
       }
     : null;
+  const coachCardFooter = adaptiveOpeningIdentity ? (
+    <div className="space-y-3">
+      <div className="text-[10px] font-black uppercase tracking-[0.18em] text-green-100/75">
+        Opening context
+      </div>
+      <div
+        className={classNames(
+          "grid gap-2",
+          adaptiveOpeningIdentity.opponentOpeningName
+            ? "md:grid-cols-2"
+            : "grid-cols-1",
+        )}
+      >
+        <div className="rounded-[16px] bg-white/10 px-3 py-2">
+          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-green-100/75">
+            OPENING
+          </div>
+          <div className="mt-1 text-sm font-black leading-5 text-white">
+            {adaptiveOpeningIdentity.openingFamilyName ??
+              adaptiveOpeningIdentity.currentOpeningName}
+          </div>
+        </div>
+        {adaptiveOpeningIdentity.opponentOpeningName ? (
+          <div className="rounded-[16px] bg-white/10 px-3 py-2">
+            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-green-100/75">
+              OPPONENT
+            </div>
+            <div className="mt-1 text-sm font-black leading-5 text-white">
+              {adaptiveOpeningIdentity.opponentOpeningName}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  ) : null;
 
   const isReviewingHistory = historyIndex < positionHistory.length - 1;
   const selectedLegalMoves =
@@ -7975,17 +8119,18 @@ function BlundrApp({
   const projectiveTacticDisplay = useMemo(
     () =>
       resolveProjectiveTacticDisplay({
-        enabled: PROJECTIVE_TACTICS_ENABLED,
+        enabled:
+          PROJECTIVE_TACTICS_ENABLED &&
+          boardSettings.tacticalHighlightsEnabled,
         viewMode: trainerView,
         visuals: projectiveTacticVisuals,
-        showLines: boardSettings.projectiveTacticLinesEnabled,
-        showLabels: boardSettings.projectiveTacticLabelsEnabled,
+        showLines: boardSettings.tacticalHighlightsEnabled,
+        showLabels: boardSettings.tacticalHighlightsEnabled,
       }),
     [
       trainerView,
       projectiveTacticVisuals,
-      boardSettings.projectiveTacticLinesEnabled,
-      boardSettings.projectiveTacticLabelsEnabled,
+      boardSettings.tacticalHighlightsEnabled,
     ],
   );
   const projectiveTacticsVisualPriorityActive =
@@ -8254,16 +8399,18 @@ function BlundrApp({
   }
   function showProjectiveTacticOverlay(visuals: ProjectiveTacticVisual[]) {
     const filtered = filterProjectiveTacticsForViewMode({
-      enabled: PROJECTIVE_TACTICS_ENABLED,
+      enabled:
+        PROJECTIVE_TACTICS_ENABLED && boardSettings.tacticalHighlightsEnabled,
       viewMode: trainerView,
       visuals,
     });
     const display = resolveProjectiveTacticDisplay({
-      enabled: PROJECTIVE_TACTICS_ENABLED,
+      enabled:
+        PROJECTIVE_TACTICS_ENABLED && boardSettings.tacticalHighlightsEnabled,
       viewMode: trainerView,
       visuals: filtered,
-      showLines: boardSettings.projectiveTacticLinesEnabled,
-      showLabels: boardSettings.projectiveTacticLabelsEnabled,
+      showLines: boardSettings.tacticalHighlightsEnabled,
+      showLabels: boardSettings.tacticalHighlightsEnabled,
     });
     if (!filtered.length || !display.shouldRender) {
       clearProjectiveTacticOverlay(
@@ -8479,18 +8626,7 @@ function BlundrApp({
     if (savedSettings)
       try {
         const parsed = JSON.parse(savedSettings);
-        const canonicalBoardPreferences =
-          readLocalBoardPreferences(localStorage);
-        setBoardSettings({
-          ...DEFAULT_BOARD_SETTINGS,
-          ...parsed,
-          boardTheme: normalizeHomeBoardTheme(
-            canonicalBoardPreferences.boardThemeId,
-          ),
-          pieceStyle: normalizeHomeBoardPieceStyle(
-            canonicalBoardPreferences.pieceSetId,
-          ),
-        });
+        setBoardSettings(normalizeBoardSettings(parsed));
       } catch {}
     if (savedTelemetry)
       try {
@@ -8535,6 +8671,20 @@ function BlundrApp({
     const currentUserId = getLocalAccountCurrentUserId();
     const profile = getLocalTrainingProfile(currentUserId);
     setOnboardingProfile(profile);
+    if (
+      profile &&
+      typeof profile.tacticalHighlightsEnabled === "boolean"
+    ) {
+      setBoardSettings((current) =>
+        current.tacticalHighlightsEnabled ===
+        profile.tacticalHighlightsEnabled
+          ? current
+          : {
+              ...current,
+              tacticalHighlightsEnabled: profile.tacticalHighlightsEnabled,
+            },
+      );
+    }
     if (profile) {
       setRatingFilter(
         getStage2RatingBandForAccountRatingBand(profile.ratingBandId).value,
@@ -8584,6 +8734,18 @@ function BlundrApp({
     [customRepertoires],
   );
   useEffect(() => {
+    let existingBoardSettings: BoardSettings | null = null;
+    try {
+      const raw = localStorage.getItem("blundr-board-settings");
+      existingBoardSettings = raw ? normalizeBoardSettings(JSON.parse(raw)) : null;
+    } catch {
+      existingBoardSettings = null;
+    }
+
+    if (existingBoardSettings && areBoardSettingsEquivalent(boardSettings, existingBoardSettings)) {
+      return;
+    }
+
     const currentPreferences = readLocalBoardPreferences(localStorage);
     const nextPreferences: BlundrBoardPreferences = {
       ...currentPreferences,
@@ -8596,7 +8758,28 @@ function BlundrApp({
       pieceSetId: normalizeHomeBoardPieceStyle(boardSettings.pieceStyle),
       updatedAt: nowIso(),
     };
+    if (areBoardPreferencesEquivalent(currentPreferences, nextPreferences)) {
+      return;
+    }
     writeLocalBoardPreferences(nextPreferences, localStorage);
+    try {
+      const parsed = existingBoardSettings ? { ...existingBoardSettings } : {};
+      localStorage.setItem(
+        "blundr-board-settings",
+        JSON.stringify({
+          ...parsed,
+          ...boardSettings,
+          boardTheme: boardSettings.boardTheme,
+          pieceStyle: boardSettings.pieceStyle,
+          boardThemeId: nextPreferences.boardThemeId,
+          pieceSetId: nextPreferences.pieceSetId,
+          showCoordinates: nextPreferences.showCoordinates,
+          boardOrientation: nextPreferences.boardOrientation,
+          source: nextPreferences.source,
+          updatedAt: nextPreferences.updatedAt,
+        }),
+      );
+    } catch {}
   }, [boardSettings]);
   useEffect(
     () => localStorage.setItem("blundr-stage2-rating-band", rating.id),
@@ -8613,26 +8796,23 @@ function BlundrApp({
   useEffect(() => {
     if (typeof window === "undefined") return;
     const handleBoardPreferencesChanged = () => {
-      const canonical = readLocalBoardPreferences(window.localStorage);
-      const nextTheme = normalizeHomeBoardTheme(canonical.boardThemeId);
-      const nextPiece = normalizeHomeBoardPieceStyle(canonical.pieceSetId);
-      setBoardSettings((current) => {
-        if (
-          current.boardTheme === nextTheme &&
-          current.pieceStyle === nextPiece
-        ) {
-          return current;
-        }
-        return {
-          ...current,
-          boardTheme: nextTheme,
-          pieceStyle: nextPiece,
-        };
-      });
+      try {
+        const raw = window.localStorage.getItem("blundr-board-settings");
+        if (!raw) return;
+        const nextBoardSettings = normalizeBoardSettings(JSON.parse(raw));
+        setBoardSettings((current) =>
+          areBoardSettingsEquivalent(current, nextBoardSettings)
+            ? current
+            : nextBoardSettings,
+        );
+      } catch {}
     };
     const handleRingRefresh = () => {
       setRepertoireProgress(
         loadRepertoireProgress({ userId: getLocalAccountCurrentUserId() }),
+      );
+      setDailyRingSnapshot(
+        loadDailyRingSnapshot({ userId: getLocalAccountCurrentUserId() }),
       );
     };
     window.addEventListener("storage", handleBoardPreferencesChanged);
@@ -8908,6 +9088,143 @@ function BlundrApp({
     }));
     setOverlayClearedOnPhaseChange(true);
   }, [fen]);
+  useEffect(() => {
+    const currentFen = normalizeFen(fen);
+    const currentEvaluationPreview =
+      enginePreview &&
+      normalizeFen(enginePreview.fen) === currentFen &&
+      enginePreview.pvs.length > 0
+        ? enginePreview
+        : null;
+    const currentEvaluationDisplay = currentEvaluationPreview
+      ? resolveTrainerEvaluationDisplay(
+          evalForWhite(currentEvaluationPreview.pvs[0]?.cp, game.turn() as ChessColor),
+        )
+      : null;
+
+    if (!boardSettings.showEvalBar || activeTab !== "train") {
+      boardEvaluationAbortRef.current?.abort();
+      boardEvaluationAbortRef.current = null;
+      boardEvaluationSeqRef.current += 1;
+      setBoardEvaluationStatus("idle");
+      return;
+    }
+
+    if (currentEvaluationPreview) {
+      boardEvaluationAbortRef.current?.abort();
+      boardEvaluationAbortRef.current = null;
+      boardEvaluationSeqRef.current += 1;
+      setBoardEvaluationDisplay((prev) =>
+        prev &&
+        currentEvaluationDisplay &&
+        prev.label === currentEvaluationDisplay.label &&
+        prev.whitePercent === currentEvaluationDisplay.whitePercent &&
+        prev.blackPercent === currentEvaluationDisplay.blackPercent
+          ? prev
+          : currentEvaluationDisplay,
+      );
+      setBoardEvaluationStatus("ready");
+      return;
+    }
+
+    if (
+      trainingMode === "continuation" &&
+      userExplicitlyEnteredContinuation
+    ) {
+      boardEvaluationAbortRef.current?.abort();
+      boardEvaluationAbortRef.current = null;
+      boardEvaluationSeqRef.current += 1;
+      setBoardEvaluationStatus(
+        continuationAnalysisStatus === "error" ? "unavailable" : "pending",
+      );
+      return;
+    }
+
+    const cacheKey = `${currentFen}|${rating.skill}|10`;
+    const cached = continuationEngineCacheRef.current[cacheKey];
+    if (cached && normalizeFen(cached.fen) === currentFen && cached.pvs.length) {
+      boardEvaluationAbortRef.current?.abort();
+      boardEvaluationAbortRef.current = null;
+      boardEvaluationSeqRef.current += 1;
+      setEnginePreview(cached);
+      const cachedDisplay = resolveTrainerEvaluationDisplay(
+        evalForWhite(cached.pvs[0]?.cp, game.turn() as ChessColor),
+      );
+      setBoardEvaluationDisplay((prev) =>
+        prev &&
+        cachedDisplay &&
+        prev.label === cachedDisplay.label &&
+        prev.whitePercent === cachedDisplay.whitePercent &&
+        prev.blackPercent === cachedDisplay.blackPercent
+          ? prev
+          : cachedDisplay,
+      );
+      setBoardEvaluationStatus("ready");
+      return;
+    }
+
+    boardEvaluationAbortRef.current?.abort();
+    const controller = new AbortController();
+    boardEvaluationAbortRef.current = controller;
+    const requestSeq = ++boardEvaluationSeqRef.current;
+    setBoardEvaluationStatus("pending");
+
+    void runBrowserStockfish(fen, rating.skill, 700, 10, controller.signal)
+      .then((result) => {
+        if (
+          controller.signal.aborted ||
+          requestSeq !== boardEvaluationSeqRef.current ||
+          normalizeFen(fenRef.current) !== currentFen
+        ) {
+          return;
+        }
+        if (!result?.pvs?.length) {
+          setBoardEvaluationStatus("unavailable");
+          return;
+        }
+        const next = { fen, pvs: result.pvs, source: result.source };
+        const nextDisplay = resolveTrainerEvaluationDisplay(
+          evalForWhite(next.pvs[0]?.cp, game.turn() as ChessColor),
+        );
+        continuationEngineCacheRef.current[cacheKey] = next;
+        setEnginePreview(next);
+        setBoardEvaluationDisplay((prev) =>
+          prev &&
+          nextDisplay &&
+          prev.label === nextDisplay.label &&
+          prev.whitePercent === nextDisplay.whitePercent &&
+          prev.blackPercent === nextDisplay.blackPercent
+            ? prev
+            : nextDisplay,
+        );
+        setBoardEvaluationStatus("ready");
+      })
+      .catch(() => {
+        if (
+          controller.signal.aborted ||
+          requestSeq !== boardEvaluationSeqRef.current ||
+          normalizeFen(fenRef.current) !== currentFen
+        ) {
+          return;
+        }
+        setBoardEvaluationStatus("unavailable");
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [
+    activeTab,
+    boardSettings.showEvalBar,
+    continuationAnalysisStatus,
+    enginePreview?.fen,
+    enginePreview?.pvs?.length,
+    fen,
+    game.turn(),
+    rating.skill,
+    trainingMode,
+    userExplicitlyEnteredContinuation,
+  ]);
   useEffect(() => {
     if (activeTab !== "train") return;
     if (trainingMode !== "continuation") {
@@ -9416,7 +9733,9 @@ function BlundrApp({
           return;
         }
         const message =
-          error instanceof Error ? error.message : "Visual model failed";
+          error instanceof Error
+            ? error.message
+            : "Something went wrong while preparing the training view. Please try again.";
         setVisualDebugSnapshot((prev) => ({
           ...prev,
           error: message,
@@ -9453,7 +9772,7 @@ function BlundrApp({
         ? continuationAnalysisStatus === "analyzing"
           ? "Analyzing continuation candidate."
           : "Continuation candidate ready."
-        : "Teaching cue ready.",
+        : "Cue prepared.",
     );
     setBrain((p) => ({
       ...p,
@@ -9479,7 +9798,7 @@ function BlundrApp({
       moveQuality?.status === "verified_top1" ||
       moveQuality?.status === "verified_top2"
     ) {
-      setPipelineNote("Teaching cue ready.");
+      setPipelineNote("Cue prepared.");
       return;
     }
     if (moveQuality?.status === "rejected") {
@@ -13464,8 +13783,8 @@ function BlundrApp({
     );
   }
   return (
-    <main className="blundr-page-bg min-h-screen text-stone-950">
-      <div className="mx-auto flex min-h-screen max-w-md flex-col px-4 pb-24 pt-5">
+    <main className="w-full text-stone-950">
+      <div className="mx-auto flex w-full max-w-[1340px] flex-col pb-24">
         {isActiveTab(activeTab, "home") && (
           <section className="space-y-5">
             <header className="rounded-[2rem] border border-stone-200 bg-white p-4 shadow-sm">
@@ -13644,13 +13963,16 @@ function BlundrApp({
           </section>
         )}
         {activeTab === "train" && (
-          <section className="space-y-4">
-            <header className="flex items-start justify-between gap-3">
+          <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(340px,400px)] lg:items-start">
+            <header className="flex items-end justify-between gap-6 lg:col-span-2 max-[820px]:items-start">
               <div>
-                <h1 className="text-xl font-bold tracking-tight">
-                  {repertoire.name}
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-green-800">
+                  Train · {repertoire.name}
+                </div>
+                <h1 className="mt-3 text-[34px] font-black leading-[1.05] tracking-[-0.05em] text-stone-950 max-[820px]:text-[27px]">
+                  Find the move.
                 </h1>
-                <p className="text-sm font-semibold text-green-700">
+                <p className="mt-3 max-w-[720px] text-[13px] leading-[1.55] text-stone-600 max-[820px]:text-[11px]">
                   {trainingMode === "restricted"
                     ? "Restricted trainer"
                     : "Continuation"}{" "}
@@ -13668,6 +13990,7 @@ function BlundrApp({
                 </button>
               </div>
             </header>
+            <div data-train-board-column className="flex min-h-0 flex-col gap-4">
             {blundrDebugEnabled && (
               <>
                 <LiveBrain brain={brain} />
@@ -13688,7 +14011,16 @@ function BlundrApp({
                 />
               </>
             )}
-            <div className="rounded-3xl bg-white p-3 shadow-sm">
+            <div
+              data-train-board-workspace
+              className="w-full max-w-none rounded-none border-0 bg-transparent p-0 shadow-none sm:rounded-[22px] sm:border sm:border-stone-200/80 sm:bg-white/90 sm:p-3 sm:shadow-[0_16px_36px_rgba(16,20,17,0.07)] sm:max-w-[var(--train-board-workspace-max-width)]"
+              style={
+                {
+                  "--train-board-workspace-max-width":
+                    "min(100%, calc(100dvh - 16rem))",
+                } as CSSProperties
+              }
+            >
               {blundrDebugEnabled && (
                 <div className="mb-3 grid grid-cols-4 gap-2">
                   {RATING_PRESETS.map((p) => (
@@ -13707,7 +14039,7 @@ function BlundrApp({
                   ))}
                 </div>
               )}
-              <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
                 {blundrDebugEnabled && (
                   <button
                     onClick={() => setActiveBoard(!activeBoard)}
@@ -13717,42 +14049,10 @@ function BlundrApp({
                         ? "bg-stone-950 text-white"
                         : "bg-stone-100 text-stone-600",
                     )}
-                  >
-                    Active Board {activeBoard ? "ON" : "OFF"}
-                  </button>
+                    >
+                      Active Board {activeBoard ? "ON" : "OFF"}
+                    </button>
                 )}
-                <PipelineStatus step={thinkingStep} note={pipelineNote} />
-              </div>
-              <div className="mb-3 rounded-2xl bg-stone-50 p-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => handleTrainerViewChange("assisted")}
-                    className={classNames(
-                      "rounded-full px-3 py-2 text-xs font-black",
-                      trainerView === "assisted"
-                        ? "bg-green-700 text-white"
-                        : "bg-white text-stone-600 ring-1 ring-stone-200",
-                    )}
-                  >
-                    Assisted
-                  </button>
-                  <button
-                    onClick={() => handleTrainerViewChange("plain")}
-                    className={classNames(
-                      "rounded-full px-3 py-2 text-xs font-black",
-                      trainerView === "plain"
-                        ? "bg-green-700 text-white"
-                        : "bg-white text-stone-600 ring-1 ring-stone-200",
-                    )}
-                  >
-                    Plain
-                  </button>
-                </div>
-                <p className="mt-2 text-[11px] font-semibold text-stone-500">
-                  {trainerView === "assisted"
-                    ? "Shows the visual pattern cue before the move."
-                    : "Hides pre-move hints for independent recall."}
-                </p>
               </div>
               {blundrDebugEnabled && activeBoard && enabledViews.length > 0 && (
                 <div
@@ -13793,30 +14093,61 @@ function BlundrApp({
                 projectiveTacticShowLines={projectiveTacticDisplay.showLines}
                 projectiveTacticShowLabels={projectiveTacticDisplay.showLabels}
                 onSquareTap={handleSquareTap}
-                evaluation={evaluationDisplay}
+                evaluationBar={evaluationBarDisplay}
                 settings={boardSettings}
                 captured={captured}
                 userColor={userColor}
                 animationName={visualAnimationName}
-                adaptiveOpeningIdentity={adaptiveOpeningIdentity}
                 pendingPromotion={pendingPromotion}
                 onPromotionSelect={handlePromotionPieceSelection}
                 onPromotionCancel={cancelPromotionSelection}
               />
-              <HistoryControls
-                index={historyIndex}
-                total={positionHistory.length}
-                lessonProgress={
-                  trainingMode === "restricted"
-                    ? selectedRuntimeLineLearnerProgress
-                    : null
-                }
-                onBack={() => jumpHistory(-1)}
-                onForward={() => jumpHistory(1)}
-              />
+              <div className="px-3 sm:px-0">
+                <HistoryControls
+                  index={historyIndex}
+                  total={positionHistory.length}
+                  lessonProgress={
+                    trainingMode === "restricted"
+                      ? selectedRuntimeLineLearnerProgress
+                      : null
+                  }
+                  onBack={() => jumpHistory(-1)}
+                  onForward={() => jumpHistory(1)}
+                />
+              </div>
+              </div>
             </div>
-            {showDetails && (
-              <div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm">
+            <aside data-train-aside className="flex min-h-0 flex-col gap-4">
+              <section className="rounded-[22px] border border-stone-200/80 bg-white/90 p-3 shadow-[0_16px_36px_rgba(16,20,17,0.07)]">
+                <div className="rounded-full bg-white p-1 shadow-sm ring-1 ring-stone-200">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => handleTrainerViewChange("assisted")}
+                      className={classNames(
+                        "rounded-full px-3 py-2 text-xs font-black",
+                        trainerView === "assisted"
+                          ? "bg-green-700 text-white"
+                          : "bg-white text-stone-600 ring-1 ring-stone-200",
+                      )}
+                    >
+                      Assisted
+                    </button>
+                    <button
+                      onClick={() => handleTrainerViewChange("plain")}
+                      className={classNames(
+                        "rounded-full px-3 py-2 text-xs font-black",
+                        trainerView === "plain"
+                          ? "bg-green-700 text-white"
+                          : "bg-white text-stone-600 ring-1 ring-stone-200",
+                      )}
+                    >
+                      Plain
+                    </button>
+                  </div>
+                </div>
+              </section>
+              {showDetails && (
+                <div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm">
                 <div className="font-black text-stone-800">Coach Debug</div>
                 <div className="mt-2">coachMode: {coachDecision.mode}</div>
                 <div>coachAction: {coachDecision.action}</div>
@@ -14318,17 +14649,73 @@ function BlundrApp({
                 </div>
               </div>
             ) : surfaceCoachCardDecision?.shouldShowCoachCard ? (
-              <CoachCard
-                key={`${trainerFrameId}:surface:${convergedVisibleSurface.targetUci ?? "no-target"}`}
-                decision={surfaceCoachCardDecision}
-                onAction={handleCoachAction}
-                replayEnabled={
-                  visualRecipePlayback.replayAvailable &&
-                  trainerView !== "plain"
-                }
-                surfaceActions={v28CoachUiModel?.actions}
-                topRightBadge={continuationRatingBadge}
-              />
+              <div className="space-y-3">
+                <CoachCard
+                  key={`${trainerFrameId}:surface:${convergedVisibleSurface.targetUci ?? "no-target"}`}
+                  decision={surfaceCoachCardDecision}
+                  onAction={handleCoachAction}
+                  replayEnabled={
+                    visualRecipePlayback.replayAvailable &&
+                    trainerView !== "plain"
+                  }
+                  surfaceActions={v28CoachUiModel?.actions}
+                  topRightBadge={continuationRatingBadge}
+                  footer={coachCardFooter}
+                />
+                <section className="rounded-[22px] border border-stone-200/80 bg-white/90 p-4 shadow-[0_16px_34px_rgba(16,20,17,0.07)]">
+                  <h2 className="text-lg font-black tracking-[-0.03em] text-stone-950">
+                    Session
+                  </h2>
+                  <p className="mt-1 text-xs leading-5 text-stone-500">
+                    Authoritative daily rings for this training run.
+                  </p>
+                  <div className="mt-4 grid gap-2 text-xs font-black sm:grid-cols-2 lg:grid-cols-1">
+                    <div className="rounded-2xl bg-stone-50 px-3 py-3 text-stone-700">
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-green-700">
+                        Tempo
+                      </div>
+                      <div className="mt-2 flex items-end justify-between gap-3">
+                        <div className="text-base font-black text-stone-950">
+                          {dailyRingSnapshot.tempo.current}/
+                          {dailyRingSnapshot.tempo.target}
+                        </div>
+                        <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-stone-500 ring-1 ring-stone-200">
+                          {dailyRingSnapshot.tempo.percent}%
+                        </span>
+                      </div>
+                    </div>
+                    <div className="rounded-2xl bg-stone-50 px-3 py-3 text-stone-700">
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-green-700">
+                        Battery
+                      </div>
+                      <div className="mt-2 flex items-end justify-between gap-3">
+                        <div className="text-base font-black text-stone-950">
+                          {dailyRingSnapshot.battery.current}/
+                          {dailyRingSnapshot.battery.target}
+                        </div>
+                        <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-stone-500 ring-1 ring-stone-200">
+                          {dailyRingSnapshot.battery.percent}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4 rounded-2xl border border-stone-200 bg-[#fbfcf7] px-4 py-3">
+                    <div className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">
+                      Run context
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-stone-600">
+                      <span className="rounded-full bg-white px-2 py-1 ring-1 ring-stone-200">
+                        {accountRatingBandLabel}
+                      </span>
+                      <span className="rounded-full bg-white px-2 py-1 ring-1 ring-stone-200">
+                        {trainingMode === "restricted"
+                          ? "Restricted"
+                          : "Continuation"}
+                      </span>
+                    </div>
+                  </div>
+                </section>
+              </div>
             ) : null}
             {showDetails && visualRecipe && (
               <div className="rounded-3xl border border-stone-200 bg-white/95 p-4 text-xs font-semibold text-stone-500 shadow-sm">
@@ -14691,6 +15078,7 @@ function BlundrApp({
                 </div>
               </div>
             </div>
+            </aside>
           </section>
         )}
         {isActiveTab(activeTab, "review") && (
@@ -14789,7 +15177,19 @@ function BlundrApp({
   );
 }
 
-export default BlundrApp;
+export default function HomePage({
+  initialTab = "home",
+  initialOpeningId = null,
+}: {
+  initialTab?: Tab;
+  initialOpeningId?: string | null;
+} = {}) {
+  const auth = useOnboardingAuthSession();
+  if (initialTab === "home" && initialOpeningId === null && auth.status !== "authenticated") {
+    return <BlundrLandingPage />;
+  }
+  return <BlundrApp initialTab={initialTab} initialOpeningId={initialOpeningId} />;
+}
 
 function boardThemeClasses(theme: BoardTheme, isDark: boolean) {
   if (theme === "blue") return isDark ? "bg-sky-700" : "bg-sky-100";
@@ -14814,12 +15214,11 @@ function TapChessboard({
   projectiveTacticShowLines,
   projectiveTacticShowLabels,
   onSquareTap,
-  evaluation,
+  evaluationBar,
   settings,
   captured,
   userColor,
   animationName,
-  adaptiveOpeningIdentity,
   pendingPromotion,
   onPromotionSelect,
   onPromotionCancel,
@@ -14835,12 +15234,11 @@ function TapChessboard({
   projectiveTacticShowLines: boolean;
   projectiveTacticShowLabels: boolean;
   onSquareTap: (s: string) => void;
-  evaluation: TrainerEvaluationDisplay | null;
+  evaluationBar: TrainerEvaluationBarDisplay | null;
   settings: BoardSettings;
   captured: CapturedSummary;
   userColor: ChessColor;
   animationName?: string;
-  adaptiveOpeningIdentity: AdaptiveOpeningIdentity | null;
   pendingPromotion: PendingPromotion | null;
   onPromotionSelect: (piece: PromotionPiece) => void;
   onPromotionCancel: () => void;
@@ -14860,30 +15258,45 @@ function TapChessboard({
   const topColor: ChessColor = userColor === "w" ? "b" : "w";
   const bottomColor = userColor;
   return (
-    <div className="mx-auto w-full max-w-[450px]">
+    <div
+      className="mx-auto w-full max-w-none sm:max-w-[var(--train-board-unit-max-width)]"
+      style={
+        {
+          "--train-board-unit-max-width": resolveTrainBoardWorkspaceMaxWidth(
+            settings.showEvalBar,
+          ),
+        } as CSSProperties
+      }
+    >
       {settings.showCaptured ? (
-        <CapturedStrip
-          color={topColor}
-          captured={
-            topColor === "w" ? captured.blackCaptured : captured.whiteCaptured
-          }
-          advantage={
-            captured.materialAdvantage.side === topColor
-              ? captured.materialAdvantage.value
-              : 0
-          }
-          label="Opponent"
-          settings={settings}
-        />
+        <div className="px-3 sm:px-0">
+          <CapturedStrip
+            color={topColor}
+            captured={
+              topColor === "w" ? captured.blackCaptured : captured.whiteCaptured
+            }
+            advantage={
+              captured.materialAdvantage.side === topColor
+                ? captured.materialAdvantage.value
+                : 0
+            }
+            label="Opponent"
+            settings={settings}
+          />
+        </div>
       ) : null}
-      <div className="flex items-stretch gap-2">
-        {settings.showEvalBar && evaluation ? (
-          <EvalBar evaluation={evaluation} />
+      <div data-train-board-bleed className="train-board-mobile-bleed">
+        {settings.showEvalBar ? (
+          <EvalBar display={evaluationBar} orientation="horizontal" />
         ) : null}
-        <div className="flex-1 rounded-[28px] bg-white p-3 shadow-xl shadow-stone-300/40 ring-1 ring-stone-200">
+        <div className="flex items-stretch gap-0 sm:gap-1.5">
+          {settings.showEvalBar ? (
+            <EvalBar display={evaluationBar} orientation="vertical" />
+          ) : null}
+          <div className="flex-1 rounded-none bg-white p-0 shadow-none ring-0 sm:rounded-[24px] sm:p-2 sm:shadow-xl sm:shadow-stone-300/40 sm:ring-1 sm:ring-stone-200">
           <div
             className={classNames(
-              "relative aspect-square w-full overflow-hidden rounded-[18px] border border-stone-300 bg-stone-200",
+              "relative aspect-square w-full overflow-hidden rounded-none border-0 bg-stone-200 sm:rounded-[18px] sm:border sm:border-stone-300",
               visualAnimationClass(animationName),
             )}
           >
@@ -15042,45 +15455,24 @@ function TapChessboard({
           </div>
         </div>
       </div>
-      {settings.showCaptured ? (
-        <CapturedStrip
-          color={bottomColor}
-          captured={
-            bottomColor === "w"
-              ? captured.blackCaptured
-              : captured.whiteCaptured
-          }
-          advantage={
-            captured.materialAdvantage.side === bottomColor
-              ? captured.materialAdvantage.value
-              : 0
-          }
-          label="You"
-          settings={settings}
-        />
-      ) : null}
-      <AdaptiveOpeningIdentityBadge identity={adaptiveOpeningIdentity} />
-    </div>
-  );
-}
-
-function AdaptiveOpeningIdentityBadge({
-  identity,
-}: {
-  identity: AdaptiveOpeningIdentity | null;
-}) {
-  if (!identity) return null;
-  const openingName = identity.openingFamilyName ?? identity.currentOpeningName;
-  return (
-    <div className="mx-1 mt-2 rounded-2xl border border-stone-200 bg-white/90 px-3 py-2 text-xs leading-5 text-stone-600 shadow-sm">
-      <div>
-        <span className="font-black text-stone-900">Opening: </span>
-        {openingName}
       </div>
-      {identity.opponentOpeningName ? (
-        <div>
-          <span className="font-black text-stone-900">Opponent: </span>
-          {identity.opponentOpeningName}
+      {settings.showCaptured ? (
+        <div className="px-3 sm:px-0">
+          <CapturedStrip
+            color={bottomColor}
+            captured={
+              bottomColor === "w"
+                ? captured.blackCaptured
+                : captured.whiteCaptured
+            }
+            advantage={
+              captured.materialAdvantage.side === bottomColor
+                ? captured.materialAdvantage.value
+                : 0
+            }
+            label="You"
+            settings={settings}
+          />
         </div>
       ) : null}
     </div>
@@ -15129,32 +15521,143 @@ function CapturedStrip({
   );
 }
 
-function EvalBar({ evaluation }: { evaluation: TrainerEvaluationDisplay }) {
-  return (
-    <div className="flex w-14 shrink-0 flex-col gap-2">
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-stone-950 shadow-sm ring-1 ring-stone-200">
-        <div
-          className="flex items-center justify-center bg-stone-950 text-[10px] font-black text-white transition-all duration-500"
-          style={{ height: `${evaluation.blackPercent}%`, minHeight: "8%" }}
-        >
-          {evaluation.blackPercent > 34 ? (
-            <span className="rotate-90 tracking-tight">Black</span>
-          ) : null}
+function EvalBar({
+  display,
+  orientation,
+}: {
+  display: TrainerEvaluationBarDisplay | null;
+  orientation: "horizontal" | "vertical";
+}) {
+  const nextDisplay = display ?? ({ state: "pending", label: "—" } as const);
+  const nextBarDisplay = nextDisplay as TrainerEvaluationBarDisplay;
+  const hasBar =
+    typeof nextBarDisplay.whitePercent === "number" &&
+    typeof nextBarDisplay.blackPercent === "number";
+  const barDisplay = hasBar
+    ? (nextBarDisplay as TrainerEvaluationBarDisplay & {
+        whitePercent: number;
+        blackPercent: number;
+      })
+    : null;
+  const isMuted = nextDisplay.state !== "ready";
+  const accessibleLabel = `Advantage evaluation: ${nextDisplay.label}`;
+  const compactLabel = compactEvaluationLabel(nextDisplay.label);
+
+  if (orientation === "horizontal") {
+    return (
+      <div
+        data-eval-bar-mobile
+        aria-label={accessibleLabel}
+        className="flex items-center gap-2 px-3 pb-1.5 sm:hidden"
+      >
+        <div className="min-w-[4.5rem] text-[11px] font-black leading-none text-stone-700">
+          {nextDisplay.label}
         </div>
         <div
-          className="flex items-center justify-center bg-stone-50 text-[10px] font-black text-stone-950 transition-all duration-500"
-          style={{ height: `${evaluation.whitePercent}%`, minHeight: "8%" }}
+          className={classNames(
+            "relative h-[6px] min-w-0 flex-1 overflow-hidden rounded-full ring-1 ring-stone-200",
+            hasBar ? "bg-stone-950" : "bg-stone-200",
+          )}
         >
-          {evaluation.whitePercent > 34 ? (
-            <span className="-rotate-90 tracking-tight">White</span>
+          {barDisplay ? (
+            <div className="flex h-full w-full">
+              <div
+                className={classNames(
+                  "h-full transition-all duration-500",
+                  isMuted ? "bg-stone-900/90" : "bg-stone-950",
+                )}
+                style={{
+                  width: `${barDisplay.blackPercent}%`,
+                  minWidth: "8%",
+                }}
+              />
+              <div
+                className={classNames(
+                  "h-full transition-all duration-500",
+                  isMuted ? "bg-stone-50/90" : "bg-stone-50",
+                )}
+                style={{
+                  width: `${barDisplay.whitePercent}%`,
+                  minWidth: "8%",
+                }}
+              />
+            </div>
+          ) : (
+            <div className="h-full w-full bg-stone-200" />
+          )}
+          {barDisplay && nextDisplay.state !== "ready" ? (
+            <span className="absolute right-1 top-1/2 h-1 w-1 -translate-y-1/2 rounded-full bg-stone-500/70" />
           ) : null}
         </div>
       </div>
-      <div className="rounded-xl bg-white px-1 py-1 text-center text-[9px] font-black leading-3 text-stone-700 shadow-sm ring-1 ring-stone-200">
-        {evaluation.label}
+    );
+  }
+
+  return (
+    <div
+      data-eval-bar-desktop
+      aria-label={accessibleLabel}
+      className="hidden w-5 shrink-0 flex-col gap-1 sm:flex sm:w-6"
+      title={nextDisplay.label}
+    >
+      <div
+        className={classNames(
+          "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl shadow-sm ring-1 ring-stone-200",
+          hasBar ? "bg-stone-950" : "bg-stone-100",
+        )}
+      >
+        {barDisplay ? (
+          <>
+            <div
+              className={classNames(
+                "transition-all duration-500",
+                isMuted ? "bg-stone-900/90" : "bg-stone-950",
+              )}
+              style={{
+                height: `${barDisplay.blackPercent}%`,
+                minHeight: "8%",
+              }}
+            >
+            </div>
+            <div
+              className={classNames(
+                "transition-all duration-500",
+                isMuted ? "bg-stone-50/90" : "bg-stone-50",
+              )}
+              style={{
+                height: `${barDisplay.whitePercent}%`,
+                minHeight: "8%",
+              }}
+            >
+            </div>
+          </>
+        ) : (
+          <div className="flex h-full items-center justify-center px-1 text-center text-[10px] font-black uppercase tracking-[0.14em] text-stone-500">
+            {nextDisplay.label}
+          </div>
+        )}
+        {barDisplay && nextDisplay.state !== "ready" ? (
+          <div className="absolute inset-x-0 bottom-1 flex justify-center">
+            <span className="h-1 w-1 rounded-full bg-white/75 shadow-[0_0_0_1px_rgba(0,0,0,.12)]" />
+          </div>
+        ) : null}
+      </div>
+      <div className="rounded-lg bg-white px-0.5 py-1 text-center text-[8px] font-black leading-none text-stone-700 shadow-sm ring-1 ring-stone-200">
+        {compactLabel}
       </div>
     </div>
   );
+}
+
+function compactEvaluationLabel(label: string) {
+  if (label.startsWith("White +")) return `+${label.slice("White +".length)}`;
+  if (label.startsWith("Black +")) return `-${label.slice("Black +".length)}`;
+  if (label === "Equal") return "0.0";
+  if (label === "White mate") return "M";
+  if (label === "Black mate") return "-M";
+  if (label === "Updating") return "…";
+  if (label === "Unavailable") return "—";
+  return label;
 }
 
 function temporalGateColor(line: ActiveLine, transient: boolean) {
@@ -15381,15 +15884,22 @@ function SettingsPanel({
   onClose,
 }: {
   settings: BoardSettings;
-  setSettings: (s: BoardSettings) => void;
+  setSettings: Dispatch<SetStateAction<BoardSettings>>;
   rating: Stage2RatingBand;
   ratingBandLabel: string;
   onClose: () => void;
 }) {
+  const [tacticalBusy, setTacticalBusy] = useState(false);
+  const [tacticalMessage, setTacticalMessage] = useState<string | null>(null);
+
   const update = <K extends keyof BoardSettings>(
     key: K,
     value: BoardSettings[K],
-  ) => setSettings({ ...settings, [key]: value });
+  ) =>
+    setSettings((previous) => ({
+      ...previous,
+      [key]: value,
+    }));
   const toggle = (
     key: keyof Pick<
       BoardSettings,
@@ -15400,10 +15910,58 @@ function SettingsPanel({
       | "showEvalBar"
       | "showCaptured"
       | "showOpponentCue"
-      | "projectiveTacticLinesEnabled"
-      | "projectiveTacticLabelsEnabled"
+      | "tacticalHighlightsEnabled"
     >,
-  ) => setSettings({ ...settings, [key]: !settings[key] });
+  ) =>
+    setSettings((previous) => ({
+      ...previous,
+      [key]: !previous[key],
+    }));
+
+  async function persistTacticalHighlightsEnabled(next: boolean) {
+    setTacticalBusy(true);
+    setTacticalMessage(null);
+    try {
+      const response = await authenticatedApiFetch<{
+        ok: true;
+        data: UserTrainingProfile;
+      }>("/api/blundr/account/preferences", {
+        method: "PATCH",
+        body: JSON.stringify({
+          tacticalHighlightsEnabled: next,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }),
+      });
+      upsertLocalTrainingProfile(response.data);
+      setTacticalMessage("Saved to your account.");
+      return true;
+    } catch (error) {
+      if (
+        error instanceof AuthenticatedApiError &&
+        error.code === "authentication_required"
+      ) {
+        const userId = getLocalAccountCurrentUserId();
+        const current =
+          getLocalTrainingProfile(userId) ?? createDefaultTrainingProfile(userId);
+        upsertLocalTrainingProfile({
+          ...current,
+          userId,
+          tacticalHighlightsEnabled: next,
+          updatedAt: nowIso(),
+        });
+        setTacticalMessage("Saved on this device.");
+        return true;
+      }
+      setTacticalMessage(
+        error instanceof AuthenticatedApiError
+          ? error.message
+          : "Tactical highlight preference could not be saved.",
+      );
+      return false;
+    } finally {
+      setTacticalBusy(false);
+    }
+  }
   const OptionButton = ({
     active,
     label,
@@ -15436,8 +15994,7 @@ function SettingsPanel({
       | "showEvalBar"
       | "showCaptured"
       | "showOpponentCue"
-      | "projectiveTacticLinesEnabled"
-      | "projectiveTacticLabelsEnabled"
+      | "tacticalHighlightsEnabled"
     >;
     label: string;
   }) => (
@@ -15535,16 +16092,47 @@ function SettingsPanel({
               <Toggle id="showCaptured" label="Captured pieces" />
               <Toggle id="showOpponentCue" label="Show Last Opponent Move" />
               {PROJECTIVE_TACTICS_ENABLED ? (
-                <>
-                  <Toggle
-                    id="projectiveTacticLinesEnabled"
-                    label="Tactic lines"
-                  />
-                  <Toggle
-                    id="projectiveTacticLabelsEnabled"
-                    label="Tactic labels"
-                  />
-                </>
+                <button
+                  type="button"
+                  disabled={tacticalBusy}
+                  onClick={async () => {
+                    const next = !settings.tacticalHighlightsEnabled;
+                    setSettings((previous) => ({
+                      ...previous,
+                      tacticalHighlightsEnabled: next,
+                    }));
+                    const ok = await persistTacticalHighlightsEnabled(next);
+                    if (!ok) {
+                      setSettings((previous) => ({
+                        ...previous,
+                        tacticalHighlightsEnabled: !next,
+                      }));
+                    }
+                  }}
+                  className={classNames(
+                    "col-span-2 rounded-2xl px-3 py-3 text-left text-sm font-black",
+                    tacticalBusy && "cursor-not-allowed opacity-60",
+                    settings.tacticalHighlightsEnabled
+                      ? "bg-green-50 text-green-800"
+                      : "bg-stone-100 text-stone-500",
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Tactical highlights</span>
+                    <span>
+                      {settings.tacticalHighlightsEnabled ? "ON" : "OFF"}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs font-semibold leading-5 text-current/70">
+                    Show visual cues when Blundr detects tactical patterns such
+                    as forks and pins.
+                  </p>
+                  {tacticalMessage ? (
+                    <p className="mt-2 text-xs font-semibold text-current/70" role="status">
+                      {tacticalMessage}
+                    </p>
+                  ) : null}
+                </button>
               ) : null}
             </div>
           </div>
@@ -15562,13 +16150,13 @@ function SettingsPanel({
 
 function PipelineStatus({ step, note }: { step: ThinkingStep; note: string }) {
   const labels: Record<ThinkingStep, string> = {
-    idle: "Ready",
+    idle: "Live",
     facts: "Analyzing",
     engine: "Engine",
     brain: "Blundr Brain",
     "gpt-receive": "Receiving",
     "visual-update": "Updating",
-    ready: "Ready",
+    ready: "Live",
     error: "Error",
   };
   const tone =

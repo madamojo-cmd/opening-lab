@@ -2,12 +2,18 @@
 
 import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
 import { normalizeStarterPackId } from "@/lib/blundr/accounts/accountDefaults";
+import { getLocalDateKeyForTimeZone } from "@/lib/blundr/daily-rings/dailyRingDate";
 import { getDefaultStarterPack } from "@/lib/blundr/onboarding/starterPacks";
 import { getStage2OpeningAvailability } from "@/lib/blundr/openings/openingAvailability";
 import {
   getNextUnlockCost,
   getUnlockProgressPct,
 } from "@/lib/blundr/repertoire/repertoireUnlockCurve";
+import { resolveCommercialAccess } from "@/lib/blundr/commercial/commercialAccess.server";
+import {
+  effectiveDailyBlundrCardGoal,
+  isTrustedProAccess,
+} from "@/lib/blundr/commercial/commercialAccess";
 import type { BlundrProgressSummary } from "./progressTypes";
 
 type Row = Record<string, unknown>;
@@ -30,10 +36,10 @@ function addDays(dateKey: string, offset: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function dayFromTimestamp(value: unknown): string {
+function dayFromTimestamp(value: unknown, timeZone?: string | null): string {
   const parsed = new Date(String(value ?? ""));
   return Number.isFinite(parsed.valueOf())
-    ? parsed.toISOString().slice(0, 10)
+    ? getLocalDateKeyForTimeZone(parsed, timeZone)
     : "";
 }
 
@@ -53,6 +59,91 @@ function ensureQuery(result: { error: unknown }, label: string): void {
   if (result.error) throw new Error(`progress_${label}_unavailable`);
 }
 
+async function loadDailyCardsCompletedToday(input: {
+  admin: ReturnType<typeof createBlundrSupabaseAdminClient>;
+  userId: string;
+  todayDateKey: string;
+}): Promise<number> {
+  const { admin, userId, todayDateKey } = input;
+  if (!admin) throw new Error("progress_persistence_unavailable");
+
+  const decksResult = await admin
+    .from("blundr_daily_decks")
+    .select("deck_id")
+    .eq("user_id", userId)
+    .eq("local_date", todayDateKey);
+  if (decksResult.error) throw new Error("progress_daily_decks_unavailable");
+
+  const deckIds = (decksResult.data ?? [])
+    .map((row: Row) => String(row.deck_id ?? "").trim())
+    .filter(Boolean);
+  if (!deckIds.length) return 0;
+
+  const sessionsQuery = admin
+    .from("blundr_daily_sessions")
+    .select("session_id,deck_id")
+    .eq("user_id", userId);
+  const sessionsResult =
+    deckIds.length === 1
+      ? await sessionsQuery.eq("deck_id", deckIds[0])
+      : await sessionsQuery.in("deck_id", deckIds);
+  if (sessionsResult.error)
+    throw new Error("progress_daily_sessions_unavailable");
+
+  const sessionIds = (sessionsResult.data ?? [])
+    .map((row: Row) => String(row.session_id ?? "").trim())
+    .filter(Boolean);
+  if (!sessionIds.length) return 0;
+
+  const evidenceResult = await admin
+    .from("blundr_daily_task_evidence_v3")
+    .select("card_fingerprint,session_id,outcome")
+    .eq("user_id", userId)
+    .eq("outcome", "correct")
+    .in("session_id", sessionIds);
+  if (evidenceResult.error)
+    throw new Error("progress_daily_task_evidence_unavailable");
+
+  return Array.from(
+    new Set(
+      (evidenceResult.data ?? [])
+        .map((row: Row) => String(row.card_fingerprint ?? "").trim())
+        .filter(Boolean),
+    ),
+  ).length;
+}
+
+async function loadReservedDailyCardTarget(input: {
+  admin: ReturnType<typeof createBlundrSupabaseAdminClient>;
+  userId: string;
+  todayDateKey: string;
+}): Promise<number | null> {
+  const { admin, userId, todayDateKey } = input;
+  if (!admin) throw new Error("progress_persistence_unavailable");
+
+  const deckResult = await admin
+    .from("blundr_daily_decks")
+    .select("deck_id,public_cards")
+    .eq("user_id", userId)
+    .eq("local_date", todayDateKey)
+    .maybeSingle();
+  if (deckResult.error) throw new Error("progress_daily_decks_unavailable");
+  if (!deckResult.data) return null;
+
+  const sessionResult = await admin
+    .from("blundr_daily_sessions")
+    .select("session_id")
+    .eq("user_id", userId)
+    .eq("deck_id", String((deckResult.data as Row).deck_id ?? ""))
+    .maybeSingle();
+  if (sessionResult.error)
+    throw new Error("progress_daily_sessions_unavailable");
+  if (!sessionResult.data) return null;
+
+  const publicCards = (deckResult.data as Row).public_cards;
+  return Array.isArray(publicCards) ? Math.max(1, publicCards.length) : null;
+}
+
 export async function loadDurableProgressSummary(input: {
   userId: string;
   todayDateKey: string;
@@ -63,8 +154,13 @@ export async function loadDurableProgressSummary(input: {
   const week = Array.from({ length: 7 }, (_, index) =>
     addDays(input.todayDateKey, index - 6),
   );
+  const recentDays = Array.from({ length: 28 }, (_, index) =>
+    addDays(input.todayDateKey, index - 27),
+  );
   const weekStart = week[0];
+  const recentStart = recentDays[0];
   const weekStartIso = `${weekStart}T00:00:00.000Z`;
+  const recentStartIso = `${recentStart}T00:00:00.000Z`;
 
   const [
     profile,
@@ -81,7 +177,7 @@ export async function loadDurableProgressSummary(input: {
     admin
       .from("blundr_user_profiles")
       .select(
-        "daily_tempo_goal,daily_battery_goal,daily_blundr_goal,selected_starter_pack_id",
+        "daily_tempo_goal,daily_battery_goal,daily_blundr_goal,daily_blundr_card_goal,selected_starter_pack_id,time_zone",
       )
       .eq("user_id", input.userId)
       .maybeSingle(),
@@ -105,7 +201,7 @@ export async function loadDurableProgressSummary(input: {
         "local_date,daily_tempo_goal,daily_tempo_progress,daily_tempo_completed,daily_battery_goal,daily_battery_progress,daily_battery_completed,daily_blundr_goal,daily_blundr_progress,daily_blundr_completed,all_rings_closed,xp_earned,opening_points_earned,updated_at",
       )
       .eq("user_id", input.userId)
-      .gte("local_date", weekStart)
+      .gte("local_date", recentStart)
       .lte("local_date", input.todayDateKey),
     admin
       .from("blundr_completion_grants")
@@ -134,7 +230,7 @@ export async function loadDurableProgressSummary(input: {
       .from("blundr_daily_attempts")
       .select("attempt_id,created_at,outcome,first_attempt")
       .eq("user_id", input.userId)
-      .gte("created_at", weekStartIso),
+      .gte("created_at", recentStartIso),
     admin
       .from("blundr_minigame_instances")
       .select("instance_id,mini_game_id,first_attempt,updated_at")
@@ -171,8 +267,29 @@ export async function loadDurableProgressSummary(input: {
   const attemptRows = (dailyAttempts.data ?? []) as Row[];
   const minigameRows = (minigames.data ?? []) as Row[];
   const rewardRows = (rewardRolls.data ?? []) as Row[];
+  const timeZone = String(profileRow.time_zone ?? "").trim() || null;
+  const commercialAccess = await resolveCommercialAccess({
+    userId: input.userId,
+  });
+  const hasPremiumProgress = isTrustedProAccess(commercialAccess);
   const today =
     dayRows.find((row) => String(row.local_date) === input.todayDateKey) ?? {};
+  const [cardsCompletedToday, reservedDailyCardTarget] = await Promise.all([
+    loadDailyCardsCompletedToday({
+      admin,
+      userId: input.userId,
+      todayDateKey: input.todayDateKey,
+    }),
+    loadReservedDailyCardTarget({
+      admin,
+      userId: input.userId,
+      todayDateKey: input.todayDateKey,
+    }),
+  ]);
+  const dailyBlundrCardGoal = effectiveDailyBlundrCardGoal(
+    Number(reservedDailyCardTarget ?? profileRow.daily_blundr_card_goal) || 10,
+    commercialAccess,
+  );
 
   const ring = (
     id: "daily_tempo" | "daily_battery" | "daily_blundr",
@@ -198,9 +315,23 @@ export async function loadDurableProgressSummary(input: {
   const rings = [
     ring("daily_tempo", "Daily Tempo", "daily_tempo", 10),
     ring("daily_battery", "Daily Battery", "daily_battery", 3),
-    ring("daily_blundr", "Daily Blundr", "daily_blundr", 1),
+    {
+      ringId: "daily_blundr" as const,
+      label: "Daily Blundr",
+      progress: cardsCompletedToday,
+      goal: dailyBlundrCardGoal,
+      percent: Math.min(
+        100,
+        Math.round(
+          (Math.min(cardsCompletedToday, dailyBlundrCardGoal) /
+            dailyBlundrCardGoal) *
+            100,
+        ),
+      ),
+      closed: cardsCompletedToday >= dailyBlundrCardGoal,
+    },
   ];
-  const todayClosed = Boolean(today.all_rings_closed);
+  const todayClosed = rings.every((item) => item.closed);
 
   const grantOn = (row: Row, date: string, source?: string) =>
     String(row.local_date) === date && (!source || row.source === source);
@@ -208,7 +339,28 @@ export async function loadDurableProgressSummary(input: {
     const day = dayRows.find((row) => String(row.local_date) === localDate);
     const reviewCount = countBy(
       attemptRows,
-      (row) => dayFromTimestamp(row.created_at) === localDate,
+      (row) => dayFromTimestamp(row.created_at, timeZone) === localDate,
+    );
+    const completionCount = countBy(
+      grantRows,
+      (row) => String(row.local_date) === localDate,
+    );
+    return {
+      localDate,
+      label: localDate.slice(5),
+      hasTraining:
+        completionCount > 0 ||
+        reviewCount > 0 ||
+        Boolean(day?.all_rings_closed),
+      allRingsClosed: Boolean(day?.all_rings_closed),
+      reviewCount,
+    };
+  });
+  const recentDayGrid = recentDays.map((localDate) => {
+    const day = dayRows.find((row) => String(row.local_date) === localDate);
+    const reviewCount = countBy(
+      attemptRows,
+      (row) => dayFromTimestamp(row.created_at, timeZone) === localDate,
     );
     const completionCount = countBy(
       grantRows,
@@ -233,7 +385,7 @@ export async function loadDurableProgressSummary(input: {
       ["move_correct", "move_incorrect"].includes(String(row.taxonomy)),
   );
   const todayAttempts = firstAttemptTrain.filter(
-    (row) => dayFromTimestamp(row.occurred_at) === input.todayDateKey,
+    (row) => dayFromTimestamp(row.occurred_at, timeZone) === input.todayDateKey,
   );
   const correct = countBy(
     todayAttempts,
@@ -305,12 +457,12 @@ export async function loadDurableProgressSummary(input: {
   );
   const reviewToday = countBy(
     attemptRows,
-    (row) => dayFromTimestamp(row.created_at) === input.todayDateKey,
+    (row) => dayFromTimestamp(row.created_at, timeZone) === input.todayDateKey,
   );
   const minigamesToday = countBy(
     minigameRows,
     (row) =>
-      dayFromTimestamp(row.updated_at) === input.todayDateKey &&
+      dayFromTimestamp(row.updated_at, timeZone) === input.todayDateKey &&
       Boolean(row.first_attempt),
   );
 
@@ -337,7 +489,7 @@ export async function loadDurableProgressSummary(input: {
     recentActivity.push({
       key: "daily",
       title: "Daily Blundr",
-      message: "Today’s durable review deck is complete.",
+      message: "Today's Daily deck is complete.",
       localDate: input.todayDateKey,
       href: "/daily",
       tone: "positive",
@@ -346,7 +498,7 @@ export async function loadDurableProgressSummary(input: {
     recentActivity.push({
       key: "review",
       title: "Review attempts",
-      message: `${reviewToday} durable review attempt${reviewToday === 1 ? "" : "s"} today.`,
+      message: `${reviewToday} review attempt${reviewToday === 1 ? "" : "s"} today.`,
       localDate: input.todayDateKey,
       href: "/review",
       tone: "neutral",
@@ -365,7 +517,7 @@ export async function loadDurableProgressSummary(input: {
   if (grantRows.some((row) => row.source === "daily_blundr_deck_completed"))
     milestones.push({
       title: "Daily Blundr complete",
-      message: "You completed a durable Daily Blundr session this week.",
+      message: "You completed Daily Blundr this week.",
     });
   if (number(streakRow.total_all_rings_closed_days) > 0)
     milestones.push({
@@ -381,7 +533,7 @@ export async function loadDurableProgressSummary(input: {
     milestones.push({
       title: "Start here",
       message:
-        "Finish an opening run and Daily Blundr session to establish your first milestone.",
+        "Finish an opening run and complete Daily Blundr to establish your first milestone.",
     });
 
   const summary: BlundrProgressSummary = {
@@ -405,6 +557,7 @@ export async function loadDurableProgressSummary(input: {
       totalAllRingsClosedDays: number(streakRow.total_all_rings_closed_days),
       daysTrainedThisWeek: countBy(weekGrid, (day) => day.hasTraining),
       week: weekGrid,
+      recentDays: recentDayGrid,
     },
     trainingVolume: {
       openingRunsToday: openingToday,
@@ -423,7 +576,9 @@ export async function loadDurableProgressSummary(input: {
         (row) => row.source === "daily_blundr_deck_completed",
       ),
       reviewAttemptsToday: reviewToday,
-      reviewAttemptsWeek: attemptRows.length,
+      reviewAttemptsWeek: countBy(attemptRows, (row) =>
+        week.includes(dayFromTimestamp(row.created_at, timeZone)),
+      ),
       minigamesToday,
       minigamesWeek: countBy(minigameRows, (row) => Boolean(row.first_attempt)),
     },
@@ -445,13 +600,17 @@ export async function loadDurableProgressSummary(input: {
       nextUnlockProgressPct: getUnlockProgressPct(unlockShape),
       mostTrainedOpeningId,
       mostTrainedOpeningName: openingName(mostTrainedOpeningId),
-      recommendedOpeningId,
-      recommendedOpeningName: openingName(recommendedOpeningId),
+      recommendedOpeningId: hasPremiumProgress ? recommendedOpeningId : null,
+      recommendedOpeningName: hasPremiumProgress
+        ? openingName(recommendedOpeningId)
+        : null,
     },
     weakAreas: {
-      items: weakItems,
-      message: weakItems.length
-        ? "Tempo is using durable misses to rank the lines that need attention."
+      items: hasPremiumProgress ? weakItems : [],
+      message: !hasPremiumProgress
+        ? "Upgrade to Blundr Pro to see weak-area and mastery intelligence."
+        : weakItems.length
+        ? "Tempo is using your saved misses to rank the lines that need attention."
         : "Complete a few unaided positions and Tempo will surface your weakest lines here.",
     },
     milestones,
@@ -469,7 +628,7 @@ export async function loadDurableProgressSummary(input: {
     {
       title: "Start Daily Blundr",
       href: "/daily",
-      description: "Work through today’s server-owned review loop.",
+      description: "Work through today's saved Daily deck.",
     },
     {
       title: "Review Queue",
@@ -490,5 +649,24 @@ export async function loadDurableProgressSummary(input: {
           : "All MVP openings are currently unlocked.",
     },
   ];
+  if (!hasPremiumProgress) {
+    summary.nextActions = [
+      {
+        title: "Continue Training",
+        href: "/",
+        description: "Train inside your active Free repertoire.",
+      },
+      {
+        title: "Start Daily Blundr",
+        href: "/daily",
+        description: "Complete up to 5 Daily cards today.",
+      },
+      {
+        title: "Review Queue",
+        href: "/review",
+        description: "Complete up to 5 Review positions today.",
+      },
+    ];
+  }
   return summary;
 }

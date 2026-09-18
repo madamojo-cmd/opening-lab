@@ -1,4 +1,8 @@
 import { Chess } from "chess.js";
+import {
+  classifyChessRuleState,
+  type ChessRuleState,
+} from "@/lib/blundr/chess/canonicalPosition";
 
 export type ContinuedCandidate = {
   uci: string;
@@ -67,6 +71,13 @@ export type ContinuationPauseDecision = {
   hardStopPlyLimit: 22;
   currentPlyCount: number;
 };
+
+export function classifyContinuedPlayRuleState(input: {
+  fen: string;
+  positionCounts?: ReadonlyMap<string, number>;
+}): ChessRuleState {
+  return classifyChessRuleState(new Chess(input.fen), input.positionCounts);
+}
 
 const MIN_CONTINUATION_GAMES = 500;
 const MIN_CONTINUATION_PLAY_RATE = 0.18;
@@ -193,6 +204,7 @@ function buildDebugCandidate(candidate: ContinuedCandidate, requireDatabaseAndEn
 
 export function selectContinuedPlayMove(input: {
   fen: string;
+  positionCounts?: ReadonlyMap<string, number>;
   bookCandidates?: ContinuedCandidate[];
   repertoireCandidates?: ContinuedCandidate[];
   lichessCandidates?: ContinuedCandidate[];
@@ -201,6 +213,12 @@ export function selectContinuedPlayMove(input: {
   lastMoveUci?: string | null; // v2.7.40 P1: for emergency reverse-shuffle guard (prevent Ra1<->Ra2 A-B-A-B)
   requireReliableDatabaseMove?: boolean;
 }): ContinuedPlayPolicyDecision | null {
+  const ruleState = classifyContinuedPlayRuleState({
+    fen: input.fen,
+    positionCounts: input.positionCounts,
+  });
+  if (ruleState.terminal || ruleState.claimableDraw) return null;
+
   const requireReliableDatabaseMove = input.requireReliableDatabaseMove === true;
   const book = (input.bookCandidates ?? []).filter((c) => c.uci && c.supported !== false);
   const rep = (input.repertoireCandidates ?? []).filter((c) => c.uci && c.supported !== false);

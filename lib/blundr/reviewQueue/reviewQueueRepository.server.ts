@@ -1,0 +1,429 @@
+import "server-only";
+
+import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
+import { getServerFeatureFlags } from "@/lib/blundr/contracts/serverFeatureFlags";
+import {
+  buildPreferredMoveAuthorityKey,
+  getPreferredMoveAuthorityEntry,
+  hasPreferredMoveAuthorityOpening,
+  isPreferredMoveForAuthority,
+} from "@/lib/blundr/openings/preferredMoveAuthority";
+import { resolveCommercialAccess } from "@/lib/blundr/commercial/commercialAccess.server";
+import { isTrustedProAccess } from "@/lib/blundr/commercial/commercialAccess";
+import {
+  buildReviewDailyLimitAuthorityKey,
+  loadDailyReviewCompletionCounts,
+  MAX_DAILY_REVIEW_COMPLETIONS_PER_FREE_USER,
+} from "./dailyReviewLimit.server";
+import {
+  buildImportedEvidencePriorityMap,
+  type ImportedEvidencePriorityRecord,
+} from "@/lib/blundr/gameData/importedEvidencePriority";
+import type {
+  ReviewQueueItem,
+  ReviewQueueLifecycleState,
+  ReviewQueuePage,
+  ReviewQueueSyncState,
+} from "./reviewQueueTypes";
+
+type Row = Record<string, unknown>;
+type InternalReviewQueueItem = ReviewQueueItem & {
+  canonicalFen: string | null;
+  expectedMoveUci: string | null;
+};
+
+function text(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function number(value: unknown): number {
+  return Math.max(0, Number(value) || 0);
+}
+
+function repertoireSide(value: unknown): ReviewQueueItem["repertoireSide"] {
+  const side = text(value) as ReviewQueueItem["repertoireSide"];
+  if (side === "white" || side === "black" || side === "unknown") return side;
+  return "unknown";
+}
+
+function lifecycle(value: unknown): ReviewQueueLifecycleState {
+  const state = text(value) as ReviewQueueLifecycleState;
+  if (
+    state === "active" ||
+    state === "remediating" ||
+    state === "resolved" ||
+    state === "legacy_unclassified"
+  )
+    return state;
+  return "legacy_unclassified";
+}
+
+function computeSyncState(input: {
+  lastSyncAt: string | null;
+  lastSyncStatus: string | null;
+  itemCount: number;
+}): ReviewQueueSyncState {
+  if (!input.lastSyncAt) return input.itemCount ? "ready" : "empty";
+  const lastSyncMs = Date.parse(input.lastSyncAt);
+  const stale =
+    Number.isFinite(lastSyncMs) && Date.now() - lastSyncMs > 7 * 86_400_000;
+  if (input.lastSyncStatus === "partially_completed") return "partial";
+  return stale ? "stale" : input.itemCount ? "ready" : "empty";
+}
+
+function latestTimestamp(
+  left: string | null,
+  right: string | null,
+): string | null {
+  if (!left) return right;
+  if (!right) return left;
+  return Date.parse(left) >= Date.parse(right) ? left : right;
+}
+
+function representativeOrder(
+  left: InternalReviewQueueItem,
+  right: InternalReviewQueueItem,
+): number {
+  return (
+    right.score - left.score ||
+    Date.parse(right.lastMissedAt ?? "") -
+      Date.parse(left.lastMissedAt ?? "") ||
+    Date.parse(right.updatedAt) - Date.parse(left.updatedAt) ||
+    left.positionKey.localeCompare(right.positionKey)
+  );
+}
+
+function publicItem(item: InternalReviewQueueItem): ReviewQueueItem {
+  const {
+    canonicalFen: _canonicalFen,
+    expectedMoveUci: _expectedMoveUci,
+    ...safe
+  } = item;
+  return safe;
+}
+
+export function filterReviewQueueItemsForPreferredAuthority(input: {
+  items: InternalReviewQueueItem[];
+  includeResolved: boolean;
+  deferredAuthorityKeys?: ReadonlySet<string>;
+}): ReviewQueueItem[] {
+  const grouped = new Map<string, InternalReviewQueueItem[]>();
+  for (const item of input.items) {
+    const authorityKey =
+      item.openingId && item.canonicalFen && item.repertoireSide !== "unknown"
+        ? buildPreferredMoveAuthorityKey({
+            openingId: item.openingId,
+            canonicalFen: item.canonicalFen,
+            repertoireSide: item.repertoireSide,
+          })
+        : null;
+    const key =
+      authorityKey && hasPreferredMoveAuthorityOpening(item.openingId)
+        ? authorityKey
+        : `position:${item.positionKey}`;
+    grouped.set(key, [...(grouped.get(key) ?? []), item]);
+  }
+
+  const representatives: ReviewQueueItem[] = [];
+  for (const group of grouped.values()) {
+    const authorityItem = group.find((item) =>
+      hasPreferredMoveAuthorityOpening(item.openingId),
+    );
+    const authorityEntry =
+      authorityItem?.openingId &&
+      authorityItem.canonicalFen &&
+      authorityItem.repertoireSide !== "unknown"
+        ? getPreferredMoveAuthorityEntry({
+            openingId: authorityItem.openingId,
+            canonicalFen: authorityItem.canonicalFen,
+            repertoireSide: authorityItem.repertoireSide,
+          })
+        : null;
+    const preferredRows = authorityEntry
+      ? group.filter((item) =>
+          isPreferredMoveForAuthority({
+            openingId: item.openingId,
+            canonicalFen: item.canonicalFen ?? "",
+            repertoireSide: item.repertoireSide,
+            expectedMoveUci: item.expectedMoveUci,
+          }),
+        )
+      : group;
+    if (!preferredRows.length) continue;
+    const lifecycleEligible = preferredRows.filter(
+      (item) =>
+        input.includeResolved ||
+        item.lifecycleState === "active" ||
+        item.lifecycleState === "remediating" ||
+        item.lifecycleState === "legacy_unclassified",
+    );
+    if (!lifecycleEligible.length) continue;
+    const sorted = [...lifecycleEligible].sort(representativeOrder);
+    const representative = { ...sorted[0] };
+    representative.score = Math.max(
+      ...lifecycleEligible.map((item) => item.score),
+    );
+    representative.missCount = lifecycleEligible.reduce(
+      (sum, item) => sum + item.missCount,
+      0,
+    );
+    representative.lastMissedAt = lifecycleEligible.reduce<string | null>(
+      (latest, item) => latestTimestamp(latest, item.lastMissedAt),
+      null,
+    );
+    const dailyLimitKey = buildReviewDailyLimitAuthorityKey(representative);
+    if (dailyLimitKey && input.deferredAuthorityKeys?.has(dailyLimitKey)) {
+      continue;
+    }
+    representatives.push(publicItem(representative));
+  }
+
+  return representatives.sort(
+    (left, right) =>
+      right.score - left.score ||
+      Date.parse(right.updatedAt) - Date.parse(left.updatedAt) ||
+      left.positionKey.localeCompare(right.positionKey),
+  );
+}
+
+export async function loadReviewQueuePage(input: {
+  userId: string;
+  page: number;
+  limit: number;
+  includeResolved: boolean;
+}): Promise<
+  { ok: true; data: ReviewQueuePage } | { ok: false; error: string }
+> {
+  const flags = getServerFeatureFlags();
+  if (!flags.learning_core_v2_read)
+    return { ok: false, error: "feature_disabled" };
+
+  const client = createBlundrSupabaseAdminClient();
+  if (!client) return { ok: false, error: "persistence_unavailable" };
+
+  const generatedAt = new Date().toISOString();
+  const requestedFrom = input.page * input.limit;
+  const requestedTo = requestedFrom + input.limit;
+  const scanLimit = Math.min(
+    12_000,
+    Math.max(requestedTo * 4, requestedTo + 250),
+  );
+  const lifecycleStates = [
+    "active",
+    "remediating",
+    "resolved",
+    "legacy_unclassified",
+  ] as const;
+
+  const [weaknesses, importedFindings, jobs] = await Promise.all([
+    client
+      .from("blundr_weakness_projection")
+      .select(
+        "position_key,opening_id,play_key,category,score,confidence,explanation,recommended_daily_intervention,lifecycle_state,updated_at,lapse_count,last_evidence_at",
+      )
+      .eq("user_id", input.userId)
+      .eq("access_decision", "active")
+      .in("lifecycle_state", lifecycleStates as unknown as string[])
+      .order("score", { ascending: false })
+      .order("updated_at", { ascending: false })
+      .range(0, scanLimit - 1),
+    client
+      .from("blundr_learning_findings")
+      .select(
+        "finding_id,position_key,canonical_fen,opening_id,move_order_key,expected_move_uci,outcome,import_weight,updated_at,status",
+      )
+      .eq("user_id", input.userId)
+      .eq("status", "active")
+      .in("outcome", ["missed_known_move", "deviated_from_repertoire"])
+      .order("updated_at", { ascending: false })
+      .range(0, scanLimit - 1),
+    client
+      .from("blundr_game_import_jobs")
+      .select("status,updated_at")
+      .eq("user_id", input.userId)
+      .order("updated_at", { ascending: false })
+      .limit(1),
+  ]);
+
+  if (weaknesses.error || importedFindings.error)
+    return { ok: false, error: "query_failed" };
+
+  const weaknessRows = (weaknesses.data ?? []) as unknown as Row[];
+  const items: InternalReviewQueueItem[] = weaknessRows
+    .map((row) => ({
+      mistakeId: text(row.position_key),
+      positionKey: text(row.position_key),
+      openingId: row.opening_id === null ? null : text(row.opening_id),
+      playKey: row.play_key === null ? null : text(row.play_key),
+      repertoireSide: "unknown" as const,
+      category: text(row.category),
+      score: number(row.score),
+      confidence: number(row.confidence),
+      explanation: text(row.explanation),
+      recommendedDailyIntervention: text(row.recommended_daily_intervention),
+      lifecycleState: lifecycle(row.lifecycle_state),
+      missCount: number(row.lapse_count),
+      lastMissedAt:
+        row.last_evidence_at === null ? null : text(row.last_evidence_at),
+      updatedAt: text(row.updated_at),
+      canonicalFen: null,
+      expectedMoveUci: null,
+    }))
+    .filter((item) => Boolean(item.positionKey));
+
+  const importedRows = (importedFindings.data ?? []) as unknown as Row[];
+  const importedMap = buildImportedEvidencePriorityMap({
+    userId: input.userId,
+    now: generatedAt,
+    records: importedRows.map((row) => ({
+      userId: input.userId,
+      positionKey: text(row.position_key),
+      openingId: row.opening_id === null ? null : text(row.opening_id),
+      moveOrderKey:
+        row.move_order_key === null ? null : text(row.move_order_key),
+      outcome: text(row.outcome) as ImportedEvidencePriorityRecord["outcome"],
+      importWeight: number(row.import_weight),
+      observedAt: text(row.updated_at) || generatedAt,
+      status: text(row.status) as ImportedEvidencePriorityRecord["status"],
+    })),
+  });
+  for (const imported of importedMap.values()) {
+    const representative = importedRows.find(
+      (row) => text(row.position_key) === imported.positionKey,
+    );
+    items.push({
+      mistakeId: text(representative?.finding_id) || imported.positionKey,
+      positionKey: imported.positionKey,
+      openingId: imported.openingId,
+      playKey: imported.moveOrderKey,
+      repertoireSide: "unknown",
+      category: "opening_move",
+      score: imported.boost,
+      confidence: Math.min(1, 0.45 + imported.missCount * 0.1),
+      explanation:
+        "A recent imported game missed this unlocked repertoire position.",
+      recommendedDailyIntervention: "review_position",
+      lifecycleState: "active",
+      missCount: imported.missCount,
+      lastMissedAt: imported.lastObservedAt,
+      updatedAt: imported.lastObservedAt,
+      canonicalFen: text(representative?.canonical_fen) || null,
+      expectedMoveUci: text(representative?.expected_move_uci) || null,
+    });
+  }
+
+  if (items.length) {
+    const positionKeys = [...new Set(items.map((item) => item.positionKey))];
+    const events = await client
+      .from("blundr_learning_events")
+      .select(
+        "position_key,repertoire_side,canonical_fen,expected_move_uci,occurred_at,deleted_at",
+      )
+      .eq("user_id", input.userId)
+      .in("position_key", positionKeys)
+      .is("deleted_at", null)
+      .order("occurred_at", { ascending: false });
+    if (!events.error) {
+      const rows = (events.data ?? []) as unknown as Row[];
+      const byPositionKey = new Map<
+        string,
+        Pick<
+          InternalReviewQueueItem,
+          "repertoireSide" | "canonicalFen" | "expectedMoveUci"
+        >
+      >();
+      for (const row of rows) {
+        const key = text(row.position_key);
+        if (!key || byPositionKey.has(key)) continue;
+        byPositionKey.set(key, {
+          repertoireSide: repertoireSide(row.repertoire_side),
+          canonicalFen: text(row.canonical_fen) || null,
+          expectedMoveUci: text(row.expected_move_uci) || null,
+        });
+      }
+      for (const item of items) {
+        const event = byPositionKey.get(item.positionKey);
+        item.repertoireSide = event?.repertoireSide ?? "unknown";
+        item.canonicalFen = event?.canonicalFen ?? null;
+        item.expectedMoveUci = event?.expectedMoveUci ?? null;
+      }
+    }
+  }
+
+  const dailyCompletionCounts = await loadDailyReviewCompletionCounts({
+    client,
+    userId: input.userId,
+    now: generatedAt,
+  });
+  const commercialAccess = await resolveCommercialAccess({
+    userId: input.userId,
+    now: generatedAt,
+  });
+  const totalCompletedToday = Array.from(
+    dailyCompletionCounts.counts.values(),
+  ).reduce((total, count) => total + count, 0);
+  const freeLimitReached =
+    !isTrustedProAccess(commercialAccess) &&
+    totalCompletedToday >= MAX_DAILY_REVIEW_COMPLETIONS_PER_FREE_USER;
+  if (freeLimitReached) {
+    return {
+      ok: true,
+      data: {
+        syncState: "ready",
+        generatedAt,
+        lastSyncAt: jobs.data?.[0]?.updated_at
+          ? String(jobs.data[0].updated_at)
+          : null,
+        page: input.page,
+        limit: input.limit,
+        nextPage: null,
+        items: [],
+        warnings: ["daily_review_limit_reached"],
+      },
+    };
+  }
+  const deferredAuthorityKeys = new Set(
+    Array.from(dailyCompletionCounts.counts.entries())
+      .filter(
+        ([, count]) => count >= MAX_DAILY_REVIEW_COMPLETIONS_PER_FREE_USER,
+      )
+      .map(([key]) => key),
+  );
+
+  const filteredItems = filterReviewQueueItemsForPreferredAuthority({
+    items,
+    includeResolved: input.includeResolved,
+    deferredAuthorityKeys,
+  });
+  const pageItems = filteredItems.slice(requestedFrom, requestedTo);
+
+  const lastSyncAt = jobs.data?.[0]?.updated_at
+    ? String(jobs.data[0].updated_at)
+    : null;
+  const lastSyncStatus = jobs.data?.[0]?.status
+    ? String(jobs.data[0].status)
+    : null;
+
+  const syncState = computeSyncState({
+    lastSyncAt,
+    lastSyncStatus,
+    itemCount: pageItems.length,
+  });
+
+  return {
+    ok: true,
+    data: {
+      syncState,
+      generatedAt,
+      lastSyncAt,
+      page: input.page,
+      limit: input.limit,
+      nextPage:
+        filteredItems.length > requestedTo || weaknessRows.length === scanLimit
+          ? input.page + 1
+          : null,
+      items: pageItems,
+      warnings: [],
+    },
+  };
+}

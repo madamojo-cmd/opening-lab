@@ -5,6 +5,19 @@ import { pathToFileURL } from "node:url";
 const managementApiBaseUrl = "https://api.supabase.com/v1";
 const forbiddenProjectNameMarker = /staging|production|prod/i;
 
+class ManagementApiError extends Error {
+  constructor(operation, category, status = null) {
+    const statusFragment = status ? ` status=${status}` : "";
+    super(
+      `Management API ${operation} failed:${statusFragment} category=${category}`,
+    );
+    this.name = "ManagementApiError";
+    this.operation = operation;
+    this.category = category;
+    this.status = status;
+  }
+}
+
 function assertContract(condition, message) {
   assert.ok(condition, `PR-01 disposable project preflight: ${message}`);
 }
@@ -159,20 +172,39 @@ export function deriveProjectApiUrl(projectRef) {
   return `https://${projectRef}.supabase.co`;
 }
 
-async function fetchJson(url, accessToken) {
+export function classifyManagementApiStatus(status) {
+  if (status === 401) return "authentication";
+  if (status === 403) return "authorization";
+  if (status === 404) return "project_identity";
+  if (status === 408 || status === 429) return "service";
+  if (status >= 500) return "service";
+  return "request_rejected";
+}
+
+export async function fetchManagementJson(url, accessToken, operation) {
   let response;
   try {
     response = await fetch(url, {
       headers: { authorization: `Bearer ${accessToken}` },
     });
   } catch {
-    throw new Error("Management API request failed");
+    throw new ManagementApiError(operation, "network");
   }
-  if (!response.ok) throw new Error("Management API request failed");
+  if (!response.ok) {
+    throw new ManagementApiError(
+      operation,
+      classifyManagementApiStatus(response.status),
+      response.status,
+    );
+  }
   try {
     return await response.json();
   } catch {
-    throw new Error("Management API response was invalid");
+    throw new ManagementApiError(
+      operation,
+      "invalid_response",
+      response.status,
+    );
   }
 }
 
@@ -220,14 +252,16 @@ async function main() {
     "GITHUB_ENV is required when API-key export is enabled",
   );
 
-  const project = await fetchJson(
+  const project = await fetchManagementJson(
     `${managementApiBaseUrl}/projects/${encodeURIComponent(projectRef)}`,
     accessToken,
+    "project_metadata",
   );
   validateDisposableProjectMetadata(project);
-  const managementProjectList = await fetchJson(
+  const managementProjectList = await fetchManagementJson(
     `${managementApiBaseUrl}/projects`,
     accessToken,
+    "project_list",
   );
   const { managementProjectCount } =
     validateCandidateProjectAgainstManagementList(
@@ -236,9 +270,10 @@ async function main() {
     );
   const apiUrl = deriveProjectApiUrl(projectRef);
   const keys = extractBrowserSafeApiKeys(
-    await fetchJson(
+    await fetchManagementJson(
       `${managementApiBaseUrl}/projects/${encodeURIComponent(projectRef)}/api-keys`,
       accessToken,
+      "project_api_keys",
     ),
   );
   if (shouldExportKeys) {

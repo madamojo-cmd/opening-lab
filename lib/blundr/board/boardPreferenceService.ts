@@ -47,6 +47,20 @@ function parseExistingBoardSettings(storage?: Storage | null): Record<string, un
   }
 }
 
+export function areBoardPreferencesEquivalent(
+  a: BlundrBoardPreferences | null | undefined,
+  b: BlundrBoardPreferences | null | undefined,
+): boolean {
+  if (!a || !b) return false;
+  return (
+    a.boardThemeId === b.boardThemeId &&
+    a.pieceSetId === b.pieceSetId &&
+    a.showCoordinates === b.showCoordinates &&
+    a.boardOrientation === b.boardOrientation &&
+    a.source === b.source
+  );
+}
+
 export function normalizeBoardPreferences(value: unknown, fallback = createDefaultBoardPreferences()): BlundrBoardPreferences {
   const record = isRecord(value) ? (value as LegacyBoardSettingsLike) : {};
   const boardThemeId = normalizeBoardThemeId(record.boardThemeId ?? record.boardTheme ?? fallback.boardThemeId);
@@ -93,6 +107,11 @@ export function readLocalBoardPreferences(storage?: Storage | null): BlundrBoard
 export function writeLocalBoardPreferences(preferences: BlundrBoardPreferences, storage?: Storage | null): BlundrBoardPreferences {
   if (!storage) {
     return preferences;
+  }
+
+  const current = readLocalBoardPreferences(storage);
+  if (areBoardPreferencesEquivalent(current, preferences)) {
+    return current;
   }
 
   const existing = parseExistingBoardSettings(storage);

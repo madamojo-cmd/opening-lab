@@ -35,7 +35,7 @@ test("continuation does not enter restricted learning persistence", () => {
     trainer,
     /if \(trainingMode === "continuation"\) return true;[\s\S]{0,120}setTrainerPersistencePending/,
   );
-  assert.match(trainer, /persistContinuationCompletion\(completionPath\)/);
+  assert.match(trainer, /persistContinuationCheckmate\(completionPath\)/);
   assert.match(trainer, /dailySessionId: evidence\.evidenceId/);
 });
 

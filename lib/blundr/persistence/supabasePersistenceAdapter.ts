@@ -27,9 +27,11 @@ type SupabaseUserProfileRow = {
   raw_rating: number | null;
   rating_time_control: string | null;
   preferred_training_mode: string;
+  tactical_highlights_enabled: boolean | null;
   daily_tempo_goal: number;
   daily_battery_goal: number;
   daily_blundr_goal: number;
+  daily_blundr_card_goal: number;
   selected_starter_pack_id: string | null;
   created_at: string;
   updated_at: string;
@@ -185,9 +187,11 @@ function mapTrainingProfileRow(profile: UserTrainingProfile): SupabaseUserProfil
     raw_rating: typeof profile.rawRating === "number" && Number.isFinite(profile.rawRating) ? profile.rawRating : null,
     rating_time_control: profile.ratingTimeControl ?? null,
     preferred_training_mode: profile.preferredTrainingMode,
+    tactical_highlights_enabled: Boolean(profile.tacticalHighlightsEnabled),
     daily_tempo_goal: Math.max(1, Number(profile.dailyTempoGoal) || 1),
     daily_battery_goal: Math.max(1, Number(profile.dailyBatteryGoal) || 1),
     daily_blundr_goal: Math.max(1, Number(profile.dailyBlundrGoal) || 1),
+    daily_blundr_card_goal: Math.max(1, Math.min(99, Number(profile.dailyBlundrCardGoal) || 10)),
     selected_starter_pack_id: normalizeStarterPackId(profile.selectedStarterPackId) ?? null,
     created_at: normalizeText(profile.createdAt) || nowIso(),
     updated_at: normalizeText(profile.updatedAt) || nowIso(),
@@ -213,9 +217,14 @@ function mapTrainingProfileRowToModel(row: SupabaseUserProfileRow | null): UserT
         ? row.rating_time_control
         : undefined,
     preferredTrainingMode: row.preferred_training_mode === "plain" ? "plain" : "assisted",
+    tacticalHighlightsEnabled:
+      typeof row.tactical_highlights_enabled === "boolean"
+        ? row.tactical_highlights_enabled
+        : base.tacticalHighlightsEnabled,
     dailyTempoGoal: Math.max(1, Number(row.daily_tempo_goal) || 1),
     dailyBatteryGoal: Math.max(1, Number(row.daily_battery_goal) || 1),
     dailyBlundrGoal: Math.max(1, Number(row.daily_blundr_goal) || 1),
+    dailyBlundrCardGoal: Math.max(1, Math.min(99, Number(row.daily_blundr_card_goal) || base.dailyBlundrCardGoal)),
     selectedStarterPackId: normalizeStarterPackId(row.selected_starter_pack_id),
     createdAt: row.created_at || base.createdAt,
     updatedAt: row.updated_at || base.updatedAt,
@@ -525,12 +534,22 @@ function getClient(accessToken?: string | null): SupabaseClientType | null {
 async function runClientOperation<T>(accessToken: string | null | undefined, operation: (client: SupabaseClientType) => Promise<PersistenceResult<T>>): Promise<PersistenceResult<T>> {
   const client = getClient(accessToken);
   if (!client) {
-    return err("supabase_unavailable", "Supabase credentials are not available.", null, false);
+    return err(
+      "supabase_unavailable",
+      "This feature is temporarily unavailable. Please try again.",
+      null,
+      false,
+    );
   }
   try {
     return await operation(client);
   } catch (cause) {
-    return err("supabase_operation_failed", "Supabase operation failed.", cause, true);
+    return err(
+      "supabase_operation_failed",
+      "We couldn’t complete that request. Please try again.",
+      cause,
+      true,
+    );
   }
 }
 

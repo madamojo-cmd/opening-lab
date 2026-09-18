@@ -52,7 +52,7 @@ async function main(): Promise<void> {
   const snapshot = buildAccountSettingsSnapshot({ storage });
   assert.equal(snapshot.boardPreferences.boardThemeId, "blue");
   assert.equal(snapshot.boardPreferences.pieceSetId, "letters");
-  assert.equal(snapshot.accountStatusLabel, "Local demo on this device");
+  assert.equal(snapshot.accountStatusLabel, "On-device training on this device");
 
   const result = await signOutBlundrAccount();
   assert.equal(result.ok, true);

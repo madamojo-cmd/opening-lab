@@ -24,6 +24,20 @@ const checkpointBMigration = readFileSync(
   ),
   "utf8",
 );
+const simpleAllRingsMigration = readFileSync(
+  resolve(
+    process.cwd(),
+    "supabase/migrations/20260820193000_blundr_rewards_vault_hmac_simple_all_rings.sql",
+  ),
+  "utf8",
+);
+const freeTempoLimitMigration = readFileSync(
+  resolve(
+    process.cwd(),
+    "supabase/migrations/20260918130000_blundr_free_tempo_daily_limit.sql",
+  ),
+  "utf8",
+);
 const completionRoute = readFileSync(
   resolve(process.cwd(), "app/api/blundr/rewards/complete/route.ts"),
   "utf8",
@@ -154,6 +168,55 @@ test("v2 rewards use one atomic writer, an inventory ledger, and leased presenta
   assert.match(checkpointBMigration, /'streakRecord'/i);
 });
 
+test("v2 reward randomness comes from Vault and all-rings reward is guaranteed", () => {
+  assert.match(simpleAllRingsMigration, /from vault\.decrypted_secrets/i);
+  assert.match(
+    simpleAllRingsMigration,
+    /where name = 'blundr_rewards_hmac_secret'/i,
+  );
+  assert.match(
+    simpleAllRingsMigration,
+    /if v_secret is null then return null/i,
+  );
+  assert.match(
+    simpleAllRingsMigration,
+    /hmac\(p_payload, v_secret, 'sha256'\)/i,
+  );
+  assert.match(
+    simpleAllRingsMigration,
+    /v_randomness_available and v_all_closed_this_action/i,
+  );
+  assert.match(
+    simpleAllRingsMigration,
+    /else v_reward_trigger:='all_rings_closed'; v_reward_mode:='random_bonus'; v_should_reward:=true; end if/i,
+  );
+  assert.doesNotMatch(simpleAllRingsMigration, /daily_tempo_ring_closed/i);
+  assert.doesNotMatch(simpleAllRingsMigration, /daily_battery_ring_closed/i);
+  assert.doesNotMatch(simpleAllRingsMigration, /daily_blundr_ring_closed/i);
+  assert.doesNotMatch(simpleAllRingsMigration, /three_all_rings_completions/i);
+  assert.doesNotMatch(simpleAllRingsMigration, /v_all_rings_random < \.08/i);
+  assert.doesNotMatch(simpleAllRingsMigration, /v_random < \.12/i);
+  assert.match(simpleAllRingsMigration, /v_rarity_random < 0\.72/i);
+  assert.match(simpleAllRingsMigration, /v_rarity_random < 0\.92/i);
+  assert.match(simpleAllRingsMigration, /v_rarity_random < 0\.99/i);
+  assert.match(simpleAllRingsMigration, /then 5 else 10 end/i);
+  assert.match(simpleAllRingsMigration, /monthly_cache/i);
+  assert.match(simpleAllRingsMigration, /weekly_cache/i);
+  assert.match(simpleAllRingsMigration, /pity_bonus/i);
+  assert.match(
+    simpleAllRingsMigration,
+    /if v_should_reward then[\s\S]*blundr_reward_presentations_v2/i,
+  );
+  assert.doesNotMatch(
+    simpleAllRingsMigration,
+    /'completion:' \|\| v_completion_id,'toast'/i,
+  );
+  assert.match(
+    simpleAllRingsMigration,
+    /'presentation_kind',v_row\.presentation_kind/i,
+  );
+});
+
 test("v2 reward authority is account-scoped and deletion-safe by contract", () => {
   assert.match(v2Migration, /perform pg_advisory_xact_lock/i);
   assert.match(v2Migration, /where user_id=p_user_id/i);
@@ -173,6 +236,104 @@ test("v2 reward authority is account-scoped and deletion-safe by contract", () =
   assert.match(
     legacyMigration,
     /references auth\.users\(id\) on delete cascade/i,
+  );
+});
+
+test("Free Tempo limit counts verified local-day completions atomically", () => {
+  assert.match(
+    freeTempoLimitMigration,
+    /create or replace function public\.blundr_enforce_free_tempo_completion_limit_v1/i,
+  );
+  assert.match(
+    freeTempoLimitMigration,
+    /old\.state <> 'active' or new\.state <> 'completed'/i,
+  );
+  assert.match(freeTempoLimitMigration, /blundr_trainer_sessions_v2/i);
+  assert.match(freeTempoLimitMigration, /terminal_completion_id is not null/i);
+  assert.match(freeTempoLimitMigration, /completed_at is not null/i);
+  assert.match(
+    freeTempoLimitMigration,
+    /completed_at at time zone v_time_zone/i,
+  );
+  assert.match(freeTempoLimitMigration, /v_completed_count >= 20/i);
+  assert.match(freeTempoLimitMigration, /free_tempo_daily_limit_reached/i);
+  assert.match(freeTempoLimitMigration, /completion_time_zone_unavailable/i);
+  assert.match(freeTempoLimitMigration, /blundr_is_valid_iana_time_zone/i);
+  assert.match(freeTempoLimitMigration, /blundr_trusted_entitlements/i);
+  assert.match(freeTempoLimitMigration, /app\.blundr_billing_environment/i);
+  assert.match(
+    freeTempoLimitMigration,
+    /before update on public\.blundr_trainer_sessions_v2/i,
+  );
+  assert.doesNotMatch(
+    freeTempoLimitMigration,
+    /before insert on public\.blundr_xp_events/i,
+  );
+  assert.match(
+    freeTempoLimitMigration,
+    /commit_trainer_action_v2[\s\S]*p_billing_environment/i,
+  );
+  assert.match(
+    v2Migration,
+    /pg_advisory_xact_lock\(hashtextextended\(p_user_id::text, 403\)\)/i,
+  );
+});
+
+test("billing-aware reward RPC does not shadow the legacy seven-argument overload", () => {
+  const normalizedFreeTempoMigration = freeTempoLimitMigration.replace(
+    /\s+/g,
+    " ",
+  );
+  const normalizedLegacyRewardMigration = checkpointBMigration.replace(
+    /\s+/g,
+    " ",
+  );
+  assert.match(
+    normalizedLegacyRewardMigration,
+    /create or replace function public\.blundr_apply_completion_reward_v3\( p_user_id uuid, p_completion_id text, p_source text, p_evidence_id text, p_idempotency_key text, p_policy_version text, p_randomness_key_version text default null \)/i,
+  );
+  assert.match(
+    normalizedFreeTempoMigration,
+    /create or replace function public\.blundr_apply_completion_reward_v3\( p_user_id uuid, p_completion_id text, p_source text, p_evidence_id text, p_idempotency_key text, p_policy_version text, p_randomness_key_version text, p_billing_environment text \)/i,
+  );
+  assert.doesNotMatch(
+    freeTempoLimitMigration,
+    /create or replace function public\.blundr_apply_completion_reward_v3\( p_user_id uuid, p_completion_id text, p_source text, p_evidence_id text, p_idempotency_key text, p_policy_version text, p_randomness_key_version text, p_billing_environment text \) returns jsonb[\s\S]*?(?:p_randomness_key_version text default|p_billing_environment text default)/i,
+  );
+  assert.match(
+    normalizedFreeTempoMigration,
+    /revoke all on function public\.blundr_apply_completion_reward_v3\( uuid, text, text, text, text, text, text, text \)/i,
+  );
+  assert.match(
+    normalizedFreeTempoMigration,
+    /grant execute on function public\.blundr_apply_completion_reward_v3\( uuid, text, text, text, text, text, text, text \)/i,
+  );
+});
+
+test("all-rings presentation is deterministic when HMAC randomness is unavailable", () => {
+  const normalizedFreeTempoMigration = freeTempoLimitMigration.replace(
+    /\s+/g,
+    " ",
+  );
+  assert.match(
+    normalizedFreeTempoMigration,
+    /alter function public\.blundr_apply_completion_reward_v3\( uuid, text, text, text, text, text, text \) rename to blundr_apply_completion_reward_v3_core/i,
+  );
+  assert.match(
+    normalizedFreeTempoMigration,
+    /create or replace function public\.blundr_ensure_all_rings_presentation_v1\( p_user_id uuid, p_result jsonb, p_policy_version text \)/i,
+  );
+  assert.match(
+    normalizedFreeTempoMigration,
+    /allRingsClosedThisAction[\s\S]*blundr_reward_presentations_v2[\s\S]*on conflict do nothing/i,
+  );
+  assert.match(
+    normalizedFreeTempoMigration,
+    /'randomEvaluation', coalesce\(p_result->>'randomEvaluation', 'unavailable'\)/i,
+  );
+  assert.doesNotMatch(
+    normalizedFreeTempoMigration,
+    /'rarity'\s*,|'rewardGrants'\s*,|'rewardRollId'\s*,/i,
   );
 });
 

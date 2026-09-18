@@ -14,7 +14,10 @@ export type StarterPackId =
   | "dynamic_fighter"
   | "flexible_strategist";
 
-export type BlundrAccountMode = "local_demo" | "authenticated" | "developer_admin";
+export type BlundrAccountMode =
+  | "local_demo"
+  | "authenticated"
+  | "developer_admin";
 
 export type UserTrainingProfile = {
   userId: string;
@@ -26,9 +29,13 @@ export type UserTrainingProfile = {
   rawRating?: number;
   ratingTimeControl?: "rapid" | "blitz" | "classical" | "bullet" | "unknown";
   preferredTrainingMode: "assisted" | "plain";
+  /** Account-owned visual teaching aid toggle, synced cross-device when authenticated. */
+  tacticalHighlightsEnabled: boolean;
   dailyTempoGoal: number;
   dailyBatteryGoal: number;
   dailyBlundrGoal: number;
+  /** Target number of Daily Blundr cards per day (1-99). */
+  dailyBlundrCardGoal: number;
   selectedStarterPackId?: StarterPackId;
   createdAt: string;
   updatedAt: string;
@@ -200,6 +207,8 @@ export type CurrentBlundrUser = {
   provider?: string | null;
   /** Server-validated sign-up metadata, never returned as a public profile. */
   age13Confirmed?: boolean;
+  /** Presentation-only launch plan intent; not an entitlement or subscription state. */
+  launchPlanIntent?: "free" | "pro_monthly" | "pro_annual" | null;
 };
 
 export type UserAccountBootstrap = {
@@ -222,6 +231,16 @@ export type UserAccountSyncState = {
   validationSnapshot?: ValidationSnapshot | null;
 };
 
-export type DailyTrainingSettings = Pick<UserTrainingProfile, "dailyTempoGoal" | "dailyBatteryGoal" | "dailyBlundrGoal" | "preferredTrainingMode" | "ratingBandId" | "ratingSource" | "selectedStarterPackId"> & {
+export type DailyTrainingSettings = Pick<
+  UserTrainingProfile,
+  | "dailyTempoGoal"
+  | "dailyBatteryGoal"
+  | "dailyBlundrGoal"
+  | "dailyBlundrCardGoal"
+  | "preferredTrainingMode"
+  | "ratingBandId"
+  | "ratingSource"
+  | "selectedStarterPackId"
+> & {
   difficulty?: DailyBlundrDifficulty;
 };

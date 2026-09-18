@@ -9,7 +9,7 @@ export type ImportedFindingLearningEventInput = {
   taxonomy: "move_incorrect";
   position: ExtractedFinding["position"];
   correct: false;
-  firstAttempt: true;
+  firstAttempt: false;
   now: string;
   access: OpeningAccessSnapshot;
   explanation: string;
@@ -21,6 +21,8 @@ export function buildImportedFindingLearningEventInput(
 ): ImportedFindingLearningEventInput | null {
   if (
     finding.status !== "active" ||
+    (finding.outcome !== "missed_known_move" &&
+      finding.outcome !== "deviated_from_repertoire") ||
     !finding.position.openingId ||
     !finding.position.moveOrderKey ||
     !finding.position.expectedMoveUci ||
@@ -37,7 +39,7 @@ export function buildImportedFindingLearningEventInput(
     taxonomy: "move_incorrect",
     position: finding.position,
     correct: false,
-    firstAttempt: true,
+    firstAttempt: false,
     now: finding.source.observedAt,
     access: {
       openingId: finding.position.openingId,

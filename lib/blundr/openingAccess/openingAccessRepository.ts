@@ -12,11 +12,16 @@ export class RepertoireOpeningAccessRepository
     private readonly loadRepertoire: (
       userId: string,
     ) => RepertoireProgress | null,
+    private readonly planPolicy: {
+      activeOpeningIds?: ReadonlySet<string> | null;
+      selectionRequired?: boolean;
+    } = {},
   ) {}
   get(input: OpeningAccessRequest) {
     return evaluateOpeningAccess({
       ...input,
       repertoire: this.loadRepertoire(input.userId),
+      ...this.planPolicy,
     });
   }
 }

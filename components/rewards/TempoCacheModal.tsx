@@ -3,9 +3,13 @@
 import { X } from "lucide-react";
 import { BLUNDR_ANALYTICS_EVENTS } from "@/lib/blundr/analytics/blundrAnalyticsEvents";
 import { trackBlundrAnalyticsEvent } from "@/lib/blundr/analytics/blundrAnalyticsService";
-import type { RewardGrantRecord, TempoCacheState } from "@/lib/blundr/rewards/rewardTypes";
+import type {
+  RewardGrantRecord,
+  TempoCacheState,
+} from "@/lib/blundr/rewards/rewardTypes";
 import type { UserRewardHistory } from "@/lib/blundr/accounts/accountTypes";
 import { TempoCacheCard } from "./TempoCacheCard";
+import styles from "./RewardSurface.module.css";
 
 type TempoCacheModalProps = {
   open: boolean;
@@ -18,12 +22,19 @@ type TempoCacheModalProps = {
   onPrimaryAction?: () => void;
 };
 
-function classNames(...classes: Array<string | false | null | undefined>): string {
-  return classes.filter(Boolean).join(" ");
-}
-
-export function TempoCacheModal({ open, userId, localDate, state, rewardGrants = [], rewardHistory, onClose, onPrimaryAction }: TempoCacheModalProps) {
-  const hasPendingChoice = rewardGrants.some((grant) => grant.pendingChoice && !grant.applied);
+export function TempoCacheModal({
+  open,
+  userId,
+  localDate,
+  state,
+  rewardGrants = [],
+  rewardHistory,
+  onClose,
+  onPrimaryAction,
+}: TempoCacheModalProps) {
+  const hasPendingChoice = rewardGrants.some(
+    (grant) => grant.pendingChoice && !grant.applied,
+  );
 
   if (!open) return null;
 
@@ -41,22 +52,22 @@ export function TempoCacheModal({ open, userId, localDate, state, rewardGrants =
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-stone-950/30 px-4 py-4 backdrop-blur-[2px] sm:items-center"
+      className={styles.fixedOverlay}
       onClick={handleClose}
       role="presentation"
     >
       <div
-        className="w-full max-w-2xl"
+        className={styles.tempoModal}
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="Tempo Cache reward"
       >
-        <div className="mb-3 flex justify-end">
+        <div className={styles.modalTopbar}>
           <button
             type="button"
             onClick={handleClose}
-            className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-stone-700 shadow-sm ring-1 ring-stone-200"
+            className={styles.closeButton}
           >
             <X size={14} />
             Close

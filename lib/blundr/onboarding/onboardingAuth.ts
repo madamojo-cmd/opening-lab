@@ -33,7 +33,7 @@ function authUnavailableResult(): OnboardingAuthResult {
   return {
     ok: false,
     code: "auth_unavailable",
-    message: "Supabase auth is not configured. Continue in local demo.",
+    message: "Sign-in is temporarily unavailable.",
   };
 }
 
@@ -84,7 +84,7 @@ function normalizePasswordRecoveryError(
     return {
       ok: false,
       code: "auth_unavailable",
-      message: "Supabase auth is not configured. Continue in local demo.",
+      message: "Sign-in is temporarily unavailable.",
     };
   }
   if (
@@ -210,7 +210,7 @@ export function normalizeOnboardingAuthError(
     return {
       ok: false,
       code: "network_error",
-      message: "Network error. Try again or continue in local demo.",
+      message: "Sign-in is temporarily unavailable. Please try again.",
     };
   }
   return {
@@ -227,8 +227,7 @@ export async function getOnboardingAuthSession(): Promise<OnboardingAuthSession 
     const sessionResult = await client.auth.getSession();
     const session = sessionResult.data.session;
     if (!session) return null;
-    const userResult = await client.auth.getUser();
-    const user = userResult.data.user ?? session.user ?? null;
+    const user = session.user ?? null;
     if (!user) return null;
     return {
       userId: user.id,

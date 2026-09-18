@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
+import { readCommercialBillingEnvironment } from "@/lib/blundr/commercial/commercialAccess.server";
 
 export const REWARD_POLICY_VERSION = "rewards-v2-20260805";
 
@@ -24,6 +25,9 @@ function failure(error: unknown): RewardAuthorityFailure {
     "continuation_trainer_terminal_unverified",
     "continuation_completion_idempotency_conflict",
     "completion_projection_idempotency_conflict",
+    "free_tempo_daily_limit_reached",
+    "invalid_daily_blundr_reward_target",
+    "completion_evidence_unverified",
   ];
   return {
     ok: false,
@@ -47,6 +51,22 @@ export async function applyRewardCompletion(input: {
 > {
   const client = adminOrFailure();
   if (!client.ok) return { ok: false, code: client.code };
+  if (input.source === "daily_blundr_deck_completed") {
+    const prepared = await client.admin.rpc(
+      "blundr_prepare_daily_blundr_reward_target_v1",
+      {
+        p_user_id: input.userId,
+        p_session_id: input.evidenceId,
+      },
+    );
+    if (prepared.error) {
+      const message = String(prepared.error.message ?? "");
+      const missingDuringDeploy =
+        message.includes("blundr_prepare_daily_blundr_reward_target_v1") ||
+        message.includes("Could not find the function");
+      if (!missingDuringDeploy) return failure(prepared.error);
+    }
+  }
   const { data, error } = await client.admin.rpc(
     "blundr_apply_completion_reward_v3",
     {
@@ -60,6 +80,7 @@ export async function applyRewardCompletion(input: {
       p_policy_version: REWARD_POLICY_VERSION,
       p_randomness_key_version:
         process.env.BLUNDR_REWARDS_HMAC_KEY_VERSION?.trim() || null,
+      p_billing_environment: readCommercialBillingEnvironment(),
     },
   );
   return error || !data
@@ -106,9 +127,19 @@ export async function claimRewardPresentation(input: {
       p_lease_seconds: 60,
     },
   );
-  return error
-    ? failure(error)
-    : { ok: true as const, data: data as Record<string, unknown> | null };
+  if (error) return failure(error);
+  const claimed = data as Record<string, unknown> | null;
+  if (!claimed?.id) return { ok: true as const, data: claimed };
+  const { data: presentation } = await client.admin
+    .from("blundr_reward_presentations_v2")
+    .select("presentation_kind,presentation_key,priority")
+    .eq("id", String(claimed.id))
+    .eq("user_id", input.userId)
+    .maybeSingle();
+  return {
+    ok: true as const,
+    data: presentation ? { ...claimed, ...presentation } : claimed,
+  };
 }
 
 export async function markRewardPresentation(input: {

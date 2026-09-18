@@ -24,10 +24,10 @@ test("staging profile requires the isolated production target", () => {
     "daily_mixed_test",
     "daily_adaptive_v2",
     "rewards_v2_enabled",
-    "reward_presentations_v2_enabled",
   ]) {
     assert.equal(profile.featureFlags[disabledUntilAcceptedWriter], false);
   }
+  assert.equal(profile.featureFlags.reward_presentations_v2_enabled, true);
 });
 
 test("canonical release routes are no-store and fail closed", () => {
@@ -38,6 +38,21 @@ test("canonical release routes are no-store and fail closed", () => {
   assert.match(healthRoute, /Cache-Control", "no-store"/);
   assert.match(identity, /x-blundr-release-evidence-token/);
   assert.doesNotMatch(identity, /authorization.*release evidence/i);
+});
+
+test("health telemetry readiness is based on sink delivery, not configuration alone", () => {
+  assert.match(healthRoute, /probeBlundrTelemetrySink/);
+  assert.match(healthRoute, /telemetryRequired/);
+  assert.match(healthRoute, /telemetry\.ready/);
+  assert.doesNotMatch(healthRoute, /ready:\s*false/);
+  assert.doesNotMatch(healthRoute, /delivery:\s*endpointConfigured/);
+});
+
+test("explicit Blundr build SHA overrides generic Vercel git metadata", () => {
+  assert.match(
+    identity,
+    /process\.env\.BLUNDR_BUILD_GIT_SHA \?\? process\.env\.VERCEL_GIT_COMMIT_SHA/,
+  );
 });
 
 test("golden runner records ten API and database journeys", () => {

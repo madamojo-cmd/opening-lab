@@ -1,0 +1,160 @@
+.history {
+  border: 1px solid rgba(16, 20, 17, 0.08);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 14px 28px rgba(16, 20, 17, 0.06);
+  padding: 16px;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.eyebrow {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  background: #e8f2eb;
+  color: #185c38;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  line-height: 1.2;
+  padding: 0 11px;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 12px 0 0;
+  color: #101411;
+  font-size: 1.08rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.copy {
+  max-width: 44rem;
+  margin: 8px 0 0;
+  color: #70766f;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.countPill,
+.microPill {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(16, 20, 17, 0.08);
+  border-radius: 999px;
+  background: #f8f8f5;
+  color: #70766f;
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  padding: 0 10px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.rows {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid rgba(16, 20, 17, 0.08);
+  border-radius: 18px;
+  background: #f8f8f5;
+  padding: 13px;
+}
+
+.rowContent {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.rowTop,
+.metaRow,
+.pityRows {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.rewardName {
+  color: #101411;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.description {
+  margin: 6px 0 0;
+  color: #70766f;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.metaRow {
+  margin-top: 10px;
+  color: #70766f;
+}
+
+.empty {
+  margin-top: 14px;
+  border: 1px solid rgba(16, 20, 17, 0.08);
+  border-radius: 22px;
+  background: #f8f8f5;
+  padding: 16px;
+  text-align: center;
+}
+
+.emptyTitle {
+  margin-top: 14px;
+  color: #101411;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.emptyCopy {
+  margin: 8px auto 0;
+  max-width: 34rem;
+  color: #70766f;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.pity {
+  margin-top: 14px;
+  border: 1px solid rgba(16, 20, 17, 0.08);
+  border-radius: 18px;
+  background: #f8f8f5;
+  padding: 13px;
+}
+
+.pityTitle {
+  color: #70766f;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.pityRows {
+  margin-top: 10px;
+}

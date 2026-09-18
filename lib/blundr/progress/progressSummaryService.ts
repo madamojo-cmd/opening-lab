@@ -23,8 +23,12 @@ function clampPct(numerator: number, denominator: number): number {
 }
 
 function getWeekDateKeys(todayDateKey: string): string[] {
+  return getRecentDateKeys(todayDateKey, 7);
+}
+
+function getRecentDateKeys(todayDateKey: string, days: number): string[] {
   const keys: string[] = [];
-  for (let offset = -6; offset <= 0; offset += 1) {
+  for (let offset = 1 - days; offset <= 0; offset += 1) {
     const key = addLocalDays(todayDateKey, offset);
     if (key) keys.push(key);
   }
@@ -76,9 +80,8 @@ function buildRingSummaries(snapshot: ReturnType<typeof loadDailyRingSnapshot>):
   ];
 }
 
-function buildWeekGrid(todayDateKey: string, progressByKey: ReturnType<typeof readLocalAccountBundle>["dailyRetentionProgressByKey"], reviewCountByDate: Map<string, number>): BlundrProgressWeekDay[] {
-  const weekDateKeys = getWeekDateKeys(todayDateKey);
-  return weekDateKeys.map((localDate) => {
+function buildDayGrid(dateKeys: readonly string[], progressByKey: ReturnType<typeof readLocalAccountBundle>["dailyRetentionProgressByKey"], reviewCountByDate: Map<string, number>): BlundrProgressWeekDay[] {
+  return dateKeys.map((localDate) => {
     const dayProgress = Object.values(progressByKey).find((entry) => normalizeLocalDateKey(entry.localDate) === localDate) ?? null;
     const hasTraining = Boolean(
       dayProgress &&
@@ -95,6 +98,10 @@ function buildWeekGrid(todayDateKey: string, progressByKey: ReturnType<typeof re
       reviewCount: reviewCountByDate.get(localDate) ?? 0,
     };
   });
+}
+
+function buildWeekGrid(todayDateKey: string, progressByKey: ReturnType<typeof readLocalAccountBundle>["dailyRetentionProgressByKey"], reviewCountByDate: Map<string, number>): BlundrProgressWeekDay[] {
+  return buildDayGrid(getWeekDateKeys(todayDateKey), progressByKey, reviewCountByDate);
 }
 
 function countLearningEventsByDate(events: ReadonlyArray<ReturnType<typeof getLocalLearningEvents>[number]>, predicate: (event: ReturnType<typeof getLocalLearningEvents>[number]) => boolean): Map<string, number> {
@@ -377,6 +384,7 @@ export function loadBlundrProgressSummary(input: { userId?: string | null; now?:
   const bundle = readLocalAccountBundle();
   const learningEvents = getLocalLearningEvents();
   const weekDateKeys = getWeekDateKeys(todayDateKey);
+  const recentDateKeys = getRecentDateKeys(todayDateKey, 28);
 
   const reviewAttemptsByDate = countReviewAttemptsByDate(reviewStore.reviewAttempts);
   const learningEventsWeek = learningEvents.filter((event) => {
@@ -416,6 +424,7 @@ export function loadBlundrProgressSummary(input: { userId?: string | null; now?:
   const daysTrainedThisWeek = uniqueStrings(dailyRetentionProgressDays.map((entry) => normalizeLocalDateKey(entry.localDate) ?? "")).length;
   const weekReviewCounts = countReviewAttemptsByDate(reviewStore.reviewAttempts);
   const week = buildWeekGrid(todayDateKey, bundle.dailyRetentionProgressByKey, weekReviewCounts);
+  const recentDays = buildDayGrid(recentDateKeys, bundle.dailyRetentionProgressByKey, weekReviewCounts);
 
   const topOpening = topOpeningFromEvents(learningEvents);
   const weakAreaItems = buildWeakAreaItems(legacyProgress.mistakes);
@@ -438,6 +447,7 @@ export function loadBlundrProgressSummary(input: { userId?: string | null; now?:
       totalAllRingsClosedDays: ringSnapshot.streakRecord.totalAllRingsClosedDays,
       daysTrainedThisWeek,
       week,
+      recentDays,
     },
     trainingVolume: {
       openingRunsToday: openingRunToday,

@@ -9,6 +9,7 @@ import { BLUNDR_REWARD_ASSETS } from "@/lib/blundr/assets/blundrAssetManifest";
 import { BlundrAssetImage } from "@/components/assets/BlundrAssetImage";
 import { RewardIcon } from "./RewardIcon";
 import { RewardRarityBadge } from "./RewardRarityBadge";
+import styles from "../repertoire/RepertoireRewardHistory.module.css";
 
 type RewardHistoryListProps = {
   className?: string;
@@ -16,7 +17,9 @@ type RewardHistoryListProps = {
   title?: string;
 };
 
-function classNames(...classes: Array<string | false | null | undefined>): string {
+function classNames(
+  ...classes: Array<string | false | null | undefined>
+): string {
   return classes.filter(Boolean).join(" ");
 }
 
@@ -31,8 +34,14 @@ function formatTimestamp(value: string): string {
   });
 }
 
-export function RewardHistoryList({ className, limit = 6, title = "Reward history" }: RewardHistoryListProps) {
-  const [snapshot, setSnapshot] = useState(() => loadRewardHistorySnapshot(getLocalAccountCurrentUserId()));
+export function RewardHistoryList({
+  className,
+  limit = 6,
+  title = "Reward history",
+}: RewardHistoryListProps) {
+  const [snapshot, setSnapshot] = useState(() =>
+    loadRewardHistorySnapshot(getLocalAccountCurrentUserId()),
+  );
 
   useEffect(() => {
     setSnapshot(loadRewardHistorySnapshot(getLocalAccountCurrentUserId()));
@@ -47,47 +56,52 @@ export function RewardHistoryList({ className, limit = 6, title = "Reward histor
   }, [limit, snapshot.rewardRolls]);
 
   return (
-    <section className={classNames("rounded-[1.75rem] border border-stone-200 bg-white p-4 shadow-sm", className)}>
-      <div className="flex items-start justify-between gap-3">
+    <section className={classNames(styles.history, className)}>
+      <div className={styles.header}>
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full bg-green-50 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-green-700">
+          <div className={styles.eyebrow}>
             <History size={13} />
             {title}
           </div>
-          <h3 className="mt-3 text-lg font-black tracking-tight text-stone-950">Recent Tempo Cache results</h3>
-          <p className="mt-2 text-sm leading-6 text-stone-600">
-            Rewards stay rare and deterministic. Training still drives the main progression loop.
+          <h3 className={styles.title}>Recent Tempo Cache results</h3>
+          <p className={styles.copy}>
+            Rewards stay rare and deterministic. Training still drives the main
+            progression loop.
           </p>
         </div>
-        <div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-stone-600">
-          {rows.length} shown
-        </div>
+        <div className={styles.countPill}>{rows.length} shown</div>
       </div>
 
       {rows.length > 0 ? (
-        <div className="mt-4 grid gap-3">
+        <div className={styles.rows}>
           {rows.map((roll) => {
             const reward = roll.reward!;
-            const applied = snapshot.history.appliedRewardIds.includes(reward.id);
+            const applied = snapshot.history.appliedRewardIds.includes(
+              reward.id,
+            );
             return (
-              <div key={roll.id} className="flex items-start gap-3 rounded-[1.5rem] bg-[#fbfcf7] p-3 ring-1 ring-stone-200">
+              <div key={roll.id} className={styles.row}>
                 <RewardIcon reward={reward} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="font-black text-stone-950">{reward.displayName}</div>
+                <div className={styles.rowContent}>
+                  <div className={styles.rowTop}>
+                    <div className={styles.rewardName}>
+                      {reward.displayName}
+                    </div>
                     <RewardRarityBadge rarity={reward.rarity} />
-                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-stone-600 ring-1 ring-stone-200">
+                    <span className={styles.microPill}>
                       {applied ? "Applied" : "Granted"}
                     </span>
                   </div>
-                  <p className="mt-1 text-sm leading-6 text-stone-600">{reward.description}</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-stone-500">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 ring-1 ring-stone-200">
+                  <p className={styles.description}>{reward.description}</p>
+                  <div className={styles.metaRow}>
+                    <span className={styles.microPill}>
                       <Sparkles size={12} />
                       {getRewardTriggerLabel(roll.trigger)}
                     </span>
-                    {reward.amount ? <span className="rounded-full bg-white px-3 py-1 ring-1 ring-stone-200">+{reward.amount}</span> : null}
-                    <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 ring-1 ring-stone-200">
+                    {reward.amount ? (
+                      <span className={styles.microPill}>+{reward.amount}</span>
+                    ) : null}
+                    <span className={styles.microPill}>
                       <Clock3 size={12} />
                       {formatTimestamp(roll.rolledAt)}
                     </span>
@@ -98,28 +112,30 @@ export function RewardHistoryList({ className, limit = 6, title = "Reward histor
           })}
         </div>
       ) : (
-        <div className="mt-4 rounded-[1.75rem] border border-stone-200 bg-[#fbfcf7] p-4 text-center shadow-sm">
+        <div className={styles.empty}>
           <BlundrAssetImage
             asset={BLUNDR_REWARD_ASSETS.tempoCacheClosed}
             alt="No reward history yet"
             variant="emptyState"
             className="mx-auto"
           />
-          <div className="mt-4 text-sm font-black text-stone-950">Tempo Cache history is empty</div>
-          <p className="mt-2 text-sm leading-6 text-stone-600">
-            When a rare bonus lands, it will appear here with the trigger that opened it.
+          <div className={styles.emptyTitle}>Tempo Cache history is empty</div>
+          <p className={styles.emptyCopy}>
+            When a rare bonus lands, it will appear here with the trigger that
+            opened it.
           </p>
         </div>
       )}
 
-      <div className="mt-4 rounded-[1.5rem] bg-stone-50 p-3 text-xs leading-5 text-stone-600 ring-1 ring-stone-200">
-        <div className="font-black uppercase tracking-[0.18em] text-stone-500">Pity status</div>
-        <div className="mt-2 flex flex-wrap gap-2">
-          <span className="rounded-full bg-white px-3 py-1 font-black text-stone-700 ring-1 ring-stone-200">
-            {snapshot.history.allRingsDaysSinceRandomReward} all-ring days since random bonus
+      <div className={styles.pity}>
+        <div className={styles.pityTitle}>Pity status</div>
+        <div className={styles.pityRows}>
+          <span className={styles.microPill}>
+            {snapshot.history.allRingsDaysSinceRandomReward} all-ring days since
+            random bonus
           </span>
           {snapshot.history.lastRandomRewardLocalDate ? (
-            <span className="rounded-full bg-white px-3 py-1 font-black text-stone-700 ring-1 ring-stone-200">
+            <span className={styles.microPill}>
               Last random bonus {snapshot.history.lastRandomRewardLocalDate}
             </span>
           ) : null}

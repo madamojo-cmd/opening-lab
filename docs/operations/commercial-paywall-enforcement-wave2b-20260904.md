@@ -1,0 +1,258 @@
+# Commercial Paywall Enforcement Wave 2B
+
+Scope: non-production paywall UX, Settings Billing controls, paid-offer
+acknowledgement, and application-wide Free/Pro enforcement. Production was not
+touched. This wave does not deploy, activate live Stripe, apply production
+migrations, send lifecycle email, or add launch analytics.
+
+## Feature IDs
+
+- `BILLING-ENTITLEMENT-001`
+- `COMMERCIAL-LAUNCH-001`
+- `ONBOARD-001`
+- `REPERTOIRE-001`
+- `TRAIN-RUNTIME-001`
+- `REVIEW-SRS-001`
+
+## Free/Pro Matrix
+
+Blundr Free:
+
+- $0, no card, no ads.
+- Up to 3 active unlocked openings.
+- Up to 20 Tempo training runs per user-local day across the active openings.
+- Assisted and plain training, Continuation Play, rewards, rings, streaks,
+  basic progress, and minigames remain available.
+- Daily Blundr is capped at 5 completed cards per user-local day.
+- Review Queue is capped at 5 completed positions per user-local day.
+- Premium mastery, weak-area, trend, and next-action intelligence is omitted
+  from backend/API responses.
+
+Blundr Pro:
+
+- Unlimited active repertoire and Tempo training.
+- Daily Blundr target from 1 to 99.
+- All available Review Queue items.
+- Complete mastery, weak-area, trend, progress, and next-action intelligence.
+- Same rings, streaks, rewards, and minigames as Free. Pro receives no reward
+  multiplier.
+
+## Authority Path
+
+- Trusted access resolution lives in `lib/blundr/commercial`.
+- Protected decisions read `blundr_trusted_entitlements`, scoped by billing
+  environment and `entitlement_identifier = 'pro'`.
+- Missing, inactive, expired, or unreadable trusted entitlement state resolves
+  to Free.
+- Stripe Checkout and Customer Portal continue to use the Wave 2A server-only
+  endpoints.
+- RevenueCat-normalized backend entitlement state controls Pro access. Checkout
+  success redirects and browser state never grant Pro.
+
+## Paid Offer Consent
+
+- Offer version: `paid-offer-v1`
+- Legal version: `subscription-terms-20260904`
+- Persistence:
+  `supabase/migrations/20260904170758_blundr_paywall_enforcement_authority.sql`
+  adds `blundr_paid_offer_acceptances`.
+- The browser requests an offer with only `monthly` or `annual`.
+- The server records the authenticated user UUID, selected plan, displayed
+  price/interval, trial eligibility, disclosed conversion timestamp, and offer
+  expiry.
+- Checkout requires an unexpired accepted offer. Duplicate checkout clicks can
+  claim an offer only once.
+- Abandoned Checkout does not consume introductory trial eligibility; provider
+  confirmation still owns final trial consumption.
+
+## Downgrade Behavior
+
+When Pro expires, the resolver returns Free:
+
+- Daily effective target becomes 5 while the stored Pro preference is
+  preserved for later restoration.
+- Review completion limit becomes 5 per local day.
+- Premium Progress fields are omitted.
+- If more than 3 openings are unlocked, the user must choose 3 active Free
+  openings. Other openings, mastery, history, queued reviews, rings, streaks,
+  and rewards remain saved.
+- Resubscription restores unlimited active repertoire without rebuilding data.
+
+## Enforcement Map
+
+- Repertoire and Train:
+  `lib/blundr/gameData/gameDataService.ts` and
+  `lib/blundr/openingAccess` apply Free active-opening policy before training
+  access is granted.
+- Tempo:
+  `blundr_apply_completion_reward_v3` counts verified `opening_run_completed`
+  records by user-local day inside the existing per-user transaction lock and
+  rejects the 21st Free completion with `free_tempo_daily_limit_reached`.
+- Active-opening selection:
+  `/api/blundr/repertoire/active-openings` writes only through authenticated,
+  ownership-protected server code.
+- Daily Blundr:
+  `productionDailyService.server.ts` caps reservations and rejects a sixth Free
+  card completion in the authoritative action path.
+- Review Queue:
+  `dailyReviewLimit.server.ts` and `reviewQueueRepository.server.ts` enforce
+  five Free completions per local day and leave Pro unlimited.
+- Progress:
+  `durableProgressSummary.server.ts` removes premium weak-area,
+  recommendation, and next-action fields for Free users.
+- Rewards, rings, and minigames:
+  unchanged by this wave.
+
+## Environment Contract
+
+Required server-only variables remain those from Wave 2A:
+
+- `BLUNDR_BILLING_ENVIRONMENT`
+- `BLUNDR_APP_ORIGIN`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRO_MONTHLY_PRICE_ID`
+- `STRIPE_PRO_ANNUAL_PRICE_ID`
+- `REVENUECAT_WEBHOOK_AUTHORIZATION`
+
+Required Vercel Preview server-only variables for billing validation:
+
+- `BLUNDR_BILLING_ENVIRONMENT`: `test` only.
+- `BLUNDR_APP_ORIGIN`: stable non-production callback host.
+- `STRIPE_SECRET_KEY`: Stripe test-mode secret key only.
+- `STRIPE_WEBHOOK_SECRET`: Stripe test webhook signing secret.
+- `STRIPE_PRO_MONTHLY_PRICE_ID`: `price_1UDmveLuqtbLOQt39LJ8Pp4v`.
+- `STRIPE_PRO_ANNUAL_PRICE_ID`: `price_1UDmw4LuqtbLOQt3G6bgL5mY`.
+- `REVENUECAT_WEBHOOK_AUTHORIZATION`: server-only RevenueCat webhook header.
+- `REVENUECAT_REST_API_KEY`: RevenueCat v1 app API key used only for
+  server-side subscriber reconciliation through
+  `/v1/subscribers/{app_user_id}`.
+
+Required protected GitHub Environment values for Wave 2B validation:
+
+- `BLUNDR_QA_EMAIL`
+- `BLUNDR_QA_PASSWORD`
+- `WAVE2B_QA_SUPABASE_UUID`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_PRO_MONTHLY_PRICE_ID`
+- `STRIPE_PRO_ANNUAL_PRICE_ID`
+- `REVENUECAT_REST_API_KEY`
+- `REVENUECAT_V2_SECRET_API_KEY`: RevenueCat v2 secret API key used only by
+  the GitHub validation job for read-only project/configuration inspection.
+- `REVENUECAT_PROJECT_ID`
+- `REVENUECAT_PRO_ENTITLEMENT_ID`
+- `REVENUECAT_OFFERING_ID`
+- `BLUNDR_STAGING_SUPABASE_URL`
+- `BLUNDR_STAGING_SUPABASE_SECRET_KEY`: modern non-production `sb_secret_`
+  key used only by the protected workflow to create and delete ephemeral Auth
+  users for real sandbox proof.
+
+The immutable Preview URL and expected SHA are `workflow_dispatch` inputs, not
+secrets. No billing, webhook, Supabase admin, or RevenueCat key may be exposed
+as `NEXT_PUBLIC_*`.
+
+## Callback Topology
+
+The stable non-production callback host for provider dashboards is:
+
+- `https://blundr-staging-git-launc-291807-adamconnor00-gmailcoms-projects.vercel.app`
+
+Required provider callback routes:
+
+- Stripe webhook:
+  `https://blundr-staging-git-launc-291807-adamconnor00-gmailcoms-projects.vercel.app/api/blundr/billing/stripe/webhook`
+- RevenueCat webhook:
+  `https://blundr-staging-git-launc-291807-adamconnor00-gmailcoms-projects.vercel.app/api/blundr/billing/revenuecat/webhook`
+
+Required Stripe sandbox events:
+
+- `customer.subscription.created`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+
+RevenueCat external-purchase identity field: `app_user_id`.
+
+## Dashboard Proof Checklist
+
+Read-only operator proof is required before production activation:
+
+- Confirm the Stripe key is test-mode; abort if a live key is present.
+- Confirm the monthly sandbox price is `price_1UDmveLuqtbLOQt39LJ8Pp4v`,
+  active, recurring monthly, and exactly $9.99.
+- Confirm the annual sandbox price is `price_1UDmw4LuqtbLOQt3G6bgL5mY`,
+  active, recurring yearly, and exactly $69.99.
+- Confirm hosted Checkout and Customer Portal configuration are accessible.
+- Confirm RevenueCat entitlement identifier is exactly `pro`.
+- Confirm RevenueCat offering identifier is exactly `default`.
+- Confirm Stripe monthly and annual products are mapped as web products.
+- Confirm RevenueCat Test Store products are not used for real web Checkout.
+- Confirm sandbox/test configuration is isolated from production/live.
+
+## Validation Modes
+
+Wave 2B browser-contract validation may run against an immutable Vercel Preview.
+That mode proves exact SHA identity, authenticated QA access, onboarding plan
+state, UI request shapes, disclosures, acknowledgement behavior, responsive
+layout, and Free behavior. It may use mocked billing endpoints and is not
+release acceptance or production readiness.
+
+Full release-candidate validation requires the isolated `blundr-staging`
+project deployed with the Vercel Production target, separate from public
+Production. `/api/build-info` and `/api/health` must return `200` and prove the
+exact SHA, database, Maia, worker, feature-profile, and release-evidence
+readiness before release-required registry entries can be marked verified.
+
+## Tax
+
+Automatic tax remains disabled. User-facing billing disclosure continues to say
+`plus applicable taxes`. Tax geography and international sales handling remain a
+production-launch blocker.
+
+## Rollback Or Disable
+
+- Hide or disable paywall entry points.
+- Remove or withhold Stripe and RevenueCat server secrets; Checkout, Portal,
+  and webhook paths fail closed.
+- Keep webhook processing available for already-created subscriptions when
+  possible.
+- Do not grant Pro through Auth metadata or manual client state.
+- Do not delete repertoire, mastery, Review, reward, or ring data on downgrade.
+
+## Acceptance Evidence To Record
+
+- Focused paywall, billing, entitlement, and architecture tests passed locally
+  on the Wave 2B branch.
+- Browser-contract QA, provider configuration checks, and sandbox integration
+  proof are recorded separately. Mocked browser endpoints always remain
+  `acceptanceEligible=false` and can never satisfy sandbox integration proof or
+  produce Wave 2B acceptance.
+- Real sandbox integration proof must create an ephemeral non-production
+  Supabase Auth user, complete hosted Stripe test Checkout, verify Stripe
+  metadata and webhook idempotency, verify RevenueCat v1 subscriber
+  reconciliation for the same Supabase UUID, verify trusted backend Pro state,
+  create a Customer Portal session from the server-trusted customer mapping,
+  and clean up only the ephemeral user and sandbox subscription.
+- Disposable-only billing RLS/security gate with migrations through
+  `20260904170758` passed in GitHub Actions on 2026-09-04: run
+  `33903045519` tested SHA
+  `907a0deb50c1967a3f0413f639f411cefc157564`, rebuilt the disposable
+  Supabase project from local migrations, verified remote migration count 47
+  and head `20260904170758`, ran
+  `tests/security/billingAuthority.integration.test.ts`, and completed
+  disposable cleanup.
+- Migration verifier, unit tests, component/integration tests affected,
+  typecheck, lint, build, secret/browser-bundle audit, responsive QA, and
+  `git diff --check`.
+
+## Known Blockers
+
+- Production deployment is out of scope.
+- Live Stripe activation is out of scope.
+- Production migration application is out of scope.
+- Stripe and RevenueCat dashboard proof is pending unless safe test credentials
+  and the stable callback topology above are configured.
+- Real non-production Checkout, webhook processing, RevenueCat purchase
+  recognition, trusted backend Pro-state verification, idempotency, and
+  Customer Portal evidence are required before Wave 2B acceptance.
+- Tax geography is undecided.
+- Lifecycle email delivery and launch analytics belong to later waves.

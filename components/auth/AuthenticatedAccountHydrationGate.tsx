@@ -21,9 +21,13 @@ const EXEMPT_PREFIXES = [
   "/onboarding",
   "/privacy",
   "/terms",
+  "/pricing",
+  "/cookies",
+  "/legal",
   "/acceptable-use",
   "/subscription-terms",
 ];
+const SIGNED_OUT_PUBLIC_PATHS = ["/"];
 export const ACCOUNT_BOOTSTRAP_TIMEOUT_MS = 8_000;
 
 export function AuthenticatedAccountHydrationGate({
@@ -39,9 +43,14 @@ export function AuthenticatedAccountHydrationGate({
   const exempt = EXEMPT_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
+  const signedOutPublicPath = SIGNED_OUT_PUBLIC_PATHS.includes(pathname);
 
   useEffect(() => {
     if (exempt) {
+      setState("ready");
+      return;
+    }
+    if (signedOutPublicPath && auth.status === "signed_out") {
       setState("ready");
       return;
     }
@@ -142,15 +151,18 @@ export function AuthenticatedAccountHydrationGate({
     auth.session?.userId,
     auth.status,
     exempt,
+    signedOutPublicPath,
   ]);
 
   useEffect(() => {
-    if (!exempt && auth.status === "signed_out") {
+    if (!exempt && !signedOutPublicPath && auth.status === "signed_out") {
       router.replace(`/login?next=${encodeURIComponent(pathname)}`);
     }
-  }, [auth.status, exempt, pathname, router]);
+  }, [auth.status, exempt, pathname, router, signedOutPublicPath]);
 
   if (exempt) return <>{children}</>;
+  if (signedOutPublicPath && auth.status === "signed_out")
+    return <>{children}</>;
   if (auth.status === "signed_out") {
     return (
       <main className="min-h-screen bg-stone-50 p-6">

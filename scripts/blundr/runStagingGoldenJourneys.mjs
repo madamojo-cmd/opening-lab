@@ -227,7 +227,7 @@ async function main() {
       "Feature profile mismatch",
     );
     assert(
-      buildIdentity.migrationHead === "20260812192625",
+      buildIdentity.migrationHead === "20260918130000",
       "Migration head mismatch",
     );
     assert(

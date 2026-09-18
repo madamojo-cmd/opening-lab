@@ -195,7 +195,7 @@ export function DailyBlundrScreen() {
               <div className="mt-4 text-xs font-black uppercase tracking-[0.18em] text-green-700">Loading Daily Blundr</div>
               <h1 className="mt-2 text-2xl font-black tracking-tight text-stone-950">Blundr is lining up today&apos;s loop.</h1>
               <p className="mt-2 text-sm leading-6 text-stone-600">
-                Your local Daily Blundr state is loading. If needed, Blundr will fall back safely to local data.
+                Loading your Daily Blundr session…
               </p>
             </section>
           </div>
@@ -263,7 +263,7 @@ export function DailyBlundrScreen() {
                 <Flame size={14} /> Daily streak
               </div>
               <div className="mt-2 text-lg font-black">{overview?.store.progress.currentDailyStreak ?? overview?.store.progress.dailyStreak ?? 0}</div>
-              <div className="text-xs text-stone-400">local completions</div>
+              <div className="text-xs text-stone-400">completed today</div>
             </div>
             <div className="rounded-2xl bg-white/8 p-3">
               <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-stone-400">
@@ -355,10 +355,10 @@ export function DailyBlundrScreen() {
         <section className="mt-5 rounded-3xl border border-stone-200 bg-white p-4 shadow-sm">
           <div className="flex items-center gap-2 text-sm font-black text-stone-900">
             <BadgeCheck size={16} className="text-green-700" />
-            Mastery scaffold
+            Mastery progress
           </div>
           <p className="mt-2 text-sm leading-6 text-stone-600">
-            Daily-local mastery keeps track of what Blundr has already seen, what still feels shaky, and what can fade out later.
+            Tracks what you’ve mastered, what needs more review, and what can appear less often over time.
           </p>
           <div className="mt-3 grid grid-cols-4 gap-2 text-center text-xs font-black">
             <div className="rounded-2xl bg-stone-50 px-2 py-3 text-stone-700">Fresh {masterySummary.fresh}</div>

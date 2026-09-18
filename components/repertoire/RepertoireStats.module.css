@@ -1,0 +1,142 @@
+.panel {
+  border: 1px solid rgba(16, 20, 17, 0.08);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 14px 28px rgba(16, 20, 17, 0.06);
+  padding: 16px;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.kicker {
+  color: #185c38;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.title {
+  margin-top: 6px;
+  color: #101411;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.titleRegular {
+  font-size: 1.08rem;
+}
+
+.titleCompact {
+  font-size: 0.96rem;
+}
+
+.pill {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  border-radius: 999px;
+  background: #e8f2eb;
+  color: #185c38;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.statGrid {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.statGridRegular {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.statGridCompact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.stat {
+  min-width: 0;
+  border: 1px solid rgba(16, 20, 17, 0.08);
+  border-radius: 16px;
+  background: #f8f8f5;
+  padding: 13px;
+}
+
+.statLabel {
+  color: #70766f;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.statValue {
+  margin-top: 8px;
+  color: #101411;
+  font-size: 1.45rem;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.statSub {
+  margin-top: 8px;
+  color: #70766f;
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.progressBar {
+  height: 10px;
+  margin-top: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #f1f1ed;
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #185c38, #4e8e5e);
+  transition: width 300ms ease;
+}
+
+.progressFooter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  color: #70766f;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+@media (max-width: 860px) {
+  .statGridRegular {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .statGridRegular,
+  .statGridCompact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

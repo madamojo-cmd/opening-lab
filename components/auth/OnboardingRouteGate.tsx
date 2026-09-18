@@ -13,14 +13,19 @@ const EXEMPT_PREFIXES = [
   "/login",
   "/forgot-password",
   "/auth",
+  "/billing",
   "/confirm",
   "/reset-password",
   "/onboarding",
   "/privacy",
   "/terms",
+  "/pricing",
+  "/cookies",
+  "/legal",
   "/acceptable-use",
   "/subscription-terms",
 ];
+const SIGNED_OUT_PUBLIC_PATHS = ["/"];
 
 export function OnboardingRouteGate({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "/";
@@ -32,8 +37,13 @@ export function OnboardingRouteGate({ children }: { children: ReactNode }) {
   const exempt = EXEMPT_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
+  const signedOutPublicPath = SIGNED_OUT_PUBLIC_PATHS.includes(pathname);
   useEffect(() => {
     if (!isOnboardingV11Enabled() || exempt) {
+      setChecked(true);
+      return;
+    }
+    if (signedOutPublicPath && auth.status === "signed_out") {
       setChecked(true);
       return;
     }
@@ -61,9 +71,22 @@ export function OnboardingRouteGate({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [auth.status, exempt, pathname, requestVersion, router]);
+  }, [
+    auth.status,
+    exempt,
+    pathname,
+    requestVersion,
+    router,
+    signedOutPublicPath,
+  ]);
+  if (
+    isOnboardingV11Enabled() &&
+    signedOutPublicPath &&
+    auth.status === "signed_out"
+  )
+    return <>{children}</>;
   if (isOnboardingV11Enabled() && !exempt && auth.status === "loading")
-    return <main className="min-h-screen bg-stone-50" aria-busy="true" />;
+    return <>{children}</>;
   if (
     isOnboardingV11Enabled() &&
     !exempt &&

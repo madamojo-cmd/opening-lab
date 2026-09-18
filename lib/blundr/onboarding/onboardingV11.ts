@@ -16,11 +16,13 @@ import {
 import { hasVerifiedStarterOpeningAccess } from "./starterOpeningAccess";
 import {
   ONBOARDING_V11_PACE_GOALS,
+  ONBOARDING_V11_PLAN_INTENTS,
   ONBOARDING_V11_PRIORITIES,
   ONBOARDING_V11_STEPS,
   getEarliestIncompleteOnboardingV11Step,
   shouldInitializeOnboardingV11StarterRepertoire,
   type OnboardingPriority,
+  type OnboardingV11PlanIntent,
   type OnboardingV11Pace,
   type OnboardingV11State,
   type OnboardingV11Step,
@@ -30,6 +32,7 @@ export {
   getEarliestIncompleteOnboardingV11Step,
   getOnboardingV11PaceGoals,
   type OnboardingPriority,
+  type OnboardingV11PlanIntent,
   type OnboardingV11Pace,
   type OnboardingV11State,
   type OnboardingV11Step,
@@ -46,9 +49,32 @@ type ProfileRow = {
   daily_tempo_goal?: unknown;
   daily_battery_goal?: unknown;
   daily_blundr_goal?: unknown;
+  daily_blundr_card_goal?: unknown;
   selected_starter_pack_id?: unknown;
   preferred_training_mode?: unknown;
 };
+
+type AuthAdminClient = {
+  auth: {
+    admin: {
+      getUserById: (userId: string) => Promise<{
+        data: { user: { user_metadata?: unknown } | null };
+        error: unknown;
+      }>;
+      updateUserById: (
+        userId: string,
+        attributes: { user_metadata: Record<string, unknown> },
+      ) => Promise<{ error: unknown }>;
+    };
+  };
+};
+
+type SafeDatabaseError = {
+  code?: unknown;
+  constraint?: unknown;
+};
+
+type ProfileQueryClient = ReturnType<typeof profileClient>;
 
 function text(value: unknown): string {
   return String(value ?? "").trim();
@@ -81,6 +107,61 @@ function isMode(value: unknown): value is "assisted" | "plain" {
   return value === "assisted" || value === "plain";
 }
 
+function isPlanIntent(value: unknown): value is OnboardingV11PlanIntent {
+  return ONBOARDING_V11_PLAN_INTENTS.includes(value as OnboardingV11PlanIntent);
+}
+
+function readPlanIntent(
+  user: CurrentBlundrUser,
+): OnboardingV11PlanIntent | null {
+  return isPlanIntent(user.launchPlanIntent) ? user.launchPlanIntent : null;
+}
+
+function safeDatabaseErrorCode(error: unknown): string | null {
+  const code = (error as SafeDatabaseError | null)?.code;
+  return typeof code === "string" && /^[A-Z0-9_]+$/i.test(code) ? code : null;
+}
+
+function safeDatabaseConstraint(error: unknown): string | null {
+  const constraint = (error as SafeDatabaseError | null)?.constraint;
+  return typeof constraint === "string" && /^[A-Za-z0-9_]+$/.test(constraint)
+    ? constraint
+    : null;
+}
+
+function logOnboardingPersistenceFailure(
+  operation: "select" | "insert" | "update",
+  error: unknown,
+): void {
+  console.error("blundr_onboarding_persistence_failure", {
+    operation,
+    code: safeDatabaseErrorCode(error),
+    constraint: safeDatabaseConstraint(error),
+  });
+}
+
+function throwOnboardingPersistenceUnavailable(
+  operation: "select" | "insert" | "update",
+  error: unknown,
+): never {
+  logOnboardingPersistenceFailure(operation, error);
+  throw new Error("onboarding_persistence_unavailable");
+}
+
+export function mergeOnboardingPlanIntentUserMetadata(
+  metadata: unknown,
+  planIntent: OnboardingV11PlanIntent,
+): Record<string, unknown> {
+  const existing =
+    metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? (metadata as Record<string, unknown>)
+      : {};
+  return {
+    ...existing,
+    blundr_launch_plan_intent: planIntent,
+  };
+}
+
 function priorities(value: unknown): OnboardingPriority[] {
   return Array.from(
     new Set(
@@ -111,6 +192,7 @@ function paceFromGoals(row: ProfileRow): OnboardingV11Pace | null {
 
 export function normalizeOnboardingV11ProfileRow(
   row: ProfileRow | null | undefined,
+  user?: CurrentBlundrUser,
 ): OnboardingV11State {
   const completed = Boolean(row?.onboarding_completed);
   return {
@@ -129,6 +211,7 @@ export function normalizeOnboardingV11ProfileRow(
     trainingMode: isMode(row?.preferred_training_mode)
       ? row.preferred_training_mode
       : null,
+    planIntent: user ? readPlanIntent(user) : null,
     ageConfirmed: Boolean(row?.age_confirmed_at),
     startedAt: text(row?.onboarding_started_at) || null,
     completedAt: text(row?.onboarding_completed_at) || null,
@@ -151,17 +234,17 @@ function profileClient(user: CurrentBlundrUser) {
   });
 }
 
-async function ensureProfile(
+export async function ensureOnboardingV11Profile(
   user: CurrentBlundrUser,
+  client: ProfileQueryClient = profileClient(user),
 ): Promise<ProfileRow | null> {
-  const client = profileClient(user);
   if (!client) return null;
   const { data: existing, error } = await client
     .from("blundr_user_profiles")
     .select("*")
     .eq("user_id", user.userId)
     .maybeSingle();
-  if (error) throw new Error("onboarding_persistence_unavailable");
+  if (error) throwOnboardingPersistenceUnavailable("select", error);
   if (existing) {
     if (user.age13Confirmed && !(existing as ProfileRow).age_confirmed_at) {
       const { data, error: confirmationError } = await client
@@ -171,7 +254,7 @@ async function ensureProfile(
         .select("*")
         .single();
       if (confirmationError || !data)
-        throw new Error("onboarding_persistence_unavailable");
+        throwOnboardingPersistenceUnavailable("update", confirmationError);
       return data as ProfileRow;
     }
     return existing as ProfileRow;
@@ -190,19 +273,56 @@ async function ensureProfile(
       daily_tempo_goal: fallback.dailyTempoGoal,
       daily_battery_goal: fallback.dailyBatteryGoal,
       daily_blundr_goal: fallback.dailyBlundrGoal,
+      daily_blundr_card_goal: fallback.dailyBlundrCardGoal,
       age_confirmed_at: user.age13Confirmed ? nowIso() : null,
     })
     .select("*")
     .single();
-  if (insertError || !data)
-    throw new Error("onboarding_persistence_unavailable");
+  if (insertError) {
+    if (safeDatabaseErrorCode(insertError) === "23505") {
+      const { data: recovered, error: rereadError } = await client
+        .from("blundr_user_profiles")
+        .select("*")
+        .eq("user_id", user.userId)
+        .maybeSingle();
+      if (rereadError || !recovered) {
+        throwOnboardingPersistenceUnavailable("select", rereadError);
+      }
+      return recovered as ProfileRow;
+    }
+    throwOnboardingPersistenceUnavailable("insert", insertError);
+  }
+  if (!data) throwOnboardingPersistenceUnavailable("insert", insertError);
   return data as ProfileRow;
 }
 
 export async function readOnboardingV11State(
   user: CurrentBlundrUser,
 ): Promise<OnboardingV11State> {
-  return normalizeOnboardingV11ProfileRow(await ensureProfile(user));
+  return normalizeOnboardingV11ProfileRow(
+    await ensureOnboardingV11Profile(user),
+    user,
+  );
+}
+
+async function savePlanIntent(
+  user: CurrentBlundrUser,
+  planIntent: OnboardingV11PlanIntent,
+): Promise<void> {
+  const admin = createBlundrSupabaseAdminClient();
+  if (!admin) throw new Error("onboarding_plan_intent_unavailable");
+  const authAdmin = admin as unknown as AuthAdminClient;
+  const existing = await authAdmin.auth.admin.getUserById(user.userId);
+  if (existing.error || !existing.data.user)
+    throw new Error("onboarding_plan_intent_unavailable");
+  const { error } = await authAdmin.auth.admin.updateUserById(user.userId, {
+    user_metadata: mergeOnboardingPlanIntentUserMetadata(
+      existing.data.user.user_metadata,
+      planIntent,
+    ),
+  });
+  if (error) throw new Error("onboarding_plan_intent_unavailable");
+  user.launchPlanIntent = planIntent;
 }
 
 export async function saveOnboardingV11Step(
@@ -248,6 +368,10 @@ export async function saveOnboardingV11Step(
     if (!isMode(input.value)) throw new Error("invalid_training_mode");
     update.preferred_training_mode = input.value;
   }
+  if (input.step === "plan") {
+    if (!isPlanIntent(input.value)) throw new Error("invalid_plan_intent");
+    await savePlanIntent(user, input.value);
+  }
   // The server-confirmed age acknowledgement is durable evidence. Repeated
   // submissions must be idempotent and must never replace it with another
   // onboarding timestamp.
@@ -260,8 +384,8 @@ export async function saveOnboardingV11Step(
     .eq("user_id", user.userId)
     .select("*")
     .single();
-  if (error || !data) throw new Error("onboarding_persistence_unavailable");
-  return normalizeOnboardingV11ProfileRow(data as ProfileRow);
+  if (error || !data) throwOnboardingPersistenceUnavailable("update", error);
+  return normalizeOnboardingV11ProfileRow(data as ProfileRow, user);
 }
 
 export async function completeOnboardingV11(
@@ -270,9 +394,10 @@ export async function completeOnboardingV11(
   const state = await readOnboardingV11State(user);
   if (!shouldInitializeOnboardingV11StarterRepertoire(state)) return state;
   const earliest = getEarliestIncompleteOnboardingV11Step(state);
-  if (earliest !== "plan" && earliest !== "ready")
+  if (earliest !== "ready")
     throw new Error(`onboarding_incomplete:${earliest}`);
   if (
+    !state.ageConfirmed ||
     !state.starterPackId ||
     !state.ratingBandId ||
     !state.pace ||
@@ -351,6 +476,6 @@ export async function completeOnboardingV11(
     .eq("user_id", user.userId)
     .select("*")
     .single();
-  if (error || !data) throw new Error("onboarding_persistence_unavailable");
+  if (error || !data) throwOnboardingPersistenceUnavailable("update", error);
   return normalizeOnboardingV11ProfileRow(data as ProfileRow);
 }

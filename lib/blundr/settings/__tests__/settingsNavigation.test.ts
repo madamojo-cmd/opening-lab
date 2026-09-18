@@ -11,6 +11,6 @@ assert.deepEqual(BLUNDR_MAJOR_APP_LINKS.map((link) => link.id), ["home", "daily"
 assert.deepEqual(BLUNDR_SETTINGS_BOARD_THEME_OPTIONS.map((option) => option.id), ["default", "blue", "walnut"]);
 assert.deepEqual(BLUNDR_SETTINGS_BOARD_PIECE_OPTIONS.map((option) => option.id), ["unicode", "neo", "letters"]);
 assert.ok(BLUNDR_SETTINGS_SECTION_IDS.includes("account"));
-assert.ok(BLUNDR_SETTINGS_SECTION_IDS.includes("developer_tools"));
+assert.ok(BLUNDR_SETTINGS_SECTION_IDS.includes("account_management"));
 
 console.log("settingsNavigation.test.ts passed");

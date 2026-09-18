@@ -1,4 +1,5 @@
 import type { MasteryMapReadModel } from "@/lib/blundr/masteryMap";
+import styles from "./OpeningDetail.module.css";
 export function OpeningIntelligenceStrip({
   model,
 }: {
@@ -18,19 +19,11 @@ export function OpeningIntelligenceStrip({
     ],
   ] as const;
   return (
-    <section
-      aria-label="Opening intelligence"
-      className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6"
-    >
+    <section aria-label="Opening intelligence" className={styles.metricsGrid}>
       {values.map(([label, value]) => (
-        <div
-          key={label}
-          className="rounded-2xl border border-stone-200 bg-white p-4"
-        >
-          <p className="text-xs font-black uppercase tracking-wide text-stone-500">
-            {label}
-          </p>
-          <p className="mt-2 text-2xl font-black text-stone-900">{value}</p>
+        <div key={label} className={styles.metricCard}>
+          <p className={styles.metricLabel}>{label}</p>
+          <p className={styles.metricValue}>{value}</p>
         </div>
       ))}
     </section>

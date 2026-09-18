@@ -64,6 +64,7 @@ export type BlundrProgressSummary = {
     totalAllRingsClosedDays: number;
     daysTrainedThisWeek: number;
     week: BlundrProgressWeekDay[];
+    recentDays: BlundrProgressWeekDay[];
   };
   trainingVolume: {
     openingRunsToday: number;

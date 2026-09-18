@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   normalizeIanaTimeZone,
   validateTrainingPreferencesPatch,
-} from "../trainingPreferences";
+} from "../trainingPreferences.ts";
 
 test("accepts every supported rating band and marks invalid bands unsafe", () => {
   for (const ratingBandId of [
@@ -37,6 +37,18 @@ test("validates account timezone and bounded daily goals", () => {
   assert.equal(
     validateTrainingPreferencesPatch({ dailyTempoGoal: 10 }).ok,
     true,
+  );
+  assert.equal(
+    validateTrainingPreferencesPatch({ dailyBlundrCardGoal: 0 }).ok,
+    false,
+  );
+  assert.equal(
+    validateTrainingPreferencesPatch({ dailyBlundrCardGoal: 10 }).ok,
+    true,
+  );
+  assert.equal(
+    validateTrainingPreferencesPatch({ dailyBlundrCardGoal: 100 }).ok,
+    false,
   );
 });
 

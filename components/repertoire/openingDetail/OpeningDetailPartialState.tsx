@@ -1,11 +1,10 @@
+import styles from "./OpeningDetail.module.css";
+
 export function OpeningDetailPartialState() {
   return (
-    <section
-      role="status"
-      className="rounded-3xl border border-stone-200 bg-white p-5"
-    >
-      <h2 className="font-black">Partial intelligence</h2>
-      <p className="mt-2 text-sm text-stone-600">
+    <section role="status" className={styles.stateCard}>
+      <h2 className={styles.sectionTitle}>Partial intelligence</h2>
+      <p className={styles.bodyCopy}>
         Some source data is still being processed.
       </p>
     </section>

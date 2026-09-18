@@ -40,7 +40,7 @@ export async function GET(request: Request) {
           error instanceof Error
             ? error.message
             : "progress_persistence_unavailable",
-        message: "Progress could not be loaded from durable storage.",
+        message: "Couldn't load your saved progress.",
       },
       { status: 503 },
     );

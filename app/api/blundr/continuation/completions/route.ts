@@ -76,7 +76,7 @@ export async function POST(request: Request) {
       {
         error: code,
         message:
-          "The continuation was not counted because server-owned completion evidence could not be confirmed.",
+          "That continuation wasn't counted because the completion couldn't be saved.",
       },
       { status: statusFor(code) },
     );

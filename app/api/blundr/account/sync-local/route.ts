@@ -8,7 +8,16 @@ export const dynamic = "force-dynamic";
 export async function POST(request: NextRequest) {
   const user = await getCurrentBlundrUser({ request, allowLocalFallback: true });
   if (!user) {
-    return NextResponse.json({ ok: false, error: { code: "authentication_required", message: "A user session is required." } }, { status: 401 });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: {
+          code: "authentication_required",
+          message: "Please sign in to continue.",
+        },
+      },
+      { status: 401 },
+    );
   }
 
   const bootstrap = await bootstrapBlundrAccount({ request, user });

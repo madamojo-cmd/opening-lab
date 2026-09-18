@@ -935,19 +935,34 @@ export function testMultiMoveTrainingQa(): void {
   const transpositionTree = buildOpeningTree([
     { openingId: "qa-trans", lineId: "qa-trans:0", openingName: "Ruy Lopez", sideToTrain: "white", movesSan: ["e4", "e5", "Nf3"] },
   ]);
-  const transposedFen = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w - - 0 2";
-  const transpositionFrame = buildFrame({
+  const knownPrefixFen = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2";
+  const knownPrefixFrame = buildFrame({
     openingTree: transpositionTree,
-    fen: transposedFen,
+    fen: knownPrefixFen,
     frameId: 14,
     trainerView: "assisted",
     trainingMode: "restricted",
     userColor: "w",
     visualMode: "safe_arrow",
   });
-  assert.equal(transpositionFrame.expectedMoveResolution.source, "transposition");
-  assert.equal(transpositionFrame.expectedMoveResolution.expectedMoveSan, "Nf3");
-  assertCoachMeaningful(transpositionFrame, "transposition");
+  assert.equal(knownPrefixFrame.expectedMoveResolution.source, "lesson_line");
+  assert.equal(knownPrefixFrame.expectedMoveResolution.expectedMoveSan, "Nf3");
+  assertCoachMeaningful(knownPrefixFrame, "known prefix");
+
+  const castlingRightsDriftFen = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w - - 0 2";
+  const castlingRightsDriftFrame = buildFrame({
+    openingTree: transpositionTree,
+    fen: castlingRightsDriftFen,
+    frameId: 140,
+    trainerView: "assisted",
+    trainingMode: "restricted",
+    userColor: "w",
+    visualMode: "safe_arrow",
+  });
+  assert.equal(castlingRightsDriftFrame.expectedMoveResolution.source, "opening_family_plan");
+  assert.equal(castlingRightsDriftFrame.expectedMoveResolution.debug?.transpositionNodeFound, undefined);
+  assert.equal(Boolean(castlingRightsDriftFrame.expectedMoveResolution.expectedMoveUci), true);
+  assertCoachMeaningful(castlingRightsDriftFrame, "castling-rights fallback");
 
   const providedBranchFEN = "rnbqkbnr/pp2pppp/8/2pp4/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3";
   const providedBranchRestricted = buildFrame({

@@ -135,7 +135,7 @@ jobs:
       BLUNDR_RLS_FRESH_PROJECT_REF: ${{ secrets.BLUNDR_RLS_FRESH_PROJECT_REF }}
       BLUNDR_RLS_UPGRADE_PROJECT_REF: ${{ secrets.BLUNDR_RLS_UPGRADE_PROJECT_REF }}
       BLUNDR_RLS_TEST_PROJECT_REF: ${{ secrets.BLUNDR_RLS_TEST_PROJECT_REF }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.BLUNDR_RLS_FRESH_DB_PASSWORD }}
       BLUNDR_RLS_TEST_ENVIRONMENT_ROLE: ${{ secrets.BLUNDR_RLS_TEST_ENVIRONMENT_ROLE }}
       BLUNDR_RLS_TEST_USER_A_EMAIL: ${{ secrets.BLUNDR_RLS_TEST_USER_A_EMAIL }}
       BLUNDR_RLS_TEST_USER_A_PASSWORD: ${{ secrets.BLUNDR_RLS_TEST_USER_A_PASSWORD }}
@@ -163,19 +163,24 @@ jobs:
             echo "Remote RLS target must have the disposable environment role"
             exit 1
           }
-      - name: Journey A preflight and fresh zero-to-38 rebuild
+      - name: Journey A preflight and fresh zero-to-50 rebuild
         run: |
           set -eu
           run_supabase() {
             command_log="$(mktemp)"
+            sanitize_log() {
+              sed -E 's#(postgres(ql)?://)[^@[:space:]]+@#\1[REDACTED]@#g; s#(password|token|secret|key)([=:][[:space:]]*|[[:space:]]+)[^[:space:]]+#\1\2[REDACTED]#Ig' "$1"
+            }
             if ! npx --yes supabase@2.111.0 "$@" >"$command_log" 2>&1; then
+              sanitize_log "$command_log"
               rm -f "$command_log"
-              echo "Supabase migration command failed without emitting target details"
+              echo "Supabase command failed; see sanitized CLI diagnostics above"
               exit 1
             fi
             if grep -q '"_tag":"Error"' "$command_log"; then
+              sanitize_log "$command_log"
               rm -f "$command_log"
-              echo "Supabase migration command returned a structured failure"
+              echo "Supabase command returned a structured failure; see sanitized CLI diagnostics above"
               exit 1
             fi
             rm -f "$command_log"
@@ -202,7 +207,7 @@ jobs:
           BLUNDR_PR01_PREFLIGHT_MODE=fresh BLUNDR_PR01_PREFLIGHT_PROJECT_REF="$BLUNDR_RLS_FRESH_PROJECT_REF" BLUNDR_PR01_EXPORT_API_KEYS=true npm run verify:pr01-disposable-project
           run_supabase link --project-ref "$BLUNDR_RLS_FRESH_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
           run_supabase --yes db reset --linked --no-seed
-          BLUNDR_EXPECTED_MIGRATION_COUNT=38 BLUNDR_EXPECTED_MIGRATION_HEAD=20260817203000 npm run verify:remote-migration-history
+          BLUNDR_EXPECTED_MIGRATION_COUNT=50 BLUNDR_EXPECTED_MIGRATION_HEAD=20260918130000 npm run verify:remote-migration-history
       - name: Run non-skippable fresh authority matrix
         run: |
           set -eu
@@ -211,6 +216,7 @@ jobs:
             test -n "${!name:-}" || { echo "$name is required"; exit 1; }
           done
           BLUNDR_RLS_TEST_PROJECT_REF="$BLUNDR_RLS_FRESH_PROJECT_REF" npm run test:pr03-remote-authority
+          node --preserve-symlinks --import tsx tests/security/tempoDailyLimitRemoteAuthority.integration.test.ts
 
   supabase-rls-upgrade:
     needs: source-identity
@@ -225,7 +231,7 @@ jobs:
       BLUNDR_RLS_FRESH_PROJECT_REF: ${{ secrets.BLUNDR_RLS_FRESH_PROJECT_REF }}
       BLUNDR_RLS_UPGRADE_PROJECT_REF: ${{ secrets.BLUNDR_RLS_UPGRADE_PROJECT_REF }}
       BLUNDR_RLS_TEST_PROJECT_REF: ${{ secrets.BLUNDR_RLS_TEST_PROJECT_REF }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.BLUNDR_RLS_UPGRADE_DB_PASSWORD }}
       BLUNDR_RLS_TEST_ENVIRONMENT_ROLE: ${{ secrets.BLUNDR_RLS_TEST_ENVIRONMENT_ROLE }}
       BLUNDR_RLS_TEST_USER_A_EMAIL: ${{ secrets.BLUNDR_RLS_TEST_USER_A_EMAIL }}
       BLUNDR_RLS_TEST_USER_A_PASSWORD: ${{ secrets.BLUNDR_RLS_TEST_USER_A_PASSWORD }}
@@ -257,19 +263,24 @@ jobs:
             echo "The RLS authority target must be the upgrade migration target"
             exit 1
           }
-      - name: Journey B preflight and exact 25-to-38 upgrade
+      - name: Journey B preflight and exact 25-to-50 upgrade
         run: |
           set -eu
           run_supabase() {
             command_log="$(mktemp)"
+            sanitize_log() {
+              sed -E 's#(postgres(ql)?://)[^@[:space:]]+@#\1[REDACTED]@#g; s#(password|token|secret|key)([=:][[:space:]]*|[[:space:]]+)[^[:space:]]+#\1\2[REDACTED]#Ig' "$1"
+            }
             if ! npx --yes supabase@2.111.0 "$@" >"$command_log" 2>&1; then
+              sanitize_log "$command_log"
               rm -f "$command_log"
-              echo "Supabase migration command failed without emitting target details"
+              echo "Supabase command failed; see sanitized CLI diagnostics above"
               exit 1
             fi
             if grep -q '"_tag":"Error"' "$command_log"; then
+              sanitize_log "$command_log"
               rm -f "$command_log"
-              echo "Supabase migration command returned a structured failure"
+              echo "Supabase command returned a structured failure; see sanitized CLI diagnostics above"
               exit 1
             fi
             rm -f "$command_log"
@@ -306,10 +317,10 @@ jobs:
           run_supabase --yes db reset --linked --version 20260805150000 --no-seed
           BLUNDR_EXPECTED_MIGRATION_COUNT=25 BLUNDR_EXPECTED_MIGRATION_HEAD=20260805150000 npm run verify:remote-migration-history
           expected_pr03_migration="$(mktemp)"
-          find supabase/migrations -maxdepth 1 -name '*.sql' -type f -printf '%f\n' | sort | tail -n 12 >"$expected_pr03_migration"
+          find supabase/migrations -maxdepth 1 -name '*.sql' -type f -printf '%f\n' | sort | tail -n 24 >"$expected_pr03_migration"
           require_dry_run_migrations "$expected_pr03_migration"
           run_supabase db push
-          BLUNDR_EXPECTED_MIGRATION_COUNT=38 BLUNDR_EXPECTED_MIGRATION_HEAD=20260817203000 npm run verify:remote-migration-history
+          BLUNDR_EXPECTED_MIGRATION_COUNT=50 BLUNDR_EXPECTED_MIGRATION_HEAD=20260918130000 npm run verify:remote-migration-history
       - name: Run non-skippable upgraded authority matrix
         run: |
           set -eu
@@ -318,6 +329,7 @@ jobs:
             test -n "${!name:-}" || { echo "$name is required"; exit 1; }
           done
           npm run test:pr03-remote-authority
+          node --preserve-symlinks --import tsx tests/security/tempoDailyLimitRemoteAuthority.integration.test.ts
 
   production-build:
     needs:

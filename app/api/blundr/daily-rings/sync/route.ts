@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     {
       error: "client_authored_progress_disabled",
       message:
-        "Daily progress is calculated only from durable completion evidence.",
+        "Daily progress is calculated only from saved completions.",
     },
     { status: 405, headers: { Allow: "GET" } },
   );

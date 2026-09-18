@@ -8,7 +8,7 @@ export const metadata = {
 export default async function MiniGamePracticePage({ params }: { params: Promise<{ miniGameId: string }> }) {
   const resolvedParams = await params;
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-24 pt-5">
+    <main className="mx-auto flex w-full max-w-[1340px] flex-col text-stone-950">
       <MiniGamePracticeRunner miniGameId={resolvedParams.miniGameId} homeHref="/" reviewHref="/review" settingsHref="/settings" />
     </main>
   );

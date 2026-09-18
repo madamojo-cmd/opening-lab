@@ -17,7 +17,7 @@ jobs:
     environment: blundr-disposable-rls
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.BLUNDR_RLS_FRESH_DB_PASSWORD }}
       BLUNDR_RLS_FRESH_PROJECT_REF: ${{ secrets.BLUNDR_RLS_FRESH_PROJECT_REF }}
       BLUNDR_RLS_UPGRADE_PROJECT_REF: ${{ secrets.BLUNDR_RLS_UPGRADE_PROJECT_REF }}
       BLUNDR_RLS_TEST_PROJECT_REF: ${{ secrets.BLUNDR_RLS_TEST_PROJECT_REF }}
@@ -139,7 +139,7 @@ jobs:
           BLUNDR_EXPECTED_MIGRATION_COUNT=25 BLUNDR_EXPECTED_MIGRATION_HEAD=20260805150000 \
             npm run verify:remote-migration-history | tee "$log"
 
-      - name: Prove 25→38 upgrade path
+      - name: Prove 25→50 upgrade path
         shell: bash
         run: |
           set -euo pipefail
@@ -166,7 +166,7 @@ jobs:
             echo "Validated sanitized migration dry-run with $expected_count expected migrations"
           }
           expected_upgrade_migrations="$(mktemp)"
-          find supabase/migrations -maxdepth 1 -name '*.sql' -type f -printf '%f\n' | sort | tail -n 12 >"$expected_upgrade_migrations"
+          find supabase/migrations -maxdepth 1 -name '*.sql' -type f -printf '%f\n' | sort | tail -n 24 >"$expected_upgrade_migrations"
           require_dry_run_migrations "$expected_upgrade_migrations"
           command_log="$(mktemp)"
           if ! npx --yes supabase@2.111.0 db push >"$command_log" 2>&1; then
@@ -182,13 +182,13 @@ jobs:
           cat "$command_log" | tee "$LOG_DIR/db-push-upgrade.log" >/dev/null
           rm -f "$command_log"
 
-      - name: Verify remote migration history reached 38 after upgrade
+      - name: Verify remote migration history reached 50 after upgrade
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$LOG_DIR"
           log="$LOG_DIR/migrations-after-upgrade.log"
-          BLUNDR_EXPECTED_MIGRATION_COUNT=38 BLUNDR_EXPECTED_MIGRATION_HEAD=20260817203000 \
+          BLUNDR_EXPECTED_MIGRATION_COUNT=50 BLUNDR_EXPECTED_MIGRATION_HEAD=20260918130000 \
             npm run verify:remote-migration-history | tee "$log"
 
       - name: Validate linked reset support
@@ -244,7 +244,7 @@ jobs:
           set -euo pipefail
           mkdir -p "$LOG_DIR"
           log="$LOG_DIR/migrations-after-reset.log"
-          BLUNDR_EXPECTED_MIGRATION_COUNT=38 BLUNDR_EXPECTED_MIGRATION_HEAD=20260817203000 \
+          BLUNDR_EXPECTED_MIGRATION_COUNT=50 BLUNDR_EXPECTED_MIGRATION_HEAD=20260918130000 \
             npm run verify:remote-migration-history | tee "$log"
 
       - name: Promote fresh project for downstream authority tests
@@ -294,6 +294,14 @@ jobs:
           mkdir -p "$LOG_DIR"
           node --preserve-symlinks --import tsx tests/security/trainerCompletionRemoteAuthority.integration.test.ts | tee "$LOG_DIR/trainer-completion-remote-authority.log"
 
+      - id: tempo_daily_limit_remote_authority
+        name: Tempo daily limit remote authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          node --preserve-symlinks --import tsx tests/security/tempoDailyLimitRemoteAuthority.integration.test.ts | tee "$LOG_DIR/tempo-daily-limit-remote-authority.log"
+
       - id: pr01_migration_authority_regression
         name: PR-01 migration authority regression
         shell: bash
@@ -311,6 +319,14 @@ jobs:
           mkdir -p "$LOG_DIR"
           echo "Running learningCoreRls.integration.test.ts"
           node --preserve-symlinks --import tsx tests/security/learningCoreRls.integration.test.ts | tee "$LOG_DIR/learning-core-rls.log"
+
+      - id: billing_authority_rls_regression
+        name: Billing authority RLS and entitlement isolation regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR"
+          npm run test:billing-rls-authority | tee "$LOG_DIR/billing-authority-rls.log"
 
       - id: local_daily_rewards_ring_and_security_contracts
         name: Daily composition and fallback tests
@@ -371,14 +387,15 @@ jobs:
             echo "- Run ID: $GITHUB_RUN_ID"
             echo "- Tested SHA: $GITHUB_SHA"
             echo "- Disposable environment role: $BLUNDR_RLS_TEST_ENVIRONMENT_ROLE"
-            echo "- Migration count: 38"
-            echo "- Migration head: 20260817203000"
+            echo "- Migration count: 50"
+            echo "- Migration head: 20260918130000"
             echo "- Daily v3 remote authority: ${{ steps.daily_v3_remote_authority.outcome }}"
             echo "- PR-02 regression: ${{ steps.pr02_learning_and_daily_authority_regression.outcome }}"
             echo "- PR-03 regression: ${{ steps.pr03_rewards_grant_and_presentation_regression.outcome }}"
             echo "- Trainer regression: ${{ steps.durable_trainer_completion_authority_regression.outcome }}"
             echo "- PR-01 migration authority regression: ${{ steps.pr01_migration_authority_regression.outcome }}"
             echo "- Learning core RLS and cross-user isolation matrix: ${{ steps.learning_core_rls_cross_user_isolation_matrix.outcome }}"
+            echo "- Billing authority RLS and entitlement isolation regression: ${{ steps.billing_authority_rls_regression.outcome }}"
             echo "- Daily composition and fallback tests: ${{ steps.local_daily_rewards_ring_and_security_contracts.outcome }}"
             echo "- Rewards v2 server authority contract tests: ${{ steps.rewards_server_authoritative_contract.outcome }}"
             echo "- Daily ring authenticated writer-isolation tests: ${{ steps.daily_rings_read_only_authority.outcome }}"

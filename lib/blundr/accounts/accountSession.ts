@@ -1,10 +1,16 @@
 // server-only: do not import into client components.
 
 import { createBlundrSupabaseServerClient } from "../backend/supabaseServerClient";
-import { isBlundrAllowlistedUser, readBlundrBackendEnv } from "../backend/backendEnv";
+import {
+  isBlundrAllowlistedUser,
+  readBlundrBackendEnv,
+} from "../backend/backendEnv";
 import { resolveBlundrAccountMode } from "../backend/backendMode";
 import { createLocalDemoUser } from "./accountDefaults";
-import { getLocalAccountCurrentUserId, setLocalAccountCurrentUserId } from "./localAccountStorage";
+import {
+  getLocalAccountCurrentUserId,
+  setLocalAccountCurrentUserId,
+} from "./localAccountStorage";
 import type { CurrentBlundrUser } from "./accountTypes";
 
 export type CurrentBlundrUserResolutionInput = {
@@ -27,7 +33,9 @@ export function getCurrentBlundrUserIdFallback(): string {
   return setLocalAccountCurrentUserId(getLocalAccountCurrentUserId());
 }
 
-export async function getCurrentBlundrUser(input: CurrentBlundrUserResolutionInput = {}): Promise<CurrentBlundrUser | null> {
+export async function getCurrentBlundrUser(
+  input: CurrentBlundrUserResolutionInput = {},
+): Promise<CurrentBlundrUser | null> {
   if (input.userOverride?.userId) {
     const userId = normalizeText(input.userOverride.userId);
     if (!userId) return null;
@@ -40,6 +48,7 @@ export async function getCurrentBlundrUser(input: CurrentBlundrUserResolutionInp
       accessToken: input.userOverride.accessToken ?? null,
       provider: input.userOverride.provider ?? null,
       age13Confirmed: Boolean(input.userOverride.age13Confirmed),
+      launchPlanIntent: input.userOverride.launchPlanIntent ?? null,
     };
   }
 
@@ -55,23 +64,39 @@ export async function getCurrentBlundrUser(input: CurrentBlundrUserResolutionInp
       const { data, error } = await client.auth.getUser(accessToken);
       if (error || !data?.user) return null;
       const user = data.user;
-      const isAdmin = isBlundrAllowlistedUser({ userId: user.id, email: user.email }, env);
+      const isAdmin = isBlundrAllowlistedUser(
+        { userId: user.id, email: user.email },
+        env,
+      );
       return {
         userId: user.id,
         email: user.email ?? null,
-        mode: isAdmin && env.devToolsEnabled ? "developer_admin" : "authenticated",
+        mode:
+          isAdmin && env.devToolsEnabled ? "developer_admin" : "authenticated",
         isAuthenticated: true,
         isAdmin,
         accessToken,
         provider: user.app_metadata?.provider ?? null,
-        age13Confirmed: user.user_metadata?.age_13_confirmed === true,
+        age13Confirmed:
+          user.user_metadata?.age_16_terms_confirmed === true ||
+          user.user_metadata?.age_16_confirmed === true ||
+          user.user_metadata?.age_13_confirmed === true,
+        launchPlanIntent:
+          user.user_metadata?.blundr_launch_plan_intent === "free" ||
+          user.user_metadata?.blundr_launch_plan_intent === "pro_monthly" ||
+          user.user_metadata?.blundr_launch_plan_intent === "pro_annual"
+            ? user.user_metadata.blundr_launch_plan_intent
+            : null,
       };
     } catch {
       return null;
     }
   }
 
-  const mode = resolveBlundrAccountMode({ env, allowLocalFallback: input.allowLocalFallback ?? true });
+  const mode = resolveBlundrAccountMode({
+    env,
+    allowLocalFallback: input.allowLocalFallback ?? true,
+  });
   if (mode === "local_demo") {
     const userId = getCurrentBlundrUserIdFallback();
     return {
@@ -83,6 +108,8 @@ export async function getCurrentBlundrUser(input: CurrentBlundrUserResolutionInp
   return null;
 }
 
-export function isCurrentBlundrUserLocalDemo(user: CurrentBlundrUser | null | undefined): boolean {
+export function isCurrentBlundrUserLocalDemo(
+  user: CurrentBlundrUser | null | undefined,
+): boolean {
   return Boolean(user && user.mode === "local_demo");
 }

@@ -14,9 +14,11 @@ export type TrainingPreferencesPatch = Partial<
     UserTrainingProfile,
     | "ratingBandId"
     | "preferredTrainingMode"
+    | "tacticalHighlightsEnabled"
     | "dailyTempoGoal"
     | "dailyBatteryGoal"
     | "dailyBlundrGoal"
+    | "dailyBlundrCardGoal"
     | "timeZone"
   >
 >;
@@ -31,6 +33,35 @@ function hasOwn(input: object, key: string): boolean {
 
 function validGoal(value: unknown): value is number {
   return Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 100;
+}
+
+function validCardGoal(value: unknown): value is number {
+  return Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 99;
+}
+
+export function normalizeDailyBlundrCardGoalPreference(
+  input: {
+    dailyBlundrCardGoal?: unknown;
+    dailyBlundrGoal?: unknown;
+  },
+  fallback = 10,
+): number {
+  const direct = Number(input.dailyBlundrCardGoal);
+  if (Number.isFinite(direct)) {
+    const next = Math.trunc(direct);
+    if (next >= 1 && next <= 99) return next;
+  }
+
+  // Back-compat: some older local payloads stored a daily-card preference in the
+  // legacy `dailyBlundrGoal` slot. Avoid treating the common legacy default (1)
+  // as a card-goal to prevent surprising resets for existing users.
+  const legacy = Number(input.dailyBlundrGoal);
+  if (Number.isFinite(legacy)) {
+    const next = Math.trunc(legacy);
+    if (next >= 2) return Math.max(1, Math.min(99, next));
+  }
+
+  return Math.max(1, Math.min(99, Math.trunc(Number(fallback) || 10)));
 }
 
 export function normalizeIanaTimeZone(value: unknown): string | null {
@@ -62,9 +93,11 @@ export function validateTrainingPreferencesPatch(
   const allowed = new Set([
     "ratingBandId",
     "preferredTrainingMode",
+    "tacticalHighlightsEnabled",
     "dailyTempoGoal",
     "dailyBatteryGoal",
     "dailyBlundrGoal",
+    "dailyBlundrCardGoal",
     "timeZone",
   ]);
   if (Object.keys(input).some((key) => !allowed.has(key)))
@@ -96,6 +129,15 @@ export function validateTrainingPreferencesPatch(
       };
     patch.preferredTrainingMode = input.preferredTrainingMode;
   }
+  if (hasOwn(input, "tacticalHighlightsEnabled")) {
+    if (typeof input.tacticalHighlightsEnabled !== "boolean")
+      return {
+        ok: false,
+        code: "invalid_teaching_aid",
+        message: "Teaching aid preferences must be true or false.",
+      };
+    patch.tacticalHighlightsEnabled = input.tacticalHighlightsEnabled;
+  }
   for (const key of [
     "dailyTempoGoal",
     "dailyBatteryGoal",
@@ -109,6 +151,15 @@ export function validateTrainingPreferencesPatch(
         message: "Daily goals must be whole numbers from 1 to 100.",
       };
     patch[key] = Number(input[key]);
+  }
+  if (hasOwn(input, "dailyBlundrCardGoal")) {
+    if (!validCardGoal(input.dailyBlundrCardGoal))
+      return {
+        ok: false,
+        code: "invalid_daily_card_goal",
+        message: "Daily card goals must be whole numbers from 1 to 99.",
+      };
+    patch.dailyBlundrCardGoal = Number(input.dailyBlundrCardGoal);
   }
   if (hasOwn(input, "timeZone")) {
     const timeZone = normalizeIanaTimeZone(input.timeZone);

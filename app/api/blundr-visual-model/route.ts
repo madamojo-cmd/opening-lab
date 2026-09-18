@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
         expectedMove: firstMove(body.expectedMove ?? body.expectedMoves) as any,
         candidateMoves: candidateMovesFromBody(body),
       },
-      error instanceof Error ? error.message : "visual model failed",
+      "Something went wrong while preparing the training view. Please try again.",
     );
 
     return NextResponse.json({

@@ -38,7 +38,7 @@ function buildPlainBlock(input: {
       return {
         title: "Line Complete",
         body: "This line is complete. Continue from here when you are ready.",
-        bullets: ["No move target is active in this frame."],
+        bullets: ["No move is active right now."],
         evidenceClaimIds: [],
         leakRisk: "none",
       };
@@ -47,7 +47,7 @@ function buildPlainBlock(input: {
       return {
         title: "Opponent Move",
         body: "Wait for the opponent reply to finish before selecting your next move.",
-        bullets: ["No user move target is active."],
+        bullets: ["Your move unlocks after the reply finishes."],
         evidenceClaimIds: [],
         leakRisk: "none",
       };
@@ -55,7 +55,7 @@ function buildPlainBlock(input: {
     if (input.frame.kind === "terminal") {
       return {
         title: "Position Complete",
-        body: "This position is terminal, so no coaching target is available.",
+        body: "This position is finished, so there is nothing left to train here.",
         bullets: [],
         evidenceClaimIds: [],
         leakRisk: "none",
@@ -63,7 +63,7 @@ function buildPlainBlock(input: {
     }
     return {
       title: "Safe Fallback",
-      body: "No safe teaching target is available right now.",
+      body: "No safe hint is available right now. Keep playing or switch lines.",
       bullets: [],
       evidenceClaimIds: [],
       leakRisk: "none",

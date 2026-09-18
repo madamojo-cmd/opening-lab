@@ -3,6 +3,11 @@ import { getCurrentBlundrUser } from "@/lib/blundr/accounts/accountSession";
 import { readUserRepertoire } from "@/lib/blundr/accounts/accountRepository";
 import { createBlundrSupabaseAdminClient } from "@/lib/blundr/backend/supabaseAdminClient";
 import { RepertoireOpeningAccessRepository } from "@/lib/blundr/openingAccess/openingAccessRepository";
+import { loadFreeActiveOpeningPolicy } from "@/lib/blundr/commercial/activeOpenings.server";
+import {
+  readCommercialBillingEnvironment,
+  resolveCommercialAccess,
+} from "@/lib/blundr/commercial/commercialAccess.server";
 import type { RepertoireProgress } from "@/lib/blundr/repertoire/repertoireTypes";
 import type { CurrentBlundrUser } from "@/lib/blundr/accounts/accountTypes";
 import type { UserRepertoire } from "@/lib/blundr/accounts/accountTypes";
@@ -48,7 +53,18 @@ export async function loadOpeningAccess(user: CurrentBlundrUser) {
   });
   const stored = repertoireResult.ok ? repertoireResult.data : null;
   const repertoire = toOpeningAccessRepertoire(stored);
-  return new RepertoireOpeningAccessRepository(() => repertoire);
+  const environment = readCommercialBillingEnvironment();
+  const access = await resolveCommercialAccess({
+    userId: user.userId,
+    environment,
+  });
+  const policy = await loadFreeActiveOpeningPolicy({
+    userId: user.userId,
+    environment,
+    unlockedOpeningIds: repertoire?.unlockedOpeningIds ?? [],
+    access,
+  });
+  return new RepertoireOpeningAccessRepository(() => repertoire, policy);
 }
 
 export async function loadOpeningAccessForWorker(userId: string) {

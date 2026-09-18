@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error: "unlock_persistence_unavailable",
-        message: "Unlock persistence is unavailable.",
+        message: "We couldn’t unlock this opening right now. Please try again.",
       },
       { status: 503 },
     );

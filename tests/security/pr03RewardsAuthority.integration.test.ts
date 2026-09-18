@@ -89,6 +89,7 @@ const rewardArgs = (
   policy = "rewards-v2-test",
   source:
     | "daily_blundr_deck_completed"
+    | "opening_run_completed"
     | "continuation_completed" = "daily_blundr_deck_completed",
 ) => ({
   p_user_id: userId,
@@ -97,8 +98,20 @@ const rewardArgs = (
   p_evidence_id: evidenceId,
   p_idempotency_key: `client-key-${randomUUID()}`,
   p_policy_version: policy,
-  p_randomness_key_version: null,
+  p_randomness_key_version:
+    process.env.BLUNDR_REWARDS_HMAC_KEY_VERSION ?? "pr03-test-key-v1",
 });
+
+async function countPendingPresentations(userId: string) {
+  const result = await service
+    .from("blundr_reward_presentations_v2")
+    .select("id")
+    .eq("user_id", userId)
+    .is("acknowledged_at", null)
+    .is("dismissed_at", null);
+  assert.equal(result.error, null);
+  return result.data?.length ?? 0;
+}
 
 async function main() {
   const emailA = scopedEmail(process.env.BLUNDR_RLS_TEST_USER_A_EMAIL!, "a");
@@ -160,7 +173,15 @@ async function main() {
     const first = await service.rpc(REWARD_RPC, acceptedArgs);
     assert.equal(first.error, null);
     assert.equal(first.data.duplicate, false);
-    assert.equal(first.data.randomEvaluation, "unavailable");
+    assert.match(
+      String(first.data.randomEvaluation),
+      /^(evaluated|unavailable)$/,
+    );
+    assert.equal(
+      await countPendingPresentations(userAId),
+      0,
+      "one verified Daily completion must not create an all-rings presentation",
+    );
     const compatibilityRetry = await service.rpc(
       "blundr_apply_reward_transaction_v2",
       deniedArgs,
@@ -177,6 +198,11 @@ async function main() {
     );
     assert.equal(retry.error, null);
     assert.equal(retry.data.duplicate, true);
+    assert.equal(
+      await countPendingPresentations(userAId),
+      0,
+      "repeating the Daily completion must not create a presentation",
+    );
     const conflict = await service.rpc(
       REWARD_RPC,
       rewardArgs(userAId, acceptedSession, "conflicting-policy"),
@@ -209,6 +235,7 @@ async function main() {
     const lineFingerprint = createHash("sha256")
       .update(`${scope}:line`)
       .digest("hex");
+    const trainerCompletedAt = new Date().toISOString();
     assert.equal(
       (
         await service.from("blundr_trainer_sessions_v2").insert({
@@ -223,7 +250,7 @@ async function main() {
           state: "completed",
           state_version: 2,
           terminal_completion_id: terminalCompletionId,
-          completed_at: new Date().toISOString(),
+          completed_at: trainerCompletedAt,
         })
       ).error,
       null,
@@ -328,6 +355,61 @@ async function main() {
     );
     assert.equal(checkmateEvidence.error, null);
     assert.equal(checkmateEvidence.data.status, "inserted");
+    const batteryCompletion = await service
+      .from("blundr_continuation_checkmates_v1")
+      .select("completed_at")
+      .eq("completion_id", checkmateEvidenceId)
+      .single();
+    assert.equal(batteryCompletion.error, null);
+    assert.ok(batteryCompletion.data?.completed_at);
+    const authoritativeBatteryCompletedAt = batteryCompletion.data.completed_at;
+    const allRingsDay = authoritativeBatteryCompletedAt.slice(0, 10);
+    assert.equal(
+      (
+        await service
+          .from("blundr_trainer_sessions_v2")
+          .update({ completed_at: authoritativeBatteryCompletedAt })
+          .eq("session_id", trainerSessionId)
+          .eq("user_id", userAId)
+      ).error,
+      null,
+    );
+    assert.equal(
+      await countPendingPresentations(userAId),
+      0,
+      "one or two verified rings must not create a pending reward presentation",
+    );
+    const tempoReward = await service.rpc(
+      REWARD_RPC,
+      rewardArgs(
+        userAId,
+        terminalCompletionId,
+        "rewards-v2-test",
+        "opening_run_completed",
+      ),
+    );
+    assert.equal(tempoReward.error, null);
+    assert.equal(tempoReward.data.duplicate, false);
+    assert.equal(tempoReward.data.dayRecord.dailyTempo.progress, 1);
+    assert.equal(
+      await countPendingPresentations(userAId),
+      0,
+      "one verified same-day ring must not create a pending reward presentation",
+    );
+    assert.equal(
+      (
+        await service.rpc(
+          REWARD_RPC,
+          rewardArgs(
+            userAId,
+            terminalCompletionId,
+            "rewards-v2-test",
+            "opening_run_completed",
+          ),
+        )
+      ).data.duplicate,
+      true,
+    );
 
     const continuationReward = await service.rpc(
       REWARD_RPC,
@@ -342,6 +424,11 @@ async function main() {
     assert.equal(continuationReward.data.duplicate, false);
     assert.equal(continuationReward.data.dayRecord.dailyBattery.progress, 1);
     assert.equal(
+      await countPendingPresentations(userAId),
+      0,
+      "two verified same-day rings must not create a pending reward presentation",
+    );
+    assert.equal(
       (
         await service.rpc(
           REWARD_RPC,
@@ -354,6 +441,66 @@ async function main() {
         )
       ).data.duplicate,
       true,
+    );
+    assert.equal(
+      await countPendingPresentations(userAId),
+      0,
+      "repeating the Battery completion must not create a presentation",
+    );
+    const allRingsDailySession = await seedCompletedDaily(userAId, allRingsDay);
+    const allRingsDailyReward = await service.rpc(
+      REWARD_RPC,
+      rewardArgs(
+        userAId,
+        allRingsDailySession,
+        "rewards-v2-test",
+        "daily_blundr_deck_completed",
+      ),
+    );
+    assert.equal(allRingsDailyReward.error, null);
+    assert.equal(allRingsDailyReward.data.duplicate, false);
+    assert.equal(allRingsDailyReward.data.dayRecord.dailyBlundr.progress, 1);
+    assert.equal(
+      await countPendingPresentations(userAId),
+      1,
+      "the third same-day verified ring must create exactly one presentation",
+    );
+    const allRingsPresentations = await service
+      .from("blundr_reward_presentations_v2")
+      .select("envelope")
+      .eq("user_id", userAId)
+      .is("acknowledged_at", null)
+      .is("dismissed_at", null);
+    assert.equal(allRingsPresentations.error, null);
+    assert.equal(allRingsPresentations.data?.length, 1);
+    const allRingsEnvelope = allRingsPresentations.data?.[0]?.envelope as
+      | Record<string, unknown>
+      | undefined;
+    assert.equal(allRingsEnvelope?.allRingsClosed, true);
+    if (allRingsDailyReward.data.randomEvaluation === "unavailable") {
+      assert.equal(allRingsEnvelope?.randomEvaluation, "unavailable");
+      assert.equal("rarity" in (allRingsEnvelope ?? {}), false);
+      assert.equal("rewardGrants" in (allRingsEnvelope ?? {}), false);
+      assert.equal("rewardRollId" in (allRingsEnvelope ?? {}), false);
+    }
+    assert.equal(
+      (
+        await service.rpc(
+          REWARD_RPC,
+          rewardArgs(
+            userAId,
+            allRingsDailySession,
+            "rewards-v2-test",
+            "daily_blundr_deck_completed",
+          ),
+        )
+      ).data.duplicate,
+      true,
+    );
+    assert.equal(
+      await countPendingPresentations(userAId),
+      1,
+      "repeating the third completion must not duplicate the presentation",
     );
     assert.ok(
       (
@@ -375,13 +522,13 @@ async function main() {
       .eq("user_id", userAId)
       .eq("transaction_kind", "reward_grant");
     assert.equal(transactions.error, null);
-    assert.equal(transactions.data?.length, 3);
+    assert.equal(transactions.data?.length, 5);
     const grants = await service
       .from("blundr_completion_grants")
       .select("source,evidence_id")
       .eq("user_id", userAId);
     assert.equal(grants.error, null);
-    assert.equal(grants.data?.length, 3);
+    assert.equal(grants.data?.length, 5);
     assert.ok(
       grants.data?.some(
         (grant) =>
@@ -402,73 +549,88 @@ async function main() {
           (row) => `${row.daily_blundr_progress}:${row.daily_battery_progress}`,
         )
         .sort(),
-      ["0:1", "1:0", "1:0"],
+      ["1:0", "1:0", "1:1"],
     );
 
-    const claim = await service.rpc("blundr_claim_reward_presentation_v2", {
-      p_user_id: userAId,
-      p_claimed_by: `tab-${scope}`,
-      p_lease_seconds: 60,
-    });
-    assert.equal(claim.error, null);
-    assert.ok(claim.data?.id);
-    const otherClaim = await service.rpc(
-      "blundr_claim_reward_presentation_v2",
-      {
+    const pendingBeforeClaims = await countPendingPresentations(userAId);
+    let claimedCount = 0;
+    while (claimedCount < pendingBeforeClaims) {
+      const claimedBy = `tab-${scope}-${claimedCount}`;
+      const claim = await service.rpc("blundr_claim_reward_presentation_v2", {
         p_user_id: userAId,
-        p_claimed_by: `other-${scope}`,
+        p_claimed_by: claimedBy,
         p_lease_seconds: 60,
-      },
-    );
-    assert.equal(otherClaim.error, null);
-    assert.equal(otherClaim.data, null);
-    assert.ok(
-      (
-        await userB.rpc("blundr_mark_reward_presentation_v2", {
+      });
+      assert.equal(claim.error, null);
+      assert.ok(claim.data?.id);
+      const otherClaim = await service.rpc(
+        "blundr_claim_reward_presentation_v2",
+        {
           p_user_id: userAId,
-          p_presentation_id: claim.data.id,
-          p_claimed_by: `tab-${scope}`,
-          p_action: "acknowledged",
-        })
-      ).error,
-    );
+          p_claimed_by: `other-${scope}-${claimedCount}`,
+          p_lease_seconds: 60,
+        },
+      );
+      assert.equal(otherClaim.error, null);
+      assert.equal(otherClaim.data, null);
+      assert.ok(
+        (
+          await userB.rpc("blundr_mark_reward_presentation_v2", {
+            p_user_id: userAId,
+            p_presentation_id: claim.data.id,
+            p_claimed_by: claimedBy,
+            p_action: "acknowledged",
+          })
+        ).error,
+      );
+      assert.equal(
+        (
+          await service.rpc("blundr_mark_reward_presentation_v2", {
+            p_user_id: userAId,
+            p_presentation_id: claim.data.id,
+            p_claimed_by: claimedBy,
+            p_action: "rendered",
+          })
+        ).error,
+        null,
+      );
+      assert.equal(
+        (
+          await service.rpc("blundr_mark_reward_presentation_v2", {
+            p_user_id: userAId,
+            p_presentation_id: claim.data.id,
+            p_claimed_by: claimedBy,
+            p_action: "acknowledged",
+          })
+        ).error,
+        null,
+      );
+      const acknowledged = await service
+        .from("blundr_reward_presentations_v2")
+        .select("id,acknowledged_at")
+        .eq("id", claim.data.id)
+        .single();
+      assert.equal(acknowledged.error, null);
+      assert.ok(acknowledged.data?.acknowledged_at);
+      claimedCount += 1;
+    }
+    assert.equal(claimedCount, pendingBeforeClaims);
     assert.equal(
-      (
-        await service.rpc("blundr_mark_reward_presentation_v2", {
-          p_user_id: userAId,
-          p_presentation_id: claim.data.id,
-          p_claimed_by: `tab-${scope}`,
-          p_action: "rendered",
-        })
-      ).error,
-      null,
+      await countPendingPresentations(userAId),
+      0,
+      "acknowledgement clears the pending reward presentation",
     );
-    assert.equal(
-      (
-        await service.rpc("blundr_mark_reward_presentation_v2", {
-          p_user_id: userAId,
-          p_presentation_id: claim.data.id,
-          p_claimed_by: `tab-${scope}`,
-          p_action: "acknowledged",
-        })
-      ).error,
-      null,
-    );
-    const acknowledged = await service
-      .from("blundr_reward_presentations_v2")
-      .select("id,acknowledged_at")
-      .eq("id", claim.data.id)
-      .single();
-    assert.equal(acknowledged.error, null);
-    assert.ok(acknowledged.data?.acknowledged_at);
     const nextClaim = await service.rpc("blundr_claim_reward_presentation_v2", {
       p_user_id: userAId,
       p_claimed_by: `other-${scope}`,
       p_lease_seconds: 60,
     });
     assert.equal(nextClaim.error, null);
-    assert.ok(nextClaim.data?.id);
-    assert.notEqual(nextClaim.data.id, claim.data.id);
+    assert.equal(
+      nextClaim.data,
+      null,
+      "refresh/reclaim after acknowledgement must not duplicate the presentation",
+    );
 
     const seedTx = await service
       .from("blundr_reward_transactions_v2")

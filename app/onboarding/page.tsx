@@ -60,7 +60,10 @@ function classNames(...classes: Array<string | false | null | undefined>): strin
   return classes.filter(Boolean).join(" ");
 }
 
-function getErrorMessage(error: unknown, fallback = "Something went wrong. Try again or continue in local demo."): string {
+function getErrorMessage(
+  error: unknown,
+  fallback = "Something went wrong. Please try again.",
+): string {
   const message = normalizeText(typeof error === "string" ? error : (error as { message?: unknown })?.message);
   return message || fallback;
 }
@@ -226,7 +229,7 @@ function buildFinalSummary(state: BlundrOnboardingState): ReactNode {
         <div className="mt-2 text-sm font-black text-stone-950">{getRatingBandLabel(ratingBand.id)}</div>
         <p className="mt-1 text-sm leading-6 text-stone-600">{getRatingBandTrainingDescription(ratingBand.id)}</p>
         <p className="mt-3 text-sm leading-6 text-stone-600">
-          {dailyGoalPreset.label} goals: {state.dailyTempoGoal} Tempo, {state.dailyBatteryGoal} Battery, {state.dailyBlundrGoal} Daily Blundr.
+          {dailyGoalPreset.label} goals: {state.dailyTempoGoal} Tempo · {state.dailyBatteryGoal} Battery · {state.dailyBlundrCardGoal} Daily cards.
         </p>
       </div>
     </div>
@@ -557,7 +560,7 @@ function LegacyOnboardingPage() {
               </div>
             </div>
             <p className="mt-4 text-sm leading-6 text-stone-600">
-              Restoring your local onboarding state and account profile.
+              Loading your setup…
             </p>
           </div>
         </div>
@@ -817,5 +820,9 @@ function LegacyOnboardingPage() {
 }
 
 export default function OnboardingPage() {
-  return isOnboardingV11Enabled() ? <OnboardingV11Flow /> : <LegacyOnboardingPage />;
+  return isOnboardingV11Enabled() || process.env.NODE_ENV === "production" ? (
+    <OnboardingV11Flow />
+  ) : (
+    <LegacyOnboardingPage />
+  );
 }

@@ -92,11 +92,13 @@ export type ProviderGameRecord = {
   blackPlayer: string;
   playedAt: string;
   result: "1-0" | "0-1" | "1/2-1/2" | "*";
+  terminationReason: string | null;
   timeControl: string | null;
   rated: boolean | null;
   variant: string;
   pgn: string;
   normalizedMoves: readonly string[];
+  providerMetadata: Readonly<Record<string, string | number | boolean | null>>;
   playerColor: "white" | "black";
   classificationState: "pending" | "processed" | "excluded";
   processingVersion: string;
@@ -106,10 +108,14 @@ export type ProviderGameRecord = {
 export type ReplayedPly = {
   ply: number;
   fenBefore: string;
+  canonicalFenBefore: string;
+  fenAfter: string;
+  canonicalFenAfter: string;
   moveUci: string;
   moveSan: string;
   sideToMove: "white" | "black";
   isPlayerMove: boolean;
+  ruleStateAfter: import("@/lib/blundr/chess/canonicalPosition").ChessRuleState;
 };
 
 export type OpeningSegmentRecord = {
@@ -130,6 +136,14 @@ export type ExtractedFinding = LearningFinding & {
   fingerprint: string;
   evidence: EvidenceRecord;
   status: "active" | "gated_pending";
+  outcome:
+    | "followed_known_repertoire"
+    | "alternate_unlocked_continuation"
+    | "deviated_from_repertoire"
+    | "missed_known_move";
+  userMoveUci: string;
+  expectedMoveSet: readonly string[];
+  importWeight: number;
 };
 
 export type ProviderResponse<T> = {

@@ -1,6 +1,15 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { OpeningDetailPage } from "../OpeningDetailPage";
+
+vi.mock("../OpeningDetail.module.css", () => ({
+  default: new Proxy(
+    {},
+    {
+      get: (_target, property) => String(property),
+    },
+  ),
+}));
 
 afterEach(cleanup);
 

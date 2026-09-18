@@ -4,11 +4,14 @@ import path from "node:path";
 
 const repoRoot = path.resolve(__dirname, "..", "..");
 const css = fs.readFileSync(path.join(repoRoot, "app", "globals.css"), "utf8");
-const overlay = fs.readFileSync(path.join(repoRoot, "components", "board", "ProjectiveTacticalOverlay.tsx"), "utf8");
+const overlay = fs.readFileSync(
+  path.join(repoRoot, "components", "board", "ProjectiveTacticalOverlay.tsx"),
+  "utf8",
+);
 const page = fs.readFileSync(path.join(repoRoot, "app", "page.tsx"), "utf8");
 
-assert.equal(css.includes(".projective-tactic-line--straight{stroke-dasharray:"), true);
-assert.equal(css.includes(".projective-tactic-line--knight line{"), true);
+assert.match(css, /\.projective-tactic-line--straight\s*{\s*stroke-dasharray:/);
+assert.match(css, /\.projective-tactic-line--knight line\s*{/);
 assert.equal(css.includes("projective-tactic-target"), false);
 assert.equal(overlay.includes("projective-tactic-target"), false);
 assert.equal(overlay.includes("showLines"), true);

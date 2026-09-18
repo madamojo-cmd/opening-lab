@@ -31,7 +31,7 @@ export async function GET(request: Request) {
             ? error.message
             : "repertoire_persistence_unavailable",
         message:
-          "Repertoire progress could not be loaded from durable storage.",
+          "Couldn't load your saved repertoire progress.",
       },
       { status: 503 },
     );

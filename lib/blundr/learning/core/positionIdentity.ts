@@ -4,13 +4,13 @@ import {
   type IdentityInput,
   type PositionIdentity,
 } from "@/lib/blundr/contracts";
+import { canonicalPositionFen } from "@/lib/blundr/chess/canonicalPosition";
 
 export { createPositionIdentity };
 export type { IdentityInput, PositionIdentity };
 
 export function canonicalizeFen(fen: string): string {
-  const chess = new Chess(fen);
-  return chess.fen();
+  return canonicalPositionFen(new Chess(fen).fen());
 }
 
 export function createValidatedPositionIdentity(

@@ -345,7 +345,7 @@ async function applyActivityCompletionRemotely(input: {
     return {
       mode: "failed",
       code: "completion_evidence_missing",
-      message: "This completion has no durable session evidence yet.",
+      message: "This completion hasn't saved yet. Try again.",
     };
   }
   try {
@@ -375,7 +375,7 @@ async function applyActivityCompletionRemotely(input: {
         code: normalizeText(payload?.error) || "reward_persistence_failed",
         message:
           normalizeText(payload?.message) ||
-          "Progress was not awarded because it could not be saved.",
+          "We couldn’t save this progress. Please try again.",
       };
     }
     return { mode: "remote", data: payload.data };
@@ -383,8 +383,7 @@ async function applyActivityCompletionRemotely(input: {
     return {
       mode: "failed",
       code: "reward_persistence_unavailable",
-      message:
-        "Progress was not awarded because the server could not be reached.",
+      message: "We couldn’t save this progress. Please try again.",
     };
   }
 }

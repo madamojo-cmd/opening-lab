@@ -7,6 +7,7 @@ import {
   getOnboardingV11PaceGoals,
   shouldInitializeOnboardingV11StarterRepertoire,
 } from "../onboardingV11Contract";
+import { mergeOnboardingPlanIntentUserMetadata } from "../onboardingV11";
 
 test("v1.1 onboarding resumes the durable next screen rather than inferring completion from defaults", () => {
   const state = {
@@ -95,4 +96,26 @@ test("v1.1 onboarding verifies starter openings through the product access polic
     hasVerifiedStarterOpeningAccess(user, progress, ["queens-gambit-white"]),
     false,
   );
+});
+
+test("v1.1 onboarding plan intent preserves existing auth metadata without granting Pro", () => {
+  assert.deepEqual(
+    mergeOnboardingPlanIntentUserMetadata(
+      {
+        age_16_terms_confirmed: true,
+        locale: "en-US",
+        is_pro: true,
+      },
+      "pro_monthly",
+    ),
+    {
+      age_16_terms_confirmed: true,
+      locale: "en-US",
+      is_pro: true,
+      blundr_launch_plan_intent: "pro_monthly",
+    },
+  );
+  assert.deepEqual(mergeOnboardingPlanIntentUserMetadata(null, "free"), {
+    blundr_launch_plan_intent: "free",
+  });
 });

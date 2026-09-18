@@ -7,7 +7,7 @@ export const metadata = {
 
 export default function ReviewPage() {
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-24 pt-5">
+    <main className="w-full">
       <ReviewHub homeHref="/" settingsHref="/settings" />
     </main>
   );

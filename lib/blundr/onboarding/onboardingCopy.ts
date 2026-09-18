@@ -34,7 +34,7 @@ export const ONBOARDING_COPY: Record<OnboardingStepId, OnboardingCopyBlock> = {
   },
   daily_goals: {
     title: "Set your daily goals",
-    copy: "Tempo will size your Daily Tempo, Daily Battery, and Daily Blundr goals around your schedule.",
+    copy: "Tempo will size your Tempo, Battery, and Daily card goals around your schedule.",
     tempoCopy: "Small, steady goals are easier to keep than ambitious ones that burn out quickly.",
   },
   real_game_data: {

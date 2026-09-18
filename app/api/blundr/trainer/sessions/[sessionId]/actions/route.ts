@@ -36,16 +36,19 @@ export async function POST(
       error instanceof Error
         ? error.message
         : "trainer_action_persistence_unavailable";
-    const status = code.includes("forbidden")
-      ? 403
-      : code.includes("not_found")
-        ? 404
-        : code.includes("invalid") ||
-            code.includes("not_current") ||
-            code.includes("stale") ||
-            code.includes("conflict")
-          ? 409
-          : 503;
+    const status =
+      code === "free_tempo_daily_limit_reached"
+        ? 403
+        : code.includes("forbidden")
+          ? 403
+          : code.includes("not_found")
+            ? 404
+            : code.includes("invalid") ||
+                code.includes("not_current") ||
+                code.includes("stale") ||
+                code.includes("conflict")
+              ? 409
+              : 503;
     return NextResponse.json({ error: code }, { status });
   }
 }

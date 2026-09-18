@@ -1,0 +1,526 @@
+name: Blundr Wave 2B commercial validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      preview_url:
+        description: Exact immutable non-production deployment URL
+        required: true
+        type: string
+      expected_sha:
+        description: Exact 40-character candidate SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blundr-wave2b-commercial-validation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  browser_qa_provider_config_and_blocked_sandbox_proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: wave2b-validation
+    env:
+      WAVE2B_PREVIEW_URL: ${{ inputs.preview_url }}
+      WAVE2B_QA_EMAIL: ${{ secrets.BLUNDR_QA_EMAIL }}
+      WAVE2B_QA_PASSWORD: ${{ secrets.BLUNDR_QA_PASSWORD }}
+      WAVE2B_QA_SUPABASE_UUID: ${{ secrets.WAVE2B_QA_SUPABASE_UUID }}
+      WAVE2B_EXPECTED_SHA: ${{ inputs.expected_sha }}
+      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+      STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+      STRIPE_PRO_MONTHLY_PRICE_ID: ${{ secrets.STRIPE_PRO_MONTHLY_PRICE_ID }}
+      STRIPE_PRO_ANNUAL_PRICE_ID: ${{ secrets.STRIPE_PRO_ANNUAL_PRICE_ID }}
+      REVENUECAT_REST_API_KEY: ${{ secrets.REVENUECAT_REST_API_KEY }}
+      REVENUECAT_V2_SECRET_API_KEY: ${{ secrets.REVENUECAT_V2_SECRET_API_KEY }}
+      REVENUECAT_PROJECT_ID: ${{ secrets.REVENUECAT_PROJECT_ID }}
+      REVENUECAT_SANDBOX_APP_ID: ${{ secrets.REVENUECAT_SANDBOX_APP_ID }}
+      REVENUECAT_PRO_ENTITLEMENT_ID: ${{ secrets.REVENUECAT_PRO_ENTITLEMENT_ID }}
+      REVENUECAT_OFFERING_ID: ${{ secrets.REVENUECAT_OFFERING_ID }}
+      BLUNDR_STAGING_SUPABASE_URL: ${{ secrets.BLUNDR_STAGING_SUPABASE_URL }}
+      BLUNDR_STAGING_SUPABASE_SECRET_KEY: ${{ secrets.BLUNDR_STAGING_SUPABASE_SECRET_KEY }}
+      ARTIFACT_DIR: ${{ github.workspace }}/.tmp/wave2b-commercial-validation
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+
+      - name: Print exact validation SHA
+        run: echo "Exact SHA $GITHUB_SHA"
+
+      - name: Install dependencies
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          mkdir -p "$ARTIFACT_DIR"
+          started_at="$(date +%s)"
+          set +e
+          npm ci 2>&1 | tee "$ARTIFACT_DIR/npm-ci.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          elapsed=$(( $(date +%s) - started_at ))
+          printf '{"step":"npm_ci","status":%s,"elapsedSeconds":%s}\n' "$status" "$elapsed" >> "$ARTIFACT_DIR/install-diagnostics.jsonl"
+          exit "$status"
+
+      - name: Initialize artifact directory
+        run: |
+          set -euo pipefail
+          mkdir -p "$ARTIFACT_DIR/screenshots"
+          node --version > "$ARTIFACT_DIR/node-version.txt"
+          npm --version > "$ARTIFACT_DIR/npm-version.txt"
+          node <<'NODE'
+          const fs = require("node:fs");
+          const lock = JSON.parse(fs.readFileSync("package-lock.json", "utf8"));
+          const playwrightVersion = lock.packages?.["node_modules/playwright"]?.version ?? lock.dependencies?.playwright?.version ?? "unknown";
+          fs.writeFileSync(
+            `${process.env.ARTIFACT_DIR}/runner-diagnostics.json`,
+            `${JSON.stringify({
+              node: process.version,
+              npmVersionFile: "npm-version.txt",
+              playwrightVersion,
+              runnerOs: process.env.RUNNER_OS ?? null,
+              cacheArtifact: "install-diagnostics.jsonl",
+            }, null, 2)}\n`,
+          );
+          NODE
+
+      - name: Preflight non-production configuration
+        run: |
+          set -euo pipefail
+          mkdir -p "$ARTIFACT_DIR"
+          node <<'NODE'
+          const { execFileSync } = require("node:child_process");
+          const fs = require("node:fs");
+
+          const artifactDir = process.env.ARTIFACT_DIR;
+          const required = [
+            { env: "WAVE2B_PREVIEW_URL", name: "WAVE2B_PREVIEW_URL" },
+            { env: "WAVE2B_QA_EMAIL", name: "BLUNDR_QA_EMAIL" },
+            { env: "WAVE2B_QA_PASSWORD", name: "BLUNDR_QA_PASSWORD" },
+          ];
+          const providerConfiguration = [
+            { env: "WAVE2B_QA_SUPABASE_UUID", name: "WAVE2B_QA_SUPABASE_UUID" },
+            { env: "STRIPE_SECRET_KEY", name: "STRIPE_SECRET_KEY" },
+            { env: "STRIPE_WEBHOOK_SECRET", name: "STRIPE_WEBHOOK_SECRET" },
+            { env: "STRIPE_PRO_MONTHLY_PRICE_ID", name: "STRIPE_PRO_MONTHLY_PRICE_ID" },
+            { env: "STRIPE_PRO_ANNUAL_PRICE_ID", name: "STRIPE_PRO_ANNUAL_PRICE_ID" },
+            { env: "REVENUECAT_REST_API_KEY", name: "REVENUECAT_REST_API_KEY" },
+            { env: "REVENUECAT_V2_SECRET_API_KEY", name: "REVENUECAT_V2_SECRET_API_KEY" },
+            { env: "REVENUECAT_PROJECT_ID", name: "REVENUECAT_PROJECT_ID" },
+            { env: "REVENUECAT_SANDBOX_APP_ID", name: "REVENUECAT_SANDBOX_APP_ID" },
+            { env: "REVENUECAT_PRO_ENTITLEMENT_ID", name: "REVENUECAT_PRO_ENTITLEMENT_ID" },
+            { env: "REVENUECAT_OFFERING_ID", name: "REVENUECAT_OFFERING_ID" },
+            { env: "BLUNDR_STAGING_SUPABASE_URL", name: "BLUNDR_STAGING_SUPABASE_URL" },
+            { env: "BLUNDR_STAGING_SUPABASE_SECRET_KEY", name: "BLUNDR_STAGING_SUPABASE_SECRET_KEY" },
+          ];
+          const missingRequired = required
+            .filter((config) => !String(process.env[config.env] ?? "").trim())
+            .map((config) => config.name);
+          const missingProviderConfiguration = providerConfiguration
+            .filter((config) => !String(process.env[config.env] ?? "").trim())
+            .map((config) => config.name);
+
+          const result = {
+            workflow: process.env.GITHUB_WORKFLOW,
+            runId: process.env.GITHUB_RUN_ID,
+            sha: process.env.GITHUB_SHA,
+            previewHost: null,
+            preflight: "failed",
+            missingRequired,
+            missingProviderConfiguration,
+            providerConfigurationAvailable:
+              missingProviderConfiguration.length === 0,
+            sandboxIntegrationProof: "blocked_until_real_provider_journey",
+          };
+
+          function fail(message) {
+            result.failure = message;
+            fs.writeFileSync(
+              `${artifactDir}/preflight.json`,
+              `${JSON.stringify(result, null, 2)}\n`,
+            );
+            console.error(message);
+            if (missingRequired.length) {
+              console.error(`Missing required configuration: ${missingRequired.join(", ")}`);
+            }
+            if (missingProviderConfiguration.length) {
+              console.error(`Missing provider configuration: ${missingProviderConfiguration.join(", ")}`);
+            }
+            process.exit(1);
+          }
+
+          if (missingRequired.length) {
+            fail("Wave 2B validation preflight failed.");
+          }
+          if (!/^[0-9a-f]{40}$/i.test(process.env.WAVE2B_EXPECTED_SHA || "")) {
+            fail("expected_sha must be exactly 40 hexadecimal characters.");
+          }
+          const checkedOutHead = execFileSync("git", ["rev-parse", "HEAD"], {
+            encoding: "utf8",
+          }).trim();
+          result.checkedOutHeadMatchesExpected =
+            checkedOutHead.toLowerCase() ===
+            process.env.WAVE2B_EXPECTED_SHA.toLowerCase();
+          if (!result.checkedOutHeadMatchesExpected) {
+            fail("expected_sha does not match the checked-out HEAD.");
+          }
+
+          let preview;
+          try {
+            preview = new URL(process.env.WAVE2B_PREVIEW_URL);
+          } catch {
+            fail("WAVE2B_PREVIEW_URL is not a valid URL.");
+          }
+
+          const host = preview.hostname.toLowerCase();
+          result.previewHost = host;
+          const blockedHosts = new Set([
+            "blundr.com",
+            "www.blundr.com",
+            "app.blundr.com",
+            "blundr.ai",
+            "www.blundr.ai",
+            "blundr.vercel.app",
+          ]);
+          if (preview.protocol !== "https:") {
+            fail("WAVE2B_PREVIEW_URL must use HTTPS.");
+          }
+          if (blockedHosts.has(host)) {
+            fail("WAVE2B_PREVIEW_URL resolves to a production Blundr host.");
+          }
+          if (host === "localhost" || host.endsWith(".local")) {
+            fail("WAVE2B_PREVIEW_URL must be a remote non-production preview.");
+          }
+          if (process.env.STRIPE_SECRET_KEY?.startsWith("sk_live_")) {
+            fail("Live-mode Stripe credentials are forbidden for Wave 2B validation.");
+          }
+          if (process.env.STRIPE_SECRET_KEY && !process.env.STRIPE_SECRET_KEY.startsWith("sk_test_")) {
+            fail("STRIPE_SECRET_KEY must be test-mode when provided.");
+          }
+          if (
+            process.env.REVENUECAT_SANDBOX_APP_ID &&
+            process.env.REVENUECAT_SANDBOX_APP_ID !== "appe3b4140fc1"
+          ) {
+            fail("RevenueCat sandbox app identifier must be appe3b4140fc1.");
+          }
+          if (
+            process.env.REVENUECAT_PRO_ENTITLEMENT_ID &&
+            process.env.REVENUECAT_PRO_ENTITLEMENT_ID !== "pro"
+          ) {
+            fail("RevenueCat entitlement identifier must be pro.");
+          }
+          if (
+            process.env.REVENUECAT_OFFERING_ID &&
+            process.env.REVENUECAT_OFFERING_ID !== "default"
+          ) {
+            fail("RevenueCat offering identifier must be default.");
+          }
+
+          result.preflight = "passed";
+          fs.writeFileSync(
+            `${artifactDir}/preflight.json`,
+            `${JSON.stringify(result, null, 2)}\n`,
+          );
+          console.log("Wave 2B validation preflight passed.");
+          if (missingProviderConfiguration.length) {
+            console.log(`Provider configuration not complete: ${missingProviderConfiguration.join(", ")}`);
+          }
+          NODE
+
+      - name: Verify preview commit identity when exposed
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const artifactDir = process.env.ARTIFACT_DIR;
+          const base = process.env.WAVE2B_PREVIEW_URL.replace(/\/+$/, "");
+          const expected = process.env.WAVE2B_EXPECTED_SHA.toLowerCase();
+
+          async function readJson(path) {
+            const response = await fetch(`${base}${path}`, { redirect: "manual" });
+            try {
+              return { ok: response.ok, status: response.status, body: await response.json() };
+            } catch {
+              return { ok: response.ok, status: response.status, body: null };
+            }
+          }
+
+          function readPath(value, path) {
+            return path.reduce((current, key) => current && typeof current === "object" ? current[key] : undefined, value);
+          }
+
+          function extractSha(body) {
+            if (!body || typeof body !== "object") return null;
+            const paths = [
+              ["gitSha"],
+              ["sha"],
+              ["commit"],
+              ["buildGitSha"],
+              ["build", "gitSha"],
+              ["build", "sha"],
+              ["build", "commit"],
+              ["build", "buildGitSha"],
+            ];
+            for (const path of paths) {
+              const value = readPath(body, path);
+              if (typeof value === "string" && /^[0-9a-f]{40}$/i.test(value)) return value.toLowerCase();
+            }
+            return null;
+          }
+
+          function summarizeBody(body) {
+            if (!body || typeof body !== "object") return null;
+            return {
+              ready: typeof body.ready === "boolean" ? body.ready : null,
+              buildReady: typeof body.build?.ready === "boolean" ? body.build.ready : null,
+              buildIssues: Array.isArray(body.build?.issues) ? body.build.issues.map(String) : [],
+              errorCode: typeof body.error === "string" ? body.error : typeof body.error?.code === "string" ? body.error.code : null,
+            };
+          }
+
+          const probes = ["/api/health", "/api/build-info"];
+          const observations = [];
+          for (const path of probes) {
+            const result = await readJson(path);
+            const candidate = extractSha(result.body);
+            const redacted = { path, ok: result.ok, status: result.status, exposedSha: candidate, summary: summarizeBody(result.body) };
+            observations.push(redacted);
+          }
+          const health = observations.find((observation) => observation.path === "/api/health");
+          const mismatches = observations.filter(
+            (observation) => observation.exposedSha && observation.exposedSha !== expected,
+          );
+          const identity = {
+            expectedSha: expected,
+            checked: observations,
+            status:
+              health?.exposedSha === expected && mismatches.length === 0
+                ? "matched"
+                : mismatches.length
+                  ? "mismatched"
+                  : "not_exposed",
+          };
+          fs.writeFileSync(
+            `${artifactDir}/preview-identity.json`,
+            `${JSON.stringify(identity, null, 2)}\n`,
+          );
+          if (identity.status === "mismatched") {
+            throw new Error("Preview deployment metadata exposes a different SHA.");
+          }
+          if (health?.exposedSha !== expected) {
+            throw new Error("/api/health did not expose the expected SHA.");
+          }
+          if (identity.status === "not_exposed") {
+            throw new Error("Preview deployment metadata did not expose a supported SHA field.");
+          }
+          console.log(`Preview SHA identity ${identity.status}.`);
+          NODE
+
+      - name: Restore Playwright browser cache
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+
+      - name: Record Playwright cache status
+        run: |
+          set -euo pipefail
+          printf '{"step":"playwright_cache","cacheHit":"%s"}\n' "${{ steps.playwright-cache.outputs.cache-hit }}" >> "$ARTIFACT_DIR/install-diagnostics.jsonl"
+
+      - name: Install Chromium system dependencies
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          started_at="$(date +%s)"
+          set +e
+          npm exec -- playwright install-deps chromium 2>&1 | tee "$ARTIFACT_DIR/playwright-install-deps.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          elapsed=$(( $(date +%s) - started_at ))
+          printf '{"step":"chromium_system_dependencies","status":%s,"elapsedSeconds":%s}\n' "$status" "$elapsed" >> "$ARTIFACT_DIR/install-diagnostics.jsonl"
+          exit "$status"
+
+      - name: Install Chromium browser if not cached
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          started_at="$(date +%s)"
+          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ]; then
+            printf '{"step":"chromium_browser","status":0,"elapsedSeconds":0,"skipped":"cache-hit"}\n' >> "$ARTIFACT_DIR/install-diagnostics.jsonl"
+            exit 0
+          fi
+          set +e
+          npm exec -- playwright install chromium 2>&1 | tee "$ARTIFACT_DIR/playwright-install-chromium.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          elapsed=$(( $(date +%s) - started_at ))
+          printf '{"step":"chromium_browser","status":%s,"elapsedSeconds":%s}\n' "$status" "$elapsed" >> "$ARTIFACT_DIR/install-diagnostics.jsonl"
+          exit "$status"
+
+      - name: Launch Chromium smoke test
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          started_at="$(date +%s)"
+          set +e
+          node --input-type=module <<'NODE' 2>&1 | tee "$ARTIFACT_DIR/chromium-smoke.log"
+          import { chromium } from "playwright";
+          const browser = await chromium.launch({ headless: true });
+          await browser.close();
+          console.log("chromium_launch_smoke_passed");
+          NODE
+          status=${PIPESTATUS[0]}
+          set -e
+          elapsed=$(( $(date +%s) - started_at ))
+          printf '{"step":"chromium_launch_smoke","status":%s,"elapsedSeconds":%s}\n' "$status" "$elapsed" >> "$ARTIFACT_DIR/install-diagnostics.jsonl"
+          exit "$status"
+
+      - name: Run Wave 2B browser QA
+        id: browser-qa
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          mkdir -p "$ARTIFACT_DIR/screenshots"
+          node scripts/wave2b-browser-qa.mjs
+
+      - name: Run Wave 2B provider configuration check
+        id: provider-configuration
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          node scripts/wave2b-provider-configuration-check.mjs
+
+      - name: Require real Wave 2B sandbox integration proof
+        id: sandbox-integration
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          node scripts/wave2b-sandbox-integration-proof.mjs
+
+      - name: Record Wave 2B aggregate result
+        if: always()
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const artifactDir = process.env.ARTIFACT_DIR;
+          function readArtifact(name) {
+            try {
+              return JSON.parse(fs.readFileSync(`${artifactDir}/${name}`, "utf8"));
+            } catch {
+              return null;
+            }
+          }
+          const result = {
+            classification: "WAVE2B_COMMERCIAL_VALIDATION_AGGREGATE",
+            browserQa: {
+              stepOutcome: process.env.BROWSER_QA_OUTCOME,
+              artifactStatus: readArtifact("browser-qa-summary.json")?.status ?? null,
+            },
+            providerConfigurationCheck: {
+              stepOutcome: process.env.PROVIDER_CONFIGURATION_OUTCOME,
+              artifactStatus:
+                readArtifact("provider-configuration-check.json")?.status ?? null,
+            },
+            sandboxIntegrationProof: {
+              stepOutcome: process.env.SANDBOX_INTEGRATION_OUTCOME,
+              artifactStatus:
+                readArtifact("sandbox-integration-proof.json")?.status ?? null,
+              acceptanceEligible:
+                readArtifact("sandbox-integration-proof.json")
+                  ?.acceptanceEligible === true,
+            },
+            providerCheckGatesSandbox: false,
+            mocksCanGrantAcceptance: false,
+          };
+          fs.writeFileSync(
+            `${artifactDir}/wave2b-aggregate-result.json`,
+            `${JSON.stringify(result, null, 2)}\n`,
+          );
+          NODE
+        env:
+          BROWSER_QA_OUTCOME: ${{ steps.browser-qa.outcome }}
+          PROVIDER_CONFIGURATION_OUTCOME: ${{ steps.provider-configuration.outcome }}
+          SANDBOX_INTEGRATION_OUTCOME: ${{ steps.sandbox-integration.outcome }}
+
+      - name: Require Wave 2B acceptance-critical outcomes
+        if: always()
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const artifactDir = process.env.ARTIFACT_DIR;
+          function readArtifact(name) {
+            try {
+              return JSON.parse(fs.readFileSync(`${artifactDir}/${name}`, "utf8"));
+            } catch {
+              return null;
+            }
+          }
+          const browser = readArtifact("browser-qa-summary.json");
+          const provider = readArtifact("provider-configuration-check.json");
+          const sandbox = readArtifact("sandbox-integration-proof.json");
+          const failures = [];
+          if (process.env.BROWSER_QA_OUTCOME !== "success" || browser?.status !== "passed") {
+            failures.push("BROWSER_QA");
+          }
+          if (
+            process.env.SANDBOX_INTEGRATION_OUTCOME !== "success" ||
+            sandbox?.status !== "passed" ||
+            sandbox?.acceptanceEligible !== true
+          ) {
+            failures.push("SANDBOX_INTEGRATION_PROOF");
+          }
+          if (provider?.status !== "passed") {
+            console.log("Provider configuration check did not pass; see provider-configuration-check.json.");
+          }
+          if (failures.length) {
+            throw new Error(`Wave 2B acceptance-critical validation failed: ${failures.join(", ")}`);
+          }
+          console.log("Wave 2B acceptance-critical browser and sandbox outcomes passed.");
+          NODE
+        env:
+          BROWSER_QA_OUTCOME: ${{ steps.browser-qa.outcome }}
+          SANDBOX_INTEGRATION_OUTCOME: ${{ steps.sandbox-integration.outcome }}
+
+      - name: Publish Wave 2B validation summary
+        if: always()
+        run: |
+          {
+            echo "## Wave 2B commercial validation"
+            echo "- Workflow: $GITHUB_WORKFLOW"
+            echo "- Run ID: $GITHUB_RUN_ID"
+            echo "- Tested SHA: $WAVE2B_EXPECTED_SHA"
+            echo "- Environment: wave2b-validation"
+            echo "- Preview URL: workflow_dispatch input preview_url"
+            echo "- Browser contract QA artifact: browser-qa-summary.json"
+            echo "- Provider configuration artifact: provider-configuration-check.json"
+            echo "- Sandbox integration proof artifact: sandbox-integration-proof.json"
+            echo "- Aggregate result artifact: wave2b-aggregate-result.json"
+            echo "- Browser QA outcome: ${{ steps.browser-qa.outcome }}"
+            echo "- Provider configuration outcome: ${{ steps.provider-configuration.outcome }}"
+            echo "- Sandbox integration outcome: ${{ steps.sandbox-integration.outcome }}"
+            echo "- Production touched: no"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Wave 2B validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blundr-wave2b-commercial-validation-${{ github.sha }}
+          path: ${{ github.workspace }}/.tmp/wave2b-commercial-validation
+          if-no-files-found: warn
+          retention-days: 30

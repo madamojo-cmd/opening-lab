@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ProductionDailyPublicSession } from "../productionDailyTypes";
-import { resolveProductionDailyCompletion } from "../productionDailyCompletion";
+import { resolveProductionDailyCompletion } from "../productionDailyCompletion.ts";
 
 const card = {
   actionId: "daily-action-test",

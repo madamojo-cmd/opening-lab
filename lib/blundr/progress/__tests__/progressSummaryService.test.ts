@@ -1,8 +1,21 @@
 import assert from "node:assert/strict";
 
-import { createDefaultDailyRetentionProgress, createDefaultTrainingProfile } from "../../accounts/accountDefaults";
-import { getLocalTrainingProfile, resetLocalAccountState, setLocalAccountCurrentUserId, upsertLocalDailyRetentionProgress, upsertLocalTrainingProfile } from "../../accounts/localAccountStorage";
-import { clearLocalLearningEvents, createLearningSessionId, recordLearningEvent } from "../../learning/learningEvents";
+import {
+  createDefaultDailyRetentionProgress,
+  createDefaultTrainingProfile,
+} from "../../accounts/accountDefaults";
+import {
+  getLocalTrainingProfile,
+  resetLocalAccountState,
+  setLocalAccountCurrentUserId,
+  upsertLocalDailyRetentionProgress,
+  upsertLocalTrainingProfile,
+} from "../../accounts/localAccountStorage";
+import {
+  clearLocalLearningEvents,
+  createLearningSessionId,
+  recordLearningEvent,
+} from "../../learning/learningEvents";
 import { loadBlundrProgressSummary } from "../progressSummaryService";
 import { writeDailyBlundrReviewAttempts } from "../../daily/dailyBlundrReviewStorage";
 
@@ -15,7 +28,7 @@ class MemoryStorage implements Storage {
     this.store.clear();
   }
   getItem(key: string): string | null {
-    return this.store.has(key) ? this.store.get(key) ?? null : null;
+    return this.store.has(key) ? (this.store.get(key) ?? null) : null;
   }
   key(index: number): string | null {
     return Array.from(this.store.keys())[index] ?? null;
@@ -56,13 +69,18 @@ try {
     dailyBlundrGoal: 1,
     updatedAt: now,
   });
-  upsertLocalDailyRetentionProgress(
-    createDefaultDailyRetentionProgress(userId, localDate, {
+  const todayRetention = createDefaultDailyRetentionProgress(
+    userId,
+    localDate,
+    {
       dailyTempoGoal: 2,
       dailyBatteryGoal: 1,
       dailyBlundrGoal: 1,
-    }, now),
+    },
+    now,
   );
+  todayRetention.rings.dailyTempo.progress = 1;
+  upsertLocalDailyRetentionProgress(todayRetention);
 
   writeDailyBlundrReviewAttempts([
     {
@@ -127,8 +145,23 @@ try {
   assert.equal(summary.nextActions.length >= 3, true);
   assert.equal(summary.repertoire.unlockedOpenings >= 0, true);
   assert.equal(summary.streak.week.length, 7);
+  assert.equal(summary.streak.recentDays.length, 28);
+  assert.deepEqual(
+    summary.streak.recentDays.map((day) => day.localDate),
+    Array.from({ length: 28 }, (_, index) => {
+      const date = new Date(`${localDate}T12:00:00.000Z`);
+      date.setUTCDate(date.getUTCDate() + index - 27);
+      return date.toISOString().slice(0, 10);
+    }),
+  );
+  assert.equal(summary.streak.recentDays[0].hasTraining, false);
+  assert.equal(summary.streak.recentDays[0].reviewCount, 0);
+  assert.equal(summary.streak.daysTrainedThisWeek, 1);
   assert.equal(getLocalTrainingProfile(userId)?.dailyTempoGoal, 2);
-  assert.equal(summary.recentActivity.some((item) => item.key === "minigames"), true);
+  assert.equal(
+    summary.recentActivity.some((item) => item.key === "minigames"),
+    true,
+  );
 
   console.log("progressSummaryService.test.ts passed");
 } finally {

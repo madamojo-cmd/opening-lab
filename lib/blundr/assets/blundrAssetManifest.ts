@@ -11,6 +11,12 @@ export const BLUNDR_TEMPO_ASSETS = {
 } as const;
 
 export const BLUNDR_REWARD_ASSETS = {
+  allRingsComplete: "/assets/rewards/all-rings-complete.png",
+  commonReward: "/assets/rewards/common-reward.png",
+  rareReward: "/assets/rewards/rare-reward.png",
+  epicReward: "/assets/rewards/epic-reward.png",
+  openingUnlocked: "/assets/rewards/opening-unlocked.png",
+  streakReward: "/assets/rewards/streak-reward.png",
   tempoCacheClosed: "/assets/rewards/tempo-cache-closed.png",
   tempoCacheOpen: "/assets/rewards/tempo-cache-open.png",
   tempoCacheGlow: "/assets/rewards/tempo-cache-glow.png",

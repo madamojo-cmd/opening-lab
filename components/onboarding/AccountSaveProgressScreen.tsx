@@ -69,7 +69,7 @@ export function AccountSaveProgressScreen({
       onBack={onBack}
       footer={
         <OnboardingButtonRow
-          primaryLabel="Continue in local demo"
+          primaryLabel="Continue on this device"
           onPrimary={onContinueLocalDemo}
           primaryDisabled={busy}
           primaryTone="dark"
@@ -93,12 +93,12 @@ export function AccountSaveProgressScreen({
         />
         <OnboardingFeatureRow
           label="Email/password sign in"
-          description="Use Supabase Auth for a minimal authenticated flow during development."
+          description="Sign in to save progress to your account across devices."
           icon={<LockKeyhole size={16} />}
         />
         <OnboardingFeatureRow
-          label="Local demo fallback"
-          description="Continue without credentials if auth is unavailable or you want to stay local."
+          label="On-device training"
+          description="Keep training without sign-in if it’s temporarily unavailable."
           icon={<Mail size={16} />}
         />
       </div>
@@ -106,7 +106,7 @@ export function AccountSaveProgressScreen({
       <div className="rounded-[1.75rem] border border-stone-200 bg-stone-50 p-4">
         <div className="grid gap-2 sm:grid-cols-3">
           {[
-            { id: "local_demo", label: "Continue in local demo" },
+            { id: "local_demo", label: "Continue on this device" },
             { id: "sign_in", label: "Sign in with email/password" },
             { id: "sign_up", label: "Create account with email/password" },
           ].map((option) => {
@@ -200,17 +200,16 @@ export function AccountSaveProgressScreen({
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                     <BlundrAssetImage
                       asset={BLUNDR_EMPTY_STATE_ASSETS.offlineLocalDemo}
-                      alt="Local demo fallback"
+                      alt="On-device training"
                       variant="emptyState"
                       className="mx-auto sm:mx-0 sm:shrink-0"
                     />
                     <div>
                       <div className="text-xs font-black uppercase tracking-[0.18em] text-amber-800">
-                        Supabase unavailable
+                        Sign-in is temporarily unavailable
                       </div>
                       <p className="mt-2">
-                        Continue in local demo to keep going without auth
-                        credentials.
+                        Continue on this device to keep going without sign-in.
                       </p>
                     </div>
                   </div>
@@ -234,20 +233,20 @@ export function AccountSaveProgressScreen({
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                 <BlundrAssetImage
                   asset={BLUNDR_EMPTY_STATE_ASSETS.offlineLocalDemo}
-                  alt="Local demo fallback"
+                  alt="On-device training"
                   variant="emptyState"
                   className="mx-auto sm:mx-0 sm:shrink-0"
                 />
                 <div>
                   <div className="text-xs font-black uppercase tracking-[0.18em] text-green-700">
-                    Local demo
+                    On-device training
                   </div>
                   <p className="mt-2">
-                    Continue in local demo to save progress on this device
-                    without Supabase credentials.
+                    Continue on this device to save training progress without
+                    signing in.
                   </p>
                   <p className="mt-2 text-xs font-semibold text-stone-500">
-                    Tempo keeps your setup moving even when auth is unavailable.
+                    Your setup is saved securely as you continue.
                   </p>
                 </div>
               </div>
@@ -261,13 +260,13 @@ export function AccountSaveProgressScreen({
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
             <BlundrAssetImage
               asset={BLUNDR_TEMPO_ASSETS.sad}
-              alt="Tempo sad"
+              alt="Tempo"
               variant="tempoInline"
               className="mx-auto sm:mx-0 sm:shrink-0"
             />
             <div className="min-w-0 flex-1">
               <div className="text-xs font-black uppercase tracking-[0.18em] text-red-700">
-                Auth failed
+                Sign-in is temporarily unavailable
               </div>
               <p className="mt-2 text-sm leading-6 text-red-900">{authError}</p>
             </div>

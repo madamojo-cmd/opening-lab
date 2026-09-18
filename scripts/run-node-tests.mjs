@@ -66,6 +66,8 @@ const child = spawn(
   [
     "--preserve-symlinks",
     "--import",
+    "./scripts/node-test-server-only-register.mjs",
+    "--import",
     "tsx",
     "--test",
     "--test-concurrency=1",
