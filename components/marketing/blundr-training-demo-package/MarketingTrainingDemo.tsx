@@ -30,9 +30,10 @@ type Stage = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 export function MarketingTrainingDemo({ Board, tempoImageSrc }: Props) {
   const [stage, setStage] = useState<Stage>(0);
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [inView, setInView] = useState(false);
+  const [visibilityQualified, setVisibilityQualified] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
   const timers = useRef<number[]>([]);
+  const hasPlayedRef = useRef(false);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -43,41 +44,48 @@ export function MarketingTrainingDemo({ Board, tempoImageSrc }: Props) {
   }, []);
 
   useEffect(() => {
-    if (!("IntersectionObserver" in window) || !sectionRef.current) return;
+    if (!("IntersectionObserver" in window) || !sectionRef.current) {
+      setVisibilityQualified(true);
+      return;
+    }
     const observer = new IntersectionObserver(
-      ([entry]) => setInView(entry.isIntersecting),
-      { rootMargin: "220px 0px", threshold: 0.08 },
+      ([entry]) => {
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.35) {
+          setVisibilityQualified(true);
+        }
+      },
+      { rootMargin: "0px", threshold: [0, 0.35] },
     );
     observer.observe(sectionRef.current);
     return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
-    const clear = () => {
+    if (hasPlayedRef.current) return;
+    if (reducedMotion) {
+      hasPlayedRef.current = true;
+      setStage(6);
+      return;
+    }
+    if (!visibilityQualified) return;
+    hasPlayedRef.current = true;
+    setStage(0);
+    timers.current.push(
+      window.setTimeout(() => setStage(1), landingOpeningDemo.moves[0].atMs),
+      window.setTimeout(() => setStage(2), landingOpeningDemo.teaching.bishopEmphasisAtMs),
+      window.setTimeout(() => setStage(3), landingOpeningDemo.teaching.pawnHighlightAtMs),
+      window.setTimeout(() => setStage(4), landingOpeningDemo.moves[1].atMs),
+      window.setTimeout(() => setStage(5), landingOpeningDemo.cueAtMs),
+      window.setTimeout(() => setStage(6), landingOpeningDemo.reviewAtMs),
+    );
+  }, [reducedMotion, visibilityQualified]);
+
+  useEffect(() => {
+    return () => {
       timers.current.forEach(window.clearTimeout);
       timers.current = [];
     };
-    if (reducedMotion) {
-      setStage(6);
-      return clear;
-    }
-    if (!inView) return clear;
-    const run = () => {
-      clear();
-      setStage(0);
-      timers.current.push(
-        window.setTimeout(() => setStage(1), landingOpeningDemo.moves[0].atMs),
-        window.setTimeout(() => setStage(2), landingOpeningDemo.teaching.bishopEmphasisAtMs),
-        window.setTimeout(() => setStage(3), landingOpeningDemo.teaching.pawnHighlightAtMs),
-        window.setTimeout(() => setStage(4), landingOpeningDemo.moves[1].atMs),
-        window.setTimeout(() => setStage(5), landingOpeningDemo.cueAtMs),
-        window.setTimeout(() => setStage(6), landingOpeningDemo.reviewAtMs),
-        window.setTimeout(run, landingOpeningDemo.durationMs),
-      );
-    };
-    run();
-    return clear;
-  }, [inView, reducedMotion]);
+  }, []);
 
   const fen =
     stage === 0

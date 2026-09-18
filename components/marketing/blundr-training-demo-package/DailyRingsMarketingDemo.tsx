@@ -11,10 +11,10 @@ const mix = (from: number, to: number, amount: number) => from + (to - from) * e
 export function DailyRingsMarketingDemo() {
   const sectionRef = useRef<HTMLElement>(null);
   const animationRef = useRef(0);
-  const [inView, setInView] = useState(false);
+  const [visibilityQualified, setVisibilityQualified] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [resetting, setResetting] = useState(false);
   const [display, setDisplay] = useState<DisplayState>({ tempo: 6, battery: 2, streak: 2, final: false });
+  const hasPlayedRef = useRef(false);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -25,8 +25,15 @@ export function DailyRingsMarketingDemo() {
   }, []);
 
   useEffect(() => {
-    if (!("IntersectionObserver" in window) || !sectionRef.current) return;
-    const observer = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), { rootMargin: "220px 0px", threshold: 0.08 });
+    if (!("IntersectionObserver" in window) || !sectionRef.current) {
+      setVisibilityQualified(true);
+      return;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && entry.intersectionRatio >= 0.35) {
+        setVisibilityQualified(true);
+      }
+    }, { rootMargin: "0px", threshold: [0, 0.35] });
     observer.observe(sectionRef.current);
     return () => observer.disconnect();
   }, []);
@@ -35,25 +42,34 @@ export function DailyRingsMarketingDemo() {
     if (reducedMotion) {
       const final = dailyRingsFrames[2];
       setDisplay({ tempo: final.tempo, battery: final.battery, streak: final.streak, final: true });
-      setResetting(false);
       return;
     }
-    if (!inView) return;
+    if (hasPlayedRef.current) return;
+    if (!visibilityQualified) return;
+    hasPlayedRef.current = true;
     const startedAt = performance.now();
     const tick = (now: number) => {
-      const elapsed = (now - startedAt) % 8200;
+      const elapsed = Math.min(now - startedAt, 8200);
+      if (elapsed >= 8200) {
+        const final = dailyRingsFrames[2];
+        setDisplay({ tempo: final.tempo, battery: final.battery, streak: final.streak, final: true });
+        animationRef.current = 0;
+        return;
+      }
       let tempo = 6, battery = 2, final = false;
-      setResetting(elapsed >= 7500);
       if (elapsed >= 900 && elapsed < 2400) tempo = mix(6, 10, (elapsed - 900) / 1500);
       else if (elapsed >= 2400 && elapsed < 3200) tempo = 10;
       else if (elapsed >= 3200 && elapsed < 4700) { tempo = 10; battery = mix(2, 3, (elapsed - 3200) / 1500); }
-      else if (elapsed >= 4700 && elapsed < 7900) { tempo = 10; battery = 3; final = elapsed >= 5400; }
+      else if (elapsed >= 4700) { tempo = 10; battery = 3; final = elapsed >= 5400; }
       setDisplay({ tempo, battery, streak: final ? 3 : 2, final });
       animationRef.current = requestAnimationFrame(tick);
     };
     animationRef.current = requestAnimationFrame(tick);
+  }, [reducedMotion, visibilityQualified]);
+
+  useEffect(() => {
     return () => cancelAnimationFrame(animationRef.current);
-  }, [inView, reducedMotion]);
+  }, []);
 
   const tempoDone = display.tempo >= 9.95;
   const batteryDone = display.battery >= 2.95;
@@ -76,7 +92,7 @@ export function DailyRingsMarketingDemo() {
           <p>Blundr keeps Tempo, Battery, and Daily Blundr in one synchronized daily loop. Close each ring, protect your streak, and always know the next best action to keep improving.</p>
         </div>
 
-        <div className={`${styles.dashboard} ${resetting ? styles.resetting : ""}`} role="img" aria-label="Tempo, Battery, and Daily Blundr rings progress from one of three in progress to all three complete, increasing a two-day streak to three days.">
+        <div className={styles.dashboard} role="img" aria-label="Tempo, Battery, and Daily Blundr rings progress from one of three in progress to all three complete, increasing a two-day streak to three days.">
           <div className={styles.head}><div><span>Today’s training</span><h3>Close your daily rings.</h3></div><b>{display.streak}-day streak</b></div>
           <div className={styles.main} aria-hidden="true">
             <div className={styles.rings}>

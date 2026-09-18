@@ -23,10 +23,11 @@ type Stage = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
 export function SmartReviewMarketingDemo({ Board }: Props) {
   const [stage, setStage] = useState<Stage>(0);
-  const [inView, setInView] = useState(false);
+  const [visibilityQualified, setVisibilityQualified] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
   const timers = useRef<number[]>([]);
+  const hasPlayedRef = useRef(false);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -37,43 +38,50 @@ export function SmartReviewMarketingDemo({ Board }: Props) {
   }, []);
 
   useEffect(() => {
-    if (!("IntersectionObserver" in window) || !sectionRef.current) return;
+    if (!("IntersectionObserver" in window) || !sectionRef.current) {
+      setVisibilityQualified(true);
+      return;
+    }
     const observer = new IntersectionObserver(
-      ([entry]) => setInView(entry.isIntersecting),
-      { rootMargin: "220px 0px", threshold: 0.08 },
+      ([entry]) => {
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.35) {
+          setVisibilityQualified(true);
+        }
+      },
+      { rootMargin: "0px", threshold: [0, 0.35] },
     );
     observer.observe(sectionRef.current);
     return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
-    const clear = () => {
+    if (hasPlayedRef.current) return;
+    if (reducedMotion) {
+      hasPlayedRef.current = true;
+      setStage(8);
+      return;
+    }
+    if (!visibilityQualified) return;
+    hasPlayedRef.current = true;
+    setStage(0);
+    timers.current.push(
+      window.setTimeout(() => setStage(1), demo.wrongHighlightAtMs),
+      window.setTimeout(() => setStage(2), demo.wrongMoveAtMs),
+      window.setTimeout(() => setStage(3), demo.missAtMs),
+      window.setTimeout(() => setStage(4), demo.replayAtMs),
+      window.setTimeout(() => setStage(5), demo.correctHighlightAtMs),
+      window.setTimeout(() => setStage(6), demo.correctMoveAtMs),
+      window.setTimeout(() => setStage(7), demo.successAtMs),
+      window.setTimeout(() => setStage(8), demo.updatedAtMs),
+    );
+  }, [reducedMotion, visibilityQualified]);
+
+  useEffect(() => {
+    return () => {
       timers.current.forEach(window.clearTimeout);
       timers.current = [];
     };
-    if (reducedMotion) {
-      setStage(8);
-      return clear;
-    }
-    if (!inView) return clear;
-    const run = () => {
-      clear();
-      setStage(0);
-      timers.current.push(
-        window.setTimeout(() => setStage(1), demo.wrongHighlightAtMs),
-        window.setTimeout(() => setStage(2), demo.wrongMoveAtMs),
-        window.setTimeout(() => setStage(3), demo.missAtMs),
-        window.setTimeout(() => setStage(4), demo.replayAtMs),
-        window.setTimeout(() => setStage(5), demo.correctHighlightAtMs),
-        window.setTimeout(() => setStage(6), demo.correctMoveAtMs),
-        window.setTimeout(() => setStage(7), demo.successAtMs),
-        window.setTimeout(() => setStage(8), demo.updatedAtMs),
-        window.setTimeout(run, demo.durationMs),
-      );
-    };
-    run();
-    return clear;
-  }, [inView, reducedMotion]);
+  }, []);
 
   const wrongMoveVisible = stage === 2 || stage === 3;
   const correctMoveVisible = stage >= 6;

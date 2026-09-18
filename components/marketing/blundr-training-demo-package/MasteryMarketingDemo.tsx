@@ -23,10 +23,10 @@ const interpolate = (from: MasteryMarketingFrame, to: MasteryMarketingFrame, amo
 export function MasteryMarketingDemo({ tempoImageSrc }: Props) {
   const sectionRef = useRef<HTMLElement>(null);
   const animationRef = useRef(0);
-  const [inView, setInView] = useState(true);
+  const [visibilityQualified, setVisibilityQualified] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [resetting, setResetting] = useState(false);
   const [frame, setFrame] = useState<MasteryMarketingFrame>(masteryMarketingFrames[0]);
+  const hasPlayedRef = useRef(false);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -37,24 +37,37 @@ export function MasteryMarketingDemo({ tempoImageSrc }: Props) {
   }, []);
 
   useEffect(() => {
-    if (!("IntersectionObserver" in window) || !sectionRef.current) return;
-    const observer = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), { rootMargin: "220px 0px", threshold: 0.08 });
+    if (!("IntersectionObserver" in window) || !sectionRef.current) {
+      setVisibilityQualified(true);
+      return;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && entry.intersectionRatio >= 0.35) {
+        setVisibilityQualified(true);
+      }
+    }, { rootMargin: "0px", threshold: [0, 0.35] });
     observer.observe(sectionRef.current);
     return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
+    if (hasPlayedRef.current) return;
     if (reducedMotion) {
+      hasPlayedRef.current = true;
       setFrame(masteryMarketingFrames[3]);
-      setResetting(false);
       return;
     }
-    if (!inView) return;
+    if (!visibilityQualified) return;
+    hasPlayedRef.current = true;
     const startedAt = performance.now();
     const tick = (now: number) => {
-      const elapsed = (now - startedAt) % 8000;
+      const elapsed = Math.min(now - startedAt, 8000);
+      if (elapsed >= 8000) {
+        setFrame(masteryMarketingFrames[3]);
+        animationRef.current = 0;
+        return;
+      }
       let next = masteryMarketingFrames[0];
-      setResetting(elapsed >= 7200);
       if (elapsed < 900) next = masteryMarketingFrames[0];
       else if (elapsed < 1700) next = interpolate(masteryMarketingFrames[0], masteryMarketingFrames[1], (elapsed - 900) / 800);
       else if (elapsed < 2500) next = masteryMarketingFrames[1];
@@ -66,8 +79,11 @@ export function MasteryMarketingDemo({ tempoImageSrc }: Props) {
       animationRef.current = requestAnimationFrame(tick);
     };
     animationRef.current = requestAnimationFrame(tick);
+  }, [reducedMotion, visibilityQualified]);
+
+  useEffect(() => {
     return () => cancelAnimationFrame(animationRef.current);
-  }, [inView, reducedMotion]);
+  }, []);
 
   const rounded = (value: number) => Math.round(value);
   const status = frame.progress < 1 ? "Building foundation" : frame.progress < 12 ? "Learning in motion" : frame.progress < 22 ? "Mastery growing" : "Repertoire strengthening";
@@ -82,7 +98,7 @@ export function MasteryMarketingDemo({ tempoImageSrc }: Props) {
           <p>Blundr tracks every branch as mastered, learning, weak, or unseen—giving you a live picture of what you know and exactly where to focus next.</p>
         </div>
 
-        <div className={`${styles.dashboard} ${resetting ? styles.resetting : ""}`} role="img" aria-label="Italian Game mastery grows to twenty-six percent while weak and unseen branches fall and accuracy improves.">
+        <div className={styles.dashboard} role="img" aria-label="Italian Game mastery grows to twenty-six percent while weak and unseen branches fall and accuracy improves.">
           <div className={styles.topline}><div><span>Repertoire · Opening intelligence</span><h3>Italian Game mastery</h3></div><b>{status}</b></div>
           <div className={styles.summary} aria-hidden="true">
             <div><small>Unlocked repertoire opening</small><strong>{rounded(frame.progress)}%</strong><div className={styles.bar}><span style={{ width: `${frame.progress}%` }} /></div></div>

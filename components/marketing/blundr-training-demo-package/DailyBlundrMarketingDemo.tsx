@@ -24,9 +24,10 @@ type Stage = 0 | 1 | 2 | 3 | 4 | 5;
 export function DailyBlundrMarketingDemo({ Board }: Props) {
   const [stage, setStage] = useState<Stage>(0);
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [inView, setInView] = useState(false);
+  const [visibilityQualified, setVisibilityQualified] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
   const timers = useRef<number[]>([]);
+  const hasPlayedRef = useRef(false);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -37,40 +38,47 @@ export function DailyBlundrMarketingDemo({ Board }: Props) {
   }, []);
 
   useEffect(() => {
-    if (!("IntersectionObserver" in window) || !sectionRef.current) return;
+    if (!("IntersectionObserver" in window) || !sectionRef.current) {
+      setVisibilityQualified(true);
+      return;
+    }
     const observer = new IntersectionObserver(
-      ([entry]) => setInView(entry.isIntersecting),
-      { rootMargin: "220px 0px", threshold: 0.08 },
+      ([entry]) => {
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.35) {
+          setVisibilityQualified(true);
+        }
+      },
+      { rootMargin: "0px", threshold: [0, 0.35] },
     );
     observer.observe(sectionRef.current);
     return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
-    const clear = () => {
+    if (hasPlayedRef.current) return;
+    if (reducedMotion) {
+      hasPlayedRef.current = true;
+      setStage(5);
+      return;
+    }
+    if (!visibilityQualified) return;
+    hasPlayedRef.current = true;
+    setStage(0);
+    timers.current.push(
+      window.setTimeout(() => setStage(1), dailyBlundrDemo.highlightAtMs),
+      window.setTimeout(() => setStage(2), dailyBlundrDemo.moveAtMs),
+      window.setTimeout(() => setStage(3), dailyBlundrDemo.resultAtMs),
+      window.setTimeout(() => setStage(4), dailyBlundrDemo.progressAtMs),
+      window.setTimeout(() => setStage(5), dailyBlundrDemo.nextAtMs),
+    );
+  }, [reducedMotion, visibilityQualified]);
+
+  useEffect(() => {
+    return () => {
       timers.current.forEach(window.clearTimeout);
       timers.current = [];
     };
-    if (reducedMotion) {
-      setStage(4);
-      return clear;
-    }
-    if (!inView) return clear;
-    const run = () => {
-      clear();
-      setStage(0);
-      timers.current.push(
-        window.setTimeout(() => setStage(1), dailyBlundrDemo.highlightAtMs),
-        window.setTimeout(() => setStage(2), dailyBlundrDemo.moveAtMs),
-        window.setTimeout(() => setStage(3), dailyBlundrDemo.resultAtMs),
-        window.setTimeout(() => setStage(4), dailyBlundrDemo.progressAtMs),
-        window.setTimeout(() => setStage(5), dailyBlundrDemo.nextAtMs),
-        window.setTimeout(run, dailyBlundrDemo.durationMs),
-      );
-    };
-    run();
-    return clear;
-  }, [inView, reducedMotion]);
+  }, []);
 
   const moveVisible = stage >= 2;
   const resultVisible = stage >= 3;
