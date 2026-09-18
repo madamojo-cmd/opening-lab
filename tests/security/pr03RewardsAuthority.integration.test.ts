@@ -356,7 +356,7 @@ async function main() {
     assert.equal(checkmateEvidence.error, null);
     assert.equal(checkmateEvidence.data.status, "inserted");
     const batteryCompletion = await service
-      .from("blundr_continuation_completions_v1")
+      .from("blundr_continuation_checkmates_v1")
       .select("completed_at")
       .eq("completion_id", checkmateEvidenceId)
       .single();

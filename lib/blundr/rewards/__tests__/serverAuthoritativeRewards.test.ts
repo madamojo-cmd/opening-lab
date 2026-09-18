@@ -284,6 +284,14 @@ test("billing-aware reward RPC does not shadow the legacy seven-argument overloa
     /\s+/g,
     " ",
   );
+  const normalizedLegacyRewardMigration = checkpointBMigration.replace(
+    /\s+/g,
+    " ",
+  );
+  assert.match(
+    normalizedLegacyRewardMigration,
+    /create or replace function public\.blundr_apply_completion_reward_v3\( p_user_id uuid, p_completion_id text, p_source text, p_evidence_id text, p_idempotency_key text, p_policy_version text, p_randomness_key_version text default null \)/i,
+  );
   assert.match(
     normalizedFreeTempoMigration,
     /create or replace function public\.blundr_apply_completion_reward_v3\( p_user_id uuid, p_completion_id text, p_source text, p_evidence_id text, p_idempotency_key text, p_policy_version text, p_randomness_key_version text, p_billing_environment text \)/i,

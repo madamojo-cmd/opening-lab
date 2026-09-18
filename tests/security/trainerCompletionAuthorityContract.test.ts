@@ -69,6 +69,11 @@ test("Trainer terminal evidence extends only the existing Rewards v2 writer", ()
 
 test("billing-aware Trainer RPC preserves the unambiguous legacy overload", () => {
   const normalizedTempoMigration = tempoMigration.replace(/\s+/g, " ");
+  const normalizedLegacyMigration = migration.replace(/\s+/g, " ");
+  assert.match(
+    normalizedLegacyMigration,
+    /create or replace function public\.blundr_commit_trainer_action_v2\( p_user_id uuid, p_session_id text, p_action jsonb \)/i,
+  );
   assert.match(
     normalizedTempoMigration,
     /create or replace function public\.blundr_commit_trainer_action_v2\( p_user_id uuid, p_session_id text, p_action jsonb, p_billing_environment text \)/i,
